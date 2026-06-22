@@ -1,0 +1,67 @@
+<section class="creator-abilities">
+  <div class="creator-method-tabs">
+    {{#each methods}}
+    <button type="button" class="creator-tab {{#if active}}is-active{{/if}}"
+            data-action="stepAction" data-step-action="ability-method" data-method="{{id}}">
+      {{label}}
+    </button>
+    {{/each}}
+  </div>
+
+  {{#if isPointBuy}}
+  <div class="creator-points">
+    <span class="creator-points-value {{#unless remaining}}is-zero{{/unless}}">{{remaining}}</span>
+    <span class="creator-points-label">{{localize "sogrom-dnd5e-character-creator.step.abilities.pointsLeft"}} / {{budget}}</span>
+  </div>
+  <ul class="creator-ability-list">
+    {{#each rows}}
+    <li class="creator-ability-row">
+      <span class="creator-ability-name">{{label}}</span>
+      <div class="creator-stepper">
+        <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="ability-dec"
+                data-ability="{{key}}" {{#unless canDec}}disabled{{/unless}}>&minus;</button>
+        <span class="creator-ability-score">{{value}}</span>
+        <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="ability-inc"
+                data-ability="{{key}}" {{#unless canInc}}disabled{{/unless}}>+</button>
+      </div>
+      <span class="creator-ability-mod">{{modifier}}</span>
+    </li>
+    {{/each}}
+  </ul>
+
+  {{else}}
+    {{#if isRoll}}
+    <div class="creator-roll-bar">
+      <button type="button" class="creator-btn creator-btn-primary" data-action="stepAction" data-step-action="ability-roll">
+        <i class="fa-solid fa-dice"></i>
+        {{localize "sogrom-dnd5e-character-creator.step.abilities.rollScores"}} ({{rollFormula}})
+      </button>
+    </div>
+    {{/if}}
+
+    {{#if hasPool}}
+    <ul class="creator-ability-list">
+      {{#each rows}}
+      <li class="creator-ability-row {{#if assigned}}is-assigned{{/if}}">
+        <span class="creator-ability-name">{{label}}</span>
+        <select class="creator-assign" data-step-change="ability-assign" data-ability="{{key}}">
+          <option value="">{{localize "sogrom-dnd5e-character-creator.step.abilities.unassigned"}}</option>
+          {{#each options}}
+          <option value="{{index}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{value}}</option>
+          {{/each}}
+        </select>
+        <span class="creator-ability-mod">{{modifier}}</span>
+      </li>
+      {{/each}}
+    </ul>
+    {{else}}
+    <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.step.abilities.rollPrompt"}}</p>
+    {{/if}}
+  {{/if}}
+
+  <div class="creator-ability-actions">
+    <button type="button" class="creator-btn creator-btn-ghost" data-action="stepAction" data-step-action="ability-reset">
+      <i class="fa-solid fa-rotate-left"></i> {{localize "sogrom-dnd5e-character-creator.common.reset"}}
+    </button>
+  </div>
+</section>

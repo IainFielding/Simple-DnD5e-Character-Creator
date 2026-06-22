@@ -1,0 +1,74 @@
+{
+  "sogrom-dnd5e-character-creator": {
+    "window": {
+      "title": "Character Creator — {name}",
+      "brand": "Character Creator"
+    },
+    "common": {
+      "newCharacter": "New Character",
+      "search": "Search…",
+      "available": "Available",
+      "noEntries": "No entries found in the enabled compendiums.",
+      "reset": "Reset"
+    },
+    "loading": {
+      "indexing": "Reading the compendiums…"
+    },
+    "nav": {
+      "back": "Back",
+      "next": "Next",
+      "create": "Create Character",
+      "cancel": "Cancel",
+      "position": "Step {current} of {total}"
+    },
+    "menu": {
+      "launch": "Create Character",
+      "resume": "Open in Character Creator"
+    },
+    "notify": {
+      "noPermission": "You do not have permission to create actors.",
+      "indexFailed": "Could not read the compendiums. Check that the dnd5e content packs are enabled.",
+      "buildFailed": "Character creation failed. See the console for details."
+    },
+    "step": {
+      "class": { "label": "Class" },
+      "species": { "label": "Species" },
+      "background": { "label": "Background" },
+      "review": {
+        "label": "Review",
+        "intro": "Review {name} before building the character. You can step back to change any choice.",
+        "noClass": "No class chosen",
+        "noSpecies": "No species chosen",
+        "noBackground": "No background chosen"
+      },
+      "abilities": {
+        "label": "Ability Scores",
+        "pointBuy": "Point Buy",
+        "standardArray": "Standard Array",
+        "roll": "Roll",
+        "pointsLeft": "points left",
+        "rollScores": "Roll Scores",
+        "unassigned": "—",
+        "rollPrompt": "Roll to generate six scores, then assign them to your abilities."
+      }
+    },
+    "settings": {
+      "launchButton": {
+        "name": "Show launch button",
+        "hint": "Adds a “Create Character” button to the Actors sidebar for anyone allowed to create actors."
+      },
+      "contextMenu": {
+        "name": "Show actor context entry",
+        "hint": "Adds an “Open in Character Creator” entry to a character's right-click menu."
+      },
+      "pointBuyBudget": {
+        "name": "Point-buy budget",
+        "hint": "Number of points available when using the Point Buy method (standard rules use 27)."
+      },
+      "rollFormula": {
+        "name": "Ability roll formula",
+        "hint": "Dice formula rolled for each ability when using the Roll method (standard rules use 4d6kh3)."
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+<section class="creator-origin">
+  <div class="creator-toolbar">
+    <label class="creator-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" data-creator-search autocomplete="off"
+             placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
+    </label>
+    <span class="creator-count">{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
+  </div>
+
+  <div class="creator-grid">
+    {{#each cards}}
+    <button type="button" class="creator-card {{#if selected}}is-selected{{/if}}"
+            data-action="stepAction" data-step-action="pick-origin"
+            data-uuid="{{uuid}}" data-name="{{name}}">
+      <img class="creator-card-img" src="{{img}}" alt="">
+      <span class="creator-card-name">{{name}}</span>
+      {{#if selected}}<span class="creator-card-tick"><i class="fa-solid fa-check"></i></span>{{/if}}
+    </button>
+    {{else}}
+    <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.common.noEntries"}}</p>
+    {{/each}}
+  </div>
+
+  {{#if hasSelection}}
+  <aside class="creator-detail">
+    <header class="creator-detail-head">
+      <img class="creator-detail-img" src="{{detail.img}}" alt="">
+      <h2>{{detail.name}}</h2>
+    </header>
+    <div class="creator-detail-body">{{{detail.enriched}}}</div>
+  </aside>
+  {{/if}}
+</section>

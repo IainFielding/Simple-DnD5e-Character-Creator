@@ -1,0 +1,31 @@
+<section class="creator-review">
+  <p class="creator-review-intro">{{localize "sogrom-dnd5e-character-creator.step.review.intro" name=name}}</p>
+
+  <div class="creator-summary-cards">
+    {{#each origins}}
+    <div class="creator-summary-card {{#unless chosen}}is-empty{{/unless}}">
+      <span class="creator-summary-kind">{{kind}}</span>
+      {{#if chosen}}
+      <img class="creator-summary-img" src="{{img}}" alt="">
+      <span class="creator-summary-name">{{name}}</span>
+      {{else}}
+      <span class="creator-summary-name is-muted">{{empty}}</span>
+      {{/if}}
+    </div>
+    {{/each}}
+  </div>
+
+  <div class="creator-review-abilities">
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.abilities.label"}}
+      <small>({{method}})</small></h2>
+    <ul class="creator-score-strip">
+      {{#each abilities}}
+      <li class="creator-score">
+        <span class="creator-score-abbr">{{abbr}}</span>
+        <span class="creator-score-value">{{value}}</span>
+        <span class="creator-score-mod">{{modifier}}</span>
+      </li>
+      {{/each}}
+    </ul>
+  </div>
+</section>

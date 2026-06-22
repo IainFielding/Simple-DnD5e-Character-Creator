@@ -1,0 +1,32 @@
+<div class="creator-stage">
+  {{#if loading}}
+  <div class="creator-loading">
+    <i class="fa-solid fa-spinner fa-spin-pulse"></i>
+    <p>{{loadingLabel}}</p>
+  </div>
+  {{else}}
+  <header class="creator-stage-head">
+    <h1>{{step.label}}</h1>
+    <span class="creator-stage-pos">{{nav.position}}</span>
+  </header>
+
+  <div class="creator-stage-body">
+    {{> (lookup step "template") step}}
+  </div>
+
+  <footer class="creator-stage-foot">
+    <button type="button" class="creator-btn" data-action="navBack" {{#unless nav.canBack}}disabled{{/unless}}>
+      <i class="fa-solid fa-arrow-left"></i> {{nav.backLabel}}
+    </button>
+    {{#if isReview}}
+    <button type="button" class="creator-btn creator-btn-primary" data-action="finish" {{#unless canFinish}}disabled{{/unless}}>
+      <i class="fa-solid fa-wand-magic-sparkles"></i> {{finishLabel}}
+    </button>
+    {{else}}
+    <button type="button" class="creator-btn creator-btn-primary" data-action="navNext" {{#unless nav.canNext}}disabled{{/unless}}>
+      {{nav.nextLabel}} <i class="fa-solid fa-arrow-right"></i>
+    </button>
+    {{/if}}
+  </footer>
+  {{/if}}
+</div>
