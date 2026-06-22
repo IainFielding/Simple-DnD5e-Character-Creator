@@ -31,7 +31,7 @@
       "buildFailed": "Character creation failed. See the console for details."
     },
     "step": {
-      "class": { "label": "Class" },
+      "class": { "label": "Class & Abilities" },
       "species": { "label": "Species" },
       "background": { "label": "Background" },
       "review": {
@@ -47,9 +47,15 @@
         "standardArray": "Standard Array",
         "roll": "Roll",
         "pointsLeft": "points left",
-        "rollScores": "Roll Scores",
+        "rollScores": "Roll Stats",
         "unassigned": "—",
         "rollPrompt": "Roll to generate six scores, then assign them to your abilities."
+      },
+      "bgAbilities": {
+        "label": "Ability Increase",
+        "hint": "Raise your ability scores by {points} points, up to +{cap} in any one.",
+        "none": "This background grants no ability increase.",
+        "locked": "Set by this background"
       }
     },
     "settings": {

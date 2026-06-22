@@ -30,6 +30,20 @@ export class CreatorState {
   /** Dice results for the "roll" method, in roll order. */
   rolledPool = [];
 
+  /**
+   * Player-allocated ability increases granted by the chosen background, on top of
+   * any the background fixes itself. Reset whenever the background selection changes.
+   */
+  backgroundAbilities = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+
+  /**
+   * The selected background's ability-score-improvement config, cached so the
+   * synchronous completion check can see it without re-resolving the document.
+   * `undefined` = not yet resolved; `null` = background grants no increase.
+   * @type {{id: string, points: number, cap: number, fixed: object, locked: string[]}|null|undefined}
+   */
+  backgroundAsi;
+
   constructor(actor) {
     this.actor = actor;
     this.#prefillFromActor(actor);
@@ -64,6 +78,15 @@ export class CreatorState {
       out[key] = (idx != null && pool[idx] != null) ? pool[idx] : 8;
     }
     return out;
+  }
+
+  /**
+   * Forget the current background's ability allocation and cached config. Called
+   * when the background selection changes so a previous choice never leaks across.
+   */
+  resetBackgroundAbilities() {
+    this.backgroundAbilities = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+    this.backgroundAsi = undefined;
   }
 
   /* -------------------------------------------- */

@@ -25,10 +25,33 @@ export async function assembleActor(state) {
     if ( !uuid ) continue;
     const doc = await fromUuid(uuid);
     if ( !doc ) { log(`origin item not found: ${uuid}`); continue; }
-    await addOrigin(actor, doc.toObject());
+    const itemData = doc.toObject();
+    // Carry the background ability-increase the player allocated in the wizard, so the
+    // advancement applies it directly instead of re-prompting during the manager step.
+    if ( uuid === state.backgroundUuid ) applyBackgroundIncrease(itemData, state);
+    await addOrigin(actor, itemData);
   }
 
   return actor;
+}
+
+/**
+ * Stamp the player's chosen ability-increase onto the background item's
+ * AbilityScoreImprovement advancement value, so the AdvancementManager treats the
+ * choice as already made. No-op when the background grants no increase.
+ */
+function applyBackgroundIncrease(itemData, state) {
+  const advancements = Object.values(itemData.system?.advancement ?? {});
+  const adv = advancements.find(a => a.type === "AbilityScoreImprovement" && (a.level ?? 0) === 0)
+    ?? advancements.find(a => a.type === "AbilityScoreImprovement");
+  if ( !adv ) return;
+
+  const assignments = {};
+  for ( const key of ABILITIES ) {
+    const value = state.backgroundAbilities[key] ?? 0;
+    if ( value ) assignments[key] = value;
+  }
+  adv.value = { type: "asi", assignments };
 }
 
 /* -------------------------------------------- */

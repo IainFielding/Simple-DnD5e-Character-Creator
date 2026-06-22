@@ -1,6 +1,5 @@
 <nav class="creator-rail">
   <header class="creator-rail-brand">
-    <i class="fa-solid fa-hat-wizard"></i>
     <span>{{localize "sogrom-dnd5e-character-creator.window.brand"}}</span>
   </header>
 
@@ -12,7 +11,7 @@
           {{#if complete}}<i class="fa-solid fa-check"></i>{{else}}{{ordinal}}{{/if}}
         </span>
         <span class="creator-rail-text">
-          <span class="creator-rail-label"><i class="{{icon}}"></i> {{label}}</span>
+          <span class="creator-rail-label">{{label}}</span>
           {{#if summary}}<span class="creator-rail-summary">{{summary}}</span>{{/if}}
         </span>
       </button>

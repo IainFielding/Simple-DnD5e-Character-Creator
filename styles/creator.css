@@ -9,10 +9,13 @@
   --cc-line: #353b4f;
   --cc-text: #e7e9f0;
   --cc-muted: #9aa1b5;
-  --cc-accent: #7c6cf0;
-  --cc-accent-soft: rgba(124, 108, 240, 0.18);
+  --cc-accent: #e7b864;
+  --cc-accent-soft: rgba(231, 184, 100, 0.18);
   --cc-good: #4fd18b;
   --cc-gold: #e7b864;
+  /* Selection highlight — gold, distinct from the violet UI accent. */
+  --cc-select: #e7b864;
+  --cc-select-soft: rgba(231, 184, 100, 0.16);
 
   position: fixed;
   inset: 0;
@@ -58,15 +61,43 @@
   padding: 0.75rem;
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
+
+/* Each step is the anchor for its connector line to the next step. */
+.creator-rail-step {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* Vertical progress line: runs from this circle down to the next one. It sits in
+   the marker column, behind the circles, and turns gold once the step is done. */
+.creator-rail-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: calc(0.8rem + 28px);   /* link padding-left + marker radius = circle centre */
+  top: calc(50% + 28px);       /* bottom edge of this 56px circle */
+  width: 2px;
+  height: calc(100% + 0.6rem - 56px);  /* row + gap - diameter = the gap to next circle */
+  transform: translateX(-1px);
+  background: var(--cc-line);
+  z-index: 0;
+}
+.creator-rail-step.is-complete:not(:last-child)::before { background: var(--cc-gold); }
 
 .creator-rail-link {
   display: flex;
   align-items: center;
+  /* Override Foundry's button justify-content:center so the circle/text hug the left. */
+  justify-content: flex-start;
   gap: 0.85rem;
   width: 100%;
+  /* Override Foundry's fixed button height (28px) so the row grows to its content. */
+  height: auto;
+  min-height: auto;
   padding: 0.7rem 0.8rem;
-  margin-bottom: 0.3rem;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -79,28 +110,38 @@
 .creator-rail-link:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .creator-rail-step.is-active .creator-rail-link {
-  background: var(--cc-accent-soft);
-  border-color: var(--cc-accent);
+  background: var(--cc-select-soft);
+  border-color: var(--cc-select);
   color: var(--cc-text);
 }
 
 .creator-rail-marker {
-  flex: 0 0 28px;
-  height: 28px;
+  position: relative;
+  z-index: 1;                /* sits above the connector line */
+  flex: 0 0 56px;
+  height: 56px;
   display: grid;
   place-items: center;
   border-radius: 50%;
+  border: 1px solid transparent;
   background: var(--cc-panel-2);
-  font-size: 0.85rem;
+  font-size: 1.5rem;
   font-weight: 600;
 }
-.creator-rail-step.is-complete .creator-rail-marker { background: var(--cc-good); color: #0c1411; }
+.creator-rail-step.is-complete .creator-rail-marker {
+  background: transparent;
+  border-color: var(--cc-gold);
+  color: var(--cc-gold);
+}
+.creator-rail-step.is-complete .creator-rail-marker i { font-size: 1.35rem; }
 
-.creator-rail-text { display: flex; flex-direction: column; min-width: 0; }
-.creator-rail-label { font-weight: 600; }
-.creator-rail-label i { width: 1.1em; color: var(--cc-accent); margin-right: 0.25rem; }
+/* Reserve the summary line on every row (44px = 28px label + 16px summary) so
+   rows without a summary are the same height — keeps the circles evenly spaced. */
+.creator-rail-text { display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 44px; }
+.creator-rail-label { font-weight: 600; line-height: 28px; }
 .creator-rail-summary {
   font-size: 0.8rem;
+  line-height: 16px;
   color: var(--cc-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -201,19 +242,25 @@
 
 .creator-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  /* Generous row gap leaves room for the icon that floats above each card. */
-  gap: 2.75rem 0.85rem;
-  padding-top: 1.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 180px));
+  gap: 1.25rem;
+  justify-content: center;
 }
 .creator-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  /* Top padding clears the floating icon; the name sits in the lower box. */
-  padding: 2.6rem 0.6rem 0.9rem;
+  align-items: stretch;
+  /* Fill the grid track. The square comes from the image below — a <button>
+     ignores aspect-ratio on itself, so we let the (replaced) <img> drive it.
+     height:auto overrides Foundry's default fixed button height so the button
+     grows to fit the square image + name instead of clipping them. */
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  align-self: start;
+  padding: 0;
+  overflow: hidden;
   background: var(--cc-panel);
   border: 1px solid var(--cc-line);
   border-radius: 12px;
@@ -221,25 +268,32 @@
   cursor: pointer;
   transition: transform 0.12s, border-color 0.12s, background 0.12s;
 }
-.creator-card:hover { transform: translateY(-2px); border-color: var(--cc-accent); }
-.creator-card.is-selected { border-color: var(--cc-accent); background: var(--cc-accent-soft); }
+.creator-card:hover { transform: translateY(-2px); border-color: var(--cc-select); }
+.creator-card.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
 .creator-card.is-hidden { display: none; }
+/* Image band: sits entirely above the name box; whole icon shown, not cropped. */
 .creator-card-img {
-  position: absolute;
-  top: -1.75rem;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 68px;
-  height: 68px;
-  object-fit: cover;
-  border-radius: 14px;
-  border: 1px solid var(--cc-line);
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  /* Square image band drives the card's size; the name box sits below it. */
+  aspect-ratio: 1 / 1;
+  height: auto;
+  min-height: 0;
+  object-fit: contain;
+  object-position: center;
+  padding: 0.9rem;
   background: #0d1017;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  border-bottom: 1px solid var(--cc-line);
 }
-.creator-card:hover .creator-card-img,
-.creator-card.is-selected .creator-card-img { border-color: var(--cc-accent); }
-.creator-card-name { font-size: 0.9rem; text-align: center; line-height: 1.3; }
+.creator-card-name {
+  padding: 0.65rem 0.5rem;
+  font-size: 0.9rem;
+  text-align: center;
+  line-height: 1.3;
+  background: var(--cc-panel-2);
+}
+.creator-card.is-selected .creator-card-name { background: var(--cc-select-soft); }
 .creator-card-tick {
   position: absolute;
   top: 0.4rem;
@@ -249,8 +303,8 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--cc-accent);
-  color: #fff;
+  background: var(--cc-select);
+  color: #1a1206;
   font-size: 0.7rem;
 }
 
@@ -270,6 +324,63 @@
 
 .creator-empty { color: var(--cc-muted); font-style: italic; padding: 1rem 0; }
 
+/* ---------------------------------------------- Class step (grid + abilities aside) */
+
+/* Class selection fills the main column; the ability panel rides along on the right.
+   Two distinct panels composed side by side — not a single fused class+ability block. */
+.creator-class {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 2rem;
+  align-items: start;
+}
+.creator-class-main { min-width: 0; }
+
+.creator-class-aside {
+  position: sticky;
+  top: 0;
+  padding: 1.25rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+}
+.creator-aside-title {
+  margin: 0 0 1rem;
+  border: none;
+  font-size: 1.15rem;
+  color: var(--cc-gold);
+}
+/* Inside the narrow aside the ability rows should fill the column, not cap at 520px. */
+.creator-class-aside .creator-ability-list { max-width: none; }
+.creator-class-aside .creator-method-tabs { flex-wrap: wrap; }
+
+/* On narrow stages, drop the aside below the grid rather than squeezing both. */
+@media (max-width: 1100px) {
+  .creator-class { grid-template-columns: 1fr; }
+  .creator-class-aside { position: static; }
+}
+
+/* A background with no ability increase has no aside, so reclaim the full width. */
+.creator-class--solo { grid-template-columns: 1fr; }
+
+/* Background increase aside: terse helper line. */
+.creator-asi-hint { margin: -0.5rem 0 1.25rem; color: var(--cc-muted); font-size: 0.85rem; }
+
+/* A fixed ability can't be hand-allocated: dim the whole row and stamp a padlock
+   over its score so the lock reads as "this number is set" rather than a side note. */
+.creator-ability-row.is-locked { opacity: 0.4; }
+.creator-ability-row.is-locked .creator-ability-score { position: relative; }
+.creator-ability-lock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  color: var(--cc-gold);
+  background: color-mix(in srgb, var(--cc-panel) 70%, transparent);
+  border-radius: 6px;
+}
+
 /* ---------------------------------------------- Abilities */
 
 .creator-method-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
@@ -281,14 +392,37 @@
   color: var(--cc-muted);
   cursor: pointer;
 }
-.creator-tab.is-active { background: var(--cc-accent); border-color: var(--cc-accent); color: #fff; }
+.creator-tab.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
 
-.creator-points { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 1rem; }
+.creator-points { display: flex; align-items: baseline; justify-content: center; gap: 0.5rem; margin-bottom: 1rem; }
 .creator-points-value { font-size: 2rem; font-weight: 700; color: var(--cc-gold); }
 .creator-points-value.is-zero { color: var(--cc-good); }
 .creator-points-label { color: var(--cc-muted); }
 
-.creator-roll-bar { margin-bottom: 1.25rem; }
+/* Available-score pool — sits in the same slot point-buy uses for "points remaining". */
+.creator-pool {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.creator-pool-chip {
+  min-width: 2.4rem;
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--cc-gold);
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+}
+/* A value already assigned to an ability dims out, so the remaining pool reads at a glance. */
+.creator-pool-chip.is-used { opacity: 0.3; color: var(--cc-muted); }
 
 .creator-ability-list { list-style: none; margin: 0; padding: 0; max-width: 520px; }
 .creator-ability-row {
@@ -302,7 +436,7 @@
   border: 1px solid var(--cc-line);
   border-radius: 10px;
 }
-.creator-ability-row.is-assigned { border-color: var(--cc-accent); }
+.creator-ability-row.is-assigned { border-color: var(--cc-select); }
 .creator-ability-name { font-weight: 600; }
 .creator-ability-mod { text-align: right; color: var(--cc-muted); font-variant-numeric: tabular-nums; }
 
@@ -330,7 +464,16 @@
   border-radius: 8px;
   color: var(--cc-text);
 }
-.creator-ability-actions { margin-top: 1.25rem; }
+.creator-ability-actions { display: flex; flex-wrap: nowrap; gap: 0.6rem; margin-top: 1.25rem; }
+/* Keep both buttons on one row inside the narrow aside: shrink padding and let them
+   share the width rather than wrapping Reset onto a second line. */
+.creator-ability-actions .creator-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: center;
+  padding: 0.55rem 0.7rem;
+  white-space: nowrap;
+}
 
 /* ---------------------------------------------- Review */
 

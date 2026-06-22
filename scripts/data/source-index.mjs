@@ -16,6 +16,9 @@ export class SourceIndex {
   /** uuid -> { name, img, enriched } resolved detail, memoised. */
   #details = new Map();
 
+  /** uuid -> ability-score-improvement config (or null), memoised. */
+  #asi = new Map();
+
   loaded = false;
 
   /**
@@ -119,4 +122,49 @@ export class SourceIndex {
     this.#details.set(uuid, detail);
     return detail;
   }
+
+  /**
+   * Resolve an origin item's level-0 Ability Score Improvement advancement into a
+   * plain config the Background step uses to drive its allocation panel. Returns
+   * null when the item grants no allocatable increase. Memoised per UUID.
+   *
+   * @param {string} uuid
+   * @returns {Promise<{id: string, points: number, cap: number, fixed: Record<string, number>, locked: string[]}|null>}
+   */
+  async abilityScoreIncrease(uuid) {
+    if ( !uuid ) return null;
+    if ( this.#asi.has(uuid) ) return this.#asi.get(uuid);
+
+    const doc = await fromUuid(uuid);
+    const config = doc ? readAsi(doc) : null;
+    this.#asi.set(uuid, config);
+    return config;
+  }
+}
+
+/**
+ * Pull the AbilityScoreImprovement advancement (preferring the level-0 one) off a
+ * resolved origin document and flatten its configuration. Kept free of any state
+ * or UI concern — just data extraction.
+ */
+function readAsi(doc) {
+  const byType = doc.advancement?.byType?.AbilityScoreImprovement;
+  let adv = byType?.length ? (byType.find(a => (a.level ?? 0) === 0) ?? byType[0]) : null;
+  if ( !adv ) {
+    const raw = Object.values(doc.system?.advancement ?? {});
+    adv = raw.find(a => a.type === "AbilityScoreImprovement" && (a.level ?? 0) === 0)
+      ?? raw.find(a => a.type === "AbilityScoreImprovement");
+  }
+  if ( !adv ) return null;
+
+  const config = adv.configuration ?? {};
+  const points = Number(config.points ?? 0);
+  if ( points <= 0 ) return null;
+  return {
+    id: adv.id ?? adv._id,
+    points,
+    cap: Number(config.cap ?? 2),
+    fixed: { ...(config.fixed ?? {}) },
+    locked: [...(config.locked ?? [])]
+  };
 }

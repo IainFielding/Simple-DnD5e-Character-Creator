@@ -1,4 +1,4 @@
-import { ABILITIES, abilityRollFormula, pointBuyBudget, t } from "../config.mjs";
+import { ABILITIES, MODULE_ID, abilityRollFormula, pointBuyBudget, t } from "../config.mjs";
 
 /** PHB point-buy price of each reachable score. */
 const POINT_BUY_COST = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
@@ -14,71 +14,78 @@ const abilityLabel = key => CONFIG.DND5E?.abilities?.[key]?.label ?? key.toUpper
 const abilityAbbr = key => CONFIG.DND5E?.abilities?.[key]?.abbreviation ?? key.slice(0, 3).toUpperCase();
 
 /**
- * Ability score determination — its own step (deliberately separate from class).
+ * Ability score determination. This lives as a self-contained panel — context,
+ * event handling, and completion — rather than a top-level step, so it can be
+ * composed into the Class step (which renders abilities alongside the class grid)
+ * without either side knowing about the other's layout.
+ *
  * Supports the three standard methods; each keeps the others' working values, so
  * a player can flip between them without losing progress.
  */
-export const abilitiesStep = {
-  id: "abilities",
-  icon: "fa-solid fa-dice-d20",
-  labelKey: "step.abilities.label",
-  template: "steps/abilities",
 
-  isComplete(state) {
-    if ( state.abilityMethod === "point-buy" ) return pointsRemaining(state) === 0;
-    const pool = state.abilityPool() ?? [];
-    if ( !pool.length ) return false;
-    return ABILITIES.every(k => state.assignment[k] != null);
-  },
+/** True once the chosen method has produced a complete, valid set of scores. */
+export function abilitiesComplete(state) {
+  if ( state.abilityMethod === "point-buy" ) return pointsRemaining(state) === 0;
+  const pool = state.abilityPool() ?? [];
+  if ( !pool.length ) return false;
+  return ABILITIES.every(k => state.assignment[k] != null);
+}
 
-  summary(state) {
-    const scores = state.resolvedScores();
-    return ABILITIES.map(k => scores[k]).join(" / ");
-  },
+/** Compact "15 / 14 / …" line for the rail. */
+export function abilitiesSummary(state) {
+  const scores = state.resolvedScores();
+  return ABILITIES.map(k => scores[k]).join(" / ");
+}
 
-  async handle(action, el, { state }) {
-    const ability = el?.dataset?.ability;
-    switch ( action ) {
-      case "ability-method":
-        state.abilityMethod = el.dataset.method;
-        break;
-      case "ability-inc":
-        if ( canIncrease(state, ability) ) state.pointBuy[ability] += 1;
-        break;
-      case "ability-dec":
-        if ( state.pointBuy[ability] > PB_MIN ) state.pointBuy[ability] -= 1;
-        break;
-      case "ability-roll":
-        state.rolledPool = await rollPool();
-        state.assignment = blankAssignment();
-        break;
-      case "ability-assign":
-        assignSlot(state, ability, el.value === "" ? null : Number(el.value));
-        break;
-      case "ability-reset":
-        if ( state.abilityMethod === "point-buy" ) resetPointBuy(state);
-        else state.assignment = blankAssignment();
-        break;
-    }
-  },
-
-  async context({ state }) {
-    const method = state.abilityMethod;
-    return {
-      method,
-      isPointBuy: method === "point-buy",
-      isArray: method === "standard-array",
-      isRoll: method === "roll",
-      rollFormula: abilityRollFormula(),
-      methods: [
-        { id: "point-buy", label: t("step.abilities.pointBuy"), active: method === "point-buy" },
-        { id: "standard-array", label: t("step.abilities.standardArray"), active: method === "standard-array" },
-        { id: "roll", label: t("step.abilities.roll"), active: method === "roll" }
-      ],
-      ...(method === "point-buy" ? pointBuyContext(state) : poolContext(state))
-    };
+/** Apply one ability-panel action to the state. Returns nothing; caller re-renders. */
+export async function abilitiesHandle(action, el, state) {
+  const ability = el?.dataset?.ability;
+  switch ( action ) {
+    case "ability-method":
+      state.abilityMethod = el.dataset.method;
+      break;
+    case "ability-inc":
+      if ( canIncrease(state, ability) ) state.pointBuy[ability] += 1;
+      break;
+    case "ability-dec":
+      if ( state.pointBuy[ability] > PB_MIN ) state.pointBuy[ability] -= 1;
+      break;
+    case "ability-roll":
+      state.rolledPool = await rollPool();
+      state.assignment = blankAssignment();
+      break;
+    case "ability-assign":
+      assignSlot(state, ability, el.value === "" ? null : Number(el.value));
+      break;
+    case "ability-reset":
+      if ( state.abilityMethod === "point-buy" ) resetPointBuy(state);
+      else state.assignment = blankAssignment();
+      break;
   }
-};
+}
+
+/** Template context for the ability panel (nested under `abilities` by the Class step). */
+export function abilitiesContext(state) {
+  const method = state.abilityMethod;
+  return {
+    method,
+    isPointBuy: method === "point-buy",
+    isArray: method === "standard-array",
+    isRoll: method === "roll",
+    rollFormula: abilityRollFormula(),
+    methods: [
+      { id: "point-buy", label: t("step.abilities.pointBuy"), active: method === "point-buy" },
+      { id: "standard-array", label: t("step.abilities.standardArray"), active: method === "standard-array" },
+      { id: "roll", label: t("step.abilities.roll"), active: method === "roll" }
+    ],
+    ...(method === "point-buy" ? pointBuyContext(state) : poolContext(state))
+  };
+}
+
+/** Actions this panel owns, so the Class step can route only its own clicks here. */
+export const ABILITY_ACTIONS = new Set([
+  "ability-method", "ability-inc", "ability-dec", "ability-roll", "ability-assign", "ability-reset"
+]);
 
 /* -------------------------------------------- */
 /*  Point-buy                                   */
@@ -141,12 +148,26 @@ function assignSlot(state, ability, index) {
 
 async function rollPool() {
   const formula = abilityRollFormula();
-  const results = [];
-  for ( let i = 0; i < 6; i++ ) {
-    const roll = await new Roll(formula).evaluate();
-    results.push(roll.total);
+  const rolls = [];
+  for ( let i = 0; i < 6; i++ ) rolls.push(await new Roll(formula).evaluate());
+
+  // Capture the scores up front: the pool is highest-first (like the standard array)
+  // and must survive even if the cosmetic animation below fails or is absent.
+  const totals = rolls.map(r => r.total).sort((a, b) => b - a);
+
+  // Animate via Dice So Nice when installed — a single synchronised throw of all six
+  // dice. Purely cosmetic, so any failure is logged and ignored, never propagated.
+  await showRolledDice(rolls);
+  return totals;
+}
+
+async function showRolledDice(rolls) {
+  if ( !game.dice3d ) return;
+  try {
+    await Promise.all(rolls.map(roll => game.dice3d.showForRoll(roll, game.user, true)));
+  } catch ( err ) {
+    console.warn(`${MODULE_ID} | dice animation failed`, err);
   }
-  return results.sort((a, b) => b - a);
 }
 
 function poolContext(state) {
@@ -171,5 +192,8 @@ function poolContext(state) {
     };
   });
 
-  return { rows, hasPool, poolValues: pool };
+  // The pool shown as a strip up top — each value flagged once it's been assigned.
+  const poolChips = pool.map((value, index) => ({ value, used: used.has(index) }));
+
+  return { rows, hasPool, pool: poolChips };
 }
