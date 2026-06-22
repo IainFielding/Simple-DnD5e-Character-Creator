@@ -1,0 +1,125 @@
+<section class="creator-choices">
+  {{!-- Rich dnd5e item tooltip for any element backed by a compendium uuid. The
+        `.loading[data-uuid]` placeholder is what dnd5e's tooltip observer fills in. --}}
+  {{#*inline "itemTip"}} data-tooltip="<section class='loading' data-uuid='{{uuid}}'><i class='fas fa-spinner fa-spin-pulse'></i></section>" data-tooltip-class="dnd5e2 dnd5e-tooltip item-tooltip themed theme-light" data-tooltip-direction="LEFT"{{/inline}}
+
+  {{#*inline "choiceOption"}}
+  <button type="button"
+          class="creator-choice-opt {{#if isSelected}}is-selected{{/if}} {{#if disabled}}is-disabled{{/if}}"
+          data-action="stepAction" data-step-action="pick-choice"
+          data-choice-source="{{source}}" data-sel-key="{{selKey}}" data-key="{{key}}" data-count="{{count}}"
+          {{#if disabled}}disabled data-tooltip="{{disabledReason}}"{{else}}{{#if uuid}}{{> itemTip uuid=uuid}}{{/if}}{{/if}}>
+    {{#if img}}<img class="creator-choice-opt-img" src="{{img}}" alt="">{{/if}}
+    <span class="creator-choice-opt-label">{{label}}</span>
+    {{#if isSelected}}<i class="creator-choice-opt-tick fa-solid fa-check"></i>{{/if}}
+  </button>
+  {{/inline}}
+
+  {{#if isEmpty}}
+  <div class="creator-pick-empty">
+    <i class="fa-solid fa-list-check"></i>
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.choices.label"}}</h2>
+    <p>{{localize "sogrom-dnd5e-character-creator.step.choices.none"}}</p>
+  </div>
+  {{else}}
+  <div class="creator-choices-list">
+
+    {{#each sources}}
+    <section class="creator-choice-source">
+      <header class="creator-choice-source-head">
+        <img class="creator-choice-source-img" src="{{img}}" alt="">
+        <h2>{{name}}</h2>
+      </header>
+
+      {{#each requirements}}
+      <div class="creator-choice {{#if complete}}is-complete{{/if}}">
+        <div class="creator-choice-head">
+          <h3>{{title}}</h3>
+          <span class="creator-choice-count {{#if complete}}is-complete{{/if}}">
+            {{#if showProgress}}{{chosenCount}}/{{count}}{{else}}{{countLabel}}{{/if}}
+          </span>
+        </div>
+
+        {{#if hint}}<div class="creator-choice-hint">{{{hint}}}</div>{{/if}}
+        {{#if emptyNote}}<p class="creator-choice-empty">{{emptyNote}}</p>{{/if}}
+
+        {{#if groups}}
+          {{#each groups}}
+          <div class="creator-choice-group">
+            <span class="creator-choice-group-label">{{label}}</span>
+            <div class="creator-choice-options">
+              {{#each options}}{{> choiceOption}}{{/each}}
+            </div>
+          </div>
+          {{/each}}
+        {{else}}
+          <div class="creator-choice-options">
+            {{#each options}}{{> choiceOption}}{{/each}}
+          </div>
+        {{/if}}
+      </div>
+      {{/each}}
+    </section>
+    {{/each}}
+
+    {{#if hasEquipment}}
+    <section class="creator-choice-source creator-equipment">
+      <header class="creator-choice-source-head">
+        <i class="fa-solid fa-sack-xmark creator-choice-source-icon"></i>
+        <h2>{{localize "sogrom-dnd5e-character-creator.equipment.heading"}}</h2>
+      </header>
+
+      {{#each equipment}}
+      <div class="creator-equip-source" data-equip-source="{{key}}">
+        <div class="creator-equip-head">
+          <img class="creator-choice-source-img" src="{{img}}" alt="">
+          <h3>{{name}}</h3>
+        </div>
+
+        <div class="creator-equip-options">
+          {{#each options}}
+          <button type="button" class="creator-equip-tab {{#if isSelected}}is-selected{{/if}}"
+                  data-action="stepAction" data-step-action="equip-option"
+                  data-equip-source="{{../key}}" data-index="{{index}}">
+            {{localize "sogrom-dnd5e-character-creator.equipment.option" label=label}}{{#if isGold}} — {{wealth}} GP{{/if}}
+          </button>
+          {{/each}}
+        </div>
+
+        {{#if isGold}}
+        <p class="creator-equip-gold"><i class="fa-solid fa-coins"></i> {{wealth}} GP</p>
+        {{else}}
+        <ul class="creator-equip-rows">
+          {{#each rows}}
+          {{#if isOrGroup}}
+          <li class="creator-equip-orgroup">
+            {{#if label}}<span class="creator-equip-orlabel">{{label}}</span>{{/if}}
+            <div class="creator-equip-orpills">
+              {{#each options}}
+              <button type="button" class="creator-equip-pill {{#if isSelected}}is-selected{{/if}}"
+                      data-action="stepAction" data-step-action="equip-or"
+                      data-equip-source="{{../../key}}" data-group="{{../_id}}" data-option="{{_id}}"
+                      {{#if uuid}}{{> itemTip uuid=uuid}}{{/if}}>
+                {{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}{{#if count}} ×{{count}}{{/if}}
+              </button>
+              {{/each}}
+            </div>
+          </li>
+          {{else}}
+          <li class="creator-equip-row"{{#if uuid}}{{> itemTip uuid=uuid}}{{/if}}>
+            {{#if img}}<img src="{{img}}" alt="">{{/if}}
+            <span>{{name}}{{#if count}} ×{{count}}{{/if}}</span>
+          </li>
+          {{/if}}
+          {{/each}}
+        </ul>
+        {{#if currency}}<p class="creator-equip-gold"><i class="fa-solid fa-coins"></i> {{currency}}</p>{{/if}}
+        {{/if}}
+      </div>
+      {{/each}}
+    </section>
+    {{/if}}
+
+  </div>
+  {{/if}}
+</section>

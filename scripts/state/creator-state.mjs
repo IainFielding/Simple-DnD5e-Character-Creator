@@ -1,4 +1,4 @@
-import { ABILITIES } from "../config.mjs";
+import { ABILITIES, t } from "../config.mjs";
 
 /**
  * The single source of truth for every choice the player makes in the creator.
@@ -17,6 +17,66 @@ export class CreatorState {
   classUuid = null;
   speciesUuid = null;
   backgroundUuid = null;
+
+  /**
+   * Identity & biography fields. `name` mirrors the actor name (the only mandatory
+   * field); the rest are optional and written to `actor.system.details` on build.
+   */
+  details = {
+    name: "", alignment: "", faith: "", gender: "", eyes: "", hair: "", skin: "",
+    height: "", weight: "", age: "", trait: "", ideals: "", bonds: "", flaws: "",
+    appearance: "", biography: ""
+  };
+
+  /** Portrait / prototype-token visual settings, applied to the actor on build. */
+  portrait = "icons/svg/mystery-man.svg";
+  tokenImg = "icons/svg/mystery-man.svg";
+  tokenRingImg = "icons/svg/mystery-man.svg";
+  tokenRingEnabled = false;
+  tokenLockRotation = false;
+
+  /** Transient Details-step UI: which token image tab is shown ("token"|"ring"). Not persisted. */
+  tokenTab = "token";
+
+  /**
+   * Level-1 spell picks (spellcaster classes only), each `{uuid, id, name, img, level}`.
+   * Cleared whenever the class selection changes — a spell list is class-specific.
+   */
+  selectedCantrips = [];
+  selectedSpells = [];
+
+  /**
+   * Advancement choices made on the Choices step: source -> selKey -> chosen key/uuid[].
+   * Each source's bucket is cleared when that origin selection changes.
+   */
+  advChoices = { class: {}, background: {}, species: {} };
+
+  /** Starting-equipment selection per source: { selectedOption, orSelections }. */
+  equipment = {
+    class: { selectedOption: 0, orSelections: {} },
+    background: { selectedOption: 0, orSelections: {} }
+  };
+
+  /** Transient Spells-step UI: which tab is shown and which spell is focused. Not persisted. */
+  spellTab = "cantrips";
+  focusedSpellUuid = null;
+
+  /**
+   * Slim spellcasting summary for the current class — `{isSpellcaster, maxCantrips, maxSpells}`
+   * — so the (synchronous) completion gate can tell whether the Spells step applies and
+   * whether every known spell has been chosen. Refreshed whenever the class changes. Null
+   * until a class is picked.
+   */
+  spellInfo = null;
+
+  /**
+   * The most recently resolved advancement-choice requirements (from the choice
+   * resolver). Cached so the synchronous `isComplete` check — and the assembler — can
+   * read completion without re-resolving documents. Refreshed whenever an origin
+   * selection or a choice pick changes. `undefined` until first resolved.
+   * @type {{sources: object[], hasAny: boolean}|undefined}
+   */
+  choiceCache;
 
   /** "point-buy" | "standard-array" | "roll" */
   abilityMethod = "point-buy";
@@ -81,12 +141,51 @@ export class CreatorState {
   }
 
   /**
+   * The ability increase the chosen background confers per ability: the fixed part
+   * plus whatever the player allocated in the wizard. Only abilities with a non-zero
+   * increase are present, so callers can treat a missing key as "no bonus".
+   * @returns {Record<string, number>}
+   */
+  backgroundDeltas() {
+    const asi = this.backgroundAsi;
+    if ( !asi ) return {};
+    const out = {};
+    for ( const key of ABILITIES ) {
+      const total = Number(asi.fixed?.[key] ?? 0) + (this.backgroundAbilities[key] ?? 0);
+      if ( total ) out[key] = total;
+    }
+    return out;
+  }
+
+  /**
    * Forget the current background's ability allocation and cached config. Called
    * when the background selection changes so a previous choice never leaks across.
    */
   resetBackgroundAbilities() {
     this.backgroundAbilities = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
     this.backgroundAsi = undefined;
+  }
+
+  /**
+   * Forget everything keyed to the class: its level-1 spell picks, its advancement
+   * choices, and its equipment selection. Called when the class selection changes so
+   * a spell list or skill pick never carries over to a different class.
+   */
+  resetClassDependent() {
+    this.selectedCantrips = [];
+    this.selectedSpells = [];
+    this.advChoices.class = {};
+    this.equipment.class = { selectedOption: 0, orSelections: {} };
+  }
+
+  /**
+   * Forget one origin source's advancement choices (and equipment, where it has any).
+   * Called when that source's selection changes.
+   * @param {"class"|"background"|"species"} source
+   */
+  resetSourceChoices(source) {
+    this.advChoices[source] = {};
+    if ( this.equipment[source] ) this.equipment[source] = { selectedOption: 0, orSelections: {} };
   }
 
   /* -------------------------------------------- */
@@ -114,5 +213,29 @@ export class CreatorState {
         this.pointBuy[key] = Math.min(15, Math.max(8, abil[key]?.value ?? 8));
       }
     }
+
+    // Identity & biography — round-trip whatever the actor already carries. `ideals`,
+    // `bonds`, `flaws` map to the singular dnd5e keys; biography is a rich-text object.
+    const d = actor.system?.details ?? {};
+    // The draft is created with a placeholder name; don't treat that as a real entry,
+    // so the Details step stays incomplete until the player actually names the character.
+    const placeholder = t("common.newCharacter");
+    this.details = {
+      name: (actor.name && actor.name !== placeholder) ? actor.name : "",
+      alignment: d.alignment ?? "", faith: d.faith ?? "", gender: d.gender ?? "",
+      eyes: d.eyes ?? "", hair: d.hair ?? "", skin: d.skin ?? "",
+      height: d.height ?? "", weight: d.weight ?? "", age: d.age ?? "",
+      trait: d.trait ?? "", ideals: d.ideal ?? "", bonds: d.bond ?? "",
+      flaws: d.flaw ?? "", appearance: d.appearance ?? "",
+      biography: d.biography?.value ?? ""
+    };
+
+    // Portrait & prototype-token visuals.
+    const token = actor.prototypeToken ?? {};
+    if ( actor.img ) this.portrait = actor.img;
+    if ( token.texture?.src ) this.tokenImg = token.texture.src;
+    if ( token.ring?.subject?.texture ) this.tokenRingImg = token.ring.subject.texture;
+    this.tokenRingEnabled = !!token.ring?.enabled;
+    this.tokenLockRotation = !!token.lockRotation;
   }
 }

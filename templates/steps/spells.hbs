@@ -1,0 +1,94 @@
+<section class="creator-pick creator-pick--solo creator-spells">
+  {{#if isSpellcaster}}
+  <!-- Left column: tabs + spell list -->
+  <div class="creator-pick-side">
+    <div class="creator-spell-tabs">
+      {{#if hasCantrips}}
+      <button type="button" class="creator-spell-tab {{#if isCantripsTab}}is-active{{/if}} {{#if cantripsFull}}is-full{{/if}}"
+              data-action="stepAction" data-step-action="spell-tab" data-tab="cantrips">
+        {{localize "sogrom-dnd5e-character-creator.step.spells.cantrips"}}
+        <span class="creator-spell-count">{{cantripCount}}/{{maxCantrips}}</span>
+      </button>
+      {{/if}}
+      {{#if hasLevel1}}
+      <button type="button" class="creator-spell-tab {{#if isLevel1Tab}}is-active{{/if}} {{#if spellsFull}}is-full{{/if}}"
+              data-action="stepAction" data-step-action="spell-tab" data-tab="level1">
+        {{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}
+        <span class="creator-spell-count">{{spellCount}}/{{maxSpells}}</span>
+      </button>
+      {{/if}}
+    </div>
+
+    <div class="creator-toolbar creator-toolbar--stacked">
+      <label class="creator-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="search" data-creator-search autocomplete="off"
+               placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
+      </label>
+      <span class="creator-count">{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
+    </div>
+
+    <ul class="creator-picklist">
+      {{#each list}}
+      <li>
+        <button type="button"
+                class="creator-pickrow {{#if active}}is-selected{{/if}} {{#if focused}}is-focused{{/if}} {{#if disabled}}is-disabled{{/if}}"
+                data-action="stepAction" data-step-action="focus-spell"
+                data-uuid="{{uuid}}" data-name="{{name}}">
+          <img class="creator-pickrow-img" src="{{img}}" alt="">
+          <span class="creator-pickrow-name">{{name}}</span>
+          {{#if active}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}
+        </button>
+      </li>
+      {{else}}
+      <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.step.spells.empty"}}</p>
+      {{/each}}
+    </ul>
+  </div>
+
+  <!-- Right column: focused spell -->
+  <div class="creator-pick-desc">
+    {{#if focused}}
+    <article class="creator-detail">
+      <header class="creator-detail-head">
+        <img class="creator-detail-img" src="{{focused.img}}" alt="">
+        <div>
+          <h2>{{focused.name}}</h2>
+          <p class="creator-spell-meta">
+            {{focused.school}}{{#if focused.components}} · {{focused.components}}{{/if}}
+            {{#if focused.isConcentration}} · {{localize "sogrom-dnd5e-character-creator.step.spells.concentration"}}{{/if}}
+            {{#if focused.isRitual}} · {{localize "sogrom-dnd5e-character-creator.step.spells.ritual"}}{{/if}}
+          </p>
+        </div>
+      </header>
+
+      <button type="button" class="creator-btn {{#if focused.active}}creator-btn-danger{{else}}creator-btn-primary{{/if}}"
+              data-action="stepAction" data-step-action="pick-spell"
+              data-uuid="{{focused.uuid}}" data-level="{{focused.level}}"
+              {{#if focused.disabled}}disabled{{/if}}>
+        {{#if focused.active}}
+        <i class="fa-solid fa-minus"></i> {{localize "sogrom-dnd5e-character-creator.step.spells.remove"}}
+        {{else}}
+        <i class="fa-solid fa-plus"></i> {{localize "sogrom-dnd5e-character-creator.step.spells.add"}}
+        {{/if}}
+      </button>
+
+      <div class="creator-detail-body">{{{focused.description}}}</div>
+    </article>
+    {{else}}
+    <div class="creator-pick-empty">
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      <h2>{{localize "sogrom-dnd5e-character-creator.step.spells.label"}}</h2>
+      <p>{{localize "sogrom-dnd5e-character-creator.step.spells.selectHint"}}</p>
+    </div>
+    {{/if}}
+  </div>
+
+  {{else}}
+  <div class="creator-pick-empty creator-spells-none">
+    <i class="fa-solid fa-ban"></i>
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.spells.label"}}</h2>
+    <p>{{hint}}</p>
+  </div>
+  {{/if}}
+</section>

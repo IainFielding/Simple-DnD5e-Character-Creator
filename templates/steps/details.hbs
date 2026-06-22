@@ -1,0 +1,102 @@
+<section class="creator-details">
+  <!-- Left column: portrait & token -->
+  <div class="creator-details-media">
+    <div class="creator-portrait-frame">
+      <img class="creator-portrait-img" src="{{portrait}}" alt="">
+    </div>
+    <button type="button" class="creator-portrait-btn" data-action="stepAction" data-step-action="portrait">
+      <i class="fa-solid fa-image"></i> {{localize "sogrom-dnd5e-character-creator.step.details.changePortrait"}}
+    </button>
+
+    <div class="creator-media-divider">{{localize "sogrom-dnd5e-character-creator.step.details.token"}}</div>
+
+    <div class="creator-token-tabs">
+      <button type="button" class="creator-token-tab {{#if onToken}}is-active{{/if}}"
+              data-action="stepAction" data-step-action="tokenTab" data-tab="token">
+        {{localize "sogrom-dnd5e-character-creator.step.details.token"}}
+      </button>
+      <button type="button" class="creator-token-tab {{#if onRing}}is-active{{/if}}"
+              data-action="stepAction" data-step-action="tokenTab" data-tab="ring">
+        {{localize "sogrom-dnd5e-character-creator.step.details.ringSubject"}}
+      </button>
+    </div>
+
+    <div class="creator-portrait-frame">
+      <img class="creator-portrait-img" src="{{tokenImg}}" alt="">
+    </div>
+    {{#if onRing}}
+    <button type="button" class="creator-portrait-btn" data-action="stepAction" data-step-action="tokenRingImg">
+      <i class="fa-solid fa-image"></i> {{localize "sogrom-dnd5e-character-creator.step.details.changeRingSubject"}}
+    </button>
+    {{else}}
+    <button type="button" class="creator-portrait-btn" data-action="stepAction" data-step-action="tokenImg">
+      <i class="fa-solid fa-image"></i> {{localize "sogrom-dnd5e-character-creator.step.details.changeToken"}}
+    </button>
+    {{/if}}
+
+    <div class="creator-setting-row">
+      <span class="creator-setting-label">
+        <i class="fa-solid fa-rotate"></i> {{localize "sogrom-dnd5e-character-creator.step.details.lockRotation"}}
+      </span>
+      <button type="button" class="creator-setting-toggle {{#if lockRotation}}is-on{{/if}}"
+              data-action="stepAction" data-step-action="toggleLock">
+        {{#if lockRotation}}{{localize "sogrom-dnd5e-character-creator.common.on"}}{{else}}{{localize "sogrom-dnd5e-character-creator.common.off"}}{{/if}}
+      </button>
+    </div>
+
+    <div class="creator-setting-row">
+      <span class="creator-setting-label">
+        <i class="fa-solid fa-ring"></i> {{localize "sogrom-dnd5e-character-creator.step.details.dynamicRing"}}
+      </span>
+      <button type="button" class="creator-setting-toggle {{#if ringEnabled}}is-on{{/if}}"
+              data-action="stepAction" data-step-action="toggleRing">
+        {{#if ringEnabled}}{{localize "sogrom-dnd5e-character-creator.common.on"}}{{else}}{{localize "sogrom-dnd5e-character-creator.common.off"}}{{/if}}
+      </button>
+    </div>
+  </div>
+
+  <!-- Right column: form -->
+  <div class="creator-details-form">
+    <h2 class="creator-details-title">{{localize "sogrom-dnd5e-character-creator.step.details.label"}}</h2>
+    <p class="creator-details-subtitle">{{subtitle}}</p>
+
+    <div class="creator-detail-name">
+      <label for="creator-cc-name">
+        {{localize "sogrom-dnd5e-character-creator.step.details.nameLabel"}}
+        <span class="creator-required">*</span>
+      </label>
+      <input id="creator-cc-name" type="text" data-step-change="detail" data-detail="name"
+             value="{{name}}" placeholder="{{namePlaceholder}}" autocomplete="off">
+    </div>
+
+    <p class="creator-detail-optional">{{localize "sogrom-dnd5e-character-creator.step.details.optional"}}</p>
+
+    <div class="creator-detail-grid">
+      {{#each shortFields}}
+      <div class="creator-detail-field">
+        <label for="creator-cc-{{key}}">{{label}}</label>
+        <input id="creator-cc-{{key}}" type="text" data-step-change="detail" data-detail="{{key}}"
+               value="{{value}}" placeholder="{{placeholder}}" autocomplete="off">
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="creator-detail-textgrid">
+      {{#each gridTextFields}}
+      <div class="creator-detail-field">
+        <label for="creator-cc-{{key}}">{{label}}</label>
+        <textarea id="creator-cc-{{key}}" data-step-change="detail" data-detail="{{key}}"
+                  rows="{{rows}}" placeholder="{{placeholder}}">{{value}}</textarea>
+      </div>
+      {{/each}}
+    </div>
+
+    {{#each wideTextFields}}
+    <div class="creator-detail-field creator-detail-textwide">
+      <label for="creator-cc-{{key}}">{{label}}</label>
+      <textarea id="creator-cc-{{key}}" data-step-change="detail" data-detail="{{key}}"
+                rows="{{rows}}" placeholder="{{placeholder}}">{{value}}</textarea>
+    </div>
+    {{/each}}
+  </div>
+</section>

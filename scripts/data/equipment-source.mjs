@@ -1,0 +1,462 @@
+import { t, log } from "../config.mjs";
+import { getEnabledPacks } from "./compendium-util.mjs";
+
+/**
+ * Resolves a class's and background's starting equipment into selectable options, and
+ * later collects the chosen gear (and currency) for the build. Options come straight
+ * from each item's `system.startingEquipment` tree: a root OR exposes each branch as a
+ * lettered option, a root AND is option A, and a non-zero `system.wealth` adds a final
+ * "gold" option. Nested OR/tool/focus picks become inline sub-choices.
+ *
+ * One instance per builder session; built option sets are memoised per origin UUID. It
+ * reads selections from `state.equipment` but is otherwise free of UI/state coupling.
+ */
+
+const VALID_TYPES = new Set(["AND", "OR", "linked", "currency", "tool"]);
+const OPTION_LABELS = "ABCDEFGH";
+const TOOL_IMG = {
+  art: "icons/tools/hand/hammer-and-nail.webp",
+  game: "icons/sundries/gaming/dice-pair-white-green.webp",
+  music: "icons/tools/instruments/harp-yellow-teal.webp"
+};
+const FOCUS_IMG = "icons/svg/item-bag.svg";
+
+/** Spellcasting-focus picks per class identifier; items are referenced by identifier. */
+const CLASS_FOCUS_CHOICES = {
+  wizard:  { label: "equipment.focus.arcane",  ids: ["crystal", "orb", "rod", "staff", "wand"] },
+  druid:   { label: "equipment.focus.druidic", ids: ["sprig-of-mistletoe", "wooden-staff", "yew-wand"] },
+  ranger:  { label: "equipment.focus.druidic", ids: ["sprig-of-mistletoe", "wooden-staff", "yew-wand"] },
+  cleric:  { label: "equipment.focus.holy",    ids: ["amulet", "emblem", "reliquary"] },
+  paladin: { label: "equipment.focus.holy",    ids: ["amulet", "emblem", "reliquary"] }
+};
+
+export class EquipmentSource {
+
+  /** origin uuid -> { name, img, options }, memoised. */
+  #cache = new Map();
+  /** tool category -> choice[], memoised. */
+  #toolCache = new Map();
+  /** focus identifier -> {uuid,name,img}|null, memoised. */
+  #focusCache = new Map();
+
+  /**
+   * Build the option sets for the chosen class & background and seed default sub-choices.
+   * @returns {Promise<{class?: object, background?: object}>}
+   */
+  async load(state, source) {
+    const out = {};
+    for ( const [key, field] of [["class", "classUuid"], ["background", "backgroundUuid"]] ) {
+      const uuid = state[field];
+      if ( !uuid ) continue;
+      const data = await this.#buildFor(uuid, key, source);
+      if ( !data ) continue;
+      out[key] = data;
+
+      const eq = state.equipment[key] ?? (state.equipment[key] = { selectedOption: 0, orSelections: {} });
+      if ( eq.selectedOption == null ) eq.selectedOption = 0;
+      for ( const opt of data.options ) if ( opt.tree ) seedOrSelections(eq.orSelections, opt.tree);
+    }
+    return out;
+  }
+
+  async #buildFor(uuid, key, source) {
+    if ( this.#cache.has(uuid) ) return this.#cache.get(uuid);
+    const doc = await fromUuid(uuid).catch(() => null);
+    if ( !doc ) return null;
+
+    const entries = doc.system?.startingEquipment ?? [];
+    const wealth = doc.system?.wealth ?? "0";
+    const roots = [...entries]
+      .filter(e => !e.group && VALID_TYPES.has(e.type))
+      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+
+    const options = [];
+    if ( roots.length ) {
+      const root = buildNode(roots[0]);
+      if ( root.type === "OR" ) {
+        for ( const child of root.children ) { await this.#resolveNodes(child); options.push({ type: "equipment", tree: child }); }
+      } else {
+        await this.#resolveNodes(root);
+        options.push({ type: "equipment", tree: root });
+      }
+    }
+    if ( parseInt(wealth) > 0 ) options.push({ type: "gold", wealth });
+    if ( !options.length ) { this.#cache.set(uuid, null); return null; }
+
+    options.forEach((opt, i) => { opt.label = OPTION_LABELS[i] ?? String(i + 1); });
+
+    // Description-embedded gold (fallback for classes that state gold in prose).
+    const descHTML = doc.system?.description?.value ?? "";
+    for ( const opt of options ) {
+      if ( opt.type === "equipment" ) opt.descriptionGold = extractDescriptionGold(descHTML, opt.label);
+    }
+
+    // Spellcasting focus pick (class only).
+    if ( key === "class" ) await this.#expandFocusChoice(doc.system?.identifier ?? "", options);
+
+    const card = source.card(uuid);
+    const data = { name: card?.name ?? doc.name, img: card?.img ?? doc.img, options };
+    this.#cache.set(uuid, data);
+    return data;
+  }
+
+  /** Resolve linked-item names/images and tool category choices throughout a tree. */
+  async #resolveNodes(node) {
+    if ( node.type === "linked" && node.key ) {
+      const doc = await fromUuid(node.key).catch(() => null);
+      if ( doc ) { node.name = doc.name; node.img = doc.img; node.identifier = doc.system?.identifier ?? null; }
+      else log(`equipment item did not resolve: ${node.key}`);
+    }
+    if ( node.type === "tool" && node.key ) {
+      node.name = dnd5e.documents.Trait?.keyLabel?.(`tool:${node.key}`) ?? node.key;
+      node.img = TOOL_IMG[node.key] ?? null;
+      const category = toolCategoryKey(node.key);
+      if ( category ) {
+        const choices = await this.#toolChoices(category);
+        if ( choices.length ) { node.isToolChoice = true; node.choices = choices; }
+      }
+    }
+    for ( const child of node.children ?? [] ) await this.#resolveNodes(child);
+  }
+
+  /** Specific tool items in a category (e.g. all musical instruments), deduped + cached. */
+  async #toolChoices(category) {
+    if ( this.#toolCache.has(category) ) return this.#toolCache.get(category);
+    let entries = [];
+    const browser = dnd5e.applications?.CompendiumBrowser;
+    if ( browser?.fetch ) {
+      try {
+        const all = await browser.fetch(Item, {
+          types: new Set(["tool"]),
+          indexFields: new Set(["system.type.value", "system.type.baseItem"])
+        });
+        entries = all.filter(e => (e.system?.type?.value ?? "") === category);
+      } catch ( err ) {
+        log(`tool choice fetch failed for "${category}"`, err);
+      }
+    }
+    const choices = dedupeByPriority(entries, e => e.system?.type?.baseItem || e.name)
+      .map(e => ({ uuid: e.uuid, name: e.name, img: e.img }))
+      .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
+    this.#toolCache.set(category, choices);
+    return choices;
+  }
+
+  /** Add the class's focus pick to each equipment option, converting or injecting a node. */
+  async #expandFocusChoice(classId, options) {
+    const cfg = CLASS_FOCUS_CHOICES[classId];
+    if ( !cfg?.ids?.length ) return;
+    const choices = await this.#focusItems(cfg.ids);
+    if ( choices.length <= 1 ) return;
+
+    const ids = new Set(cfg.ids);
+    const uuids = new Set(choices.map(c => c.uuid));
+    const label = t("equipment.choosePrompt", { label: t(cfg.label) });
+    const isFocus = n => n.type === "linked" && (ids.has(n.identifier) || uuids.has(n.key));
+
+    for ( const opt of options ) {
+      if ( opt.type !== "equipment" || !opt.tree ) continue;
+      const node = findNode(opt.tree, isFocus) ?? injectFocusNode(opt);
+      node.isFocusChoice = true;
+      node.choices = choices;
+      node.choiceLabel = label;
+    }
+  }
+
+  /** Resolve focus items by identifier from the world's equipment packs, cached per id. */
+  async #focusItems(ids) {
+    const want = new Set(ids.filter(id => !this.#focusCache.has(id)));
+    if ( want.size ) {
+      const PRIORITY = ["dnd-players-handbook.equipment", "dnd5e.equipment24", "dnd5e.equipment"];
+      const rankOf = c => { const i = PRIORITY.findIndex(p => c.startsWith(p)); return i >= 0 ? i : PRIORITY.length; };
+      const enabled = getEnabledPacks();
+      const best = new Map();
+      for ( const pack of game.packs ) {
+        if ( pack.metadata.type !== "Item" ) continue;
+        if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) continue;
+        if ( enabled && !enabled.has(pack.collection) ) continue;
+        try {
+          const index = await pack.getIndex({ fields: ["system.identifier"] });
+          for ( const e of index ) {
+            const id = e.system?.identifier;
+            if ( !id || !want.has(id) ) continue;
+            const rank = rankOf(pack.collection);
+            const existing = best.get(id);
+            if ( !existing || rank < existing.rank ) best.set(id, { uuid: e.uuid, name: e.name, img: e.img, rank });
+          }
+        } catch ( err ) {
+          log(`focus item scan failed for ${pack.collection}`, err);
+        }
+      }
+      for ( const id of want ) {
+        const c = best.get(id);
+        this.#focusCache.set(id, c ? { uuid: c.uuid, name: c.name, img: c.img } : null);
+      }
+    }
+    return ids.map(id => this.#focusCache.get(id)).filter(Boolean);
+  }
+}
+
+/* -------------------------------------------- */
+/*  Display & collection (pure helpers)         */
+/* -------------------------------------------- */
+
+/**
+ * Display rows for the selected option of one equipment source, given the player's
+ * inline OR/tool/focus selections. Currency rows are separated out for the summary.
+ */
+export function describeOption(data, eqState) {
+  const selectedIdx = eqState.selectedOption ?? 0;
+  const opt = data.options[selectedIdx];
+  const rows = opt?.type === "equipment" ? flattenTree(opt.tree, eqState.orSelections) : [];
+  return {
+    options: data.options.map((o, i) => ({
+      index: i, label: o.label, isGold: o.type === "gold", wealth: o.wealth,
+      isSelected: i === selectedIdx
+    })),
+    isGold: opt?.type === "gold",
+    wealth: opt?.wealth,
+    // `isOrGroup` lets the template branch without a comparison helper.
+    rows: rows.filter(r => !r.isCurrency).map(r => ({ ...r, isOrGroup: r.type === "or-group" })),
+    currency: rows.filter(r => r.isCurrency).map(r => r.name).join(", ")
+      || (opt?.descriptionGold ? `${opt.descriptionGold} GP` : "")
+  };
+}
+
+/**
+ * A flat summary of one source's selected option for the review page: each OR/focus/tool
+ * choice collapsed to the picked item, plus a combined gold string.
+ * @returns {{items: {name:string, img:?string, count:?number, uuid:?string}[], gold: string}}
+ */
+export function summarizeOption(data, eqState) {
+  const opt = data.options[eqState.selectedOption ?? 0];
+  if ( !opt ) return { items: [], gold: "" };
+  if ( opt.type === "gold" ) return { items: [], gold: `${opt.wealth} GP` };
+
+  const items = [];
+  const goldParts = [];
+  for ( const r of flattenTree(opt.tree, eqState.orSelections) ) {
+    if ( r.type === "or-group" ) {
+      const sel = r.options.find(o => o.isSelected) ?? r.options[0];
+      if ( sel ) items.push({ name: sel.name, img: sel.img, count: sel.count, uuid: sel.uuid ?? null });
+    } else if ( r.isCurrency ) {
+      goldParts.push(r.name);
+    } else {
+      items.push({ name: r.name, img: r.img, count: r.count, uuid: r.uuid ?? null });
+    }
+  }
+  let gold = goldParts.join(", ");
+  if ( !gold && opt.descriptionGold ) gold = `${opt.descriptionGold} GP`;
+  return { items, gold };
+}
+
+/** Flatten an equipment tree into display rows (items, currency, and inline OR selectors). */
+function flattenTree(node, orSelections = {}) {
+  if ( !node ) return [];
+  if ( node.type === "AND" ) return node.children.flatMap(c => flattenTree(c, orSelections));
+  if ( node.type === "OR" ) {
+    if ( !node.children.length ) return [];
+    if ( node.children.length === 1 ) return flattenTree(node.children[0], orSelections);
+    const selected = orSelections[node._id] ?? node.children[0]._id;
+    return [{
+      type: "or-group", _id: node._id,
+      options: node.children.map(c => ({
+        _id: c._id, name: c.name ?? t("equipment.unknown"), img: c.img,
+        count: c.count, uuid: c.key ?? null, isSelected: c._id === selected
+      }))
+    }];
+  }
+  if ( node.type === "linked" ) {
+    if ( node.isFocusChoice && node.choices?.length > 1 ) return [focusGroup(node, orSelections)];
+    return [{ type: "item", _id: node._id, name: node.name ?? t("equipment.unknown"),
+      img: node.img ?? "icons/svg/item-bag.svg", count: node.count ?? null, uuid: node.key ?? null }];
+  }
+  if ( node.type === "tool" ) {
+    if ( node.isToolChoice && node.choices?.length ) {
+      if ( node.choices.length === 1 ) {
+        const c = node.choices[0];
+        return [{ type: "item", _id: node._id, name: c.name, img: c.img ?? "icons/svg/trophy.svg", count: null, uuid: c.uuid ?? null }];
+      }
+      return [focusGroup(node, orSelections, node.name)];
+    }
+    return [{ type: "item", _id: node._id, name: node.name ?? t("traitChoice.tool"),
+      img: node.img ?? "icons/svg/trophy.svg", count: node.count ?? null }];
+  }
+  if ( node.type === "currency" ) {
+    const amount = parseInt(node.count ?? 0) || 0;
+    return [{ type: "item", _id: node._id, isCurrency: true,
+      name: `${amount} ${(node.key ?? "gp").toUpperCase()}` }];
+  }
+  return [];
+}
+
+/** Inline pick-one selector row for a focus / tool-category / OR choice. */
+function focusGroup(node, orSelections, promptName) {
+  const choices = node.choices;
+  const selected = orSelections[node._id] ?? choices[0].uuid;
+  return {
+    type: "or-group", _id: node._id,
+    label: node.choiceLabel ?? t("equipment.choosePrompt", { label: promptName ?? t("equipment.one") }),
+    options: choices.map(c => ({ _id: c.uuid, uuid: c.uuid, name: c.name, img: c.img, isSelected: c.uuid === selected }))
+  };
+}
+
+/**
+ * Collect the chosen gear and currency for the build across both sources.
+ * @returns {Promise<{items: object[], currency: Record<string, number>}>}
+ */
+export async function collectEquipment(loaded, state) {
+  const items = [];
+  const currency = {};
+  for ( const key of ["class", "background"] ) {
+    const data = loaded[key];
+    if ( !data ) continue;
+    const eq = state.equipment[key];
+    const opt = data.options[eq.selectedOption ?? 0];
+    if ( !opt ) continue;
+    if ( opt.type === "gold" ) {
+      currency.gp = (currency.gp ?? 0) + (parseInt(opt.wealth ?? "0") || 0);
+    } else if ( opt.type === "equipment" ) {
+      const collected = await collectTree(opt.tree, eq.orSelections);
+      for ( const entry of collected ) {
+        if ( entry._currencyDenomination ) {
+          currency[entry._currencyDenomination] = (currency[entry._currencyDenomination] ?? 0) + entry._currencyAmount;
+        } else items.push(entry);
+      }
+      if ( opt.descriptionGold && !collected.some(e => e._currencyDenomination === "gp") ) {
+        currency.gp = (currency.gp ?? 0) + opt.descriptionGold;
+      }
+    }
+  }
+  return { items, currency };
+}
+
+/** Resolve a tree into item data (equipped by default) and currency markers. */
+async function collectTree(node, orSelections = {}) {
+  if ( !node ) return [];
+  if ( node.type === "AND" ) {
+    const out = [];
+    for ( const child of node.children ) out.push(...await collectTree(child, orSelections));
+    return out;
+  }
+  if ( node.type === "OR" ) {
+    const selected = orSelections[node._id] ?? node.children[0]?._id;
+    const chosen = node.children.find(c => c._id === selected) ?? node.children[0];
+    return chosen ? collectTree(chosen, orSelections) : [];
+  }
+  if ( node.type === "currency" ) {
+    const amount = parseInt(node.count ?? 0) || 0;
+    return amount > 0 ? [{ _currencyDenomination: node.key ?? "gp", _currencyAmount: amount }] : [];
+  }
+  if ( node.type === "tool" ) {
+    if ( !node.isToolChoice || !node.choices?.length ) return [];
+    const uuid = node.choices.length === 1 ? node.choices[0].uuid : (orSelections[node._id] ?? node.choices[0].uuid);
+    return createItems(uuid);
+  }
+  if ( node.type === "linked" && (node.key || node.isFocusChoice) ) {
+    const uuid = node.isFocusChoice && node.choices?.length
+      ? (node.choices.length === 1 ? node.choices[0].uuid : (orSelections[node._id] ?? node.choices[0].uuid))
+      : node.key;
+    return createItems(uuid, node.count ?? 1);
+  }
+  return [];
+}
+
+/** Resolve a UUID into ready-to-create item data (with contents), counted and equipped. */
+async function createItems(uuid, qty = 1) {
+  if ( !uuid ) return [];
+  try {
+    const doc = await fromUuid(uuid);
+    if ( !doc ) return [];
+    const ItemClass = CONFIG.Item.documentClass;
+    const result = await ItemClass.createWithContents([doc], { keepId: false });
+    if ( !result?.length ) return [];
+    if ( qty > 1 && result[0].system?.quantity !== undefined ) result[0].system.quantity = qty;
+    for ( const item of result ) {
+      if ( (item.type === "weapon" || item.type === "equipment") && item.system ) item.system.equipped = true;
+    }
+    return result;
+  } catch ( err ) {
+    log(`equipment item create failed: ${uuid}`, err);
+    return [];
+  }
+}
+
+/* -------------------------------------------- */
+/*  Tree-shape utilities                        */
+/* -------------------------------------------- */
+
+/** Plain tree node from a live EquipmentEntryData instance (its `.children` getter). */
+function buildNode(entry) {
+  return {
+    _id: entry._id, type: entry.type,
+    count: entry.count ?? null, key: entry.key ?? null,
+    group: entry.group ?? null, sort: entry.sort ?? 0,
+    children: (entry.children ?? []).filter(c => VALID_TYPES.has(c.type)).map(buildNode)
+  };
+}
+
+/** Seed default selections for nested OR / tool / focus choice nodes. */
+function seedOrSelections(orSelections, node) {
+  if ( node.type === "OR" && node.children.length > 1 ) orSelections[node._id] ??= node.children[0]._id;
+  if ( node.type === "tool" && node.isToolChoice && node.choices?.length > 1 ) orSelections[node._id] ??= node.choices[0].uuid;
+  if ( node.type === "linked" && node.isFocusChoice && node.choices?.length > 1 ) orSelections[node._id] ??= node.choices[0].uuid;
+  for ( const child of node.children ?? [] ) seedOrSelections(orSelections, child);
+}
+
+/** Depth-first search for the first node matching a predicate. */
+function findNode(node, predicate) {
+  if ( !node ) return null;
+  if ( predicate(node) ) return node;
+  for ( const child of node.children ?? [] ) {
+    const found = findNode(child, predicate);
+    if ( found ) return found;
+  }
+  return null;
+}
+
+/** Append a synthetic linked node to host an injected focus choice. */
+function injectFocusNode(opt) {
+  const node = { type: "linked", _id: `focus-${foundry.utils.randomID()}`, key: null, count: null, children: [] };
+  if ( opt.tree?.type === "AND" ) opt.tree.children.push(node);
+  else opt.tree = { type: "AND", _id: `focus-and-${foundry.utils.randomID()}`, children: [opt.tree, node].filter(Boolean) };
+  return node;
+}
+
+/** A category key needing a choice (e.g. "music"), or null for a specific tool ("viol"). */
+function toolCategoryKey(key) {
+  const dnd = CONFIG.DND5E ?? {};
+  if ( dnd.tools?.[key] ) return null;
+  if ( dnd.toolTypes?.[key] || dnd.toolProficiencies?.[key] ) return key;
+  return null;
+}
+
+/** Dedupe index entries by a key, preferring PHB then 2024 then legacy packs. */
+function dedupeByPriority(entries, keyOf) {
+  const PRIORITY = ["Compendium.dnd-players-handbook.", "Compendium.dnd5e.equipment24.", "Compendium.dnd5e.equipment."];
+  const rank = uuid => { const i = PRIORITY.findIndex(p => (uuid ?? "").startsWith(p)); return i >= 0 ? i : PRIORITY.length; };
+  const byKey = new Map();
+  for ( const e of entries ) {
+    const key = keyOf(e);
+    if ( !key ) continue;
+    const existing = byKey.get(key);
+    if ( !existing || rank(e.uuid) < rank(existing.uuid) ) byKey.set(key, e);
+  }
+  return [...byKey.values()];
+}
+
+/** Extract the GP amount for an option label from item description HTML. */
+function extractDescriptionGold(html, label) {
+  if ( !html ) return null;
+  const text = html.replace(/<[^>]+>/g, " ");
+  const marker = `(${label})`;
+  const start = text.indexOf(marker);
+  if ( start < 0 ) return null;
+  const after = text.slice(start + marker.length);
+  const end = after.match(/;\s*(?:or\s+)?\([A-Z]\)/i);
+  const section = end ? after.slice(0, end.index) : after.split(/[\n\r]/)[0];
+  const award = section.match(/\[\[\/award\s+(\d+)\s*gp\]\]/i);
+  if ( award ) return parseInt(award[1]);
+  const gp = section.match(/\band\s+(\d+)\s*GP\b/i) ?? section.match(/,\s*(\d+)\s*GP\b/i);
+  return gp ? parseInt(gp[1]) : null;
+}

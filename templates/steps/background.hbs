@@ -1,6 +1,7 @@
-<section class="creator-class {{#unless abilities.selected}}creator-class--solo{{/unless}}">
-  <div class="creator-class-main">
-    <div class="creator-toolbar">
+<section class="creator-pick {{#unless abilities.selected}}creator-pick--solo{{/unless}}">
+  <!-- Left column: vertical picker -->
+  <div class="creator-pick-side">
+    <div class="creator-toolbar creator-toolbar--stacked">
       <label class="creator-search">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="search" data-creator-search autocomplete="off"
@@ -9,28 +10,68 @@
       <span class="creator-count">{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
     </div>
 
-    <div class="creator-grid">
+    <ul class="creator-picklist">
       {{#each cards}}
-      <button type="button" class="creator-card {{#if selected}}is-selected{{/if}}"
-              data-action="stepAction" data-step-action="pick-origin"
-              data-uuid="{{uuid}}" data-name="{{name}}">
-        <img class="creator-card-img" src="{{img}}" alt="">
-        <span class="creator-card-name">{{name}}</span>
-        {{#if selected}}<span class="creator-card-tick"><i class="fa-solid fa-check"></i></span>{{/if}}
-      </button>
+      <li>
+        <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="pick-origin"
+                data-uuid="{{uuid}}" data-name="{{name}}">
+          <img class="creator-pickrow-img" src="{{img}}" alt="">
+          <span class="creator-pickrow-name">{{name}}</span>
+          {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}
+        </button>
+      </li>
       {{else}}
       <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.common.noEntries"}}</p>
       {{/each}}
-    </div>
+    </ul>
+  </div>
 
+  <!-- Center column: description -->
+  <div class="creator-pick-desc">
     {{#if hasSelection}}
-    <aside class="creator-detail">
+    <article class="creator-detail">
       <header class="creator-detail-head">
         <img class="creator-detail-img" src="{{detail.img}}" alt="">
         <h2>{{detail.name}}</h2>
       </header>
       <div class="creator-detail-body">{{{detail.enriched}}}</div>
-    </aside>
+
+      {{#each groups}}
+      <section class="creator-adv-block">
+        <h3 class="creator-adv-heading">{{heading}}</h3>
+
+        {{#if tags.length}}
+        <ul class="creator-trait-list">
+          {{#each tags}}
+          <li class="creator-trait">
+            <span class="creator-trait-label">{{label}}</span>
+            <span class="creator-trait-value">{{value}}</span>
+          </li>
+          {{/each}}
+        </ul>
+        {{/if}}
+
+        {{#if items.length}}
+        <div class="creator-grant-list">
+          {{#each items}}
+          <div class="creator-grant">
+            <img class="creator-grant-icon" src="{{img}}" alt="">
+            <a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip=" ">{{name}}</a>
+            {{#if level}}<span class="creator-grant-tag">{{localize "sogrom-dnd5e-character-creator.step.class.levelTag" level=level}}</span>{{/if}}
+          </div>
+          {{/each}}
+        </div>
+        {{/if}}
+      </section>
+      {{/each}}
+    </article>
+    {{else}}
+    <div class="creator-pick-empty">
+      <i class="fa-solid fa-feather"></i>
+      <h2>{{localize "sogrom-dnd5e-character-creator.step.background.label"}}</h2>
+      <p>{{localize "sogrom-dnd5e-character-creator.common.selectHint"}}</p>
+    </div>
     {{/if}}
   </div>
 
@@ -65,7 +106,7 @@
           <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="bg-ability-inc"
                   data-ability="{{key}}" {{#unless canInc}}disabled{{/unless}}>+</button>
         </div>
-        <span class="creator-ability-mod">{{modifier}}</span>
+        <span class="creator-ability-mod">{{bonusLabel}}</span>
       </li>
       {{/each}}
     </ul>

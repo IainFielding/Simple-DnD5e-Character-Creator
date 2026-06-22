@@ -3,25 +3,27 @@
    rest of Foundry. Layout is a fixed left rail + a flexible content stage. */
 
 .sogrom-creator {
-  --cc-bg: #161922;
-  --cc-panel: #1f2330;
-  --cc-panel-2: #272c3b;
-  --cc-line: #353b4f;
-  --cc-text: #e7e9f0;
-  --cc-muted: #9aa1b5;
-  --cc-accent: #e7b864;
-  --cc-accent-soft: rgba(231, 184, 100, 0.18);
+  /* Palette — Arcane Midnight (violet UI accent, gold reserved for selection). */
+  --cc-bg: #0f0e15;
+  --cc-panel: #16151f;
+  --cc-panel-2: #1d1b28;
+  --cc-line: #2a2836;
+  --cc-text: #bfbccb;
+  --cc-muted: #807d92;
+  --cc-accent: #9180f2;
+  --cc-accent-soft: rgba(145, 128, 242, 0.18);
   --cc-good: #4fd18b;
-  --cc-gold: #e7b864;
+  --cc-gold: #c8a24e;
   /* Selection highlight — gold, distinct from the violet UI accent. */
-  --cc-select: #e7b864;
-  --cc-select-soft: rgba(231, 184, 100, 0.16);
+  --cc-select: #c8a24e;
+  --cc-select-soft: rgba(200, 162, 78, 0.16);
 
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
   display: flex;
+  flex-direction: column;
   margin: 0;
   padding: 0;
   border: none;
@@ -33,74 +35,82 @@
 
 .sogrom-creator * { box-sizing: border-box; }
 
-/* ---------------------------------------------- Rail */
-
-.creator-rail {
-  flex: 0 0 290px;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(180deg, #1a1e29, #14171f);
-  border-right: 1px solid var(--cc-line);
+/* Arcane Midnight ambience — soft violet auras top and bottom with a faint gold
+   core. Sits behind the static content (z-index:-1 within the creator's own
+   stacking context) so it tints the backdrop without catching pointer events. */
+.sogrom-creator::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(145, 128, 242, 0.14), transparent 52%),
+    radial-gradient(100% 60% at 50% 115%, rgba(145, 128, 242, 0.09), transparent 52%),
+    radial-gradient(60% 40% at 50% 50%,   rgba(200, 162, 78, 0.03),  transparent 70%);
 }
 
-.creator-rail-brand {
+/* ---------------------------------------------- Top bar (horizontal stepper) */
+
+/* A full-width bar above the stage: brand on the left, the step progression in the
+   middle, Cancel on the right. Deliberately NOT ember's banner-on-a-ridge nav — this
+   is a plain row of circle-marker + label pills. */
+.creator-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(180deg, #16151f, #100f17);
+  border-bottom: 1px solid var(--cc-line);
+}
+
+.creator-topbar-brand {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 1.25rem 1.5rem;
   font-size: 1.15rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  border-bottom: 1px solid var(--cc-line);
 }
-.creator-rail-brand i { color: var(--cc-accent); }
+.creator-topbar-brand i { color: var(--cc-accent); }
 
-.creator-rail-steps {
+.creator-topbar-foot { flex: 0 0 auto; margin-left: auto; }
+
+.creator-topbar-steps {
   list-style: none;
   margin: 0;
-  padding: 0.75rem;
+  padding: 0;
   flex: 1;
-  overflow-y: auto;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  overflow-x: auto;
 }
 
-/* Each step is the anchor for its connector line to the next step. */
 .creator-rail-step {
-  position: relative;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
 }
-
-/* Vertical progress line: runs from this circle down to the next one. It sits in
-   the marker column, behind the circles, and turns gold once the step is done. */
-.creator-rail-step:not(:last-child)::before {
-  content: "";
-  position: absolute;
-  left: calc(0.8rem + 28px);   /* link padding-left + marker radius = circle centre */
-  top: calc(50% + 28px);       /* bottom edge of this 56px circle */
-  width: 2px;
-  height: calc(100% + 0.6rem - 56px);  /* row + gap - diameter = the gap to next circle */
-  transform: translateX(-1px);
-  background: var(--cc-line);
-  z-index: 0;
-}
-.creator-rail-step.is-complete:not(:last-child)::before { background: var(--cc-gold); }
 
 .creator-rail-link {
   display: flex;
   align-items: center;
   /* Override Foundry's button justify-content:center so the circle/text hug the left. */
   justify-content: flex-start;
-  gap: 0.85rem;
+  gap: 0.6rem;
   width: 100%;
   /* Override Foundry's fixed button height (28px) so the row grows to its content. */
   height: auto;
   min-height: auto;
-  padding: 0.7rem 0.8rem;
+  padding: 0.4rem 0.65rem;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 999px;
   color: var(--cc-muted);
   text-align: left;
   cursor: pointer;
@@ -116,16 +126,14 @@
 }
 
 .creator-rail-marker {
-  position: relative;
-  z-index: 1;                /* sits above the connector line */
-  flex: 0 0 56px;
-  height: 56px;
+  flex: 0 0 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   border: 1px solid transparent;
   background: var(--cc-panel-2);
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 .creator-rail-step.is-complete .creator-rail-marker {
@@ -133,22 +141,19 @@
   border-color: var(--cc-gold);
   color: var(--cc-gold);
 }
-.creator-rail-step.is-complete .creator-rail-marker i { font-size: 1.35rem; }
+.creator-rail-step.is-complete .creator-rail-marker i { font-size: 0.9rem; }
 
-/* Reserve the summary line on every row (44px = 28px label + 16px summary) so
-   rows without a summary are the same height — keeps the circles evenly spaced. */
-.creator-rail-text { display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 44px; }
-.creator-rail-label { font-weight: 600; line-height: 28px; }
-.creator-rail-summary {
-  font-size: 0.8rem;
-  line-height: 16px;
-  color: var(--cc-muted);
+/* Not-applicable step (e.g. Spells for a non-caster): greyed, dashed marker, no tick. */
+.creator-rail-step.is-skipped .creator-rail-link { opacity: 0.55; }
+.creator-rail-step.is-skipped .creator-rail-marker { color: var(--cc-muted); }
+.creator-rail-step.is-skipped .creator-rail-marker i { font-size: 0.85rem; }
+
+.creator-rail-label {
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.creator-rail-foot { padding: 1rem; border-top: 1px solid var(--cc-line); }
 
 /* ---------------------------------------------- Stage */
 
@@ -157,9 +162,13 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* Now a vertical flex item (below the top bar): without this it keeps min-height:auto
+     and grows with content, breaking the height chain its scrolling children rely on. */
+  min-height: 0;
 }
 
 .creator-stage-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -172,6 +181,7 @@
 .creator-stage-body { flex: 1; overflow-y: auto; padding: 1.5rem 2rem; }
 
 .creator-stage-foot {
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -242,8 +252,8 @@
 
 .creator-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 180px));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 140px));
+  gap: 1rem;
   justify-content: center;
 }
 .creator-card {
@@ -282,13 +292,13 @@
   min-height: 0;
   object-fit: contain;
   object-position: center;
-  padding: 0.9rem;
-  background: #0d1017;
+  padding: 0.7rem;
+  background: #0a0910;
   border-bottom: 1px solid var(--cc-line);
 }
 .creator-card-name {
-  padding: 0.65rem 0.5rem;
-  font-size: 0.9rem;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.82rem;
   text-align: center;
   line-height: 1.3;
   background: var(--cc-panel-2);
@@ -322,19 +332,199 @@
 .creator-detail-body { line-height: 1.6; color: var(--cc-text); }
 .creator-detail-body :is(h1, h2, h3, h4) { color: var(--cc-gold); }
 
+/* Categorized advancement blocks (Traits / Features / Spells) below the description. */
+.creator-adv-block { margin-top: 1.5rem; }
+.creator-adv-heading {
+  margin: 0 0 0.6rem;
+  border: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cc-gold);
+}
+
+/* Core traits as an aligned label/value grid so rows stay a uniform size. */
+.creator-trait-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--cc-line);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.82rem;
+}
+.creator-trait { display: contents; }
+.creator-trait-label,
+.creator-trait-value {
+  padding: 0.4rem 0.7rem;
+  border-top: 1px solid var(--cc-line);
+}
+.creator-trait:first-child .creator-trait-label,
+.creator-trait:first-child .creator-trait-value { border-top: none; }
+.creator-trait-label {
+  background: var(--cc-panel-2);
+  color: var(--cc-muted);
+  white-space: nowrap;
+}
+.creator-trait-value { color: var(--cc-text); }
+
+/* Granted features and spells: round icon + clickable content link + level tag. */
+.creator-grant-list {
+  columns: 2;
+  column-gap: 1.25rem;
+}
+.creator-grant {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.6rem;
+  break-inside: avoid;
+}
+.creator-grant-icon {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border: 1px solid var(--cc-line);
+  border-radius: 50%;
+  background: var(--cc-panel-2);
+}
+.creator-grant .content-link {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--cc-text);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.creator-grant .content-link i { display: none; }
+.creator-grant .content-link:hover { color: var(--cc-gold); }
+.creator-grant-tag {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.68rem;
+  color: var(--cc-muted);
+  border: 1px solid var(--cc-line);
+  border-radius: 4px;
+}
+
 .creator-empty { color: var(--cc-muted); font-style: italic; padding: 1rem 0; }
 
-/* ---------------------------------------------- Class step (grid + abilities aside) */
+/* ---------------------------------------------- Pick steps (list + description [+ aside]) */
 
-/* Class selection fills the main column; the ability panel rides along on the right.
-   Two distinct panels composed side by side — not a single fused class+ability block. */
-.creator-class {
+/* Shared layout for class / background / species: a fixed-width picker (wide enough
+   for a two-column option list), a flexible description that takes the leftover middle
+   space, and (when the step has one) an aside on the right. Each column scrolls
+   independently within the stage height. */
+.creator-pick {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 2rem;
+  grid-template-columns: 420px minmax(0, 1fr) 340px;
+  gap: 1.5rem;
   align-items: start;
+  /* Fill the stage so the columns can each own their scroll region. */
+  height: 100%;
+  min-height: 0;
 }
-.creator-class-main { min-width: 0; }
+/* Species, and backgrounds without an ability increase, have no aside — drop the column. */
+.creator-pick--solo { grid-template-columns: 420px minmax(0, 1fr); }
+
+/* Left column: search/count on top, scrolling pick-list below. */
+.creator-pick-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+.creator-toolbar--stacked { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+.creator-toolbar--stacked .creator-search { width: 100%; }
+
+/* Two-column option grid; collapses to one column on a narrow window (see media query).
+   align-content:start keeps rows packed to the top when the list is short. */
+.creator-picklist {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0.25rem 0.25rem 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  align-content: start;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.creator-picklist li { min-width: 0; }
+.creator-picklist li.is-hidden { display: none; }
+
+/* A single pick row: rounded image + name, gold highlight when selected. */
+.creator-pickrow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 9px;
+  color: var(--cc-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+.creator-pickrow:hover { border-color: var(--cc-select); }
+.creator-pickrow.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-pickrow-img {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #0a0910;
+  border: 1px solid var(--cc-line);
+  padding: 4px;
+}
+.creator-pickrow.is-selected .creator-pickrow-img { border-color: var(--cc-select); }
+.creator-pickrow-name {
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.creator-pickrow-tick { margin-left: auto; color: var(--cc-select); font-size: 0.8rem; }
+
+/* Center column: the description panel, scrolling on its own. */
+.creator-pick-desc {
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* In this layout the detail panel owns the column rather than sitting beneath a grid. */
+.creator-pick-desc .creator-detail { margin-top: 0; }
+
+/* Placeholder shown before anything is picked. */
+.creator-pick-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  color: var(--cc-muted);
+}
+.creator-pick-empty i { font-size: 2.5rem; opacity: 0.4; }
+.creator-pick-empty h2 { margin: 0; border: none; color: var(--cc-text); }
+.creator-pick-empty p { margin: 0; max-width: 28ch; }
 
 .creator-class-aside {
   position: sticky;
@@ -354,14 +544,37 @@
 .creator-class-aside .creator-ability-list { max-width: none; }
 .creator-class-aside .creator-method-tabs { flex-wrap: wrap; }
 
-/* On narrow stages, drop the aside below the grid rather than squeezing both. */
-@media (max-width: 1100px) {
-  .creator-class { grid-template-columns: 1fr; }
-  .creator-class-aside { position: static; }
+/* In the pick layout the aside is a full-height column: cap it and scroll within. */
+.creator-pick .creator-class-aside {
+  position: static;
+  max-height: 100%;
+  overflow-y: auto;
 }
 
-/* A background with no ability increase has no aside, so reclaim the full width. */
-.creator-class--solo { grid-template-columns: 1fr; }
+/* On narrow stages, stack the columns and let the stage scroll as one. */
+@media (max-width: 1100px) {
+  .creator-pick,
+  .creator-pick--solo {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .creator-pick-side,
+  .creator-pick-desc { height: auto; }
+  .creator-picklist { overflow-y: visible; }
+  .creator-pick .creator-class-aside { max-height: none; }
+
+  /* Narrow window: drop the step labels so the bar stays on one row of circles
+     (the active/complete state still reads from marker colour). */
+  .creator-topbar { gap: 1rem; }
+  .creator-topbar-steps .creator-rail-label { display: none; }
+}
+
+/* Narrow window: the two-column option list collapses to a single column.
+   Tune this threshold to taste. */
+@media (max-width: 768px) {
+  .creator-picklist { grid-template-columns: 1fr; }
+}
 
 /* Background increase aside: terse helper line. */
 .creator-asi-hint { margin: -0.5rem 0 1.25rem; color: var(--cc-muted); font-size: 0.85rem; }
@@ -501,10 +714,13 @@
 .creator-summary-name { font-weight: 600; }
 .creator-summary-name.is-muted { color: var(--cc-muted); font-style: italic; font-weight: 400; }
 
+.creator-review-abilities { text-align: center; }
 .creator-review-abilities h2 { border: none; font-size: 1.2rem; }
 .creator-review-abilities h2 small { color: var(--cc-muted); font-weight: 400; }
+.creator-review-abilities .creator-score-strip { justify-content: center; }
 .creator-score-strip { list-style: none; margin: 0.75rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .creator-score {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -517,6 +733,423 @@
 .creator-score-abbr { font-size: 0.75rem; color: var(--cc-muted); text-transform: uppercase; }
 .creator-score-value { font-size: 1.4rem; font-weight: 700; }
 .creator-score-mod { color: var(--cc-gold); font-variant-numeric: tabular-nums; }
+.creator-score-bonus {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--cc-gold);
+  background: color-mix(in srgb, var(--cc-gold) 22%, var(--cc-panel));
+  border: 1px solid color-mix(in srgb, var(--cc-gold) 50%, transparent);
+  border-radius: 999px;
+  cursor: default;
+}
+
+.creator-btn-danger { background: #b5495b; border-color: #b5495b; color: #fff; }
+
+/* ---------------------------------------------- Details step */
+
+.creator-details {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1.5rem;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Left column: portrait, a token/ring tab + its image, and the token toggle rows. */
+.creator-details-media {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.25rem 1rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.creator-portrait-frame {
+  width: 100%;
+  max-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--cc-gold);
+  border-radius: 8px;
+  box-shadow: 0 0 18px rgba(200, 162, 78, 0.25), inset 0 0 8px rgba(0, 0, 0, 0.6);
+  background: var(--cc-panel-2);
+  overflow: hidden;
+}
+.creator-portrait-img { width: 100%; height: auto; max-height: 280px; display: block; object-fit: cover; }
+.creator-portrait-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1px solid var(--cc-line);
+  border-radius: 6px;
+  color: var(--cc-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.creator-portrait-btn:hover { color: var(--cc-text); border-color: var(--cc-gold); }
+
+.creator-media-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0;
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--cc-muted);
+}
+.creator-media-divider::before,
+.creator-media-divider::after { content: ""; flex: 1; height: 1px; background: var(--cc-line); }
+
+.creator-token-tabs {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--cc-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.creator-token-tab {
+  flex: 1;
+  padding: 0.45rem 0.25rem;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--cc-line);
+  color: var(--cc-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.creator-token-tab:last-child { border-right: none; }
+.creator-token-tab:hover:not(.is-active) { background: var(--cc-select-soft); color: var(--cc-text); }
+.creator-token-tab.is-active { background: var(--cc-gold); color: #1c1408; }
+
+.creator-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0.5rem;
+}
+.creator-setting-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-muted);
+}
+.creator-setting-toggle {
+  min-width: 48px;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--cc-line);
+  border-radius: 5px;
+  color: var(--cc-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.creator-setting-toggle:hover { border-color: var(--cc-gold); color: var(--cc-text); }
+.creator-setting-toggle.is-on { background: var(--cc-select-soft); border-color: var(--cc-gold); color: var(--cc-gold); }
+
+/* Right column: the identity form (title, name, optional fields). */
+.creator-details-form {
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.creator-details-title { margin: 0; border: none; font-size: 1.6rem; color: var(--cc-text); }
+.creator-details-subtitle { margin: -0.6rem 0 0; font-style: italic; font-size: 0.9rem; color: var(--cc-muted); }
+
+.creator-detail-name { display: flex; flex-direction: column; gap: 0.4rem; }
+.creator-detail-name label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cc-gold);
+}
+.creator-details .creator-detail-name input { font-size: 1.1rem; border-color: var(--cc-gold); }
+.creator-required { color: #e05555; }
+
+.creator-detail-optional {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--cc-muted);
+}
+
+.creator-detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+.creator-detail-textgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+.creator-detail-textwide { width: 100%; }
+.creator-detail-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.creator-detail-field label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cc-muted);
+}
+.creator-details :is(input, textarea) {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 6px;
+  color: var(--cc-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.creator-details :is(input, textarea):focus { border-color: var(--cc-gold); outline: none; }
+.creator-details textarea { resize: vertical; }
+
+@media (max-width: 760px) {
+  .creator-detail-grid { grid-template-columns: repeat(2, 1fr); }
+  .creator-detail-textgrid { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------- Spells step */
+
+.creator-spell-tabs { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+.creator-spell-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 8px;
+  color: var(--cc-muted);
+  cursor: pointer;
+}
+.creator-spell-tab.is-active { border-color: var(--cc-accent); color: var(--cc-text); background: var(--cc-accent-soft); }
+.creator-spell-count { font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+.creator-spell-tab.is-full .creator-spell-count { color: var(--cc-good); }
+.creator-pickrow.is-focused { border-color: var(--cc-accent); }
+.creator-pickrow.is-disabled { opacity: 0.4; cursor: not-allowed; }
+.creator-spell-meta { color: var(--cc-muted); font-size: 0.85rem; margin: 0.2rem 0 0; }
+.creator-spells-none { grid-column: 1 / -1; }
+
+/* ---------------------------------------------- Choices step */
+
+.creator-choices { height: 100%; min-height: 0; overflow-y: auto; }
+.creator-choices-list { display: flex; flex-direction: column; gap: 1.5rem; }
+.creator-choice-source {
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+.creator-choice-source-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
+.creator-choice-source-head h2 { margin: 0; font-size: 1.1rem; border: none; }
+.creator-choice-source-img { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; }
+.creator-choice-source-icon { color: var(--cc-accent); font-size: 1.1rem; width: 32px; text-align: center; }
+.creator-choice { padding: 0.75rem 0; border-top: 1px solid var(--cc-line); }
+.creator-choice:first-of-type { border-top: none; }
+.creator-choice-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.creator-choice-head h3 { margin: 0; font-size: 0.95rem; color: var(--cc-text); }
+.creator-choice-count { font-size: 0.8rem; color: var(--cc-muted); white-space: nowrap; }
+.creator-choice-count.is-complete { color: var(--cc-good); }
+.creator-choice-hint { color: var(--cc-muted); font-size: 0.85rem; margin: 0.4rem 0; }
+.creator-choice-empty { color: var(--cc-muted); font-style: italic; font-size: 0.85rem; }
+.creator-choice-group { margin-top: 0.5rem; }
+.creator-choice-group-label { font-size: 0.75rem; text-transform: uppercase; color: var(--cc-muted); }
+.creator-choice-options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.creator-choice-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  color: var(--cc-text);
+  cursor: pointer;
+}
+.creator-choice-opt:hover:not(.is-disabled) { border-color: var(--cc-select); }
+.creator-choice-opt.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-choice-opt.is-disabled { opacity: 0.35; cursor: not-allowed; }
+.creator-choice-opt-img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
+.creator-choice-opt-tick { color: var(--cc-select); font-size: 0.75rem; }
+
+/* ---------------------------------------------- Equipment (within Choices) */
+
+.creator-equip-source { padding: 0.75rem 0; border-top: 1px solid var(--cc-line); }
+.creator-equip-source:first-of-type { border-top: none; }
+.creator-equip-head { display: flex; align-items: center; gap: 0.5rem; }
+.creator-equip-head h3 { margin: 0; font-size: 0.95rem; }
+.creator-equip-head .creator-choice-source-img { width: 24px; height: 24px; }
+.creator-equip-options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0; }
+.creator-equip-tab {
+  padding: 0.35rem 0.7rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 8px;
+  color: var(--cc-muted);
+  cursor: pointer;
+}
+.creator-equip-tab.is-selected { border-color: var(--cc-select); color: var(--cc-text); background: var(--cc-select-soft); }
+.creator-equip-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.creator-equip-row { display: flex; align-items: center; gap: 0.5rem; }
+.creator-equip-row img, .creator-equip-pill img { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; }
+.creator-equip-orgroup { display: flex; flex-direction: column; gap: 0.35rem; }
+.creator-equip-orlabel { font-size: 0.8rem; color: var(--cc-muted); }
+.creator-equip-orpills { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.creator-equip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  color: var(--cc-text);
+  cursor: pointer;
+}
+.creator-equip-pill.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-equip-gold { color: var(--cc-gold); font-weight: 600; margin: 0.5rem 0 0; }
+
+/* ---------------------------------------------- Review additions */
+
+/* The three origin summaries sit side by side: Class | Background | Species. */
+.creator-review-columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin-top: 2rem;
+  align-items: start;
+}
+.creator-review-columns .creator-review-block {
+  margin-top: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+  background: var(--cc-panel);
+}
+@media (max-width: 900px) {
+  .creator-review-columns { grid-template-columns: 1fr; }
+}
+
+.creator-review-block {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cc-line);
+}
+.creator-review-block > h2 { font-size: 1.2rem; border: none; display: flex; align-items: center; gap: 0.5rem; }
+.creator-review-block h3 { font-size: 0.9rem; color: var(--cc-gold); margin: 0.75rem 0 0.4rem; }
+.creator-review-origin-img {
+  width: 100%;
+  max-width: 160px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+  background: var(--cc-panel-2);
+}
+
+/* Origin section header: small "kind" eyebrow, a large portrait, then the option name. */
+.creator-review-origin-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.creator-review-origin-head h2 { margin: 0; font-size: 1.15rem; text-align: center; }
+/* Keep every heading inside a column centered with its centered title/portrait. */
+.creator-review-columns .creator-review-block :is(h3, h4) { text-align: center; }
+.creator-review-columns .creator-review-spells { justify-content: center; }
+.creator-review-kind {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cc-accent);
+}
+.creator-review-origin.is-empty { border-top-style: dashed; }
+.creator-review-origin-head h2.is-muted { color: var(--cc-muted); font-style: italic; font-weight: 400; }
+.creator-review-text p { color: var(--cc-text); line-height: 1.5; margin: 0 0 0.5rem; }
+.creator-review-spells { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+.creator-review-spells li { display: flex; align-items: center; gap: 0.4rem; }
+.creator-review-spells img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
+.creator-trait.is-empty .creator-trait-value { color: var(--cc-muted); font-style: italic; }
+
+/* Review trait values hold a mix of plain-text proficiencies and clickable item links. */
+.creator-review .creator-trait-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+.creator-review-val {
+  padding: 0.05rem 0.45rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+.creator-review .content-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--cc-text);
+  text-decoration: none;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.creator-review .content-link i { display: none; }
+.creator-review .content-link img {
+  width: 20px; height: 20px; border-radius: 4px; object-fit: cover;
+  border: 1px solid var(--cc-line);
+}
+.creator-review .content-link:hover { color: var(--cc-gold); }
+
+/* A grouped sub-section (spells / starting equipment) tucked under an origin heading. */
+.creator-review-sub { margin-top: 0.85rem; }
+.creator-review-sub h4 {
+  margin: 0.5rem 0 0.3rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--cc-muted);
+}
 
 /* ---------------------------------------------- Sidebar launch button */
 

@@ -1,4 +1,5 @@
 import { ABILITIES } from "../config.mjs";
+import { resolveChoices } from "../data/choice-resolver.mjs";
 
 /**
  * The Background step. Like the Class step, it pairs the origin card grid with a
@@ -38,7 +39,9 @@ export const backgroundStep = {
       // Re-clicking the active card clears it, so a player can back out of a choice.
       state.backgroundUuid = state.backgroundUuid === uuid ? null : uuid;
       state.resetBackgroundAbilities();
+      state.resetSourceChoices("background");
       if ( state.backgroundUuid ) state.backgroundAsi = await source.abilityScoreIncrease(uuid);
+      state.choiceCache = await resolveChoices(state, source);
       return;
     }
 
@@ -61,6 +64,7 @@ export const backgroundStep = {
   async context({ state, source }) {
     const selected = state.backgroundUuid;
     const detail = selected ? await source.detail(selected) : null;
+    const groups = selected ? await source.advancementGroups(selected) : null;
     const list = source.backgrounds().map(c => ({ ...c, selected: c.uuid === selected }));
 
     // Resolve (and cache) the increase config for the active background, so the panel
@@ -74,6 +78,7 @@ export const backgroundStep = {
       count: list.length,
       hasSelection: !!selected,
       detail,
+      groups,
       abilities: abilitiesContext(state)
     };
   }
@@ -84,11 +89,6 @@ export const backgroundStep = {
 /* -------------------------------------------- */
 
 const abilityLabel = key => CONFIG.DND5E?.abilities?.[key]?.label ?? key.toUpperCase();
-
-const formatMod = score => {
-  const mod = Math.floor((score - 10) / 2);
-  return mod >= 0 ? `+${mod}` : `${mod}`;
-};
 
 /** Points the player has yet to spend out of the increase's budget. */
 function pointsRemaining(state, asi) {
@@ -118,7 +118,7 @@ function increaseSummary(state) {
 /** Template context for the increase-allocation aside (nested under `abilities`). */
 function abilitiesContext(state) {
   // The pane appears once a background is chosen — the increase, if any, is its gift.
-  if ( !state.backgroundUuid ) return { selected: false };
+  //  if ( !state.backgroundUuid ) return { selected: false };
 
   const asi = state.backgroundAsi;
   const hasAsi = !!asi;
@@ -138,7 +138,9 @@ function abilitiesContext(state) {
       label: abilityLabel(key),
       total,
       bonus,
-      modifier: formatMod(total),
+      // The background increase itself (+1/+2), not the ability modifier — the
+      // stepper's `total` already shows the value the score is raised to.
+      bonusLabel: bonus > 0 ? `+${bonus}` : "",
       locked,
       canInc: !locked && canIncrease(state, asi, key),
       canDec: !locked && allocated > 0

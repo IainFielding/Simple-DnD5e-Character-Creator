@@ -1,6 +1,9 @@
 import { originStep } from "./origin-step.mjs";
 import { classStep } from "./class-step.mjs";
 import { backgroundStep } from "./background-step.mjs";
+import { detailsStep } from "./details-step.mjs";
+import { spellsStep } from "./spells-step.mjs";
+import { choicesStep } from "./choices-step.mjs";
 import { reviewStep } from "./review-step.mjs";
 
 /**
@@ -18,6 +21,9 @@ export const STEPS = [
     field: "speciesUuid",
     cards: src => src.species()
   }),
+  detailsStep,
+  spellsStep,
+  choicesStep,
   reviewStep
 ];
 

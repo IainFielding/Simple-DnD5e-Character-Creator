@@ -1,9 +1,178 @@
 import { ABILITIES, t } from "../config.mjs";
+import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
+import { resolveChoices, advancementArray, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
+import { summarizeOption } from "../data/equipment-source.mjs";
+
+// The three origin sections, in display order: each carries the state field holding its
+// chosen UUID, the section heading (kind) label, and the placeholder when nothing is picked.
+const ORIGIN_META = [
+  { key: "class", field: "classUuid", labelKey: "step.class.label", emptyKey: "step.review.noClass" },
+  { key: "background", field: "backgroundUuid", labelKey: "step.background.label", emptyKey: "step.review.noBackground" },
+  { key: "species", field: "speciesUuid", labelKey: "step.species.label", emptyKey: "step.review.noSpecies" }
+];
 
 const formatMod = score => {
   const mod = Math.floor((score - 10) / 2);
   return mod >= 0 ? `+${mod}` : `${mod}`;
 };
+
+/**
+ * The filled identity/biography rows for the summary — only fields the player
+ * actually wrote, so empty fields don't clutter the review. Short fields render as
+ * label/value tags; the longer text fields render as their own paragraphs.
+ */
+function reviewDetails(state) {
+  const d = state.details;
+  const tags = DETAIL_FIELDS
+    .filter(k => d[k]?.trim())
+    .map(k => ({ label: t(`step.details.field.${k}`), value: d[k].trim() }));
+  const texts = DETAIL_TEXT_FIELDS
+    .filter(k => d[k]?.trim())
+    .map(k => ({ label: t(`step.details.field.${k}`), value: d[k].trim() }));
+  return { tags, texts, hasAny: tags.length > 0 || texts.length > 0 };
+}
+
+/** The chosen spells for the summary, split into cantrips and level-1. */
+function reviewSpells(state) {
+  const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+  const map = s => ({ name: s.name, img: s.img, uuid: s.uuid });
+  const cantrips = [...state.selectedCantrips].sort(byName).map(map);
+  const level1 = [...state.selectedSpells].sort(byName).map(map);
+  return { cantrips, level1, hasAny: cantrips.length > 0 || level1.length > 0 };
+}
+
+/**
+ * The chosen starting equipment for the summary, keyed by origin source so each
+ * origin block can show its own gear. Empty sources are omitted.
+ * @returns {Promise<Record<string, {items: object[], gold: string, hasAny: boolean}>>}
+ */
+async function reviewEquipment(state, source, equipment) {
+  if ( !equipment ) return {};
+  const loaded = await equipment.load(state, source);
+  const out = {};
+  for ( const key of ["class", "background"] ) {
+    if ( !loaded[key] ) continue;
+    const { items, gold } = summarizeOption(loaded[key], state.equipment[key]);
+    if ( !items.length && !gold ) continue;
+    out[key] = { items, gold, hasAny: true };
+  }
+  return out;
+}
+
+/* -------------------------------------------- */
+/*  Per-origin grants & picks                   */
+/* -------------------------------------------- */
+
+/**
+ * The three origin sections (Class & Abilities, Species, Background) for the summary,
+ * each headed by its kind label and the chosen option. Every section gathers what its
+ * source confers — fixed grants, the player's interactive picks, and (for the class) the
+ * chosen spells, plus its starting equipment — so everything a source brings lives under
+ * its own heading. Unchosen origins still render as a placeholder card. Item-backed values
+ * keep their uuid/img so the template can render clickable, tooltip-bearing content links.
+ */
+async function reviewSections(state, source, equipBySource, spells) {
+  const resolved = await resolveChoices(state, source);
+  const out = [];
+  for ( const { key, field, labelKey, emptyKey } of ORIGIN_META ) {
+    const uuid = state[field];
+    const card = uuid ? source.card(uuid) : null;
+    const doc = uuid ? await fromUuid(uuid).catch(() => null) : null;
+    const rows = doc ? [...await fixedGrants(doc), ...summaryPicks(resolved, key)] : [];
+    out.push({
+      key,
+      kind: t(labelKey),
+      empty: t(emptyKey),
+      chosen: !!(card || doc),
+      name: card?.name ?? doc?.name ?? "",
+      img: card?.img ?? doc?.img ?? "icons/svg/mystery-man.svg",
+      rows,
+      spells: (key === "class" && spells.hasAny) ? spells : null,
+      equipment: equipBySource[key] ?? null
+    });
+  }
+  return out;
+}
+
+/**
+ * Interactive picks for one source: [{title, values, empty}]. Each value is an object
+ * carrying its display name and, where the pick is a real item (ItemChoice features),
+ * its uuid/img so it can render as a content link.
+ */
+function summaryPicks(resolved, key) {
+  const src = (resolved?.sources ?? []).find(s => s.key === key);
+  if ( !src ) return [];
+  return src.requirements.map(req => {
+    const values = req.options.filter(o => o.isSelected)
+      .map(o => o.uuid ? { name: o.label, uuid: o.uuid, img: o.img } : { name: o.label });
+    return { title: req.title, values, empty: values.length === 0 };
+  });
+}
+
+/**
+ * Fixed (non-choice) advancement grants for one origin: automatically granted features,
+ * fixed trait proficiencies, hit die, a fixed size, and level-1 scale values. Collected
+ * as [{title, values, empty}] rows that merge same-titled grants together.
+ */
+async function fixedGrants(doc) {
+  const groups = [];
+  // `value` is a plain string (proficiencies, hit die, size, scale values) or an
+  // `{name, uuid, img}` object for real items (features, granted gear) so the template
+  // can render the latter as a clickable content link.
+  const add = (title, value) => {
+    const entry = (typeof value === "string") ? { name: value } : value;
+    if ( !entry?.name ) return;
+    let g = groups.find(x => x.title === title);
+    if ( !g ) { g = { title, values: [], empty: false }; groups.push(g); }
+    if ( !g.values.some(v => v.name === entry.name) ) g.values.push(entry);
+  };
+
+  for ( const adv of advancementArray(doc) ) {
+    if ( (adv.level ?? 0) > 1 ) continue;
+
+    if ( adv.type === "HitPoints" ) {
+      const raw = doc.system?.hd?.denomination ?? doc.system?.hitDice ?? adv.hitDie;
+      if ( raw ) add(t("advancement.hitDie"), /^d/i.test(String(raw)) ? String(raw) : `d${raw}`);
+      continue;
+    }
+    if ( adv.type === "Trait" ) {
+      for ( const k of Array.from(adv.configuration?.grants ?? []) ) {
+        let title = traitChoiceTitle([k]);
+        if ( title === t("choice.fallback") ) title = t("advancement.proficiency");
+        add(title, traitKeyLabel(k));
+      }
+      continue;
+    }
+    if ( adv.type === "Size" ) {
+      const sizes = Array.from(adv.configuration?.sizes ?? []);
+      if ( sizes.length === 1 ) add(t("advancement.size"), CONFIG.DND5E.actorSizes?.[sizes[0]]?.label ?? sizes[0]);
+      continue;
+    }
+    if ( adv.type === "ItemGrant" ) {
+      for ( const i of Array.from(adv.configuration?.items ?? []) ) {
+        const uuid = (typeof i === "string") ? i : i?.uuid;
+        if ( !uuid ) continue;
+        const granted = await fromUuid(uuid).catch(() => null);
+        if ( granted ) add(
+          granted.type === "feat" ? t("advancement.features") : t("advancement.grantedItems"),
+          { name: granted.name, uuid, img: granted.img }
+        );
+      }
+      continue;
+    }
+    if ( adv.type === "ScaleValue" ) {
+      const title = adv.title || adv.configuration?.identifier || t("advancement.scaleValue");
+      let display;
+      try { const v = adv.valueForLevel?.(1); display = v?.display ?? v?.value ?? v; } catch { /* fall through */ }
+      if ( display == null ) {
+        const val = adv.configuration?.scale?.[1] ?? adv.configuration?.scale?.["1"];
+        display = (val && typeof val === "object") ? val.value : val;
+      }
+      if ( display != null && display !== "" ) add(title, String(display));
+    }
+  }
+  return groups;
+}
 
 /**
  * Final review. Read-only: it surfaces every pick and the resolved ability scores
@@ -22,37 +191,33 @@ export const reviewStep = {
 
   summary() { return ""; },
 
-  async context({ state, source }) {
+  async context({ state, source, equipment }) {
     const scores = state.resolvedScores();
-    const pick = (uuid, kindKey, emptyKey) => {
-      const card = source.card(uuid);
-      return {
-        kind: t(kindKey),
-        empty: t(emptyKey),
-        chosen: !!card,
-        name: card?.name ?? "",
-        img: card?.img ?? "icons/svg/mystery-man.svg"
-      };
-    };
+    const deltas = state.backgroundDeltas();
+    const equipBySource = await reviewEquipment(state, source, equipment);
+    const spells = reviewSpells(state);
     const methodKeys = {
       "point-buy": "step.abilities.pointBuy",
       "standard-array": "step.abilities.standardArray",
       "roll": "step.abilities.roll"
     };
     return {
-      name: state.actor?.name ?? "",
-      origins: [
-        pick(state.classUuid, "step.class.label", "step.review.noClass"),
-        pick(state.speciesUuid, "step.species.label", "step.review.noSpecies"),
-        pick(state.backgroundUuid, "step.background.label", "step.review.noBackground")
-      ],
+      name: state.details.name?.trim() || state.actor?.name || "",
       method: t(methodKeys[state.abilityMethod] ?? "step.abilities.label"),
-      abilities: ABILITIES.map(key => ({
-        key,
-        abbr: CONFIG.DND5E?.abilities?.[key]?.abbreviation ?? key.slice(0, 3).toUpperCase(),
-        value: scores[key],
-        modifier: formatMod(scores[key])
-      }))
+      abilities: ABILITIES.map(key => {
+        const bonus = deltas[key] ?? 0;
+        const total = scores[key] + bonus;
+        return {
+          key,
+          abbr: CONFIG.DND5E?.abilities?.[key]?.abbreviation ?? key.slice(0, 3).toUpperCase(),
+          value: total,
+          modifier: formatMod(total),
+          bonus: bonus ? `+${bonus}` : null,
+          bonusTip: bonus ? t("step.review.bonusFromBackground", { bonus }) : null
+        };
+      }),
+      details: reviewDetails(state),
+      sections: await reviewSections(state, source, equipBySource, spells)
     };
   }
 };

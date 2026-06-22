@@ -19,6 +19,12 @@ export class SourceIndex {
   /** uuid -> ability-score-improvement config (or null), memoised. */
   #asi = new Map();
 
+  /** uuid -> categorized advancement groups (or null), memoised. */
+  #groups = new Map();
+
+  /** granted-item uuid -> { name, img, type } metadata (or null), memoised. */
+  #meta = new Map();
+
   loaded = false;
 
   /**
@@ -140,6 +146,157 @@ export class SourceIndex {
     this.#asi.set(uuid, config);
     return config;
   }
+
+  /**
+   * Resolve an origin item's advancements into the display blocks shown beneath its
+   * description: a "Traits" block of proficiency/score tags, then "Features" and
+   * "Spells" blocks of granted items (each with its icon, a clickable content-link,
+   * and a level tag). Blocks with no content are omitted. Memoised per UUID.
+   *
+   * @param {string} uuid
+   * @returns {Promise<object[]|null>}
+   */
+  async advancementGroups(uuid) {
+    if ( !uuid ) return null;
+    if ( this.#groups.has(uuid) ) return this.#groups.get(uuid);
+
+    const doc = await fromUuid(uuid);
+    const groups = doc ? await this.#buildGroups(doc) : null;
+    this.#groups.set(uuid, groups);
+    return groups;
+  }
+
+  /** Walk an item's level-1 traits and every granted feature/spell into display blocks. */
+  async #buildGroups(doc) {
+    // Headings read from the step namespace matching the document type, so a class shows
+    // "Class Traits" while a species/background shows its own wording; everything else
+    // (trait sub-labels, the level tag) is generic and stays under step.class.
+    const ns = { class: "step.class", race: "step.species", background: "step.background" }[doc.type]
+      ?? "step.class";
+    const head = key => game.i18n.localize(`sogrom-dnd5e-character-creator.${key}`);
+    const traits = { key: "traits", order: 1, heading: head(`${ns}.traits`), tags: [], items: [] };
+    const features = { key: "features", order: 2, heading: head(`${ns}.features`), tags: [], items: [] };
+    const spells = { key: "spells", order: 3, heading: head(`${ns}.spells`), tags: [], items: [] };
+
+    // Lead the Traits block with the class's headline numbers, like the PHB core table.
+    // primaryAbility.value is a Set on the prepared model, so normalise via Array.from;
+    // fall back to the raw source array in case the prepared field comes back empty.
+    const sys = doc.system ?? {};
+    const primaryRaw = sys.primaryAbility?.value ?? doc._source?.system?.primaryAbility?.value ?? [];
+    const primary = Array.from(primaryRaw).map(a => CONFIG.DND5E.abilities?.[a]?.label ?? a);
+    if ( primary.length ) traits.tags.push({ label: head("step.class.trait.primary"), value: primary.join(", ") });
+    if ( sys.hd?.denomination ) traits.tags.push({ label: head("step.class.trait.hitDie"), value: sys.hd.denomination });
+
+    for ( const adv of advancementEntries(doc) ) {
+      const type = adv.type ?? adv.constructor?.typeName;
+      const level = Number(adv.level ?? adv._source?.level ?? 0);
+
+      // The class summary table already lists higher-level proficiency grants; only the
+      // level-1 traits describe what the class opens with. Skip multiclass-only entries.
+      if ( type === "Trait" ) {
+        if ( level > 1 || adv.classRestriction === "secondary" ) continue;
+        traits.tags.push(...traitTags(adv));
+        continue;
+      }
+
+      if ( type === "ItemGrant" ) {
+        for ( const ref of adv.configuration?.items ?? [] ) {
+          const meta = await this.#resolveMeta(ref.uuid ?? ref);
+          if ( !meta ) continue;
+          const bucket = meta.type === "spell" ? spells : features;
+          bucket.items.push({ name: meta.name, img: meta.img, uuid: meta.uuid, level });
+        }
+      }
+    }
+
+    // Order each list by level then name; drop duplicate grants (same item at same level).
+    for ( const block of [features, spells] ) {
+      const seen = new Set();
+      block.items = block.items
+        .sort((a, b) => (a.level - b.level) || a.name.localeCompare(b.name, game.i18n.lang))
+        .filter(i => { const k = `${i.uuid}:${i.level}`; return seen.has(k) ? false : seen.add(k); });
+    }
+
+    return [traits, features, spells]
+      .filter(b => b.tags.length || b.items.length)
+      .sort((a, b) => a.order - b.order);
+  }
+
+  /** Resolve a granted item's UUID to the metadata a feature row needs, memoised. */
+  async #resolveMeta(uuid) {
+    if ( !uuid ) return null;
+    if ( this.#meta.has(uuid) ) return this.#meta.get(uuid);
+    let meta = null;
+    try {
+      const doc = fromUuidSync(uuid) ?? await fromUuid(uuid);
+      if ( doc ) meta = { uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
+    } catch ( err ) {
+      const doc = await fromUuid(uuid).catch(() => null);
+      if ( doc ) meta = { uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
+    }
+    this.#meta.set(uuid, meta);
+    return meta;
+  }
+}
+
+/**
+ * Return a document's advancements as a flat array, tolerating every shape dnd5e
+ * may hand back. The prepared `doc.advancement` collection is preferred because it
+ * is always populated; the raw `system.advancement` is a fallback that may be a
+ * plain object, an array, or a Map-like Collection.
+ * @param {object} doc
+ * @returns {object[]}
+ */
+function advancementEntries(doc) {
+  const byId = doc.advancement?.byId;
+  if ( byId ) return typeof byId.values === "function" ? [...byId.values()] : Object.values(byId);
+  const raw = doc.system?.advancement;
+  if ( !raw ) return [];
+  if ( Array.isArray(raw) ) return raw;
+  if ( typeof raw.values === "function" ) return [...raw.values()];
+  return Object.values(raw);
+}
+
+/** Trait categories surfaced in the class "Traits" block, mapped to their i18n keys. */
+const TRAIT_LABELS = {
+  saves: "step.class.trait.saves", skills: "step.class.trait.skills",
+  weapon: "step.class.trait.weapon", armor: "step.class.trait.armor",
+  tool: "step.class.trait.tool", languages: "step.class.trait.languages"
+};
+const traitLabel = type => game.i18n.localize(`sogrom-dnd5e-character-creator.${TRAIT_LABELS[type]}`);
+
+/**
+ * Flatten one Trait advancement into `{ label, value }` tags. Fixed `grants` become a
+ * single comma-joined tag per category; a `choices` pool becomes a "Skills (2)"-style
+ * tag listing the options. Categories outside {@link TRAIT_LABELS} (e.g. damage
+ * resistances rarely seen on classes) are ignored.
+ * @param {object} adv  A Trait advancement (prepared instance or raw data)
+ * @returns {{label: string, value: string}[]}
+ */
+function traitTags(adv) {
+  const out = [];
+  const byType = key => key.split(":")[0];
+  const label = key => dnd5e.documents.Trait?.keyLabel?.(key) ?? key;
+
+  const grants = {};
+  for ( const g of adv.configuration?.grants ?? [] ) {
+    const type = byType(g);
+    if ( !TRAIT_LABELS[type] ) continue;
+    (grants[type] ??= []).push(label(g));
+  }
+  for ( const [type, values] of Object.entries(grants) ) {
+    out.push({ label: traitLabel(type), value: values.join(", ") });
+  }
+
+  for ( const choice of adv.configuration?.choices ?? [] ) {
+    const pool = choice.pool ?? [];
+    const type = pool.length ? byType(pool[0]) : null;
+    if ( !type || !TRAIT_LABELS[type] ) continue;
+    const options = pool.map(g => g.endsWith(":*") ? game.i18n.localize("DND5E.Any") : label(g));
+    const count = choice.count ? ` (${choice.count})` : "";
+    out.push({ label: `${traitLabel(type)}${count}`, value: options.join(", ") });
+  }
+  return out;
 }
 
 /**

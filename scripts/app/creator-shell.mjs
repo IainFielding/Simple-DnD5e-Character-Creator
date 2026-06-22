@@ -1,6 +1,8 @@
 import { MODULE_ID, tpl, t, log } from "../config.mjs";
 import { CreatorState } from "../state/creator-state.mjs";
 import { SourceIndex } from "../data/source-index.mjs";
+import { SpellSource } from "../data/spell-source.mjs";
+import { EquipmentSource } from "../data/equipment-source.mjs";
 import { STEPS, REQUIRED_STEPS } from "../steps/registry.mjs";
 import { assembleActor } from "../build/actor-assembler.mjs";
 
@@ -31,13 +33,27 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static PARTS = {
     rail: { id: "rail", template: `modules/${MODULE_ID}/templates/rail.hbs` },
-    stage: { id: "stage", template: `modules/${MODULE_ID}/templates/stage.hbs`, scrollable: [".creator-stage-body"] }
+    stage: {
+      id: "stage",
+      template: `modules/${MODULE_ID}/templates/stage.hbs`,
+      // Preserve scroll across re-renders: the stage body, plus the pick steps'
+      // independently-scrolling pick-list and description columns, the details form/media
+      // columns, and the choices list (otherwise picking an option snaps them to the top).
+      scrollable: [
+        ".creator-stage-body", ".creator-picklist", ".creator-pick-desc",
+        ".creator-details-form", ".creator-details-media", ".creator-choices"
+      ]
+    }
   };
 
   /** @type {CreatorState} */
   state;
   /** @type {SourceIndex} */
   source;
+  /** @type {SpellSource} */
+  spells;
+  /** @type {EquipmentSource} */
+  equipment;
 
   #current = 0;
   #loading = true;
@@ -47,6 +63,8 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     super(options);
     this.state = new CreatorState(actor);
     this.source = new SourceIndex();
+    this.spells = new SpellSource();
+    this.equipment = new EquipmentSource();
   }
 
   get title() {
@@ -80,7 +98,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   async _prepareContext(options) {
     const flags = this.#completeFlags();
     const step = this.#activeStep;
-    const stepContext = this.#loading ? {} : await step.context({ state: this.state, source: this.source });
+    const stepContext = this.#loading ? {} : await step.context(this.#ctx());
 
     return {
       loading: this.#loading,
@@ -149,24 +167,33 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #railContext(flags) {
-    return STEPS.map((s, i) => ({
-      index: i,
-      id: s.id,
-      label: t(s.labelKey),
-      icon: s.icon,
-      ordinal: i + 1,
-      active: i === this.#current,
-      complete: flags[i] && s.id !== "review",
-      reachable: this.#reachable(i, flags),
-      summary: s.summary?.(this.state, this.source) ?? ""
-    }));
+    return STEPS.map((s, i) => {
+      // A step can opt out of applicability (e.g. Spells for a non-caster); the rail greys
+      // it out and shows no completion tick even though it doesn't block the build.
+      const applicable = s.applicable?.(this.state) ?? true;
+      return {
+        index: i,
+        id: s.id,
+        label: t(s.labelKey),
+        icon: s.icon,
+        ordinal: i + 1,
+        active: i === this.#current,
+        applicable,
+        complete: flags[i] && s.id !== "review" && applicable,
+        reachable: this.#reachable(i, flags),
+        summary: s.summary?.(this.state, this.source) ?? ""
+      };
+    });
   }
 
   #filterCards(query) {
     const needle = query.trim().toLowerCase();
-    for ( const card of this.element.querySelectorAll(".creator-card") ) {
+    // Card grid (background/species) and the class pick-list share the same filter;
+    // for a pick-row the <li> wrapper is hidden so the list gap collapses with it.
+    for ( const card of this.element.querySelectorAll(".creator-card, .creator-pickrow") ) {
       const name = (card.dataset.name ?? "").toLowerCase();
-      card.classList.toggle("is-hidden", !!needle && !name.includes(needle));
+      const target = card.closest("li") ?? card;
+      target.classList.toggle("is-hidden", !!needle && !name.includes(needle));
     }
   }
 
@@ -174,9 +201,18 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   /*  Dispatch                                    */
   /* -------------------------------------------- */
 
+  /**
+   * The shared context handed to every step's `context()` and `handle()`. `app` lets a
+   * step request a re-render after an async flow that resolves later (e.g. a FilePicker
+   * callback), since the dispatch's own render fires immediately.
+   */
+  #ctx() {
+    return { state: this.state, source: this.source, spells: this.spells, equipment: this.equipment, app: this };
+  }
+
   async #dispatch(action, el) {
     const step = this.#activeStep;
-    if ( step?.handle ) await step.handle(action, el, { state: this.state, source: this.source });
+    if ( step?.handle ) await step.handle(action, el, this.#ctx());
     this.render();
   }
 
@@ -211,7 +247,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#finished = true;
     let actor;
     try {
-      actor = await assembleActor(this.state);
+      actor = await assembleActor(this.state, this.source, this.equipment);
     } catch ( err ) {
       log("character build failed", err);
       ui.notifications?.error(t("notify.buildFailed"));
