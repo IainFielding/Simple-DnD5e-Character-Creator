@@ -134,9 +134,43 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     for ( const el of root.querySelectorAll("[data-step-change]") ) {
       el.addEventListener("change", ev => this.#dispatch(el.dataset.stepChange, ev.currentTarget));
     }
+    this.#wireDragDrop(root);
     // Client-side card filtering — no re-render, so the field keeps focus while typing.
     const search = root.querySelector("[data-creator-search]");
     if ( search ) search.addEventListener("input", ev => this.#filterCards(ev.currentTarget.value));
+  }
+
+  /**
+   * Generic drag-and-drop bridge to the step dispatcher. A `[data-step-drag]` element
+   * carries an opaque payload string; dropping it on a `[data-step-drop]` element stashes
+   * that payload on the target's `dataset.dropPayload` and dispatches the drop's action, so
+   * a step handler reads it exactly like any other dataset value. Used by the ability panel
+   * to drop pooled scores onto abilities, but knows nothing of abilities itself.
+   */
+  #wireDragDrop(root) {
+    for ( const el of root.querySelectorAll("[data-step-drag]") ) {
+      el.setAttribute("draggable", "true");
+      el.addEventListener("dragstart", ev => {
+        ev.dataTransfer.setData("text/plain", el.dataset.stepDrag);
+        ev.dataTransfer.effectAllowed = "move";
+        el.classList.add("is-dragging");
+      });
+      el.addEventListener("dragend", () => el.classList.remove("is-dragging"));
+    }
+    for ( const el of root.querySelectorAll("[data-step-drop]") ) {
+      el.addEventListener("dragover", ev => {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "move";
+        el.classList.add("is-dragover");
+      });
+      el.addEventListener("dragleave", () => el.classList.remove("is-dragover"));
+      el.addEventListener("drop", ev => {
+        ev.preventDefault();
+        el.classList.remove("is-dragover");
+        el.dataset.dropPayload = ev.dataTransfer.getData("text/plain");
+        this.#dispatch(el.dataset.stepDrop, el);
+      });
+    }
   }
 
   /** @override */

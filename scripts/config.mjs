@@ -15,12 +15,14 @@ export const SETTINGS = {
   launchButton: "showLaunchButton",
   contextMenu: "showContextMenu",
   pointBuyBudget: "pointBuyBudget",
-  rollFormula: "abilityRollFormula"
+  rollFormula: "abilityRollFormula",
+  displayMode: "displayMode"
 };
 
 export const DEFAULTS = {
   pointBuyBudget: 27,
-  rollFormula: "4d6kh3"
+  rollFormula: "4d6kh3",
+  displayMode: "windowed"
 };
 
 /**

@@ -57,6 +57,16 @@ export async function abilitiesHandle(action, el, state) {
     case "ability-assign":
       assignSlot(state, ability, el.value === "" ? null : Number(el.value));
       break;
+    case "ability-drop": {
+      // Dropped a pooled score onto an ability; the pool index rides on dropPayload.
+      const payload = el.dataset.dropPayload;
+      assignSlot(state, ability, payload == null || payload === "" ? null : Number(payload));
+      break;
+    }
+    case "ability-unassign":
+      // Dropped a value back onto the pool: clear whichever ability holds that index.
+      clearSlot(state, el.dataset.dropPayload === "" ? null : Number(el.dataset.dropPayload));
+      break;
     case "ability-reset":
       if ( state.abilityMethod === "point-buy" ) resetPointBuy(state);
       else state.assignment = blankAssignment();
@@ -84,7 +94,8 @@ export function abilitiesContext(state) {
 
 /** Actions this panel owns, so the Class step can route only its own clicks here. */
 export const ABILITY_ACTIONS = new Set([
-  "ability-method", "ability-inc", "ability-dec", "ability-roll", "ability-assign", "ability-reset"
+  "ability-method", "ability-inc", "ability-dec", "ability-roll",
+  "ability-assign", "ability-drop", "ability-unassign", "ability-reset"
 ]);
 
 /* -------------------------------------------- */
@@ -133,17 +144,27 @@ function blankAssignment() {
 }
 
 /**
- * Assign a pool slot to an ability. Each pool value may be used once, so if the
- * slot was already held by another ability that ability is cleared (a swap).
+ * Assign a pool slot to an ability. Each pool value may be used once, so if the slot
+ * was already held by another ability the two trade places: that ability inherits the
+ * value this one was holding (or becomes unassigned if it held none).
  */
 function assignSlot(state, ability, index) {
   if ( !ability ) return;
+  const previous = state.assignment[ability];
   if ( index != null ) {
     for ( const key of ABILITIES ) {
-      if ( key !== ability && state.assignment[key] === index ) state.assignment[key] = null;
+      if ( key !== ability && state.assignment[key] === index ) state.assignment[key] = previous;
     }
   }
   state.assignment[ability] = index;
+}
+
+/** Clear whichever ability currently holds this pool index (used when dragging a value back). */
+function clearSlot(state, index) {
+  if ( index == null ) return;
+  for ( const key of ABILITIES ) {
+    if ( state.assignment[key] === index ) state.assignment[key] = null;
+  }
 }
 
 async function rollPool() {
@@ -178,11 +199,11 @@ function poolContext(state) {
   const rows = ABILITIES.map(key => {
     const chosen = state.assignment[key];
     const score = (chosen != null && pool[chosen] != null) ? pool[chosen] : null;
+    // Every pool slot is offered in every row: picking one already held by another
+    // ability swaps the two (see assignSlot), so used values stay selectable.
     const options = pool.map((value, index) => ({
       index, value,
-      selected: chosen === index,
-      // A slot taken by another ability is disabled in this row's dropdown.
-      disabled: chosen !== index && used.has(index)
+      selected: chosen === index
     }));
     return {
       key, label: abilityLabel(key), abbr: abilityAbbr(key),
@@ -192,8 +213,9 @@ function poolContext(state) {
     };
   });
 
-  // The pool shown as a strip up top — each value flagged once it's been assigned.
-  const poolChips = pool.map((value, index) => ({ value, used: used.has(index) }));
+  // The pool shown as a strip up top — each value flagged once it's been assigned. The
+  // index travels with each chip so it can be dragged onto an ability row (and back).
+  const poolChips = pool.map((value, index) => ({ value, index, used: used.has(index) }));
 
   return { rows, hasPool, pool: poolChips };
 }

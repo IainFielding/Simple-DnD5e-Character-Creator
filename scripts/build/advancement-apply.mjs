@@ -157,12 +157,18 @@ export async function applyChoicePlan(actor, plan, resolved, advChoices, originI
     }
 
     for ( const [advId, info] of Object.entries(byAdv) ) {
-      if ( !info.keys.length ) continue;
       const adv = originItem.advancement?.byId?.[advId];
       if ( !adv ) continue;
       try {
-        if ( info.type === "Trait" ) await adv.apply(info.level, { chosen: info.keys });
-        else if ( info.type === "Size" ) await adv.apply(info.level, { size: info.keys[0] });
+        if ( info.type === "Trait" ) {
+          // The manager skipped this whole advancement because it carried a choice, so its
+          // automatic grants would be lost too — merge them back in with the player's picks.
+          const chosen = mergeTraitGrants(adv, info.keys);
+          if ( chosen.length ) await adv.apply(info.level, { chosen });
+        }
+        else if ( info.type === "Size" ) {
+          if ( info.keys.length ) await adv.apply(info.level, { size: info.keys[0] });
+        }
         else if ( info.type === "ItemChoice" ) await applyItemChoice(actor, originItem, adv, info.level, info.keys, src.key, advChoices, 0);
       } catch ( err ) {
         log(`failed to apply ${info.type} ${advId} on ${src.key}`, err);
@@ -174,6 +180,17 @@ export async function applyChoicePlan(actor, plan, resolved, advChoices, originI
 /* -------------------------------------------- */
 /*  Manual application internals                */
 /* -------------------------------------------- */
+
+/**
+ * The full `chosen` set a Trait advancement must apply: its automatic `configuration.grants`
+ * plus the player's recorded picks, de-duplicated. The choice resolver only ever surfaces the
+ * picks, so without folding the grants back in the manual apply path drops them (and the
+ * manager can't, since it skipped the advancement to let the wizard own the choice).
+ */
+function mergeTraitGrants(adv, recordedKeys = []) {
+  const grants = Array.from(adv?.configuration?.grants ?? []);
+  return [...new Set([...grants, ...recordedKeys])];
+}
 
 /** Recorded selection keys for an advancement (merges its multiple Trait choice entries). */
 function recordedKeysForAdv(advChoices, source, advId) {
@@ -233,7 +250,10 @@ async function manuallyApplyItemAdvancements(actor, item, source, advChoices, de
       if ( adv.type === "ItemGrant" ) {
         await manuallyApplyItemGrant(actor, item, liveAdv, source, advChoices, depth);
       } else if ( adv.type === "Trait" ) {
-        await liveAdv.apply(level, { chosen: recordedKeysForAdv(advChoices, source, adv._id) });
+        // Granted features (e.g. Construct Resilience) carry grant-only Trait advancements;
+        // merge their automatic grants with any recorded picks so the traits actually apply.
+        const chosen = mergeTraitGrants(adv, recordedKeysForAdv(advChoices, source, adv._id));
+        if ( chosen.length ) await liveAdv.apply(level, { chosen });
       } else if ( adv.type === "ItemChoice" ) {
         const keys = recordedKeysForAdv(advChoices, source, adv._id);
         if ( keys.length ) await applyItemChoice(actor, item, liveAdv, level, keys, source, advChoices, depth + 1);

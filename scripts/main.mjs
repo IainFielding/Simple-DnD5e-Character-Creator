@@ -34,6 +34,41 @@ function registerSettings() {
     hint: t("settings.rollFormula.hint"),
     scope: "world", config: true, type: String, default: DEFAULTS.rollFormula
   });
+  game.settings.register(MODULE_ID, SETTINGS.displayMode, {
+    name: t("settings.displayMode.name"),
+    hint: t("settings.displayMode.hint"),
+    scope: "world", config: true, type: String, default: DEFAULTS.displayMode,
+    choices: {
+      fullscreen: t("settings.displayMode.fullscreen"),
+      windowed: t("settings.displayMode.windowed")
+    }
+  });
+}
+
+/**
+ * Resolve the ApplicationV2 options for a launch, based on the configured display mode.
+ * Fullscreen covers the viewport with no chrome; windowed opens a themed, draggable,
+ * resizable frame at ~90% of the screen, centred.
+ * @returns {object}
+ */
+function sheetOptions() {
+  const windowed = game.settings.get(MODULE_ID, SETTINGS.displayMode) === "windowed";
+  // Carry the base class explicitly: ApplicationV2 may replace (rather than merge)
+  // the static DEFAULT_OPTIONS.classes with the array passed here.
+  if ( !windowed ) return { classes: ["sogrom-creator", "sogrom-creator-fullscreen"] };
+
+  const w = Math.min(1800, Math.round(window.innerWidth * 0.9));
+  const h = Math.min(1100, Math.round(window.innerHeight * 0.9));
+  return {
+    classes: ["sogrom-creator", "sogrom-creator-windowed"],
+    window: { frame: true, positioned: true, resizable: true },
+    position: {
+      width: w,
+      height: h,
+      top: Math.max(4, Math.round((window.innerHeight - h) / 2)),
+      left: Math.max(4, Math.round((window.innerWidth - w) / 2))
+    }
+  };
 }
 
 /* -------------------------------------------- */
@@ -65,7 +100,7 @@ async function launchCreator(actor) {
     }
     if ( !actor ) return ui.notifications?.warn(t("notify.noPermission"));
   }
-  new CreatorShell(actor).render(true);
+  new CreatorShell(actor, sheetOptions()).render(true);
 }
 
 Hooks.on("renderActorDirectory", (_app, html) => {

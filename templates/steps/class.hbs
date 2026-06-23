@@ -111,9 +111,9 @@
 
     {{else}}
       {{#if hasPool}}
-      <ul class="creator-pool">
+      <ul class="creator-pool" data-step-drop="ability-unassign">
         {{#each pool}}
-        <li class="creator-pool-chip {{#if used}}is-used{{/if}}">{{value}}</li>
+        <li class="creator-pool-chip {{#if used}}is-used{{/if}}" data-step-drag="{{index}}">{{value}}</li>
         {{/each}}
       </ul>
       {{/if}}
@@ -121,12 +121,13 @@
       {{#if hasPool}}
       <ul class="creator-ability-list">
         {{#each rows}}
-        <li class="creator-ability-row {{#if assigned}}is-assigned{{/if}}">
+        <li class="creator-ability-row {{#if assigned}}is-assigned{{/if}}"
+            data-step-drop="ability-drop" data-ability="{{key}}">
           <span class="creator-ability-name">{{label}}</span>
           <select class="creator-assign" data-step-change="ability-assign" data-ability="{{key}}">
             <option value="">{{localize "sogrom-dnd5e-character-creator.step.abilities.unassigned"}}</option>
             {{#each options}}
-            <option value="{{index}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{value}}</option>
+            <option value="{{index}}" {{#if selected}}selected{{/if}}>{{value}}</option>
             {{/each}}
           </select>
           <span class="creator-ability-mod">{{modifier}}</span>

@@ -217,6 +217,12 @@
       "rollFormula": {
         "name": "Ability roll formula",
         "hint": "Dice formula rolled for each ability when using the Roll method (standard rules use 4d6kh3)."
+      },
+      "displayMode": {
+        "name": "Display mode",
+        "hint": "How the Character Creator opens: Fullscreen covers the whole screen; Windowed opens a draggable, resizable window.",
+        "fullscreen": "Fullscreen",
+        "windowed": "Windowed"
       }
     }
   }
