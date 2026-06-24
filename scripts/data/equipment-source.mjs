@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { getEnabledPacks } from "./compendium-util.mjs";
+import { TOOL_IMG, toolCategoryKey, toolChoices } from "./tool-source.mjs";
 
 /**
  * Resolves a class's and background's starting equipment into selectable options, and
@@ -14,11 +15,6 @@ import { getEnabledPacks } from "./compendium-util.mjs";
 
 const VALID_TYPES = new Set(["AND", "OR", "linked", "currency", "tool"]);
 const OPTION_LABELS = "ABCDEFGH";
-const TOOL_IMG = {
-  art: "icons/tools/hand/hammer-and-nail.webp",
-  game: "icons/sundries/gaming/dice-pair-white-green.webp",
-  music: "icons/tools/instruments/harp-yellow-teal.webp"
-};
 const FOCUS_IMG = "icons/svg/item-bag.svg";
 
 /** Spellcasting-focus picks per class identifier; items are referenced by identifier. */
@@ -34,8 +30,6 @@ export class EquipmentSource {
 
   /** origin uuid -> { name, img, options }, memoised. */
   #cache = new Map();
-  /** tool category -> choice[], memoised. */
-  #toolCache = new Map();
   /** focus identifier -> {uuid,name,img}|null, memoised. */
   #focusCache = new Map();
 
@@ -112,34 +106,11 @@ export class EquipmentSource {
       node.img = TOOL_IMG[node.key] ?? null;
       const category = toolCategoryKey(node.key);
       if ( category ) {
-        const choices = await this.#toolChoices(category);
+        const choices = await toolChoices(category);
         if ( choices.length ) { node.isToolChoice = true; node.choices = choices; }
       }
     }
     for ( const child of node.children ?? [] ) await this.#resolveNodes(child);
-  }
-
-  /** Specific tool items in a category (e.g. all musical instruments), deduped + cached. */
-  async #toolChoices(category) {
-    if ( this.#toolCache.has(category) ) return this.#toolCache.get(category);
-    let entries = [];
-    const browser = dnd5e.applications?.CompendiumBrowser;
-    if ( browser?.fetch ) {
-      try {
-        const all = await browser.fetch(Item, {
-          types: new Set(["tool"]),
-          indexFields: new Set(["system.type.value", "system.type.baseItem"])
-        });
-        entries = all.filter(e => (e.system?.type?.value ?? "") === category);
-      } catch ( err ) {
-        log(`tool choice fetch failed for "${category}"`, err);
-      }
-    }
-    const choices = dedupeByPriority(entries, e => e.system?.type?.baseItem || e.name)
-      .map(e => ({ uuid: e.uuid, name: e.name, img: e.img }))
-      .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
-    this.#toolCache.set(category, choices);
-    return choices;
   }
 
   /** Add the class's focus pick to each equipment option, converting or injecting a node. */
@@ -237,6 +208,7 @@ export function summarizeOption(data, eqState) {
   const goldParts = [];
   for ( const r of flattenTree(opt.tree, eqState.orSelections) ) {
     if ( r.type === "or-group" ) {
+      if ( r.isBranch ) continue;          // branch router — the nested selector carries the real pick
       const sel = r.options.find(o => o.isSelected) ?? r.options[0];
       if ( sel ) items.push({ name: sel.name, img: sel.img, count: sel.count, uuid: sel.uuid ?? null });
     } else if ( r.isCurrency ) {
@@ -258,13 +230,23 @@ function flattenTree(node, orSelections = {}) {
     if ( !node.children.length ) return [];
     if ( node.children.length === 1 ) return flattenTree(node.children[0], orSelections);
     const selected = orSelections[node._id] ?? node.children[0]._id;
-    return [{
+    const rows = [{
       type: "or-group", _id: node._id,
       options: node.children.map(c => ({
         _id: c._id, name: c.name ?? t("equipment.unknown"), img: c.img,
-        count: c.count, uuid: c.key ?? null, isSelected: c._id === selected
+        // Tool branches carry a category key ("art"), not a compendium uuid — no item tooltip.
+        count: c.count, uuid: c.type === "tool" ? null : (c.key ?? null), isSelected: c._id === selected
       }))
     }];
+    // If the chosen branch is itself a further choice (e.g. which specific Musical Instrument
+    // once "Musical Instrument" is picked over "Artisan's Tools"), surface that nested selector.
+    // The outer row then just routes the branch — `isBranch` tells the summary to skip it so the
+    // collapsed pick reflects the specific tool, not the category, matching `collectTree`.
+    const chosen = node.children.find(c => c._id === selected) ?? node.children[0];
+    for ( const sub of flattenTree(chosen, orSelections) ) {
+      if ( sub.type === "or-group" ) { rows.push(sub); rows[0].isBranch = true; }
+    }
+    return rows;
   }
   if ( node.type === "linked" ) {
     if ( node.isFocusChoice && node.choices?.length > 1 ) return [focusGroup(node, orSelections)];
@@ -421,28 +403,6 @@ function injectFocusNode(opt) {
   if ( opt.tree?.type === "AND" ) opt.tree.children.push(node);
   else opt.tree = { type: "AND", _id: `focus-and-${foundry.utils.randomID()}`, children: [opt.tree, node].filter(Boolean) };
   return node;
-}
-
-/** A category key needing a choice (e.g. "music"), or null for a specific tool ("viol"). */
-function toolCategoryKey(key) {
-  const dnd = CONFIG.DND5E ?? {};
-  if ( dnd.tools?.[key] ) return null;
-  if ( dnd.toolTypes?.[key] || dnd.toolProficiencies?.[key] ) return key;
-  return null;
-}
-
-/** Dedupe index entries by a key, preferring PHB then 2024 then legacy packs. */
-function dedupeByPriority(entries, keyOf) {
-  const PRIORITY = ["Compendium.dnd-players-handbook.", "Compendium.dnd5e.equipment24.", "Compendium.dnd5e.equipment."];
-  const rank = uuid => { const i = PRIORITY.findIndex(p => (uuid ?? "").startsWith(p)); return i >= 0 ? i : PRIORITY.length; };
-  const byKey = new Map();
-  for ( const e of entries ) {
-    const key = keyOf(e);
-    if ( !key ) continue;
-    const existing = byKey.get(key);
-    if ( !existing || rank(e.uuid) < rank(existing.uuid) ) byKey.set(key, e);
-  }
-  return [...byKey.values()];
 }
 
 /** Extract the GP amount for an option label from item description HTML. */

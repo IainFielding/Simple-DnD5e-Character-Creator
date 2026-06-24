@@ -57,7 +57,7 @@
           {{#each items}}
           <div class="creator-grant">
             <img class="creator-grant-icon" src="{{img}}" alt="">
-            <a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip=" ">{{name}}</a>
+            <a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{name}}</a>
             {{#if level}}<span class="creator-grant-tag">{{localize "sogrom-dnd5e-character-creator.step.class.levelTag" level=level}}</span>{{/if}}
           </div>
           {{/each}}

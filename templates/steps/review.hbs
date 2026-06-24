@@ -1,5 +1,9 @@
 <section class="creator-review">
-  <p class="creator-review-intro">{{localize "sogrom-dnd5e-character-creator.step.review.intro" name=name}}</p>
+  <div class="creator-review-portrait">
+    <div class="creator-portrait-frame">
+      <img class="creator-portrait-img" src="{{portrait}}" alt="">
+    </div>
+  </div>
 
   <div class="creator-review-abilities">
     <h2>{{localize "sogrom-dnd5e-character-creator.step.abilities.label"}}
@@ -39,7 +43,7 @@
           {{#if empty}}<em>{{localize "sogrom-dnd5e-character-creator.step.review.notChosen"}}</em>
           {{else}}
             {{#each values}}
-            {{#if uuid}}<a class="content-link creator-item-link" data-uuid="{{uuid}}" data-link data-tooltip=" ">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{else}}<span class="creator-review-val">{{name}}</span>{{/if}}
+            {{#if uuid}}<a class="content-link creator-item-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{else}}<span class="creator-review-val">{{name}}</span>{{/if}}
             {{/each}}
           {{/if}}
         </span>
@@ -54,13 +58,13 @@
       {{#if spells.cantrips.length}}
       <h4>{{localize "sogrom-dnd5e-character-creator.step.spells.cantrips"}}</h4>
       <ul class="creator-review-spells">
-        {{#each spells.cantrips}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip=" "><img src="{{img}}" alt="">{{name}}</a></li>{{/each}}
+        {{#each spells.cantrips}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>{{/each}}
       </ul>
       {{/if}}
       {{#if spells.level1.length}}
       <h4>{{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}</h4>
       <ul class="creator-review-spells">
-        {{#each spells.level1}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip=" "><img src="{{img}}" alt="">{{name}}</a></li>{{/each}}
+        {{#each spells.level1}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>{{/each}}
       </ul>
       {{/if}}
     </div>
@@ -70,7 +74,7 @@
     <div class="creator-review-sub">
       <h3>{{localize "sogrom-dnd5e-character-creator.equipment.heading"}}</h3>
       <ul class="creator-review-spells">
-        {{#each equipment.items}}<li>{{#if uuid}}<a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip=" ">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{else}}{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}{{/if}}{{#if count}} ×{{count}}{{/if}}</li>{{/each}}
+        {{#each equipment.items}}<li>{{#if uuid}}<a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{else}}{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}{{/if}}{{#if count}} ×{{count}}{{/if}}</li>{{/each}}
         {{#if equipment.gold}}<li><i class="fa-solid fa-coins"></i> {{equipment.gold}}</li>{{/if}}
       </ul>
     </div>

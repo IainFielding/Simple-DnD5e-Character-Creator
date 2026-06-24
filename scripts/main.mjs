@@ -11,6 +11,17 @@ Hooks.once("init", () => {
   // Step partials are pulled in by the stage via a dynamic Handlebars partial, so they
   // must be registered up front (the rail/stage/shell themselves are loaded as PARTS).
   foundry.applications.handlebars.loadTemplates(STEPS.map(s => tpl(`${s.template}.hbs`)));
+
+  // The `data-tooltip` payload that triggers a dnd5e *rich* item tooltip. The system's
+  // global Tooltips5e observer watches the live tooltip element for a `.loading[data-uuid]`
+  // section and swaps it for the item's richTooltip() on hover. A bare " " can never become
+  // one — it just shows an empty (black) box — so item links must emit this instead.
+  // Handlebars escapes the returned string into the attribute; the browser decodes it back to
+  // real HTML, so element.dataset.tooltip yields exactly the markup dnd5e looks for.
+  Handlebars.registerHelper("ccItemTooltip", uuid => {
+    if ( !uuid ) return "";
+    return `<section class="loading" data-uuid="${uuid}"><i class="fa-solid fa-spinner fa-spin-pulse"></i></section>`;
+  });
 });
 
 function registerSettings() {

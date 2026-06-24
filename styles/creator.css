@@ -733,6 +733,8 @@
   .creator-pick-desc { height: auto; }
   .creator-picklist { overflow-y: visible; }
   .creator-pick .creator-class-aside { max-height: none; }
+  /* Stacked: let every row size to its content rather than splitting the height. */
+  .creator-spells { grid-template-rows: none; }
 
   /* Narrow window: drop the step labels so the bar stays on one row of circles
      (the active/complete state still reads from marker colour). */
@@ -868,7 +870,9 @@
 
 /* ---------------------------------------------- Review */
 
-.creator-review-intro { color: var(--cc-muted); margin-bottom: 1.5rem; }
+/* Portrait above the ability scores — matched to the Details step's frame size. */
+.creator-review-portrait { display: flex; justify-content: center; margin-bottom: 1.5rem; }
+.creator-review-portrait .creator-portrait-frame { width: 260px; max-width: 100%; }
 .creator-summary-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1139,7 +1143,46 @@
 .creator-pickrow.is-focused { border-color: var(--cc-accent); }
 .creator-pickrow.is-disabled { opacity: 0.4; cursor: not-allowed; }
 .creator-spell-meta { color: var(--cc-muted); font-size: 0.85rem; margin: 0.2rem 0 0; }
-.creator-spells-none { grid-column: 1 / -1; }
+/* The selected strip takes its content height; the columns fill the rest and scroll. */
+.creator-spells { grid-template-rows: auto minmax(0, 1fr); }
+.creator-spells-none { grid-column: 1 / -1; grid-row: 1 / -1; }
+
+/* Running tally of picked spells across the top of the step (spans both columns). */
+.creator-spell-selected {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 10px;
+}
+.creator-spell-selected-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-accent);
+}
+.creator-spell-selected-empty { color: var(--cc-muted); font-size: 0.85rem; }
+.creator-spell-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.creator-spell-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem 0.15rem 0.2rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  color: var(--cc-text);
+  text-decoration: none;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.creator-spell-chip i { display: none; }
+.creator-spell-chip img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid var(--cc-line); }
+.creator-spell-chip:hover { border-color: var(--cc-gold); color: var(--cc-gold); }
 
 /* ---------------------------------------------- Choices step */
 

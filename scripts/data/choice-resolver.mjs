@@ -1,4 +1,5 @@
 import { t, log } from "../config.mjs";
+import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
 
 /**
  * Resolves the player-facing advancement *choices* a set of origin items presents at
@@ -358,6 +359,13 @@ export function traitChoiceTitle(pool = []) {
 async function expandTraitPool(pool = []) {
   const Trait = dnd5e.documents.Trait;
   pool = Array.from(pool ?? []);
+
+  // Tool category/wildcard pools (e.g. the Monk's "tool:art:*" + "tool:music:*") expand
+  // unreliably through the generic Trait wildcard helper, so resolve them straight from the
+  // tool compendium — the same proven source the starting-equipment tool picks use.
+  const toolOpts = await expandToolPool(pool);
+  if ( toolOpts ) return toolOpts;
+
   if ( !pool.some(k => k.includes("*")) ) return pool.map(k => ({ key: k, label: traitKeyLabel(k) }));
 
   const flatten = (sc, out = []) => {
@@ -390,6 +398,50 @@ async function expandTraitPool(pool = []) {
     log("Trait per-type expansion failed; literal keys", err);
   }
   return pool.filter(k => !k.includes("*")).map(k => ({ key: k, label: traitKeyLabel(k) }));
+}
+
+/**
+ * Expand a tool-only Trait pool into concrete pick options, fetching the specific tools of
+ * each category (e.g. "tool:art:*" -> every Artisan's Tool) from the compendium. Returns the
+ * options as `{key:"tool:<id>", label, img, uuid}` — dnd5e's Trait apply pops the last `:`
+ * segment to reach `system.tools.<id>`, so the bare id key grants the proficiency correctly.
+ * Returns null when the pool isn't a tool-category pool, so the generic expander handles it.
+ * @param {string[]} pool
+ * @returns {Promise<{key:string,label:string,img?:string,uuid?:string}[]|null>}
+ */
+async function expandToolPool(pool) {
+  if ( !pool.length || !pool.every(k => typeof k === "string" && k.startsWith("tool:")) ) return null;
+
+  const out = [];
+  const seen = new Set();
+  let expandedCategory = false;
+  for ( const entry of pool ) {
+    const category = toolPoolCategory(entry);
+    if ( category ) {
+      expandedCategory = true;
+      for ( const tool of await toolChoices(category) ) {
+        if ( !tool.baseItem ) continue;
+        const key = `tool:${tool.baseItem}`;
+        if ( seen.has(key) ) continue;
+        seen.add(key);
+        out.push({ key, label: tool.name, img: tool.img, uuid: tool.uuid });
+      }
+    } else if ( entry.endsWith(":*") ) {
+      return null;                          // uncategorisable wildcard — defer to the generic expander
+    } else if ( !seen.has(entry) ) {
+      seen.add(entry);
+      out.push({ key: entry, label: traitKeyLabel(entry) });
+    }
+  }
+  return expandedCategory && out.length ? out : null;
+}
+
+/** The pickable tool category in a pool entry ("tool:art:*" -> "art"), or null if specific. */
+function toolPoolCategory(entry) {
+  const parts = entry.split(":");
+  parts.shift();                            // drop the "tool" prefix
+  if ( parts[parts.length - 1] === "*" ) parts.pop();
+  return parts.length ? toolCategoryKey(parts[0]) : null;
 }
 
 /** Scan enabled compendiums for items matching an `allowDrops` restriction, memoised. */

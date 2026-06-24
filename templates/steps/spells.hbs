@@ -1,5 +1,19 @@
 <section class="creator-pick creator-pick--solo creator-spells">
   {{#if isSpellcaster}}
+  <!-- Running tally of everything picked so far, spanning the full step width. -->
+  <div class="creator-spell-selected">
+    <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.step.spells.selected"}}</span>
+    {{#if selected.length}}
+    <ul class="creator-spell-chips">
+      {{#each selected}}
+      <li><a class="content-link creator-spell-chip" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
+      {{/each}}
+    </ul>
+    {{else}}
+    <span class="creator-spell-selected-empty">{{localize "sogrom-dnd5e-character-creator.step.spells.selectedNone"}}</span>
+    {{/if}}
+  </div>
+
   <!-- Left column: tabs + spell list -->
   <div class="creator-pick-side">
     <div class="creator-spell-tabs">
@@ -34,7 +48,7 @@
         <button type="button"
                 class="creator-pickrow {{#if active}}is-selected{{/if}} {{#if focused}}is-focused{{/if}} {{#if disabled}}is-disabled{{/if}}"
                 data-action="stepAction" data-step-action="focus-spell"
-                data-uuid="{{uuid}}" data-name="{{name}}">
+                data-uuid="{{uuid}}" data-name="{{name}}" data-tooltip="{{ccItemTooltip uuid}}">
           <img class="creator-pickrow-img" src="{{img}}" alt="">
           <span class="creator-pickrow-name">{{name}}</span>
           {{#if active}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}

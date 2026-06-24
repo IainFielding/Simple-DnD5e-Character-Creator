@@ -22,7 +22,7 @@ export const SETTINGS = {
 export const DEFAULTS = {
   pointBuyBudget: 27,
   rollFormula: "4d6kh3",
-  displayMode: "windowed"
+  displayMode: "fullscreen"
 };
 
 /**

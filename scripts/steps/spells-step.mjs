@@ -76,6 +76,15 @@ export const spellsStep = {
     const { cantrips, level1, maxCantrips, maxSpells } = data;
     const picked = new Set([...state.selectedCantrips, ...state.selectedSpells].map(s => s.uuid));
 
+    // The running tally shown across the top of the step so the player can always
+    // see (and read, via tooltip) what they've chosen so far. Cantrips first, then
+    // level-1, each alphabetised within its group.
+    const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+    const selected = [
+      ...[...state.selectedCantrips].sort(byName),
+      ...[...state.selectedSpells].sort(byName)
+    ].map(s => ({ uuid: s.uuid, name: s.name, img: s.img }));
+
     // Resolve the active tab, falling back when the class lacks that level of spell.
     let tab = state.spellTab;
     if ( tab === "cantrips" && maxCantrips === 0 ) tab = "level1";
@@ -121,6 +130,7 @@ export const spellsStep = {
       atLimit,
       list,
       count: list.length,
+      selected,
       focused
     };
   }

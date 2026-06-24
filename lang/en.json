@@ -117,6 +117,8 @@
         "label": "Spells",
         "cantrips": "Cantrips",
         "level1": "1st-Level Spells",
+        "selected": "Your Spells",
+        "selectedNone": "None chosen yet — pick from the list below.",
         "picked": "{count} spells",
         "noCaster": "This class has no spellcasting at level 1 — nothing to choose here.",
         "empty": "No spells found for this class in the enabled compendiums.",
@@ -133,7 +135,7 @@
       },
       "review": {
         "label": "Review",
-        "intro": "Review {name} before building the character. You can step back to change any choice.",
+        "labelNamed": "Review {name}",
         "noClass": "No class chosen",
         "noSpecies": "No species chosen",
         "noBackground": "No background chosen",

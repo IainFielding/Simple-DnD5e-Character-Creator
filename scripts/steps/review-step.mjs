@@ -201,8 +201,13 @@ export const reviewStep = {
       "standard-array": "step.abilities.standardArray",
       "roll": "step.abilities.roll"
     };
+    const name = state.details.name?.trim() || state.actor?.name || "";
     return {
-      name: state.details.name?.trim() || state.actor?.name || "",
+      name,
+      // The stage header reads `step.label`; returning one here (the shell spreads the
+      // step context over its default) lets the heading become "Review {name}".
+      label: name ? t("step.review.labelNamed", { name }) : t("step.review.label"),
+      portrait: state.portrait || "icons/svg/mystery-man.svg",
       method: t(methodKeys[state.abilityMethod] ?? "step.abilities.label"),
       abilities: ABILITIES.map(key => {
         const bonus = deltas[key] ?? 0;
