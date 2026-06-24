@@ -222,17 +222,22 @@ export class SourceIndex {
       .sort((a, b) => a.order - b.order);
   }
 
-  /** Resolve a granted item's UUID to the metadata a feature row needs, memoised. */
+  /** Resolve a granted item's UUID to the metadata a feature row needs, memoised.
+   *  The row carries the resolved document's *canonical* uuid (`doc.uuid`), not the
+   *  raw grant reference: some packs (notably 2024 backgrounds) store legacy
+   *  compendium uuids missing the `.Item.` segment, which `fromUuidSync` still
+   *  resolves but the async `fromUuid` dnd5e's tooltip handler calls does not — so
+   *  feeding the raw form to `data-uuid` leaves the hover tooltip permanently blank. */
   async #resolveMeta(uuid) {
     if ( !uuid ) return null;
     if ( this.#meta.has(uuid) ) return this.#meta.get(uuid);
     let meta = null;
     try {
       const doc = fromUuidSync(uuid) ?? await fromUuid(uuid);
-      if ( doc ) meta = { uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
+      if ( doc ) meta = { uuid: doc.uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
     } catch ( err ) {
       const doc = await fromUuid(uuid).catch(() => null);
-      if ( doc ) meta = { uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
+      if ( doc ) meta = { uuid: doc.uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
     }
     this.#meta.set(uuid, meta);
     return meta;
