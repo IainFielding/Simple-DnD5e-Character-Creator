@@ -175,6 +175,7 @@
       "expertise": "Expertise",
       "chooseItems": "Choose a Feature",
       "spellAbility": "Spellcasting Ability",
+      "spellAbilityFor": "Spellcasting Ability — {spell}",
       "proficiency": "Proficiency",
       "hitDie": "Hit Point Die",
       "features": "Features",

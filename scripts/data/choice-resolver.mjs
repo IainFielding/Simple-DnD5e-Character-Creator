@@ -259,9 +259,21 @@ async function parseAdvancementChoice(adv, ctx) {
         }
         return opt;
       });
+      // The advancement's own title is usually the trait name ("Otherworldly Presence"),
+      // which doesn't read as an ability choice. Name it for the granted spell instead, so
+      // it's plainly a spellcasting-ability pick and several from one source stay distinct.
+      const spellNames = [];
+      for ( const ref of Array.from(adv.configuration?.items ?? []) ) {
+        const uuid = typeof ref === "string" ? ref : ref?.uuid;
+        const spell = uuid ? await fromUuid(uuid).catch(() => null) : null;
+        if ( spell ) spellNames.push(spell.name);
+      }
+      const title = spellNames.length
+        ? t("advancement.spellAbilityFor", { spell: spellNames.join(", ") })
+        : t("advancement.spellAbility");
       reqs.push(buildChoiceReq({
         advId: adv._id, source, ownerUuid, type: "SpellAbility", level,
-        title: adv.title || t("advancement.spellAbility"), hint: adv.hint, count: 1, options, sel, crossTaken
+        title, hint: adv.hint, count: 1, options, sel, crossTaken
       }));
     }
     return;
