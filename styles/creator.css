@@ -791,6 +791,9 @@
   .creator-pick .creator-class-aside { max-height: none; }
   /* Stacked: let every row size to its content rather than splitting the height. */
   .creator-spells { grid-template-rows: none; }
+  /* Stacked: the description column flows with the page rather than owning a scroll. */
+  .creator-spells .creator-pick-desc { overflow: visible; }
+  .creator-pick-desc-scroll { overflow-y: visible; }
 
   /* Narrow window: drop the step labels so the bar stays on one row of circles
      (the active/complete state still reads from marker colour). */
@@ -1231,13 +1234,18 @@
 .creator-pickrow.is-focused { border-color: var(--cc-accent); }
 .creator-pickrow.is-disabled { opacity: 0.4; cursor: not-allowed; }
 .creator-spell-meta { color: var(--cc-muted); font-size: 0.85rem; margin: 0.2rem 0 0; }
-/* The selected strip takes its content height; the columns fill the rest and scroll. */
-.creator-spells { grid-template-rows: auto minmax(0, 1fr); }
+/* No top strip now — the two columns fill the whole stage height. */
+.creator-spells { grid-template-rows: minmax(0, 1fr); }
 .creator-spells-none { grid-column: 1 / -1; grid-row: 1 / -1; }
 
-/* Running tally of picked spells across the top of the step (spans both columns). */
+/* The description column scrolls its detail, with the picked-spell tally pinned beneath it. */
+.creator-spells .creator-pick-desc { display: flex; flex-direction: column; overflow: hidden; }
+.creator-pick-desc-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Running tally of picked spells, pinned to the bottom of the description column. */
 .creator-spell-selected {
-  grid-column: 1 / -1;
+  flex: 0 0 auto;
+  margin-top: 0.85rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1254,6 +1262,16 @@
   color: var(--cc-accent);
 }
 .creator-spell-selected-empty { color: var(--cc-muted); font-size: 0.85rem; }
+/* Picked spells, grouped by level so cantrips and 1st-level spells read apart. */
+.creator-spell-groups { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.5rem; }
+.creator-spell-group { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.6rem; }
+.creator-spell-group-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-muted);
+  flex: 0 0 5.5rem;
+}
 .creator-spell-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .creator-spell-chip {
   display: inline-flex;

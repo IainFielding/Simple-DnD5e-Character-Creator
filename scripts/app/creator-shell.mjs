@@ -95,7 +95,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   /** @override */
-  async _prepareContext(options) {
+  async _prepareContext() {
     const flags = this.#completeFlags();
     const step = this.#activeStep;
     const stepContext = this.#loading ? {} : await step.context(this.#ctx());

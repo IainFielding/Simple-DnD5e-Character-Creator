@@ -15,7 +15,6 @@ import { TOOL_IMG, toolCategoryKey, toolChoices } from "./tool-source.mjs";
 
 const VALID_TYPES = new Set(["AND", "OR", "linked", "currency", "tool"]);
 const OPTION_LABELS = "ABCDEFGH";
-const FOCUS_IMG = "icons/svg/item-bag.svg";
 
 /** Spellcasting-focus picks per class identifier; items are referenced by identifier. */
 const CLASS_FOCUS_CHOICES = {
