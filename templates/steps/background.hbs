@@ -1,4 +1,4 @@
-<section class="creator-pick creator-pick--solo">
+<section class="creator-pick {{#unless abilities.selected}}creator-pick--solo{{/unless}}">
   <!-- Left column: vertical picker -->
   <div class="creator-pick-side">
     <div class="creator-toolbar creator-toolbar--stacked">
@@ -68,10 +68,57 @@
     </article>
     {{else}}
     <div class="creator-pick-empty">
-      <i class="fa-solid fa-paw"></i>
-      <h2>{{localize "sogrom-dnd5e-character-creator.step.species.label"}}</h2>
+      <i class="fa-solid fa-feather"></i>
+      <h2>{{localize "sogrom-dnd5e-character-creator.step.background.label"}}</h2>
       <p>{{localize "sogrom-dnd5e-character-creator.common.selectHint"}}</p>
     </div>
     {{/if}}
   </div>
+
+  {{#with abilities}}
+  {{#if selected}}
+  <aside class="creator-class-aside">
+    <h2 class="creator-aside-title">{{localize "sogrom-dnd5e-character-creator.step.bgAbilities.label"}}</h2>
+    {{#if hasAsi}}
+    <p class="creator-asi-hint">
+      {{localize "sogrom-dnd5e-character-creator.step.bgAbilities.hint" points=points cap=cap}}
+    </p>
+
+    <div class="creator-points">
+      <span class="creator-points-value {{#if allSpent}}is-zero{{/if}}">{{remaining}}</span>
+      <span class="creator-points-label">{{localize "sogrom-dnd5e-character-creator.step.abilities.pointsLeft"}}</span>
+    </div>
+    {{else}}
+    <p class="creator-asi-hint">{{localize "sogrom-dnd5e-character-creator.step.bgAbilities.none"}}</p>
+    {{/if}}
+
+    <ul class="creator-ability-list">
+      {{#each rows}}
+      <li class="creator-ability-row {{#if locked}}is-locked{{/if}} {{#if bonus}}is-assigned{{/if}}">
+        <span class="creator-ability-name">{{label}}</span>
+        <div class="creator-stepper">
+          <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="bg-ability-dec"
+                  data-ability="{{key}}" {{#unless canDec}}disabled{{/unless}}>&minus;</button>
+          <span class="creator-ability-score">
+            {{total}}
+            {{#if locked}}<i class="creator-ability-lock fa-solid fa-lock" title="{{localize 'sogrom-dnd5e-character-creator.step.bgAbilities.locked'}}"></i>{{/if}}
+          </span>
+          <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="bg-ability-inc"
+                  data-ability="{{key}}" {{#unless canInc}}disabled{{/unless}}>+</button>
+        </div>
+        <span class="creator-ability-mod">{{bonusLabel}}</span>
+      </li>
+      {{/each}}
+    </ul>
+
+    {{#if hasAsi}}
+    <div class="creator-ability-actions">
+      <button type="button" class="creator-btn creator-btn-ghost" data-action="stepAction" data-step-action="bg-ability-reset">
+        <i class="fa-solid fa-rotate-left"></i> {{localize "sogrom-dnd5e-character-creator.common.reset"}}
+      </button>
+    </div>
+    {{/if}}
+  </aside>
+  {{/if}}
+  {{/with}}
 </section>

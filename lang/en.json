@@ -9,7 +9,10 @@
       "search": "Search…",
       "available": "Available",
       "noEntries": "No entries found in the enabled compendiums.",
-      "reset": "Reset"
+      "reset": "Reset",
+      "on": "On",
+      "off": "Off",
+      "selectHint": "Choose an option from the list to see its full description."
     },
     "loading": {
       "indexing": "Reading the compendiums…"
@@ -31,15 +34,113 @@
       "buildFailed": "Character creation failed. See the console for details."
     },
     "step": {
-      "class": { "label": "Class" },
-      "species": { "label": "Species" },
-      "background": { "label": "Background" },
+      "class": {
+        "label": "Class & Abilities",
+        "traits": "Class Traits",
+        "features": "Class Features",
+        "spells": "Spells",
+        "levelTag": "Lvl {level}",
+        "trait": {
+          "primary": "Primary Ability",
+          "hitDie": "Hit Point Die",
+          "saves": "Saving Throws",
+          "skills": "Skills",
+          "weapon": "Weapons",
+          "armor": "Armor",
+          "tool": "Tools",
+          "languages": "Languages"
+        }
+      },
+      "species": {
+        "label": "Species",
+        "traits": "Traits",
+        "features": "Features",
+        "spells": "Spells"
+      },
+      "background": {
+        "label": "Background",
+        "traits": "Proficiencies",
+        "features": "Features",
+        "spells": "Spells"
+      },
+      "details": {
+        "label": "Details",
+        "subtitle": "Give your character a name and, if you like, the finer points of who they are.",
+        "portrait": "Portrait",
+        "token": "Token",
+        "ringSubject": "Ring Subject",
+        "changeImage": "Change image…",
+        "changePortrait": "Change Portrait",
+        "changeToken": "Change Token",
+        "changeRingSubject": "Change Ring Subject",
+        "dynamicRing": "Dynamic ring",
+        "lockRotation": "Lock rotation",
+        "nameLabel": "Character name",
+        "namePlaceholder": "Name your character",
+        "optional": "Optional — flesh out who they are.",
+        "field": {
+          "alignment": "Alignment",
+          "faith": "Faith",
+          "gender": "Gender",
+          "eyes": "Eyes",
+          "hair": "Hair",
+          "skin": "Skin",
+          "height": "Height",
+          "weight": "Weight",
+          "age": "Age",
+          "trait": "Personality Traits",
+          "ideals": "Ideals",
+          "bonds": "Bonds",
+          "flaws": "Flaws",
+          "appearance": "Appearance",
+          "biography": "Biography"
+        },
+        "placeholder": {
+          "alignment": "e.g. Chaotic Good",
+          "faith": "Deity or philosophy",
+          "gender": "",
+          "eyes": "",
+          "hair": "",
+          "skin": "",
+          "height": "",
+          "weight": "",
+          "age": "",
+          "trait": "How do they carry themselves?",
+          "ideals": "What do they believe in?",
+          "bonds": "Who or what matters to them?",
+          "flaws": "What undermines them?",
+          "appearance": "Describe how they look.",
+          "biography": "Their story so far…"
+        }
+      },
+      "spells": {
+        "label": "Spells",
+        "cantrips": "Cantrips",
+        "level1": "1st-Level Spells",
+        "selected": "Your Spells",
+        "selectedNone": "None chosen yet — pick from the list below.",
+        "picked": "{count} spells",
+        "noCaster": "This class has no spellcasting at level 1 — nothing to choose here.",
+        "empty": "No spells found for this class in the enabled compendiums.",
+        "selectHint": "Pick a spell from the list to read it and add it to your character.",
+        "concentration": "Concentration",
+        "ritual": "Ritual",
+        "add": "Add spell",
+        "remove": "Remove spell"
+      },
+      "choices": {
+        "label": "Choices",
+        "none": "Your chosen class, background, and species need no further decisions.",
+        "progress": "{done}/{total} made"
+      },
       "review": {
         "label": "Review",
-        "intro": "Review {name} before building the character. You can step back to change any choice.",
+        "labelNamed": "Review {name}",
         "noClass": "No class chosen",
         "noSpecies": "No species chosen",
-        "noBackground": "No background chosen"
+        "noBackground": "No background chosen",
+        "notChosen": "Not chosen",
+        "bonusFromBackground": "+{bonus} from background"
       },
       "abilities": {
         "label": "Ability Scores",
@@ -47,10 +148,60 @@
         "standardArray": "Standard Array",
         "roll": "Roll",
         "pointsLeft": "points left",
-        "rollScores": "Roll Scores",
+        "rollScores": "Roll Stats",
         "unassigned": "—",
         "rollPrompt": "Roll to generate six scores, then assign them to your abilities."
+      },
+      "bgAbilities": {
+        "label": "Ability Increase",
+        "hint": "Raise your ability scores by {points} points, up to +{cap} in any one.",
+        "none": "This background grants no ability increase.",
+        "locked": "Set by this background"
       }
+    },
+    "choice": {
+      "chooseOne": "Choose one",
+      "chooseCount": "Choose {count}",
+      "alreadyGained": "Already gained elsewhere",
+      "emptyNoteSkills": "Pick skill proficiencies first to choose Expertise.",
+      "simpleWeapons": "Simple Weapons",
+      "martialWeapons": "Martial Weapons",
+      "other": "Other",
+      "fallback": "Choice"
+    },
+    "advancement": {
+      "size": "Size",
+      "expertise": "Expertise",
+      "chooseItems": "Choose a Feature",
+      "spellAbility": "Spellcasting Ability",
+      "proficiency": "Proficiency",
+      "hitDie": "Hit Point Die",
+      "features": "Features",
+      "grantedItems": "Granted Items",
+      "scaleValue": "Resource"
+    },
+    "equipment": {
+      "heading": "Starting Equipment",
+      "option": "Option {label}",
+      "choosePrompt": "Choose a {label}",
+      "one": "option",
+      "unknown": "Unknown item",
+      "focus": {
+        "arcane": "Arcane Focus",
+        "druidic": "Druidic Focus",
+        "holy": "Holy Symbol"
+      }
+    },
+    "traitChoice": {
+      "ci": "Condition Immunities",
+      "di": "Damage Immunities",
+      "dr": "Damage Resistances",
+      "languages": "Languages",
+      "weapon": "Weapons",
+      "armor": "Armor",
+      "saves": "Saving Throws",
+      "skills": "Skills",
+      "tool": "Tools"
     },
     "settings": {
       "launchButton": {
@@ -68,6 +219,12 @@
       "rollFormula": {
         "name": "Ability roll formula",
         "hint": "Dice formula rolled for each ability when using the Roll method (standard rules use 4d6kh3)."
+      },
+      "displayMode": {
+        "name": "Display mode",
+        "hint": "How the Character Creator opens: Fullscreen covers the whole screen; Windowed opens a draggable, resizable window.",
+        "fullscreen": "Fullscreen",
+        "windowed": "Windowed"
       }
     }
   }

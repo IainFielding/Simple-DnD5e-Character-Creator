@@ -1,0 +1,155 @@
+<section class="creator-pick">
+  <!-- Left column: vertical class picker -->
+  <div class="creator-pick-side">
+    <div class="creator-toolbar creator-toolbar--stacked">
+      <label class="creator-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="search" data-creator-search autocomplete="off"
+               placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
+      </label>
+      <span class="creator-count">{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
+    </div>
+
+    <ul class="creator-picklist">
+      {{#each cards}}
+      <li>
+        <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="pick-class"
+                data-uuid="{{uuid}}" data-name="{{name}}">
+          <img class="creator-pickrow-img" src="{{img}}" alt="">
+          <span class="creator-pickrow-name">{{name}}</span>
+          {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}
+        </button>
+      </li>
+      {{else}}
+      <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.common.noEntries"}}</p>
+      {{/each}}
+    </ul>
+  </div>
+
+  <!-- Center column: class description -->
+  <div class="creator-pick-desc">
+    {{#if hasSelection}}
+    <article class="creator-detail">
+      <header class="creator-detail-head">
+        <img class="creator-detail-img" src="{{detail.img}}" alt="">
+        <h2>{{detail.name}}</h2>
+      </header>
+      <div class="creator-detail-body">{{{detail.enriched}}}</div>
+
+      {{#each groups}}
+      <section class="creator-adv-block">
+        <h3 class="creator-adv-heading">{{heading}}</h3>
+
+        {{#if tags.length}}
+        <ul class="creator-trait-list">
+          {{#each tags}}
+          <li class="creator-trait">
+            <span class="creator-trait-label">{{label}}</span>
+            <span class="creator-trait-value">{{value}}</span>
+          </li>
+          {{/each}}
+        </ul>
+        {{/if}}
+
+        {{#if items.length}}
+        <div class="creator-grant-list">
+          {{#each items}}
+          <div class="creator-grant">
+            <img class="creator-grant-icon" src="{{img}}" alt="">
+            <a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{name}}</a>
+            {{#if level}}<span class="creator-grant-tag">{{localize "sogrom-dnd5e-character-creator.step.class.levelTag" level=level}}</span>{{/if}}
+          </div>
+          {{/each}}
+        </div>
+        {{/if}}
+      </section>
+      {{/each}}
+    </article>
+    {{else}}
+    <div class="creator-pick-empty">
+      <i class="fa-solid fa-chess-rook"></i>
+      <h2>{{localize "sogrom-dnd5e-character-creator.step.class.label"}}</h2>
+      <p>{{localize "sogrom-dnd5e-character-creator.common.selectHint"}}</p>
+    </div>
+    {{/if}}
+  </div>
+
+  {{#with abilities}}
+  <aside class="creator-class-aside">
+    <h2 class="creator-aside-title">{{localize "sogrom-dnd5e-character-creator.step.abilities.label"}}</h2>
+
+    <div class="creator-method-tabs">
+      {{#each methods}}
+      <button type="button" class="creator-tab {{#if active}}is-active{{/if}}"
+              data-action="stepAction" data-step-action="ability-method" data-method="{{id}}">
+        {{label}}
+      </button>
+      {{/each}}
+    </div>
+
+    {{#if isPointBuy}}
+    <div class="creator-points">
+      <span class="creator-points-value {{#unless remaining}}is-zero{{/unless}}">{{remaining}}</span>
+      <span class="creator-points-label">{{localize "sogrom-dnd5e-character-creator.step.abilities.pointsLeft"}} / {{budget}}</span>
+    </div>
+    <ul class="creator-ability-list">
+      {{#each rows}}
+      <li class="creator-ability-row">
+        <span class="creator-ability-name">{{label}}</span>
+        <div class="creator-stepper">
+          <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="ability-dec"
+                  data-ability="{{key}}" {{#unless canDec}}disabled{{/unless}}>&minus;</button>
+          <span class="creator-ability-score">{{value}}</span>
+          <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="ability-inc"
+                  data-ability="{{key}}" {{#unless canInc}}disabled{{/unless}}>+</button>
+        </div>
+        <span class="creator-ability-mod">{{modifier}}</span>
+      </li>
+      {{/each}}
+    </ul>
+
+    {{else}}
+      {{#if hasPool}}
+      <ul class="creator-pool" data-step-drop="ability-unassign">
+        {{#each pool}}
+        <li class="creator-pool-chip {{#if used}}is-used{{/if}}" data-step-drag="{{index}}">{{value}}</li>
+        {{/each}}
+      </ul>
+      {{/if}}
+
+      {{#if hasPool}}
+      <ul class="creator-ability-list">
+        {{#each rows}}
+        <li class="creator-ability-row {{#if assigned}}is-assigned{{/if}}"
+            data-step-drop="ability-drop" data-ability="{{key}}">
+          <span class="creator-ability-name">{{label}}</span>
+          <select class="creator-assign" data-step-change="ability-assign" data-ability="{{key}}">
+            <option value="">{{localize "sogrom-dnd5e-character-creator.step.abilities.unassigned"}}</option>
+            {{#each options}}
+            <option value="{{index}}" {{#if selected}}selected{{/if}}>{{value}}</option>
+            {{/each}}
+          </select>
+          <span class="creator-ability-mod">{{modifier}}</span>
+        </li>
+        {{/each}}
+      </ul>
+      {{else}}
+      <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.step.abilities.rollPrompt"}}</p>
+      {{/if}}
+    {{/if}}
+
+    <div class="creator-ability-actions">
+      {{#if isRoll}}
+      <button type="button" class="creator-btn creator-btn-ghost" data-action="stepAction" data-step-action="ability-roll">
+        <i class="fa-solid fa-dice"></i>
+        {{localize "sogrom-dnd5e-character-creator.step.abilities.rollScores"}}
+      </button>
+      {{/if}}
+      <button type="button" class="creator-btn creator-btn-ghost" data-action="stepAction" data-step-action="ability-reset">
+        <i class="fa-solid fa-rotate-left"></i> {{localize "sogrom-dnd5e-character-creator.common.reset"}}
+      </button>
+    </div>
+  </aside>
+  {{/with}}
+</section>

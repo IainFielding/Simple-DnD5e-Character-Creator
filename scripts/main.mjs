@@ -11,6 +11,17 @@ Hooks.once("init", () => {
   // Step partials are pulled in by the stage via a dynamic Handlebars partial, so they
   // must be registered up front (the rail/stage/shell themselves are loaded as PARTS).
   foundry.applications.handlebars.loadTemplates(STEPS.map(s => tpl(`${s.template}.hbs`)));
+
+  // The `data-tooltip` payload that triggers a dnd5e *rich* item tooltip. The system's
+  // global Tooltips5e observer watches the live tooltip element for a `.loading[data-uuid]`
+  // section and swaps it for the item's richTooltip() on hover. A bare " " can never become
+  // one — it just shows an empty (black) box — so item links must emit this instead.
+  // Handlebars escapes the returned string into the attribute; the browser decodes it back to
+  // real HTML, so element.dataset.tooltip yields exactly the markup dnd5e looks for.
+  Handlebars.registerHelper("ccItemTooltip", uuid => {
+    if ( !uuid ) return "";
+    return `<section class="loading" data-uuid="${uuid}"><i class="fa-solid fa-spinner fa-spin-pulse"></i></section>`;
+  });
 });
 
 function registerSettings() {
@@ -34,6 +45,41 @@ function registerSettings() {
     hint: t("settings.rollFormula.hint"),
     scope: "world", config: true, type: String, default: DEFAULTS.rollFormula
   });
+  game.settings.register(MODULE_ID, SETTINGS.displayMode, {
+    name: t("settings.displayMode.name"),
+    hint: t("settings.displayMode.hint"),
+    scope: "world", config: true, type: String, default: DEFAULTS.displayMode,
+    choices: {
+      fullscreen: t("settings.displayMode.fullscreen"),
+      windowed: t("settings.displayMode.windowed")
+    }
+  });
+}
+
+/**
+ * Resolve the ApplicationV2 options for a launch, based on the configured display mode.
+ * Fullscreen covers the viewport with no chrome; windowed opens a themed, draggable,
+ * resizable frame at ~90% of the screen, centred.
+ * @returns {object}
+ */
+function sheetOptions() {
+  const windowed = game.settings.get(MODULE_ID, SETTINGS.displayMode) === "windowed";
+  // Carry the base class explicitly: ApplicationV2 may replace (rather than merge)
+  // the static DEFAULT_OPTIONS.classes with the array passed here.
+  if ( !windowed ) return { classes: ["sogrom-creator", "sogrom-creator-fullscreen"] };
+
+  const w = Math.min(1800, Math.round(window.innerWidth * 0.9));
+  const h = Math.min(1100, Math.round(window.innerHeight * 0.9));
+  return {
+    classes: ["sogrom-creator", "sogrom-creator-windowed"],
+    window: { frame: true, positioned: true, resizable: true },
+    position: {
+      width: w,
+      height: h,
+      top: Math.max(4, Math.round((window.innerHeight - h) / 2)),
+      left: Math.max(4, Math.round((window.innerWidth - w) / 2))
+    }
+  };
 }
 
 /* -------------------------------------------- */
@@ -65,7 +111,7 @@ async function launchCreator(actor) {
     }
     if ( !actor ) return ui.notifications?.warn(t("notify.noPermission"));
   }
-  new CreatorShell(actor).render(true);
+  new CreatorShell(actor, sheetOptions()).render(true);
 }
 
 Hooks.on("renderActorDirectory", (_app, html) => {

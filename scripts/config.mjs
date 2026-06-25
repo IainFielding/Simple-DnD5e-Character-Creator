@@ -15,12 +15,28 @@ export const SETTINGS = {
   launchButton: "showLaunchButton",
   contextMenu: "showContextMenu",
   pointBuyBudget: "pointBuyBudget",
-  rollFormula: "abilityRollFormula"
+  rollFormula: "abilityRollFormula",
+  displayMode: "displayMode"
 };
 
 export const DEFAULTS = {
   pointBuyBudget: 27,
-  rollFormula: "4d6kh3"
+  rollFormula: "4d6kh3",
+  displayMode: "fullscreen"
+};
+
+/**
+ * Fallback counts of cantrips / level-1 spells known at level 1, keyed by class
+ * identifier. Consulted only when a class carries no matching ScaleValue advancement
+ * to read the figure from — see {@link module:data/spell-source}.
+ */
+export const DEFAULT_CANTRIPS = {
+  artificer: 2, bard: 2, cleric: 3, druid: 2,
+  ranger: 0, sorcerer: 4, warlock: 2, wizard: 3
+};
+export const DEFAULT_LEVEL1_SPELLS = {
+  artificer: 2, bard: 2, cleric: 3, druid: 3,
+  ranger: 0, sorcerer: 2, warlock: 2, wizard: 6
 };
 
 /**

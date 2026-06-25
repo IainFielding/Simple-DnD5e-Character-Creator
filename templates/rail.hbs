@@ -1,28 +1,24 @@
-<nav class="creator-rail">
-  <header class="creator-rail-brand">
-    <i class="fa-solid fa-hat-wizard"></i>
+<header class="creator-topbar">
+  <div class="creator-topbar-brand">
     <span>{{localize "sogrom-dnd5e-character-creator.window.brand"}}</span>
-  </header>
+  </div>
 
-  <ol class="creator-rail-steps">
+  <ol class="creator-topbar-steps">
     {{#each rail}}
-    <li class="creator-rail-step {{#if active}}is-active{{/if}} {{#if complete}}is-complete{{/if}} {{#unless reachable}}is-locked{{/unless}}">
+    <li class="creator-rail-step {{#if active}}is-active{{/if}} {{#if complete}}is-complete{{/if}} {{#unless applicable}}is-skipped{{/unless}} {{#unless reachable}}is-locked{{/unless}}">
       <button type="button" class="creator-rail-link" data-action="goto" data-index="{{index}}" {{#unless reachable}}disabled{{/unless}}>
         <span class="creator-rail-marker">
-          {{#if complete}}<i class="fa-solid fa-check"></i>{{else}}{{ordinal}}{{/if}}
+          {{#if complete}}<i class="fa-solid fa-check"></i>{{else}}{{#if applicable}}{{ordinal}}{{else}}<i class="fa-solid fa-minus"></i>{{/if}}{{/if}}
         </span>
-        <span class="creator-rail-text">
-          <span class="creator-rail-label"><i class="{{icon}}"></i> {{label}}</span>
-          {{#if summary}}<span class="creator-rail-summary">{{summary}}</span>{{/if}}
-        </span>
+        <span class="creator-rail-label">{{label}}</span>
       </button>
     </li>
     {{/each}}
   </ol>
 
-  <footer class="creator-rail-foot">
+  <div class="creator-topbar-foot">
     <button type="button" class="creator-btn creator-btn-ghost" data-action="cancel">
       <i class="fa-solid fa-xmark"></i> {{cancelLabel}}
     </button>
-  </footer>
-</nav>
+  </div>
+</header>

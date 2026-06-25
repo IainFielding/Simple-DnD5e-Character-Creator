@@ -15,6 +15,8 @@
  * @param {(src: import("../data/source-index.mjs").SourceIndex) => object[]} cfg.cards
  * @returns {object} A step module.
  */
+import { resolveChoices } from "../data/choice-resolver.mjs";
+
 export function originStep({ id, icon, labelKey, field, cards }) {
   return {
     id,
@@ -31,23 +33,28 @@ export function originStep({ id, icon, labelKey, field, cards }) {
       return source.card(state[field])?.name ?? "";
     },
 
-    async handle(action, el, { state }) {
+    async handle(action, el, { state, source }) {
       if ( action !== "pick-origin" ) return;
       const uuid = el.dataset.uuid;
       // Re-clicking the active card clears it, so a player can back out of a choice.
       state[field] = state[field] === uuid ? null : uuid;
+      // The step id doubles as the advancement-choice source key (e.g. "species").
+      state.resetSourceChoices(id);
+      state.choiceCache = await resolveChoices(state, source);
     },
 
     async context({ state, source }) {
       const selected = state[field];
       const detail = selected ? await source.detail(selected) : null;
+      const groups = selected ? await source.advancementGroups(selected) : null;
       const list = cards(source).map(c => ({ ...c, selected: c.uuid === selected }));
       return {
         cards: list,
         count: list.length,
         hasSelection: !!selected,
         selectedName: detail?.name ?? "",
-        detail
+        detail,
+        groups
       };
     }
   };

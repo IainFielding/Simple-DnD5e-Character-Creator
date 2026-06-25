@@ -1,21 +1,20 @@
 import { originStep } from "./origin-step.mjs";
-import { abilitiesStep } from "./abilities-step.mjs";
+import { classStep } from "./class-step.mjs";
+import { backgroundStep } from "./background-step.mjs";
+import { detailsStep } from "./details-step.mjs";
+import { spellsStep } from "./spells-step.mjs";
+import { choicesStep } from "./choices-step.mjs";
 import { reviewStep } from "./review-step.mjs";
 
 /**
- * The ordered list of steps the shell walks through. Order is data here, not
- * hard-coded control flow: insert, remove, or reorder steps by editing this array.
- * Later phases (spells, equipment, advancements, identity) slot in as more entries.
+ * The ordered list of steps the shell walks through, top to bottom. The order lives
+ * in this array as plain data rather than being hard-coded into the navigation logic,
+ * so you add, remove, or reorder steps just by editing this list — the shell reads its
+ * length and contents to drive the stepper, the Back/Next buttons, and completion.
  */
 export const STEPS = [
-  originStep({
-    id: "class",
-    icon: "fa-solid fa-chess-rook",
-    labelKey: "step.class.label",
-    field: "classUuid",
-    cards: src => src.classes()
-  }),
-  abilitiesStep,
+  classStep,
+  backgroundStep,
   originStep({
     id: "species",
     icon: "fa-solid fa-paw",
@@ -23,13 +22,9 @@ export const STEPS = [
     field: "speciesUuid",
     cards: src => src.species()
   }),
-  originStep({
-    id: "background",
-    icon: "fa-solid fa-feather",
-    labelKey: "step.background.label",
-    field: "backgroundUuid",
-    cards: src => src.backgrounds()
-  }),
+  detailsStep,
+  spellsStep,
+  choicesStep,
   reviewStep
 ];
 

@@ -1,6 +1,8 @@
 import { MODULE_ID, tpl, t, log } from "../config.mjs";
 import { CreatorState } from "../state/creator-state.mjs";
 import { SourceIndex } from "../data/source-index.mjs";
+import { SpellSource } from "../data/spell-source.mjs";
+import { EquipmentSource } from "../data/equipment-source.mjs";
 import { STEPS, REQUIRED_STEPS } from "../steps/registry.mjs";
 import { assembleActor } from "../build/actor-assembler.mjs";
 
@@ -31,13 +33,27 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static PARTS = {
     rail: { id: "rail", template: `modules/${MODULE_ID}/templates/rail.hbs` },
-    stage: { id: "stage", template: `modules/${MODULE_ID}/templates/stage.hbs`, scrollable: [".creator-stage-body"] }
+    stage: {
+      id: "stage",
+      template: `modules/${MODULE_ID}/templates/stage.hbs`,
+      // Preserve scroll across re-renders: the stage body, plus the pick steps'
+      // independently-scrolling pick-list and description columns, the details form/media
+      // columns, and the choices list (otherwise picking an option snaps them to the top).
+      scrollable: [
+        ".creator-stage-body", ".creator-picklist", ".creator-pick-desc",
+        ".creator-details-form", ".creator-details-media", ".creator-choices"
+      ]
+    }
   };
 
   /** @type {CreatorState} */
   state;
   /** @type {SourceIndex} */
   source;
+  /** @type {SpellSource} */
+  spells;
+  /** @type {EquipmentSource} */
+  equipment;
 
   #current = 0;
   #loading = true;
@@ -47,6 +63,8 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     super(options);
     this.state = new CreatorState(actor);
     this.source = new SourceIndex();
+    this.spells = new SpellSource();
+    this.equipment = new EquipmentSource();
   }
 
   get title() {
@@ -80,7 +98,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   async _prepareContext(options) {
     const flags = this.#completeFlags();
     const step = this.#activeStep;
-    const stepContext = this.#loading ? {} : await step.context({ state: this.state, source: this.source });
+    const stepContext = this.#loading ? {} : await step.context(this.#ctx());
 
     return {
       loading: this.#loading,
@@ -112,13 +130,68 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   _onRender(context, options) {
     super._onRender(context, options);
     const root = this.element;
+    this.#applySourceArt(root);
     // Selects/inputs don't fire click "actions"; wire their change events to the dispatcher.
     for ( const el of root.querySelectorAll("[data-step-change]") ) {
       el.addEventListener("change", ev => this.#dispatch(el.dataset.stepChange, ev.currentTarget));
     }
+    this.#wireDragDrop(root);
     // Client-side card filtering — no re-render, so the field keeps focus while typing.
     const search = root.querySelector("[data-creator-search]");
     if ( search ) search.addEventListener("input", ev => this.#filterCards(ev.currentTarget.value));
+  }
+
+  /**
+   * When the official D&D Player's Handbook module is installed, borrow two of its
+   * journal sketches as faded backdrops behind the empty-state placeholders — a general
+   * adventuring sketch for the origin/class/background steps, plus the abjurer on the
+   * spells step. The CSS variables feed `.creator-pick-empty::before`; left unset (no PHB
+   * module) the backdrops simply don't render, so the creator looks identical without it.
+   */
+  #applySourceArt(root) {
+    const phb = "dnd-players-handbook";
+    if ( game.modules.get(phb)?.active ) {
+      root.style.setProperty("--cc-pick-sketch",
+        `url("/modules/${phb}/assets/journal-art/adventuring-equipment-sketch.webp")`);
+      root.style.setProperty("--cc-spells-sketch",
+        `url("/modules/${phb}/assets/journal-art/abjurer.webp")`);
+    } else {
+      root.style.removeProperty("--cc-pick-sketch");
+      root.style.removeProperty("--cc-spells-sketch");
+    }
+  }
+
+  /**
+   * Generic drag-and-drop bridge to the step dispatcher. A `[data-step-drag]` element
+   * carries an opaque payload string; dropping it on a `[data-step-drop]` element stashes
+   * that payload on the target's `dataset.dropPayload` and dispatches the drop's action, so
+   * a step handler reads it exactly like any other dataset value. Used by the ability panel
+   * to drop pooled scores onto abilities, but knows nothing of abilities itself.
+   */
+  #wireDragDrop(root) {
+    for ( const el of root.querySelectorAll("[data-step-drag]") ) {
+      el.setAttribute("draggable", "true");
+      el.addEventListener("dragstart", ev => {
+        ev.dataTransfer.setData("text/plain", el.dataset.stepDrag);
+        ev.dataTransfer.effectAllowed = "move";
+        el.classList.add("is-dragging");
+      });
+      el.addEventListener("dragend", () => el.classList.remove("is-dragging"));
+    }
+    for ( const el of root.querySelectorAll("[data-step-drop]") ) {
+      el.addEventListener("dragover", ev => {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "move";
+        el.classList.add("is-dragover");
+      });
+      el.addEventListener("dragleave", () => el.classList.remove("is-dragover"));
+      el.addEventListener("drop", ev => {
+        ev.preventDefault();
+        el.classList.remove("is-dragover");
+        el.dataset.dropPayload = ev.dataTransfer.getData("text/plain");
+        this.#dispatch(el.dataset.stepDrop, el);
+      });
+    }
   }
 
   /** @override */
@@ -149,24 +222,33 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #railContext(flags) {
-    return STEPS.map((s, i) => ({
-      index: i,
-      id: s.id,
-      label: t(s.labelKey),
-      icon: s.icon,
-      ordinal: i + 1,
-      active: i === this.#current,
-      complete: flags[i] && s.id !== "review",
-      reachable: this.#reachable(i, flags),
-      summary: s.summary?.(this.state, this.source) ?? ""
-    }));
+    return STEPS.map((s, i) => {
+      // A step can opt out of applicability (e.g. Spells for a non-caster); the rail greys
+      // it out and shows no completion tick even though it doesn't block the build.
+      const applicable = s.applicable?.(this.state) ?? true;
+      return {
+        index: i,
+        id: s.id,
+        label: t(s.labelKey),
+        icon: s.icon,
+        ordinal: i + 1,
+        active: i === this.#current,
+        applicable,
+        complete: flags[i] && s.id !== "review" && applicable,
+        reachable: this.#reachable(i, flags),
+        summary: s.summary?.(this.state, this.source) ?? ""
+      };
+    });
   }
 
   #filterCards(query) {
     const needle = query.trim().toLowerCase();
-    for ( const card of this.element.querySelectorAll(".creator-card") ) {
+    // Card grid (background/species) and the class pick-list share the same filter;
+    // for a pick-row the <li> wrapper is hidden so the list gap collapses with it.
+    for ( const card of this.element.querySelectorAll(".creator-card, .creator-pickrow") ) {
       const name = (card.dataset.name ?? "").toLowerCase();
-      card.classList.toggle("is-hidden", !!needle && !name.includes(needle));
+      const target = card.closest("li") ?? card;
+      target.classList.toggle("is-hidden", !!needle && !name.includes(needle));
     }
   }
 
@@ -174,9 +256,18 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   /*  Dispatch                                    */
   /* -------------------------------------------- */
 
+  /**
+   * The shared context handed to every step's `context()` and `handle()`. `app` lets a
+   * step request a re-render after an async flow that resolves later (e.g. a FilePicker
+   * callback), since the dispatch's own render fires immediately.
+   */
+  #ctx() {
+    return { state: this.state, source: this.source, spells: this.spells, equipment: this.equipment, app: this };
+  }
+
   async #dispatch(action, el) {
     const step = this.#activeStep;
-    if ( step?.handle ) await step.handle(action, el, { state: this.state, source: this.source });
+    if ( step?.handle ) await step.handle(action, el, this.#ctx());
     this.render();
   }
 
@@ -211,7 +302,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#finished = true;
     let actor;
     try {
-      actor = await assembleActor(this.state);
+      actor = await assembleActor(this.state, this.source, this.equipment);
     } catch ( err ) {
       log("character build failed", err);
       ui.notifications?.error(t("notify.buildFailed"));
