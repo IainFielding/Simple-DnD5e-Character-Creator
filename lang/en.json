@@ -25,7 +25,7 @@
       "position": "Step {current} of {total}"
     },
     "menu": {
-      "launch": "Create Character",
+      "launch": "Simple Character Builder",
       "resume": "Open in Character Creator"
     },
     "notify": {
@@ -162,6 +162,7 @@
     "choice": {
       "chooseOne": "Choose one",
       "chooseCount": "Choose {count}",
+      "recommendedAbility": "Matches your {class}'s spellcasting ability",
       "alreadyGained": "Already gained elsewhere",
       "emptyNoteSkills": "Pick skill proficiencies first to choose Expertise.",
       "simpleWeapons": "Simple Weapons",
@@ -174,6 +175,7 @@
       "expertise": "Expertise",
       "chooseItems": "Choose a Feature",
       "spellAbility": "Spellcasting Ability",
+      "spellAbilityFor": "Spellcasting Ability — {spell}",
       "proficiency": "Proficiency",
       "hitDie": "Hit Point Die",
       "features": "Features",

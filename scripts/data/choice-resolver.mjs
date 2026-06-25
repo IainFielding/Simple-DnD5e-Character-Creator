@@ -48,12 +48,22 @@ export async function resolveChoices(state, source) {
   // or language already granted/chosen elsewhere. Computed before the per-source loop.
   const crossTaken = await collectTakenTraitKeys(defs, state.advChoices);
 
+  // The chosen class's spellcasting ability (and its display name). When a *granted* spell
+  // from any origin (species/background) lets the player pick which ability casts it, the
+  // class's ability is the recommended pick — so they can align innate casting with the
+  // class. Computed once and shared across every source.
+  const classDef = defs.find(d => d.key === "class");
+  const classAbility = classDef?.doc?.system?.spellcasting?.ability || null;
+  const spellAbilityHint = classAbility
+    ? { ability: classAbility, className: source.card(classDef.uuid)?.name ?? classDef.doc.name }
+    : null;
+
   const sources = [];
   for ( const d of defs ) {
     if ( !d.doc ) continue;
     let requirements = [];
     try {
-      requirements = await prepareRequirements(d.doc, d.key, state.advChoices, crossTaken);
+      requirements = await prepareRequirements(d.doc, d.key, state.advChoices, crossTaken, spellAbilityHint);
     } catch ( err ) {
       log(`failed to resolve choices for ${d.key}`, err);
     }
@@ -134,7 +144,7 @@ async function collectTakenTraitKeys(defs, advChoices) {
 }
 
 /** Parse one origin item's advancements (and its granted features') into requirements. */
-async function prepareRequirements(item, source, advChoices, crossTaken) {
+async function prepareRequirements(item, source, advChoices, crossTaken, spellAbilityHint) {
   const sel = advChoices[source] ?? (advChoices[source] = {});
   const reqs = [];
   const owners = await levelOneOwners(item);
@@ -144,7 +154,7 @@ async function prepareRequirements(item, source, advChoices, crossTaken) {
 
   for ( const { item: owner, ownerUuid } of owners ) {
     for ( const adv of advancementArray(owner) ) {
-      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken });
+      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint });
     }
   }
 
@@ -178,7 +188,7 @@ function proficientSkillKeys(owners, sel) {
 
 /** Parse a single advancement into zero or more requirements, appended to `reqs`. */
 async function parseAdvancementChoice(adv, ctx) {
-  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken } = ctx;
+  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint } = ctx;
   let level = adv.level ?? 0;
   if ( level > 1 || adv.classRestriction === "secondary" ) return;
 
@@ -240,10 +250,30 @@ async function parseAdvancementChoice(adv, ctx) {
   if ( adv.type === "ItemGrant" ) {
     const abilities = Array.from(adv.configuration?.spell?.ability ?? []);
     if ( abilities.length > 1 ) {
-      const options = abilities.map(a => ({ key: a, label: CONFIG.DND5E.abilities?.[a]?.label ?? a }));
+      const options = abilities.map(a => {
+        const opt = { key: a, label: CONFIG.DND5E.abilities?.[a]?.label ?? a };
+        // Mark the class's configured spellcasting ability as the recommended pick.
+        if ( spellAbilityHint && a === spellAbilityHint.ability ) {
+          opt.recommended = true;
+          opt.recommendTip = t("choice.recommendedAbility", { class: spellAbilityHint.className });
+        }
+        return opt;
+      });
+      // The advancement's own title is usually the trait name ("Otherworldly Presence"),
+      // which doesn't read as an ability choice. Name it for the granted spell instead, so
+      // it's plainly a spellcasting-ability pick and several from one source stay distinct.
+      const spellNames = [];
+      for ( const ref of Array.from(adv.configuration?.items ?? []) ) {
+        const uuid = typeof ref === "string" ? ref : ref?.uuid;
+        const spell = uuid ? await fromUuid(uuid).catch(() => null) : null;
+        if ( spell ) spellNames.push(spell.name);
+      }
+      const title = spellNames.length
+        ? t("advancement.spellAbilityFor", { spell: spellNames.join(", ") })
+        : t("advancement.spellAbility");
       reqs.push(buildChoiceReq({
         advId: adv._id, source, ownerUuid, type: "SpellAbility", level,
-        title: adv.title || t("advancement.spellAbility"), hint: adv.hint, count: 1, options, sel, crossTaken
+        title, hint: adv.hint, count: 1, options, sel, crossTaken
       }));
     }
     return;

@@ -51,6 +51,13 @@ export class CreatorState {
    */
   advChoices = { class: {}, background: {}, species: {} };
 
+  /**
+   * Transient Choices-step UI: which origin tab is shown ("class"|"background"|"species"|
+   * "equipment"). Not persisted; resolved against the available tabs on each render, so a
+   * stale value (e.g. after an origin change drops its choices) falls back to the first tab.
+   */
+  choiceTab = null;
+
   /** Starting-equipment selection per source: { selectedOption, orSelections }. */
   equipment = {
     class: { selectedOption: 0, orSelections: {} },
