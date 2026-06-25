@@ -1382,6 +1382,32 @@
 .creator-choice-opt-img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
 .creator-choice-opt-tick { color: var(--cc-select); font-size: 0.75rem; }
 
+/* A recommended option (e.g. the class's default spellcasting ability): a soft gold glow,
+   a leading star, and a slow shine sweep so the suggested pick stands out tastefully. */
+.creator-choice-opt.is-recommended {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--cc-gold);
+  box-shadow: 0 0 8px -2px var(--cc-gold);
+}
+.creator-choice-opt-star { color: var(--cc-gold); font-size: 0.7rem; }
+.creator-choice-opt.is-recommended::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 240, 200, 0.22) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: cc-recommend-shine 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes cc-recommend-shine {
+  0%, 55% { transform: translateX(-130%); }
+  75%, 100% { transform: translateX(130%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .creator-choice-opt.is-recommended::after { animation: none; }
+}
+
 /* ---------------------------------------------- Equipment (within Choices)
 
    Starting-equipment picker, rendered inside the Choices step. Each source offers

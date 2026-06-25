@@ -5,10 +5,11 @@
 
   {{#*inline "choiceOption"}}
   <button type="button"
-          class="creator-choice-opt {{#if isSelected}}is-selected{{/if}} {{#if disabled}}is-disabled{{/if}}"
+          class="creator-choice-opt {{#if isSelected}}is-selected{{/if}} {{#if recommended}}is-recommended{{/if}} {{#if disabled}}is-disabled{{/if}}"
           data-action="stepAction" data-step-action="pick-choice"
           data-choice-source="{{source}}" data-sel-key="{{selKey}}" data-key="{{key}}" data-count="{{count}}"
-          {{#if disabled}}disabled data-tooltip="{{disabledReason}}"{{else}}{{#if uuid}}{{> itemTip uuid=uuid}}{{/if}}{{/if}}>
+          {{#if disabled}}disabled data-tooltip="{{disabledReason}}"{{else}}{{#if uuid}}{{> itemTip uuid=uuid}}{{else}}{{#if recommendTip}} data-tooltip="{{recommendTip}}"{{/if}}{{/if}}{{/if}}>
+    {{#if recommended}}<i class="creator-choice-opt-star fa-solid fa-star" aria-hidden="true"></i>{{/if}}
     {{#if img}}<img class="creator-choice-opt-img" src="{{img}}" alt="">{{/if}}
     <span class="creator-choice-opt-label">{{label}}</span>
     {{#if isSelected}}<i class="creator-choice-opt-tick fa-solid fa-check"></i>{{/if}}
