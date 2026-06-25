@@ -157,7 +157,7 @@ function injectLaunchButton(root) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "sogrom-launch";
-  button.innerHTML = `<i class="fa-solid fa-hat-wizard"></i> ${t("menu.launch")}`;
+  button.innerHTML = t("menu.launch");
   button.addEventListener("click", ev => { ev.preventDefault(); launchCreator(); });
   container.appendChild(button);
 }
