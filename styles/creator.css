@@ -1568,11 +1568,17 @@
    The button injected into Foundry's Actors sidebar that opens this creator. It
    lives outside the .sogrom-creator window, so it's styled on its own here. */
 
+.header-actions:has(.sogrom-launch),
+.directory-header .action-buttons:has(.sogrom-launch) {
+  flex-wrap: wrap;
+}
+
 .sogrom-launch {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   width: 100%;
+  flex: 0 0 100%;
   justify-content: center;
   margin-top: 0.4rem;
 }
