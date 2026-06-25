@@ -94,4 +94,4 @@ The creator works great out of the box, but a few settings let your GM tailor it
 
 ---
 
-*Made by [Iain Fielding](https://iainfielding.com) for the Dungeons & Dragons 5e community.*
+*Made by [Iain Fielding](https://iainfielding.com) for the FoundryVTT - Dungeons & Dragons 5e community.*
