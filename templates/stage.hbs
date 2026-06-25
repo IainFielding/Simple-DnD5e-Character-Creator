@@ -20,7 +20,7 @@
     </button>
     {{#if isReview}}
     <button type="button" class="creator-btn creator-btn-primary" data-action="finish" {{#unless canFinish}}disabled{{/unless}}>
-      <i class="fa-solid fa-wand-magic-sparkles"></i> {{finishLabel}}
+      {{finishLabel}}
     </button>
     {{else}}
     <button type="button" class="creator-btn creator-btn-primary" data-action="navNext" {{#unless nav.canNext}}disabled{{/unless}}>
