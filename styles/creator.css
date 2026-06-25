@@ -760,7 +760,15 @@
 }
 /* Inside the narrow aside the ability rows should fill the column, not cap at 520px. */
 .creator-class-aside .creator-ability-list { max-width: none; }
-.creator-class-aside .creator-method-tabs { flex-wrap: wrap; }
+/* Keep the three method tabs on a single row in the narrow aside; let them shrink to fit. */
+.creator-class-aside .creator-method-tabs { flex-wrap: nowrap; }
+.creator-class-aside .creator-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 0.5rem;
+  text-align: center;
+  white-space: nowrap;
+}
 
 /* In the pick layout the aside is a full-height column: cap it and scroll within. */
 .creator-pick .creator-class-aside {
@@ -1027,6 +1035,23 @@
   overflow: hidden;
 }
 .creator-portrait-img { width: 100%; height: auto; max-height: 280px; display: block; object-fit: cover; }
+/* Match the dnd5e actor sheet portrait: cover-cropped and anchored to the top so faces stay visible. */
+.creator-portrait-img--photo {
+  height: 100%;
+  min-height: 180px;
+  max-height: 280px;
+  object-fit: cover;
+  object-position: top center;
+}
+/* Match the dnd5e actor sheet token: contained and centered (not cropped) with a soft drop-shadow. */
+.creator-portrait-img--token {
+  height: 100%;
+  min-height: 180px;
+  max-height: 280px;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.85));
+}
 .creator-portrait-btn {
   display: flex;
   align-items: center;

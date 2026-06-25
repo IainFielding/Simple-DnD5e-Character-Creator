@@ -103,7 +103,14 @@ function scaleCount(doc, classId, kind, fallback) {
 /**
  * Cantrips and level-1 spells available to a class identifier. Prefers dnd5e's
  * SpellListRegistry, then a legacy spell-list pack scan, then a direct per-spell
- * class-tag scan — whichever first yields entries.
+ * class-tag scan — whichever first yields the class's spell UUIDs.
+ *
+ * Note we collect UUIDs from the registry rather than its synchronous `indexes`:
+ * those are built via `fromUuidSync` and silently drop spells whose pack index
+ * isn't resolvable yet, and they only carry `system.level` for packs that index
+ * it — so the level filter would intermittently discard real spells depending on
+ * which pack a spell happens to live in. {@link fetchSpellsByUuids} resolves the
+ * level reliably instead.
  */
 async function loadSpellsForClass(classId) {
   const uuids = new Set();
@@ -111,11 +118,7 @@ async function loadSpellsForClass(classId) {
   try {
     const registry = dnd5e.registry?.spellLists;
     const list = registry?.forType?.("class", classId);
-    if ( list ) {
-      const indexes = (list.indexes ?? []).filter(idx => (idx.system?.level ?? 99) <= 1);
-      if ( indexes.length ) return indexes.map(buildSpellFromEntry);
-      for ( const uuid of list.uuids ?? [] ) uuids.add(uuid);
-    }
+    if ( list ) for ( const uuid of list.uuids ?? [] ) uuids.add(uuid);
   } catch ( err ) {
     log("spell list registry lookup failed", err);
   }
@@ -154,8 +157,14 @@ function collectSpellUuids(doc, uuids) {
   }
 }
 
-/** Batch-fetch level-≤1 spells by UUID via the Compendium Browser, falling back to fromUuid. */
+/**
+ * Resolve the class's spell UUIDs into level-≤1 spell cards. The Compendium Browser
+ * supplies reliable `system.level` for every browsable pack in one bulk query; any
+ * UUID it doesn't return (pack not browsable, index not loaded) is reconciled with a
+ * direct `fromUuid` so the list is complete rather than all-or-nothing.
+ */
 async function fetchSpellsByUuids(uuids) {
+  const found = new Map();
   const browser = dnd5e.applications?.CompendiumBrowser;
   if ( browser?.fetch ) {
     try {
@@ -164,18 +173,19 @@ async function fetchSpellsByUuids(uuids) {
         filters: [{ k: "system.level", o: "lte", v: 1 }],
         indexFields: SPELL_INDEX_FIELDS
       });
-      const hits = all.filter(e => e.uuid && uuids.has(e.uuid)).map(buildSpellFromEntry);
-      if ( hits.length ) return hits;
+      for ( const e of all ) {
+        if ( e.uuid && uuids.has(e.uuid) ) found.set(e.uuid, buildSpellFromEntry(e));
+      }
     } catch ( err ) {
       log("Compendium Browser spell fetch failed, using direct lookups", err);
     }
   }
-  const out = [];
   for ( const uuid of uuids ) {
+    if ( found.has(uuid) ) continue;
     const doc = await fromUuid(uuid).catch(() => null);
-    if ( doc?.type === "spell" ) out.push(buildSpellFromEntry(doc));
+    if ( doc?.type === "spell" && (doc.system?.level ?? 99) <= 1 ) found.set(uuid, buildSpellFromEntry(doc));
   }
-  return out;
+  return [...found.values()];
 }
 
 /** Last-resort scan: every level-≤1 spell tagged with the class identifier. */
