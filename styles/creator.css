@@ -1299,6 +1299,51 @@
 
 .creator-choices { height: 100%; min-height: 0; overflow-y: auto; }
 .creator-choices-list { display: flex; flex-direction: column; gap: 1.5rem; }
+
+/* Origin tab bar: a segmented control whose segments are the choice sources (Class /
+   Background / Species) plus Equipment, so the player works through one origin at a time.
+   The single bordered track with connected segments reads as one switch — distinct from the
+   option pills inside the panels. Each badge shows that segment's progress — a done/total
+   count, or a tick once every requirement under it is satisfied. */
+.creator-choice-tabs {
+  display: inline-flex;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--cc-line);
+  border-radius: 10px;
+  background: var(--cc-panel);
+  overflow: hidden;
+}
+.creator-choice-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--cc-line);
+  color: var(--cc-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.creator-choice-tab:first-child { border-left: none; }
+.creator-choice-tab:hover:not(.is-active) { color: var(--cc-text); background: var(--cc-panel-2); }
+.creator-choice-tab.is-active { background: var(--cc-select-soft); color: var(--cc-text); }
+.creator-choice-tab.is-active .creator-choice-tab-label { font-weight: 600; }
+.creator-choice-tab-img { width: 22px; height: 22px; border-radius: 5px; object-fit: cover; }
+.creator-choice-tab-icon { width: 22px; text-align: center; color: var(--cc-accent); }
+.creator-choice-tab-label { font-weight: 500; }
+.creator-choice-tab-badge {
+  font-size: 0.72rem;
+  color: var(--cc-muted);
+  background: var(--cc-panel-2);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+}
+.creator-choice-tab.is-active .creator-choice-tab-badge { background: var(--cc-panel); }
+.creator-choice-tab-badge.is-complete { color: var(--cc-good); background: none; padding: 0; }
+.creator-choice-tab.is-active .creator-choice-tab-badge.is-complete { background: none; }
+
+.creator-choice-source.is-hidden { display: none; }
 .creator-choice-source {
   background: var(--cc-panel);
   border: 1px solid var(--cc-line);

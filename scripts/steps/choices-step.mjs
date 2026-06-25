@@ -38,6 +38,12 @@ export const choicesStep = {
   },
 
   async handle(action, el, { state, source }) {
+    // Switch the visible origin tab. Purely a UI concern; the dispatcher re-renders.
+    if ( action === "choice-tab" ) {
+      if ( el.dataset.tab ) state.choiceTab = el.dataset.tab;
+      return;
+    }
+
     // Equipment picks are informational — they never change completion.
     if ( action === "equip-option" ) {
       const eq = state.equipment[el.dataset.equipSource];
@@ -82,13 +88,33 @@ export const choicesStep = {
     for ( const key of ["class", "background"] ) {
       if ( loaded[key] ) equipList.push({ key, name: loaded[key].name, img: loaded[key].img, ...describeOption(loaded[key], state.equipment[key]) });
     }
+    const hasEquipment = equipList.length > 0;
+
+    // One tab per choice source, plus an equipment tab. Each origin tab carries a
+    // done/total progress so its badge can show a tick or a count without re-counting
+    // in the template.
+    const tabs = resolved.sources.map(s => {
+      const total = s.requirements.length;
+      const done = s.requirements.filter(r => r.complete).length;
+      return { key: s.key, name: s.name, img: s.img, done, total, complete: total > 0 && done === total };
+    });
+    if ( hasEquipment ) tabs.push({ key: "equipment", name: t("equipment.heading"), isEquipment: true });
+
+    // Resolve the active tab, surviving re-renders. If the remembered tab no longer exists
+    // (an origin changed and dropped its choices) fall back to the first available.
+    const keys = tabs.map(tb => tb.key);
+    if ( !keys.includes(state.choiceTab) ) state.choiceTab = keys[0] ?? null;
+    for ( const tb of tabs ) tb.active = tb.key === state.choiceTab;
 
     return {
       hasChoices: resolved.hasAny,
-      sources: resolved.sources,
+      sources: resolved.sources.map(s => ({ ...s, active: s.key === state.choiceTab })),
+      tabs,
+      hasTabs: tabs.length > 1,
       equipment: equipList,
-      hasEquipment: equipList.length > 0,
-      isEmpty: !resolved.hasAny && equipList.length === 0
+      hasEquipment,
+      equipActive: state.choiceTab === "equipment",
+      isEmpty: !resolved.hasAny && !hasEquipment
     };
   }
 };

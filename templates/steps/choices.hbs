@@ -22,10 +22,25 @@
     <p>{{localize "sogrom-dnd5e-character-creator.step.choices.none"}}</p>
   </div>
   {{else}}
+  {{#if hasTabs}}
+  <nav class="creator-choice-tabs">
+    {{#each tabs}}
+    <button type="button" class="creator-choice-tab {{#if active}}is-active{{/if}}"
+            data-action="stepAction" data-step-action="choice-tab" data-tab="{{key}}">
+      {{#if isEquipment}}<i class="fa-solid fa-sack-xmark creator-choice-tab-icon"></i>
+      {{else}}<img class="creator-choice-tab-img" src="{{img}}" alt="">{{/if}}
+      <span class="creator-choice-tab-label">{{name}}</span>
+      {{#if complete}}<i class="creator-choice-tab-badge is-complete fa-solid fa-check"></i>
+      {{else}}{{#if total}}<span class="creator-choice-tab-badge">{{done}}/{{total}}</span>{{/if}}{{/if}}
+    </button>
+    {{/each}}
+  </nav>
+  {{/if}}
+
   <div class="creator-choices-list">
 
     {{#each sources}}
-    <section class="creator-choice-source">
+    <section class="creator-choice-source {{#unless active}}is-hidden{{/unless}}" data-choice-tab="{{key}}">
       <header class="creator-choice-source-head">
         <img class="creator-choice-source-img" src="{{img}}" alt="">
         <h2>{{name}}</h2>
@@ -63,7 +78,7 @@
     {{/each}}
 
     {{#if hasEquipment}}
-    <section class="creator-choice-source creator-equipment">
+    <section class="creator-choice-source creator-equipment {{#unless equipActive}}is-hidden{{/unless}}" data-choice-tab="equipment">
       <header class="creator-choice-source-head">
         <i class="fa-solid fa-sack-xmark creator-choice-source-icon"></i>
         <h2>{{localize "sogrom-dnd5e-character-creator.equipment.heading"}}</h2>
