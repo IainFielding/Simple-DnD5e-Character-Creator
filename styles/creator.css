@@ -1,11 +1,20 @@
 /* Simple D&D 5e Character Creator
-   Self-contained styling, scoped under .sogrom-creator so nothing leaks into the
-   rest of Foundry. Layout is a fixed left rail + a flexible content stage.
+   Every rule below is scoped under the .sogrom-creator root class. That scoping is
+   what keeps this stylesheet from leaking into the rest of Foundry's UI, so always
+   add new selectors as descendants of .sogrom-creator rather than styling bare
+   element or generic class names.
 
-   Theme — "Arcane Midnight": a violet arcane UI accent over near-black, with
-   antique gold reserved for selection and engraved chrome. Inscriptional Cinzel
-   caps for headings, Spectral for body. Deliberately distinct from competitors:
-   no gold-on-navy + slab chrome, no fire-red + parchment scrollwork. */
+   The screen is laid out top to bottom: a horizontal top-bar stepper (the row of
+   numbered steps) sits above a flexible content stage that fills the remaining
+   height. Note the step elements still use `.creator-rail-*` class names — that's
+   historical, from when the stepper was a vertical rail down the left side.
+
+   Theme — "Arcane Midnight": the colour and type system used throughout. The UI
+   accent is violet over a near-black background; antique gold is reserved for the
+   "currently selected" state and engraved edges so selection always stands out from
+   ordinary controls. Headings use Cinzel (carved-caps look), body text uses Spectral.
+   All of these values come from the CSS custom properties (--cc-*) defined next, so
+   change a colour there and it updates everywhere. */
 
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
 
@@ -96,7 +105,6 @@
    the screen. The frame header and resize corner are re-themed to the Arcane
    Midnight palette so the window reads as part of the creator, not stock chrome. */
 
-/* Themed frame header. */
 .sogrom-creator-windowed .window-header {
   background: linear-gradient(180deg, #16151f, #100f17);
   border-bottom: 1px solid var(--cc-line);
@@ -168,9 +176,10 @@
 
 /* ---------------------------------------------- Top bar (horizontal stepper) */
 
-/* A full-width bar above the stage: brand on the left, the step progression in the
-   middle, Cancel on the right. Deliberately NOT ember's banner-on-a-ridge nav — this
-   is a plain row of circle-marker + label pills. */
+/* The navigation bar that spans the full width above the content stage. It holds
+   three things, left to right: the brand/title, the list of steps in the middle,
+   and the Cancel button on the right. Each step renders as a pill: a small circular
+   marker (the step number, or a tick once complete) followed by its label. */
 .creator-topbar {
   flex: 0 0 auto;
   display: flex;
@@ -285,7 +294,11 @@
   text-overflow: ellipsis;
 }
 
-/* ---------------------------------------------- Stage */
+/* ---------------------------------------------- Stage
+
+   The main content area below the top bar. It's a vertical flex column split into
+   three parts: a fixed header (step title + position), a scrolling body where the
+   active step renders, and a fixed footer holding the Back/Next buttons. */
 
 .creator-stage {
   flex: 1;
@@ -343,7 +356,11 @@
   background: var(--cc-panel);
 }
 
-/* ---------------------------------------------- Buttons */
+/* ---------------------------------------------- Buttons
+
+   Shared button styles used across the whole creator. `.creator-btn` is the base
+   look; add `.creator-btn-primary` for the main call-to-action (the filled violet
+   button) or `.creator-btn-ghost` for a transparent, low-emphasis variant. */
 
 .creator-btn {
   display: inline-flex;
@@ -370,7 +387,10 @@
 .creator-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
 .creator-btn-ghost { background: transparent; }
 
-/* ---------------------------------------------- Loading */
+/* ---------------------------------------------- Loading
+
+   The centered spinner shown while the compendium index is still loading, before
+   any step can be displayed. */
 
 .creator-loading {
   flex: 1;
@@ -382,7 +402,11 @@
 }
 .creator-loading i { font-size: 2.5rem; color: var(--cc-accent); }
 
-/* ---------------------------------------------- Origin grids */
+/* ---------------------------------------------- Origin grids
+
+   The card-grid picker layout: a toolbar (search box + result count) above a
+   responsive grid of selectable cards, with a detail panel shown below once a card
+   is chosen. "Origin" refers to the character's class/background/species choices. */
 
 .creator-toolbar {
   display: flex;
@@ -450,7 +474,6 @@
   display: block;
   flex: 0 0 auto;
   width: 100%;
-  /* Square image band drives the card's size; the name box sits below it. */
   aspect-ratio: 1 / 1;
   height: auto;
   min-height: 0;
@@ -482,6 +505,8 @@
   font-size: 0.7rem;
 }
 
+/* The detail panel for a chosen option: a violet-edged card holding the option's
+   image, name, description, and its advancement blocks (traits/features/spells). */
 .creator-detail {
   margin-top: 1.5rem;
   padding: 1.25rem 1.5rem;
@@ -682,6 +707,7 @@
 
 /* Placeholder shown before anything is picked. */
 .creator-pick-empty {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -694,6 +720,28 @@
 .creator-pick-empty i { font-size: 2.5rem; opacity: 0.4; }
 .creator-pick-empty h2 { margin: 0; border: none; color: var(--cc-text); }
 .creator-pick-empty p { margin: 0; max-width: 28ch; }
+/* Keep the prompt text above the sketch backdrop below. */
+.creator-pick-empty > * { position: relative; z-index: 1; }
+
+/* When the PHB module is present its journal sketch sits behind the prompt as a
+   faint greyed backdrop (the JS sets --cc-pick-sketch; unset, this stays blank). */
+.creator-pick-empty::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--cc-pick-sketch, none);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  filter: grayscale(1) brightness(0.65);
+  opacity: 0.08;
+  pointer-events: none;
+}
+/* The spells step uses its own sketch (the abjurer) for its backdrop. */
+.creator-spells .creator-pick-empty::before {
+  background-image: var(--cc-spells-sketch, none);
+}
 
 .creator-class-aside {
   position: sticky;
@@ -742,8 +790,7 @@
   .creator-topbar-steps .creator-rail-label { display: none; }
 }
 
-/* Narrow window: the two-column option list collapses to a single column.
-   Tune this threshold to taste. */
+/* Narrow window: the two-column option list collapses to a single column. */
 @media (max-width: 768px) {
   .creator-picklist { grid-template-columns: 1fr; }
 }
@@ -766,7 +813,11 @@
   border-radius: 6px;
 }
 
-/* ---------------------------------------------- Abilities */
+/* ---------------------------------------------- Abilities
+
+   The ability-score step. A row of method tabs (point-buy, standard array, etc.)
+   sits above either a points counter or a pool of draggable score chips, followed
+   by the six ability rows where scores are assigned. */
 
 .creator-method-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
 .creator-tab {
@@ -868,7 +919,11 @@
   white-space: nowrap;
 }
 
-/* ---------------------------------------------- Review */
+/* ---------------------------------------------- Review
+
+   The final summary step. Shows the chosen portrait, a row of summary cards (one per
+   origin choice), and the finished ability scores before the character is created.
+   (Per-origin breakdown blocks for this step live in "Review additions" below.) */
 
 /* Portrait above the ability scores — matched to the Details step's frame size. */
 .creator-review-portrait { display: flex; justify-content: center; margin-bottom: 1.5rem; }
@@ -932,7 +987,11 @@
 
 .creator-btn-danger { background: #b5495b; border-color: #b5495b; color: #fff; }
 
-/* ---------------------------------------------- Details step */
+/* ---------------------------------------------- Details step
+
+   The identity step, split into two columns: a media column on the left (portrait,
+   token image with its ring/token tabs, and the token display toggles) and a form
+   column on the right for the character's name and other text fields. */
 
 .creator-details {
   display: grid;
@@ -1121,7 +1180,11 @@
   .creator-detail-textgrid { grid-template-columns: 1fr; }
 }
 
-/* ---------------------------------------------- Spells step */
+/* ---------------------------------------------- Spells step
+
+   The spell-selection step (only shown for casters). It reuses the pick-step layout
+   but adds tabs to switch between spell levels, a running tally of chosen spells
+   across the top, and selected/disabled/at-limit states on the spell rows. */
 
 .creator-spell-tabs { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 .creator-spell-tab {
@@ -1184,7 +1247,12 @@
 .creator-spell-chip img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid var(--cc-line); }
 .creator-spell-chip:hover { border-color: var(--cc-gold); color: var(--cc-gold); }
 
-/* ---------------------------------------------- Choices step */
+/* ---------------------------------------------- Choices step
+
+   Gathers every outstanding choice the character's selections create (skill/tool
+   proficiencies, languages, etc.). Choices are grouped into cards by their source
+   (the class, background, or species that introduced them), each listing its options
+   as selectable pills. The equipment picker below shares this step. */
 
 .creator-choices { height: 100%; min-height: 0; overflow-y: auto; }
 .creator-choices-list { display: flex; flex-direction: column; gap: 1.5rem; }
@@ -1226,7 +1294,11 @@
 .creator-choice-opt-img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
 .creator-choice-opt-tick { color: var(--cc-select); font-size: 0.75rem; }
 
-/* ---------------------------------------------- Equipment (within Choices) */
+/* ---------------------------------------------- Equipment (within Choices)
+
+   Starting-equipment picker, rendered inside the Choices step. Each source offers
+   bundles the player chooses between (tabs), with rows of items, "either/or" pill
+   groups for swappable items, and a gold-piece alternative where the rules allow it. */
 
 .creator-equip-source { padding: 0.75rem 0; border-top: 1px solid var(--cc-line); }
 .creator-equip-source:first-of-type { border-top: none; }
@@ -1263,7 +1335,12 @@
 .creator-equip-pill.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
 .creator-equip-gold { color: var(--cc-gold); font-weight: 600; margin: 0.5rem 0 0; }
 
-/* ---------------------------------------------- Review additions */
+/* ---------------------------------------------- Review additions
+
+   The detailed breakdown blocks at the bottom of the Review step (extending the
+   "Review" section above). The three origin choices are shown side by side as
+   columns — Class | Background | Species — each listing that origin's traits,
+   granted features, spells, and starting equipment. */
 
 /* The three origin summaries sit side by side: Class | Background | Species. */
 .creator-review-columns {
@@ -1372,7 +1449,10 @@
   color: var(--cc-muted);
 }
 
-/* ---------------------------------------------- Sidebar launch button */
+/* ---------------------------------------------- Sidebar launch button
+
+   The button injected into Foundry's Actors sidebar that opens this creator. It
+   lives outside the .sogrom-creator window, so it's styled on its own here. */
 
 .sogrom-launch {
   display: inline-flex;

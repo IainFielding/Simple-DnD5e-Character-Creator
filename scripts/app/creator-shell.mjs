@@ -130,6 +130,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   _onRender(context, options) {
     super._onRender(context, options);
     const root = this.element;
+    this.#applySourceArt(root);
     // Selects/inputs don't fire click "actions"; wire their change events to the dispatcher.
     for ( const el of root.querySelectorAll("[data-step-change]") ) {
       el.addEventListener("change", ev => this.#dispatch(el.dataset.stepChange, ev.currentTarget));
@@ -138,6 +139,26 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // Client-side card filtering — no re-render, so the field keeps focus while typing.
     const search = root.querySelector("[data-creator-search]");
     if ( search ) search.addEventListener("input", ev => this.#filterCards(ev.currentTarget.value));
+  }
+
+  /**
+   * When the official D&D Player's Handbook module is installed, borrow two of its
+   * journal sketches as faded backdrops behind the empty-state placeholders — a general
+   * adventuring sketch for the origin/class/background steps, plus the abjurer on the
+   * spells step. The CSS variables feed `.creator-pick-empty::before`; left unset (no PHB
+   * module) the backdrops simply don't render, so the creator looks identical without it.
+   */
+  #applySourceArt(root) {
+    const phb = "dnd-players-handbook";
+    if ( game.modules.get(phb)?.active ) {
+      root.style.setProperty("--cc-pick-sketch",
+        `url("/modules/${phb}/assets/journal-art/adventuring-equipment-sketch.webp")`);
+      root.style.setProperty("--cc-spells-sketch",
+        `url("/modules/${phb}/assets/journal-art/abjurer.webp")`);
+    } else {
+      root.style.removeProperty("--cc-pick-sketch");
+      root.style.removeProperty("--cc-spells-sketch");
+    }
   }
 
   /**

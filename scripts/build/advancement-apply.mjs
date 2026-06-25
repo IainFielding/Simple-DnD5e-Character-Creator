@@ -2,8 +2,8 @@ import { log } from "../config.mjs";
 import { advancementArray } from "../data/choice-resolver.mjs";
 
 /**
- * Applies the wizard's advancement choices without the dnd5e AdvancementManager ever
- * prompting the player. The strategy mirrors the previous module's proven hybrid:
+ * Applies the player's advancement choices without the dnd5e AdvancementManager ever
+ * prompting them. It splits the work into three stages:
  *
  *  1. {@link buildChoicePlan} works out which advancements the wizard already resolved
  *     (so the manager should skip them) and which granted-feature ItemGrants must be

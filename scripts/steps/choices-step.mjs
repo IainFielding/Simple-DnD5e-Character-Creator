@@ -11,7 +11,8 @@ import { describeOption } from "../data/equipment-source.mjs";
  * renders its requirements and records picks into `state.advChoices`. Completion gates
  * the build, so the cached resolution is kept fresh on every pick.
  *
- * (Starting equipment is added to this step in a later pass.)
+ * The starting-equipment picker is also shown here, but it's purely informational — it
+ * never affects whether the step counts as complete.
  */
 export const choicesStep = {
   id: "choices",

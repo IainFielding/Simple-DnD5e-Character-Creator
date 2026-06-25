@@ -117,9 +117,6 @@ function increaseSummary(state) {
 
 /** Template context for the increase-allocation aside (nested under `abilities`). */
 function abilitiesContext(state) {
-  // The pane appears once a background is chosen — the increase, if any, is its gift.
-  //  if ( !state.backgroundUuid ) return { selected: false };
-
   const asi = state.backgroundAsi;
   const hasAsi = !!asi;
   const base = state.resolvedScores();

@@ -8,12 +8,13 @@ import {
 /**
  * Turns a finished {@link CreatorState} into a real character.
  *
- * Unlike the MVP — which added each origin through an interactive AdvancementManager —
- * this bakes the wizard's decisions in directly: base ability scores (with the
- * background increase layered on), the Details fields, then the origin items run through
- * a single non-interactive AdvancementManager whose wizard-resolved advancements are
- * skipped and applied by hand afterwards (see {@link module:build/advancement-apply}).
- * Finally the chosen spells are granted.
+ * Everything the player chose is baked in directly, so they're never asked to confirm
+ * anything again. The order is: write the base ability scores (with the background's
+ * increase layered on) and the Details-step fields, then add the origin items (class,
+ * background, species) by running them through a single AdvancementManager that never
+ * shows a prompt — any advancement the player already resolved in the wizard is skipped
+ * here and applied by hand afterwards (see {@link module:build/advancement-apply}).
+ * Finally the chosen spells, then the starting equipment, are granted.
  *
  * @param {import("../state/creator-state.mjs").CreatorState} state
  * @param {import("../data/source-index.mjs").SourceIndex} source

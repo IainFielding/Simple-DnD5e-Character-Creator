@@ -7,9 +7,10 @@ import { choicesStep } from "./choices-step.mjs";
 import { reviewStep } from "./review-step.mjs";
 
 /**
- * The ordered list of steps the shell walks through. Order is data here, not
- * hard-coded control flow: insert, remove, or reorder steps by editing this array.
- * Later phases (spells, equipment, advancements, identity) slot in as more entries.
+ * The ordered list of steps the shell walks through, top to bottom. The order lives
+ * in this array as plain data rather than being hard-coded into the navigation logic,
+ * so you add, remove, or reorder steps just by editing this list — the shell reads its
+ * length and contents to drive the stepper, the Back/Next buttons, and completion.
  */
 export const STEPS = [
   classStep,
