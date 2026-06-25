@@ -1,19 +1,5 @@
 <section class="creator-pick creator-pick--solo creator-spells">
   {{#if isSpellcaster}}
-  <!-- Running tally of everything picked so far, spanning the full step width. -->
-  <div class="creator-spell-selected">
-    <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.step.spells.selected"}}</span>
-    {{#if selected.length}}
-    <ul class="creator-spell-chips">
-      {{#each selected}}
-      <li><a class="content-link creator-spell-chip" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
-      {{/each}}
-    </ul>
-    {{else}}
-    <span class="creator-spell-selected-empty">{{localize "sogrom-dnd5e-character-creator.step.spells.selectedNone"}}</span>
-    {{/if}}
-  </div>
-
   <!-- Left column: tabs + spell list -->
   <div class="creator-pick-side">
     <div class="creator-spell-tabs">
@@ -37,7 +23,7 @@
       <label class="creator-search">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="search" data-creator-search autocomplete="off"
-               placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
+                placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
       </label>
       <span class="creator-count">{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
     </div>
@@ -60,8 +46,9 @@
     </ul>
   </div>
 
-  <!-- Right column: focused spell -->
+  <!-- Right column: focused spell (scrolls), with the running tally pinned at the bottom -->
   <div class="creator-pick-desc">
+    <div class="creator-pick-desc-scroll">
     {{#if focused}}
     <article class="creator-detail">
       <header class="creator-detail-head">
@@ -96,6 +83,38 @@
       <p>{{localize "sogrom-dnd5e-character-creator.step.spells.selectHint"}}</p>
     </div>
     {{/if}}
+    </div>
+
+    <!-- Running tally of everything picked so far, grouped by level. -->
+    <div class="creator-spell-selected">
+      <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.step.spells.selected"}}</span>
+      {{#if hasSelected}}
+      <div class="creator-spell-groups">
+        {{#if selectedCantrips.length}}
+        <div class="creator-spell-group">
+          <span class="creator-spell-group-label">{{localize "sogrom-dnd5e-character-creator.step.spells.cantrips"}}</span>
+          <ul class="creator-spell-chips">
+            {{#each selectedCantrips}}
+            <li><a class="content-link creator-spell-chip" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
+        {{#if selectedSpells.length}}
+        <div class="creator-spell-group">
+          <span class="creator-spell-group-label">{{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}</span>
+          <ul class="creator-spell-chips">
+            {{#each selectedSpells}}
+            <li><a class="content-link creator-spell-chip" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
+      </div>
+      {{else}}
+      <span class="creator-spell-selected-empty">{{localize "sogrom-dnd5e-character-creator.step.spells.selectedNone"}}</span>
+      {{/if}}
+    </div>
   </div>
 
   {{else}}

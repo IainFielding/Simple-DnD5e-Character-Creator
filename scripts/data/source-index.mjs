@@ -235,7 +235,7 @@ export class SourceIndex {
     try {
       const doc = fromUuidSync(uuid) ?? await fromUuid(uuid);
       if ( doc ) meta = { uuid: doc.uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
-    } catch ( err ) {
+    } catch {
       const doc = await fromUuid(uuid).catch(() => null);
       if ( doc ) meta = { uuid: doc.uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
     }
