@@ -4,6 +4,7 @@ import { SourceIndex } from "../data/source-index.mjs";
 import { SpellSource } from "../data/spell-source.mjs";
 import { EquipmentSource } from "../data/equipment-source.mjs";
 import { STEPS, REQUIRED_STEPS } from "../steps/registry.mjs";
+import { warmChoices } from "../data/choice-resolver.mjs";
 import { assembleActor } from "../build/actor-assembler.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -117,8 +118,16 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
    */
   async #warmSources() {
     const classes = this.source.classes();
-    const total = classes.length + this.source.species().length
-      + this.source.backgrounds().length + classes.length;
+    const species = this.source.species();
+    const backgrounds = this.source.backgrounds();
+    const origins = classes.length + species.length + backgrounds.length;
+    // Every compendium read the builder will ever need, warmed once here so navigation
+    // (and especially selecting a class) never triggers a fresh pack re-index later:
+    //   • warmAll        — origin details/advancement groups       (one tick per origin)
+    //   • warmClasses    — each class's spell list                 (one tick per class)
+    //   • warmChoices    — advancement choices' tool/restriction scans (one tick per origin)
+    //   • equipment warm — class & background starting-equipment   (one tick per class+bg)
+    const total = origins + classes.length + origins + (classes.length + backgrounds.length);
     let done = 0;
     const tick = () => {
       const pct = total ? Math.round((++done / total) * 100) : 100;
@@ -128,6 +137,8 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     };
     await this.source.warmAll(tick);
     await this.spells.warmClasses(classes.map(c => c.uuid), tick);
+    await warmChoices(this.source, tick);
+    await this.equipment.warmAll(this.source, tick);
   }
 
   /** @override */

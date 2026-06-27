@@ -80,6 +80,37 @@ export async function resolveChoices(state, source) {
   return { sources, hasAny: sources.length > 0 };
 }
 
+/**
+ * Pre-resolve the advancement choices for every origin in isolation, so the compendium
+ * scans they trigger — tool-category expansion ({@link expandToolPool}) and `allowDrops`
+ * restriction scans ({@link findRestrictedItems}) — happen once behind the loading spinner
+ * rather than on the click that selects a class (which runs {@link resolveChoices} afresh
+ * every time). Each origin is resolved against a throwaway state holding only that origin,
+ * populating the module-level memo caches the live resolver then reuses. Failures on one
+ * origin are swallowed so a bad document can't abort the warm-up.
+ * @param {import("./source-index.mjs").SourceIndex} source
+ * @param {() => void} [onTick]  Invoked once per origin warmed, for progress reporting.
+ */
+export async function warmChoices(source, onTick) {
+  const groups = [
+    ["class", source.classes()],
+    ["species", source.species()],
+    ["background", source.backgrounds()]
+  ];
+  for ( const [key, cards] of groups ) {
+    const field = ORIGIN_FIELDS[key];
+    for ( const card of cards ) {
+      const state = { classUuid: null, speciesUuid: null, backgroundUuid: null, advChoices: {}, [field]: card.uuid };
+      try {
+        await resolveChoices(state, source);
+      } catch ( err ) {
+        log(`failed to warm choices for ${card.uuid}`, err);
+      }
+      onTick?.();
+    }
+  }
+}
+
 /** True once every requirement across all sources has enough picks. */
 export function choicesComplete(resolved) {
   for ( const src of resolved?.sources ?? [] ) {

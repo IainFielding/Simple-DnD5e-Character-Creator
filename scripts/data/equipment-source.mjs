@@ -52,6 +52,31 @@ export class EquipmentSource {
     return out;
   }
 
+  /**
+   * Pre-build the starting-equipment option sets for every class and background up front, so
+   * reaching the Choices step (or switching origin there) is instant rather than paying a cold
+   * compendium read — the tool-category and spellcasting-focus lookups it performs request index
+   * fields not loaded by the initial origin index, which would otherwise force Foundry to
+   * re-index every pack on the click. Memoised per origin UUID via {@link #buildFor}; one
+   * origin's failure is swallowed so it can't abort the rest of the warm-up.
+   * @param {import("./source-index.mjs").SourceIndex} source
+   * @param {() => void} [onTick]  Invoked once per origin warmed, for progress reporting.
+   */
+  async warmAll(source, onTick) {
+    const origins = [
+      ...source.classes().map(c => ["class", c.uuid]),
+      ...source.backgrounds().map(c => ["background", c.uuid])
+    ];
+    for ( const [key, uuid] of origins ) {
+      try {
+        await this.#buildFor(uuid, key, source);
+      } catch ( err ) {
+        log(`failed to warm equipment for ${uuid}`, err);
+      }
+      onTick?.();
+    }
+  }
+
   async #buildFor(uuid, key, source) {
     if ( this.#cache.has(uuid) ) return this.#cache.get(uuid);
     const doc = await fromUuid(uuid).catch(() => null);
