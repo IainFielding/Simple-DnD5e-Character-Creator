@@ -26,7 +26,7 @@
     },
     "menu": {
       "launch": "Simple Character Builder",
-      "resume": "Open in Character Creator"
+      "resume": "Simple Character Builder"
     },
     "notify": {
       "noPermission": "You do not have permission to create actors.",
@@ -208,11 +208,11 @@
     "settings": {
       "launchButton": {
         "name": "Show launch button",
-        "hint": "Adds a “Create Character” button to the Actors sidebar for anyone allowed to create actors."
+        "hint": "Adds a “Simple Character Builder” button to the Actors sidebar for anyone allowed to create actors."
       },
       "contextMenu": {
-        "name": "Show actor context entry",
-        "hint": "Adds an “Open in Character Creator” entry to a character's right-click menu."
+        "name": "Show actor right-click menu",
+        "hint": "Adds an “Simple Character Builder” button to a character's right-click menu."
       },
       "pointBuyBudget": {
         "name": "Point-buy budget",
