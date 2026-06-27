@@ -1,10 +1,7 @@
 import { MODULE_ID, tpl, t, log } from "../config.mjs";
 import { CreatorState } from "../state/creator-state.mjs";
-import { SourceIndex } from "../data/source-index.mjs";
-import { SpellSource } from "../data/spell-source.mjs";
-import { EquipmentSource } from "../data/equipment-source.mjs";
 import { STEPS, REQUIRED_STEPS } from "../steps/registry.mjs";
-import { warmChoices } from "../data/choice-resolver.mjs";
+import { getSources, warmSources, onWarmProgress, isStale, invalidateSources } from "../data/source-cache.mjs";
 import { assembleActor } from "../build/actor-assembler.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -49,11 +46,11 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** @type {CreatorState} */
   state;
-  /** @type {SourceIndex} */
+  /** @type {import("../data/source-index.mjs").SourceIndex} */
   source;
-  /** @type {SpellSource} */
+  /** @type {import("../data/spell-source.mjs").SpellSource} */
   spells;
-  /** @type {EquipmentSource} */
+  /** @type {import("../data/equipment-source.mjs").EquipmentSource} */
   equipment;
 
   #current = 0;
@@ -65,9 +62,12 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(actor, options = {}) {
     super(options);
     this.state = new CreatorState(actor);
-    this.source = new SourceIndex();
-    this.spells = new SpellSource();
-    this.equipment = new EquipmentSource();
+    // Reuse the shared, warm-once compendium index (warmed in the background at `ready`).
+    // `#loadStage` re-grabs these after any staleness check, in case the cache was rebuilt.
+    const { source, spells, equipment } = getSources();
+    this.source = source;
+    this.spells = spells;
+    this.equipment = equipment;
   }
 
   get title() {
@@ -93,52 +93,39 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#loadStage();
   }
 
-  /** Load the compendium index, warm caches, then reveal the first step. */
+  /**
+   * Reveal the first step once the shared compendium index is warm. The warm normally ran in
+   * the background at `ready`, so {@link warmSources} resolves instantly here; if the window was
+   * opened first (or the enabled-source config changed), it awaits the in-flight work — or kicks
+   * off a fresh one — behind the loading spinner. Progress is written straight to the caption's
+   * text node (no re-render) so the bar advances smoothly while the player waits.
+   */
   async #loadStage() {
+    // A changed enabled-source set means the cached index no longer reflects the world; rebuild.
+    if ( isStale() ) {
+      invalidateSources();
+      const { source, spells, equipment } = getSources();
+      this.source = source;
+      this.spells = spells;
+      this.equipment = equipment;
+    }
+    const off = onWarmProgress(pct => {
+      this.#loadingLabel = t("loading.preparing", { percent: pct });
+      const node = this.element?.querySelector(".creator-loading p");
+      if ( node ) node.textContent = this.#loadingLabel;
+    });
     try {
-      await this.source.load();
-      // Resolve every class/species/background detail and every class's spell list now,
-      // behind the loading spinner, so selecting or switching an origin later is instant
-      // instead of paying a multi-second cold compendium read on the click itself.
-      await this.#warmSources();
+      await warmSources();
     } catch ( err ) {
       log("source index failed to load", err);
       ui.notifications?.error(t("notify.indexFailed"));
+    } finally {
+      off();
     }
     this.#loading = false;
     // Resuming an in-progress actor: jump to the first step still needing input.
     this.#current = this.#firstIncompleteIndex();
     if ( this.rendered ) this.render();
-  }
-
-  /**
-   * Pre-resolve every origin card and class spell list while the spinner is up, reporting
-   * a single combined percentage across both sources. Progress is written straight to the
-   * loading caption's text node (no re-render) so the bar advances smoothly during warm-up.
-   */
-  async #warmSources() {
-    const classes = this.source.classes();
-    const species = this.source.species();
-    const backgrounds = this.source.backgrounds();
-    const origins = classes.length + species.length + backgrounds.length;
-    // Every compendium read the builder will ever need, warmed once here so navigation
-    // (and especially selecting a class) never triggers a fresh pack re-index later:
-    //   • warmAll        — origin details/advancement groups       (one tick per origin)
-    //   • warmClasses    — each class's spell list                 (one tick per class)
-    //   • warmChoices    — advancement choices' tool/restriction scans (one tick per origin)
-    //   • equipment warm — class & background starting-equipment   (one tick per class+bg)
-    const total = origins + classes.length + origins + (classes.length + backgrounds.length);
-    let done = 0;
-    const tick = () => {
-      const pct = total ? Math.round((++done / total) * 100) : 100;
-      this.#loadingLabel = t("loading.preparing", { percent: pct });
-      const node = this.element?.querySelector(".creator-loading p");
-      if ( node ) node.textContent = this.#loadingLabel;
-    };
-    await this.source.warmAll(tick);
-    await this.spells.warmClasses(classes.map(c => c.uuid), tick);
-    await warmChoices(this.source, tick);
-    await this.equipment.warmAll(this.source, tick);
   }
 
   /** @override */
