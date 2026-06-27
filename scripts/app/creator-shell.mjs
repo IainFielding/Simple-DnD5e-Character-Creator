@@ -84,6 +84,16 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   /** @override */
   async _onFirstRender(context, options) {
     await super._onFirstRender(context, options);
+    // Kick the load off without awaiting it: ApplicationV2 applies the framed window's
+    // position/size only after `_onFirstRender` resolves, so awaiting the multi-second
+    // load here would paint the spinner at the wrong size first (windowed mode) and snap
+    // to the configured size once it finished. Returning immediately lets the frame size
+    // correctly up front; `#loadStage()` flips `#loading` and re-renders when it's done.
+    this.#loadStage();
+  }
+
+  /** Load the compendium index, warm caches, then reveal the first step. */
+  async #loadStage() {
     try {
       await this.source.load();
       // Resolve every class/species/background detail and every class's spell list now,
