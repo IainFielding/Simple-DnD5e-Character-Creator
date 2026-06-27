@@ -58,6 +58,8 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   #current = 0;
   #loading = true;
   #finished = false;
+  /** Live loading caption; null falls back to the initial "reading compendiums" label. */
+  #loadingLabel = null;
 
   constructor(actor, options = {}) {
     super(options);
@@ -84,6 +86,10 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     await super._onFirstRender(context, options);
     try {
       await this.source.load();
+      // Resolve every class/species/background detail and every class's spell list now,
+      // behind the loading spinner, so selecting or switching an origin later is instant
+      // instead of paying a multi-second cold compendium read on the click itself.
+      await this.#warmSources();
     } catch ( err ) {
       log("source index failed to load", err);
       ui.notifications?.error(t("notify.indexFailed"));
@@ -94,6 +100,26 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     if ( this.rendered ) this.render();
   }
 
+  /**
+   * Pre-resolve every origin card and class spell list while the spinner is up, reporting
+   * a single combined percentage across both sources. Progress is written straight to the
+   * loading caption's text node (no re-render) so the bar advances smoothly during warm-up.
+   */
+  async #warmSources() {
+    const classes = this.source.classes();
+    const total = classes.length + this.source.species().length
+      + this.source.backgrounds().length + classes.length;
+    let done = 0;
+    const tick = () => {
+      const pct = total ? Math.round((++done / total) * 100) : 100;
+      this.#loadingLabel = t("loading.preparing", { percent: pct });
+      const node = this.element?.querySelector(".creator-loading p");
+      if ( node ) node.textContent = this.#loadingLabel;
+    };
+    await this.source.warmAll(tick);
+    await this.spells.warmClasses(classes.map(c => c.uuid), tick);
+  }
+
   /** @override */
   async _prepareContext() {
     const flags = this.#completeFlags();
@@ -102,7 +128,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
     return {
       loading: this.#loading,
-      loadingLabel: t("loading.indexing"),
+      loadingLabel: this.#loadingLabel ?? t("loading.indexing"),
       version: game.modules.get(MODULE_ID)?.version ?? "",
       cancelLabel: t("nav.cancel"),
       rail: this.#railContext(flags),

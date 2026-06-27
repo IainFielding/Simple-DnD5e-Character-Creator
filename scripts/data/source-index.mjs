@@ -42,6 +42,29 @@ export class SourceIndex {
       `${this.#cards.background.length} backgrounds`);
   }
 
+  /**
+   * Eagerly resolve every indexed card's detail panel, advancement groups, and ability
+   * increase so opening (or switching to) a card later is instant rather than paying a
+   * cold `fromUuid`/`enrichHTML` round-trip per click. Each resolved document also stays
+   * in Foundry's compendium cache, which warms the choice resolver's `fromUuid` lookups
+   * too. Memoised maps absorb the work, so this is safe to call once after {@link load}.
+   * Failures on a single card are swallowed so one bad document can't abort the warm-up.
+   * @param {() => void} [onTick]  Invoked once per card warmed, for progress reporting.
+   */
+  async warmAll(onTick) {
+    const cards = [...this.#cards.class, ...this.#cards.race, ...this.#cards.background];
+    for ( const card of cards ) {
+      try {
+        await this.detail(card.uuid);
+        await this.advancementGroups(card.uuid);
+        await this.abilityScoreIncrease(card.uuid);
+      } catch ( err ) {
+        log(`failed to warm ${card.uuid}`, err);
+      }
+      onTick?.();
+    }
+  }
+
   classes() { return this.#cards.class; }
   species() { return this.#cards.race; }
   backgrounds() { return this.#cards.background; }

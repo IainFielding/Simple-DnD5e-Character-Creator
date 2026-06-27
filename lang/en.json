@@ -15,7 +15,8 @@
       "selectHint": "Choose an option from the list to see its full description."
     },
     "loading": {
-      "indexing": "Reading the compendiums…"
+      "indexing": "Reading the compendiums…",
+      "preparing": "Preparing classes, species & backgrounds… {percent}%"
     },
     "nav": {
       "back": "Back",

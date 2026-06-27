@@ -39,6 +39,25 @@ export class SpellSource {
     return payload;
   }
 
+  /**
+   * Pre-resolve the spell payload for each class up front, so reaching the Spells step
+   * (and the class step's known-counts gate) is instant rather than loading the whole
+   * spell list on the click that selects a class. Memoised per UUID via {@link forClass};
+   * a single class's failure is swallowed so it can't abort the rest of the warm-up.
+   * @param {string[]} classUuids
+   * @param {() => void} [onTick]  Invoked once per class warmed, for progress reporting.
+   */
+  async warmClasses(classUuids, onTick) {
+    for ( const uuid of classUuids ) {
+      try {
+        await this.forClass(uuid);
+      } catch ( err ) {
+        log(`failed to warm spells for ${uuid}`, err);
+      }
+      onTick?.();
+    }
+  }
+
   async #resolve(classUuid) {
     const doc = await fromUuid(classUuid);
     const progression = doc?.system?.spellcasting?.progression;
