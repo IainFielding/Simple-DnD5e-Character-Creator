@@ -126,7 +126,7 @@ Hooks.on("getActorContextOptions", (_directory, options) => {
   if ( !game.settings.get(MODULE_ID, SETTINGS.contextMenu) ) return;
   options.push({
     name: t("menu.resume"),
-    icon: '<i class="fa-solid fa-hat-wizard"></i>',
+    icon: "",
     condition: li => {
       const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
       return actor?.type === "character" && (game.user.isGM || actor.isOwner);

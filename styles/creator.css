@@ -207,6 +207,16 @@
 }
 .creator-topbar-brand i { color: var(--cc-accent); filter: drop-shadow(0 0 6px var(--cc-accent-glow)); }
 
+.creator-topbar-version {
+  align-self: flex-end;
+  font-family: var(--cc-font-body, inherit);
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  opacity: 0.5;
+}
+
 .creator-topbar-foot { flex: 0 0 auto; margin-left: auto; }
 
 .creator-topbar-steps {

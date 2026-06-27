@@ -1,3 +1,5 @@
+![](https://img.shields.io/badge/Foundry-v14-informational) ![Latest Release Download Count](https://img.shields.io/github/downloads/IainFielding/Simple-DnD5e-Character-Creator/latest/module.zip?label=Downloads) <br>
+
 # Simple D&D Character Creator
 
 **Build a brand-new D&D 5e character without the guesswork.**

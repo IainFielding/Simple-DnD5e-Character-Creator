@@ -103,6 +103,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     return {
       loading: this.#loading,
       loadingLabel: t("loading.indexing"),
+      version: game.modules.get(MODULE_ID)?.version ?? "",
       cancelLabel: t("nav.cancel"),
       rail: this.#railContext(flags),
       step: {
