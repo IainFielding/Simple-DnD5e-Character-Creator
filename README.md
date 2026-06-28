@@ -47,7 +47,7 @@ Choose your character's people — their traits, features, and any special abili
 **4. Details**
 Give your character a name, a portrait, and a token. Want to go further? Add their personality, appearance, alignment, and backstory — or leave it for later. It's entirely optional.
 
-![Adding character details](docs\screenshots\details.png)
+![Adding character details](docs/screenshots/details.png)
 
 **5. Spells**
 If your class can cast spells, this is where you pick your cantrips and starting spells. Each spell shows its full description so you know exactly what you're taking. Non-casters skip this step automatically.
