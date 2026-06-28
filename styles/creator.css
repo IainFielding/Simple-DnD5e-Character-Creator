@@ -395,6 +395,16 @@
   box-shadow: 0 0 0 1px var(--cc-accent-soft), 0 4px 14px var(--cc-accent-glow);
 }
 .creator-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+/* Finish/Create — the climactic action gets gold instead of the per-step violet,
+   matching the gold reserved for selection and "you are here". */
+.creator-btn-finish {
+  background: linear-gradient(180deg, var(--cc-gold-bright), var(--cc-gold));
+  border-color: var(--cc-gold);
+  color: #2a200a;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 0 1px var(--cc-gold-glow), 0 4px 14px var(--cc-gold-glow);
+}
+.creator-btn-finish:hover:not(:disabled) { filter: brightness(1.06); }
 .creator-btn-ghost { background: transparent; }
 
 /* ---------------------------------------------- Loading
@@ -1520,7 +1530,7 @@
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--cc-accent);
+  color: var(--cc-gold);
 }
 .creator-review-origin.is-empty { border-top-style: dashed; }
 .creator-review-origin-head h2.is-muted { color: var(--cc-muted); font-style: italic; font-weight: 400; }

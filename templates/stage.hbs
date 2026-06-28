@@ -19,7 +19,7 @@
       <i class="fa-solid fa-arrow-left"></i> {{nav.backLabel}}
     </button>
     {{#if isReview}}
-    <button type="button" class="creator-btn creator-btn-primary" data-action="finish" {{#unless canFinish}}disabled{{/unless}}>
+    <button type="button" class="creator-btn creator-btn-primary creator-btn-finish" data-action="finish" {{#unless canFinish}}disabled{{/unless}}>
       {{finishLabel}}
     </button>
     {{else}}
