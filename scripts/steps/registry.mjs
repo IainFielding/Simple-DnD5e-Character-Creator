@@ -4,6 +4,7 @@ import { backgroundStep } from "./background-step.mjs";
 import { detailsStep } from "./details-step.mjs";
 import { spellsStep } from "./spells-step.mjs";
 import { choicesStep } from "./choices-step.mjs";
+import { equipmentStep } from "./equipment-step.mjs";
 import { reviewStep } from "./review-step.mjs";
 
 /**
@@ -25,6 +26,7 @@ export const STEPS = [
   detailsStep,
   spellsStep,
   choicesStep,
+  equipmentStep,
   reviewStep
 ];
 

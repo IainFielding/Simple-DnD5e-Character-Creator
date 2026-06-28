@@ -75,7 +75,7 @@
       <h3>{{localize "sogrom-dnd5e-character-creator.equipment.heading"}}</h3>
       <ul class="creator-review-spells">
         {{#each equipment.items}}<li>{{#if uuid}}<a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{else}}{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}{{/if}}{{#if count}} ×{{count}}{{/if}}</li>{{/each}}
-        {{#if equipment.gold}}<li><i class="fa-solid fa-coins"></i> {{equipment.gold}}</li>{{/if}}
+        {{#if equipment.gold}}<li class="creator-review-gold"><i class="fa-solid fa-coins"></i> {{equipment.gold}}</li>{{/if}}
       </ul>
     </div>
     {{/if}}

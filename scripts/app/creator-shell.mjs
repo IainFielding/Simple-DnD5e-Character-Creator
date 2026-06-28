@@ -130,6 +130,10 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** @override */
   async _prepareContext() {
+    // Let the active step record that it's been shown (e.g. the optional Equipment step's
+    // "visited" flag) before completion is read, so its rail tick and the Next button reflect
+    // the arrival on this very render rather than one render late.
+    if ( !this.#loading ) this.#activeStep.onEnter?.(this.state);
     const flags = this.#completeFlags();
     const step = this.#activeStep;
     const stepContext = this.#loading ? {} : await step.context(this.#ctx());

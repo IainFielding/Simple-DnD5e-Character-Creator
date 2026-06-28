@@ -1,18 +1,31 @@
 import { t } from "../config.mjs";
 import { resolveChoices, choicesComplete } from "../data/choice-resolver.mjs";
-import { describeOption } from "../data/equipment-source.mjs";
+
+/**
+ * Flatten a resolved choice set into the ordered list of individual decisions the checklist
+ * renders — one entry per requirement, tagged with its origin source so each row can show a
+ * chip. `advId` is unique per advancement, so `source:selKey` is a stable, globally unique key.
+ */
+function flattenDecisions(resolved) {
+  const out = [];
+  for ( const s of resolved?.sources ?? [] ) {
+    for ( const r of s.requirements ) {
+      out.push({ key: `${r.source}:${r.selKey}`, complete: r.complete, req: r, sourceName: s.name, sourceImg: s.img });
+    }
+  }
+  return out;
+}
 
 /**
  * The Choices step: every player decision a chosen origin defers to level ≤ 1 —
  * skill/tool/language/weapon proficiencies, Expertise, size, "choose a feature"
- * (ItemChoice), spellcasting-ability picks — grouped under the source that grants them.
+ * (ItemChoice), spellcasting-ability picks — laid out as one guided checklist of accordion
+ * rows, each tagged with the origin that grants it. The next unfinished row auto-expands.
  *
  * The advancement engine lives in {@link module:data/choice-resolver}; this step just
  * renders its requirements and records picks into `state.advChoices`. Completion gates
- * the build, so the cached resolution is kept fresh on every pick.
- *
- * The starting-equipment picker is also shown here, but it's purely informational — it
- * never affects whether the step counts as complete.
+ * the build, so the cached resolution is kept fresh on every pick. Starting equipment is a
+ * separate step ({@link module:steps/equipment-step}); nothing here touches it.
  */
 export const choicesStep = {
   id: "choices",
@@ -38,22 +51,11 @@ export const choicesStep = {
   },
 
   async handle(action, el, { state, source }) {
-    // Switch the visible origin tab. Purely a UI concern; the dispatcher re-renders.
-    if ( action === "choice-tab" ) {
-      if ( el.dataset.tab ) state.choiceTab = el.dataset.tab;
-      return;
-    }
-
-    // Equipment picks are informational — they never change completion.
-    if ( action === "equip-option" ) {
-      const eq = state.equipment[el.dataset.equipSource];
-      const idx = Number(el.dataset.index);
-      if ( eq && Number.isInteger(idx) ) eq.selectedOption = idx;
-      return;
-    }
-    if ( action === "equip-or" ) {
-      const eq = state.equipment[el.dataset.equipSource];
-      if ( eq ) eq.orSelections[el.dataset.group] = el.dataset.option;
+    // Expand/collapse a checklist row. Clicking the open row collapses everything (""),
+    // otherwise that row becomes the sole open one. Purely UI; the dispatcher re-renders.
+    if ( action === "toggle-decision" ) {
+      const k = el.dataset.decision;
+      state.openDecision = state.openDecision === k ? "" : k;
       return;
     }
 
@@ -68,53 +70,62 @@ export const choicesStep = {
     if ( idx >= 0 ) {
       cur.splice(idx, 1);                 // toggle off
     } else if ( max === 1 ) {
-      bucket[selKey] = [key];             // single-select: replace
-      state.choiceCache = await resolveChoices(state, source);
-      return;
+      cur.length = 0;                     // single-select: replace
+      cur.push(key);
     } else {
       if ( cur.length >= max ) cur.shift(); // at cap: drop the oldest pick
       cur.push(key);
     }
     bucket[selKey] = cur;
     state.choiceCache = await resolveChoices(state, source);
+
+    // Auto-advance: once the decision the player was working on is satisfied, open the next
+    // unfinished one so the checklist keeps moving them forward. Leaves the row as-is when
+    // it's still incomplete (e.g. mid "choose 2") or when nothing remains.
+    const flat = flattenDecisions(state.choiceCache);
+    if ( flat.find(d => d.key === `${choiceSource}:${selKey}`)?.complete ) {
+      const next = flat.find(d => !d.complete);
+      if ( next ) state.openDecision = next.key;
+    }
   },
 
-  async context({ state, source, equipment }) {
+  async context({ state, source }) {
     const resolved = await resolveChoices(state, source);
     state.choiceCache = resolved;
 
-    const loaded = await equipment.load(state, source);
-    const equipList = [];
-    for ( const key of ["class", "background"] ) {
-      if ( loaded[key] ) equipList.push({ key, name: loaded[key].name, img: loaded[key].img, ...describeOption(loaded[key], state.equipment[key]) });
-    }
-    const hasEquipment = equipList.length > 0;
+    // Flatten every decision into one checklist, each carrying its requirement data plus an
+    // origin chip and a status label (a "1/2" progress, a "Choose one" prompt, or a tick).
+    const decisions = flattenDecisions(resolved).map(d => ({
+      key: d.key,
+      sourceName: d.sourceName,
+      sourceImg: d.sourceImg,
+      complete: d.complete,
+      statusLabel: d.complete
+        ? null
+        : (d.req.showProgress ? `${d.req.chosenCount}/${d.req.count}` : d.req.countLabel),
+      ...d.req
+    }));
 
-    // One tab per choice source, plus an equipment tab. Each origin tab carries a
-    // done/total progress so its badge can show a tick or a count without re-counting
-    // in the template.
-    const tabs = resolved.sources.map(s => {
-      const total = s.requirements.length;
-      const done = s.requirements.filter(r => r.complete).length;
-      return { key: s.key, name: s.name, img: s.img, done, total, complete: total > 0 && done === total };
-    });
-    if ( hasEquipment ) tabs.push({ key: "equipment", name: t("equipment.heading"), isEquipment: true });
+    const total = decisions.length;
+    const done = decisions.filter(d => d.complete).length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
 
-    // Resolve the active tab, surviving re-renders. If the remembered tab no longer exists
-    // (an origin changed and dropped its choices) fall back to the first available.
-    const keys = tabs.map(tb => tb.key);
-    if ( !keys.includes(state.choiceTab) ) state.choiceTab = keys[0] ?? null;
-    for ( const tb of tabs ) tb.active = tb.key === state.choiceTab;
+    // Resolve which row is expanded, surviving re-renders. `""` means the player collapsed
+    // everything; an unset or stale/finished key falls back to the first unfinished decision
+    // (or the first row when all decisions are done).
+    const keys = decisions.map(d => d.key);
+    const firstOpen = decisions.find(d => !d.complete)?.key ?? decisions[0]?.key ?? null;
+    if ( state.openDecision !== "" && !keys.includes(state.openDecision) ) state.openDecision = firstOpen;
+    for ( const d of decisions ) d.open = d.key === state.openDecision;
 
     return {
       hasChoices: resolved.hasAny,
-      sources: resolved.sources.map(s => ({ ...s, active: s.key === state.choiceTab })),
-      tabs,
-      hasTabs: tabs.length > 1,
-      equipment: equipList,
-      hasEquipment,
-      equipActive: state.choiceTab === "equipment",
-      isEmpty: !resolved.hasAny && !hasEquipment
+      decisions,
+      done,
+      total,
+      pct,
+      allDone: total > 0 && done === total,
+      isEmpty: !resolved.hasAny
     };
   }
 };

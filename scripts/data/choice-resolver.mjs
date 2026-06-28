@@ -124,24 +124,41 @@ export function choicesComplete(resolved) {
 /* -------------------------------------------- */
 
 /**
- * The origin item plus the level-≤1 items it grants via ItemGrant, as `{item, ownerUuid}`
- * pairs (ownerUuid null for the origin itself). Granted features can carry their own
- * Trait/ItemChoice choices, so they count as additional advancement owners.
+ * The origin item plus the level-≤1 features that hang off it, as `{item, ownerUuid}` pairs
+ * (ownerUuid null for the origin itself). A feature counts as a nested owner whether it's
+ * handed out unconditionally (ItemGrant) or *picked* by the player from an ItemChoice — e.g.
+ * the Human "choose a feat" option, where the chosen feat (Crafter) carries its own tool
+ * choice. Recurses through both, so a chosen feat's choices surface and feed the same dedupe
+ * and apply paths as granted ones. `seen` guards against cycles; depth caps runaway nesting.
+ * @param {Item} item
+ * @param {object} sel  The source's recorded picks (`advChoices[source]`), to read ItemChoices.
  */
-async function levelOneOwners(item) {
-  const owners = [{ item, ownerUuid: null }];
-  const seen = new Set();
+async function levelOneOwners(item, sel = {}, seen = new Set(), ownerUuid = null, depth = 0) {
+  const owners = [{ item, ownerUuid }];
+  if ( depth > 3 ) return owners;
   for ( const adv of advancementArray(item) ) {
-    if ( adv.type !== "ItemGrant" || (adv.level ?? 0) > 1 ) continue;
-    for ( const ref of Array.from(adv.configuration?.items ?? []) ) {
-      const uuid = typeof ref === "string" ? ref : ref?.uuid;
+    if ( (adv.level ?? 0) > 1 ) continue;
+    let refs = null;
+    if ( adv.type === "ItemGrant" ) {
+      refs = Array.from(adv.configuration?.items ?? []).map(r => typeof r === "string" ? r : r?.uuid);
+    } else if ( adv.type === "ItemChoice" ) {
+      refs = itemChoicePicks(adv, sel);
+    } else continue;
+    for ( const uuid of refs ) {
       if ( !uuid || seen.has(uuid) ) continue;
       seen.add(uuid);
-      const granted = await fromUuid(uuid).catch(() => null);
-      if ( granted && advancementArray(granted).length ) owners.push({ item: granted, ownerUuid: uuid });
+      const doc = await fromUuid(uuid).catch(() => null);
+      if ( doc && advancementArray(doc).length ) {
+        owners.push(...await levelOneOwners(doc, sel, seen, uuid, depth + 1));
+      }
     }
   }
   return owners;
+}
+
+/** The UUIDs the player picked for an ItemChoice advancement (stored under its bare id). */
+function itemChoicePicks(adv, sel) {
+  return Array.from(sel?.[adv._id] ?? []).map(p => typeof p === "string" ? p : p?.uuid).filter(Boolean);
 }
 
 /**
@@ -155,8 +172,8 @@ async function collectTakenTraitKeys(defs, advChoices) {
   const chosenBySelKey = new Map();
   for ( const d of defs ) {
     if ( !d.doc ) continue;
-    const owners = await levelOneOwners(d.doc);
     const bucket = advChoices[d.key] ?? {};
+    const owners = await levelOneOwners(d.doc, bucket);
     for ( const { item: owner } of owners ) {
       for ( const adv of advancementArray(owner) ) {
         if ( adv.type !== "Trait" || (adv.level ?? 0) > 1 ) continue;
@@ -178,7 +195,7 @@ async function collectTakenTraitKeys(defs, advChoices) {
 async function prepareRequirements(item, source, advChoices, crossTaken, spellAbilityHint) {
   const sel = advChoices[source] ?? (advChoices[source] = {});
   const reqs = [];
-  const owners = await levelOneOwners(item);
+  const owners = await levelOneOwners(item, sel);
 
   // Skills this source grants — the only valid options for an Expertise choice.
   const expertiseSkillPool = proficientSkillKeys(owners, sel);
@@ -462,11 +479,12 @@ async function expandTraitPool(pool = []) {
 }
 
 /**
- * Expand a tool-only Trait pool into concrete pick options, fetching the specific tools of
- * each category (e.g. "tool:art:*" -> every Artisan's Tool) from the compendium. Returns the
- * options as `{key:"tool:<id>", label, img, uuid}` — dnd5e's Trait apply pops the last `:`
- * segment to reach `system.tools.<id>`, so the bare id key grants the proficiency correctly.
- * Returns null when the pool isn't a tool-category pool, so the generic expander handles it.
+ * Expand a tool-only Trait pool into concrete pick options from the compendium, handling both
+ * whole-category wildcards (e.g. "tool:art:*" -> every Artisan's Tool) and pools of specific
+ * named tools (e.g. the Crafter feat's eight "tool:art:carpenter"… keys -> just those eight).
+ * Returns the options as `{key:"tool:<id>", label, img, uuid}` — dnd5e's Trait apply pops the
+ * last `:` segment to reach `system.tools.<id>`, so the bare id key grants the proficiency
+ * correctly. Returns null when the pool isn't a tool pool, so the generic expander handles it.
  * @param {string[]} pool
  * @returns {Promise<{key:string,label:string,img?:string,uuid?:string}[]|null>}
  */
@@ -475,26 +493,30 @@ async function expandToolPool(pool) {
 
   const out = [];
   const seen = new Set();
-  let expandedCategory = false;
+  const push = opt => { if ( !seen.has(opt.key) ) { seen.add(opt.key); out.push(opt); } };
   for ( const entry of pool ) {
+    const parts = entry.split(":");
+    const wildcard = parts[parts.length - 1] === "*";
     const category = toolPoolCategory(entry);
-    if ( category ) {
-      expandedCategory = true;
+    if ( category && (wildcard || parts.length <= 2) ) {
+      // Whole-category pick ("tool:art:*" or bare "tool:art") — every tool in the category.
       for ( const tool of await toolChoices(category) ) {
-        if ( !tool.baseItem ) continue;
-        const key = `tool:${tool.baseItem}`;
-        if ( seen.has(key) ) continue;
-        seen.add(key);
-        out.push({ key, label: tool.name, img: tool.img, uuid: tool.uuid });
+        if ( tool.baseItem ) push({ key: `tool:${tool.baseItem}`, label: tool.name, img: tool.img, uuid: tool.uuid });
       }
-    } else if ( entry.endsWith(":*") ) {
+    } else if ( category ) {
+      // A specific tool named within its category ("tool:art:carpenter") — just that one,
+      // keyed by its base item so it matches the category-expansion form and applies cleanly.
+      const id = parts[parts.length - 1];
+      const match = (await toolChoices(category)).find(to => to.baseItem === id);
+      if ( match ) push({ key: `tool:${match.baseItem}`, label: match.name, img: match.img, uuid: match.uuid });
+      else push({ key: `tool:${id}`, label: traitKeyLabel(`tool:${id}`) });
+    } else if ( wildcard ) {
       return null;                          // uncategorisable wildcard — defer to the generic expander
-    } else if ( !seen.has(entry) ) {
-      seen.add(entry);
-      out.push({ key: entry, label: traitKeyLabel(entry) });
+    } else {
+      push({ key: entry, label: traitKeyLabel(entry) });
     }
   }
-  return expandedCategory && out.length ? out : null;
+  return out.length ? out : null;
 }
 
 /** The pickable tool category in a pool entry ("tool:art:*" -> "art"), or null if specific. */

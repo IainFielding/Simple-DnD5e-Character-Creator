@@ -1,0 +1,65 @@
+<section class="creator-equipment">
+  {{!-- Rich dnd5e item tooltip for any element backed by a compendium uuid. --}}
+  {{#*inline "itemTip"}} data-tooltip="<section class='loading' data-uuid='{{uuid}}'><i class='fas fa-spinner fa-spin-pulse'></i></section>" data-tooltip-class="dnd5e2 dnd5e-tooltip item-tooltip themed theme-light"{{/inline}}
+
+  {{#if isEmpty}}
+  <div class="creator-pick-empty">
+    <i class="fa-solid fa-shield-halved"></i>
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.equipment.label"}}</h2>
+    <p>{{localize "sogrom-dnd5e-character-creator.step.equipment.none"}}</p>
+  </div>
+  {{else}}
+  <p class="creator-equipment-intro">{{localize "sogrom-dnd5e-character-creator.step.equipment.hint"}}</p>
+
+  <div class="creator-equipment-list">
+    {{#each sources}}
+    <section class="creator-equip-source" data-equip-source="{{key}}">
+      <header class="creator-equip-head">
+        <img class="creator-choice-source-img" src="{{img}}" alt="">
+        <h2>{{name}}</h2>
+      </header>
+
+      <div class="creator-equip-options">
+        {{#each options}}
+        <button type="button" class="creator-equip-tab {{#if isSelected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="equip-option"
+                data-equip-source="{{../key}}" data-index="{{index}}">
+          {{localize "sogrom-dnd5e-character-creator.equipment.option" label=label}}{{#if isGold}} — {{wealth}} GP{{/if}}
+        </button>
+        {{/each}}
+      </div>
+
+      {{#if isGold}}
+      <p class="creator-equip-gold"><i class="fa-solid fa-coins"></i> {{wealth}} GP</p>
+      {{else}}
+      <ul class="creator-equip-rows">
+        {{#each rows}}
+        {{#if isOrGroup}}
+        <li class="creator-equip-orgroup">
+          {{#if label}}<span class="creator-equip-orlabel">{{label}}</span>{{/if}}
+          <div class="creator-equip-orpills">
+            {{#each options}}
+            <button type="button" class="creator-equip-pill {{#if isSelected}}is-selected{{/if}}"
+                    data-action="stepAction" data-step-action="equip-or"
+                    data-equip-source="{{../../key}}" data-group="{{../_id}}" data-option="{{_id}}"
+                    {{#if uuid}}{{> itemTip uuid=uuid}}{{/if}}>
+              {{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}{{#if count}} ×{{count}}{{/if}}
+            </button>
+            {{/each}}
+          </div>
+        </li>
+        {{else}}
+        <li class="creator-equip-row"{{#if uuid}}{{> itemTip uuid=uuid}}{{/if}}>
+          {{#if img}}<img src="{{img}}" alt="">{{/if}}
+          <span>{{name}}{{#if count}} ×{{count}}{{/if}}</span>
+        </li>
+        {{/if}}
+        {{/each}}
+      </ul>
+      {{#if currency}}<p class="creator-equip-gold"><i class="fa-solid fa-coins"></i> {{currency}}</p>{{/if}}
+      {{/if}}
+    </section>
+    {{/each}}
+  </div>
+  {{/if}}
+</section>
