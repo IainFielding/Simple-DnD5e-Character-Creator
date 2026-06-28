@@ -106,6 +106,8 @@ function scaleCount(doc, classId, kind, fallback) {
     if ( (adv.type ?? adv.constructor?.typeName) !== "ScaleValue" ) continue;
     const title = (adv.title ?? adv.configuration?.identifier ?? "").toLowerCase();
     const isCantrip = title.includes("cantrip");
+    // Match the scale to the count we want: a "cantrip" scale for cantrips; for spells, a
+    // "spells known" scale that is neither the cantrip scale nor a spell-*slot* scale.
     if ( kind === "cantrip" && !isCantrip ) continue;
     if ( kind === "spell" && (isCantrip || !title.includes("spell") || title.includes("slot")) ) continue;
     const scale = adv.configuration?.scale ?? {};

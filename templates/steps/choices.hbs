@@ -23,39 +23,38 @@
     <p>{{localize "sogrom-dnd5e-character-creator.step.choices.none"}}</p>
   </div>
   {{else}}
-  {{#if hasTabs}}
-  <nav class="creator-choice-tabs">
-    {{#each tabs}}
-    <button type="button" class="creator-choice-tab {{#if active}}is-active{{/if}}"
-            data-action="stepAction" data-step-action="choice-tab" data-tab="{{key}}">
-      {{#if isEquipment}}<i class="fa-solid fa-sack-xmark creator-choice-tab-icon"></i>
-      {{else}}<img class="creator-choice-tab-img" src="{{img}}" alt="">{{/if}}
-      <span class="creator-choice-tab-label">{{name}}</span>
-      {{#if complete}}<i class="creator-choice-tab-badge is-complete fa-solid fa-check"></i>
-      {{else}}{{#if total}}<span class="creator-choice-tab-badge">{{done}}/{{total}}</span>{{/if}}{{/if}}
-    </button>
-    {{/each}}
-  </nav>
+
+  {{!-- Overall progress across every gating decision (equipment excluded). --}}
+  {{#if total}}
+  <div class="creator-choices-progress">
+    <div class="creator-choices-progress-track">
+      <div class="creator-choices-progress-bar {{#if allDone}}is-full{{/if}}" style="width: {{pct}}%"></div>
+    </div>
+    <span class="creator-choices-progress-label">{{localize "sogrom-dnd5e-character-creator.step.choices.decisions" done=done total=total}}</span>
+  </div>
   {{/if}}
 
+  {{!-- One guided checklist: every decision is an accordion row. The next unfinished row is
+        expanded; completed rows collapse to a chip + tick. Equipment rows are optional. --}}
   <div class="creator-choices-list">
+    {{#each decisions}}
+    <div class="creator-decision {{#if complete}}is-complete{{/if}} {{#if open}}is-open{{/if}}">
+      <button type="button" class="creator-decision-head"
+              data-action="stepAction" data-step-action="toggle-decision" data-decision="{{key}}"
+              aria-expanded="{{#if open}}true{{else}}false{{/if}}">
+        <span class="creator-decision-status">
+          {{#if complete}}<i class="fa-solid fa-check"></i>{{else}}<i class="fa-regular fa-circle"></i>{{/if}}
+        </span>
+        <span class="creator-decision-chip">
+          {{#if sourceImg}}<img src="{{sourceImg}}" alt="">{{/if}}
+          <span class="creator-decision-chip-name">{{sourceName}}</span>
+        </span>
+        <span class="creator-decision-title">{{title}}</span>
+        {{#if statusLabel}}<span class="creator-decision-count {{#if complete}}is-complete{{/if}}">{{statusLabel}}</span>{{/if}}
+        <i class="creator-decision-chevron fa-solid fa-chevron-down" aria-hidden="true"></i>
+      </button>
 
-    {{#each sources}}
-    <section class="creator-choice-source {{#unless active}}is-hidden{{/unless}}" data-choice-tab="{{key}}">
-      <header class="creator-choice-source-head">
-        <img class="creator-choice-source-img" src="{{img}}" alt="">
-        <h2>{{name}}</h2>
-      </header>
-
-      {{#each requirements}}
-      <div class="creator-choice {{#if complete}}is-complete{{/if}}">
-        <div class="creator-choice-head">
-          <h3>{{title}}</h3>
-          <span class="creator-choice-count {{#if complete}}is-complete{{/if}}">
-            {{#if showProgress}}{{chosenCount}}/{{count}}{{else}}{{countLabel}}{{/if}}
-          </span>
-        </div>
-
+      <div class="creator-decision-body" {{#unless open}}hidden{{/unless}}>
         {{#if hint}}<div class="creator-choice-hint">{{{hint}}}</div>{{/if}}
         {{#if emptyNote}}<p class="creator-choice-empty">{{emptyNote}}</p>{{/if}}
 
@@ -74,68 +73,8 @@
           </div>
         {{/if}}
       </div>
-      {{/each}}
-    </section>
+    </div>
     {{/each}}
-
-    {{#if hasEquipment}}
-    <section class="creator-choice-source creator-equipment {{#unless equipActive}}is-hidden{{/unless}}" data-choice-tab="equipment">
-      <header class="creator-choice-source-head">
-        <i class="fa-solid fa-sack-xmark creator-choice-source-icon"></i>
-        <h2>{{localize "sogrom-dnd5e-character-creator.equipment.heading"}}</h2>
-      </header>
-
-      {{#each equipment}}
-      <div class="creator-equip-source" data-equip-source="{{key}}">
-        <div class="creator-equip-head">
-          <img class="creator-choice-source-img" src="{{img}}" alt="">
-          <h3>{{name}}</h3>
-        </div>
-
-        <div class="creator-equip-options">
-          {{#each options}}
-          <button type="button" class="creator-equip-tab {{#if isSelected}}is-selected{{/if}}"
-                  data-action="stepAction" data-step-action="equip-option"
-                  data-equip-source="{{../key}}" data-index="{{index}}">
-            {{localize "sogrom-dnd5e-character-creator.equipment.option" label=label}}{{#if isGold}} — {{wealth}} GP{{/if}}
-          </button>
-          {{/each}}
-        </div>
-
-        {{#if isGold}}
-        <p class="creator-equip-gold"><i class="fa-solid fa-coins"></i> {{wealth}} GP</p>
-        {{else}}
-        <ul class="creator-equip-rows">
-          {{#each rows}}
-          {{#if isOrGroup}}
-          <li class="creator-equip-orgroup">
-            {{#if label}}<span class="creator-equip-orlabel">{{label}}</span>{{/if}}
-            <div class="creator-equip-orpills">
-              {{#each options}}
-              <button type="button" class="creator-equip-pill {{#if isSelected}}is-selected{{/if}}"
-                      data-action="stepAction" data-step-action="equip-or"
-                      data-equip-source="{{../../key}}" data-group="{{../_id}}" data-option="{{_id}}"
-                      {{#if uuid}}{{> itemTip uuid=uuid}}{{/if}}>
-                {{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}{{#if count}} ×{{count}}{{/if}}
-              </button>
-              {{/each}}
-            </div>
-          </li>
-          {{else}}
-          <li class="creator-equip-row"{{#if uuid}}{{> itemTip uuid=uuid}}{{/if}}>
-            {{#if img}}<img src="{{img}}" alt="">{{/if}}
-            <span>{{name}}{{#if count}} ×{{count}}{{/if}}</span>
-          </li>
-          {{/if}}
-          {{/each}}
-        </ul>
-        {{#if currency}}<p class="creator-equip-gold"><i class="fa-solid fa-coins"></i> {{currency}}</p>{{/if}}
-        {{/if}}
-      </div>
-      {{/each}}
-    </section>
-    {{/if}}
-
   </div>
   {{/if}}
 </section>

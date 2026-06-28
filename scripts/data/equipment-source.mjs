@@ -392,7 +392,17 @@ async function createItems(uuid, qty = 1) {
 /*  Tree-shape utilities                        */
 /* -------------------------------------------- */
 
-/** Plain tree node from a live EquipmentEntryData instance (its `.children` getter). */
+/**
+ * Plain tree node from a live EquipmentEntryData instance (its `.children` getter).
+ *
+ * Every tree walker below ({@link flattenTree}, {@link collectTree}, {@link seedOrSelections})
+ * branches on these five node types:
+ *   • AND      — a bundle: take all children.
+ *   • OR       — a choice: take one child branch (the player's `orSelections` picks which).
+ *   • linked   — a concrete compendium item (may host a spellcasting-focus sub-choice).
+ *   • tool     — a tool proficiency, possibly a "pick one from this category" sub-choice.
+ *   • currency — a coin amount (e.g. 15 GP).
+ */
 function buildNode(entry) {
   return {
     _id: entry._id, type: entry.type,

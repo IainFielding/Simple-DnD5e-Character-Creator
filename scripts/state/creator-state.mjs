@@ -52,17 +52,24 @@ export class CreatorState {
   advChoices = { class: {}, background: {}, species: {} };
 
   /**
-   * Transient Choices-step UI: which origin tab is shown ("class"|"background"|"species"|
-   * "equipment"). Not persisted; resolved against the available tabs on each render, so a
-   * stale value (e.g. after an origin change drops its choices) falls back to the first tab.
+   * Transient Choices-step UI: which decision row of the guided checklist is expanded.
+   * `undefined` = auto (open the first unfinished decision); a decision key = that row;
+   * `""` = the player collapsed everything. Not persisted; resolved against the available
+   * decisions on each render, so a stale key falls back to the first unfinished decision.
    */
-  choiceTab = null;
+  openDecision = undefined;
 
   /** Starting-equipment selection per source: { selectedOption, orSelections }. */
   equipment = {
     class: { selectedOption: 0, orSelections: {} },
     background: { selectedOption: 0, orSelections: {} }
   };
+
+  /**
+   * Transient: set once the player has opened the (optional) Equipment step, so its rail tick
+   * stays off until then rather than reading complete from the start. Not persisted.
+   */
+  equipmentVisited = false;
 
   /** Transient Spells-step UI: which tab is shown and which spell is focused. Not persisted. */
   spellTab = "cantrips";

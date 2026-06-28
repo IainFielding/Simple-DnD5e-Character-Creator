@@ -132,7 +132,13 @@
       "choices": {
         "label": "Choices",
         "none": "Your chosen class, background, and species need no further decisions.",
-        "progress": "{done}/{total} made"
+        "progress": "{done}/{total} made",
+        "decisions": "{done} / {total} decisions"
+      },
+      "equipment": {
+        "label": "Equipment",
+        "hint": "Choose the starting gear granted by your class and background.",
+        "none": "Your chosen class and background grant no starting-equipment choices."
       },
       "review": {
         "label": "Review",
