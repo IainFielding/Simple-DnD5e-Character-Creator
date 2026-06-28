@@ -47,7 +47,7 @@ Choose your character's people — their traits, features, and any special abili
 **4. Details**
 Give your character a name, a portrait, and a token. Want to go further? Add their personality, appearance, alignment, and backstory — or leave it for later. It's entirely optional.
 
-![Adding character details](docs/screenshots/details.png)
+![Adding character details](docs\screenshots\details.png)
 
 **5. Spells**
 If your class can cast spells, this is where you pick your cantrips and starting spells. Each spell shows its full description so you know exactly what you're taking. Non-casters skip this step automatically.
@@ -61,6 +61,7 @@ Some classes, backgrounds, and species let you make extra decisions — a bonus 
 
 **7. Equipment**
 Kit out your hero with the starting gear your class and background provide. Pick a ready-made bundle of weapons, armour, and tools — swapping individual items where the rules let you — or take a pouch of gold to shop with later. There's always a sensible default, so you can fine-tune your loadout or breeze straight past it.
+![Starting Equipment](docs/screenshots/equipment.png)
 
 **8. Review**
 A final summary of everything you've built. Happy with it? Click **Create Character** and your new hero is ready to play.
