@@ -57,12 +57,17 @@ If your class can cast spells, this is where you pick your cantrips and starting
 **6. Choices**
 Some classes, backgrounds, and species let you make extra decisions — a bonus skill, a tool proficiency, a fighting style. Any remaining choices are gathered here in one tidy list so nothing slips through the cracks.
 
-**7. Review**
+![Making your choices](docs/screenshots/choices.png)
+
+**7. Equipment**
+Kit out your hero with the starting gear your class and background provide. Pick a ready-made bundle of weapons, armour, and tools — swapping individual items where the rules let you — or take a pouch of gold to shop with later. There's always a sensible default, so you can fine-tune your loadout or breeze straight past it.
+
+**8. Review**
 A final summary of everything you've built. Happy with it? Click **Create Character** and your new hero is ready to play.
 
 ![Reviewing the finished character](docs/screenshots/review.png)
 
-**8. Use your Actor**
+**9. Use your Actor**
 That's it — your character appears in your world, fully built and ready for adventure.
 
 ![Actor](docs/screenshots/actor.png)

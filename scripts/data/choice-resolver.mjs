@@ -240,6 +240,8 @@ async function parseAdvancementChoice(adv, ctx) {
   let level = adv.level ?? 0;
   if ( level > 1 || adv.classRestriction === "secondary" ) return;
 
+  // Size: a species offering a choice of token size (e.g. Small or Medium). A single
+  // fixed size is not a decision, so only pools of more than one size become a requirement.
   if ( adv.type === "Size" ) {
     const sizes = Array.from(adv.configuration?.sizes ?? []);
     if ( sizes.length > 1 ) {
@@ -252,6 +254,8 @@ async function parseAdvancementChoice(adv, ctx) {
     return;
   }
 
+  // Trait: proficiency / language / expertise picks. One advancement can hold several
+  // independent "choose N from this pool" groups, so each `choices` entry becomes its own row.
   if ( adv.type === "Trait" ) {
     const mode = adv.configuration?.mode || "default";
     const isExpertise = mode === "expertise";
@@ -295,6 +299,8 @@ async function parseAdvancementChoice(adv, ctx) {
     return;
   }
 
+  // ItemGrant: items handed out automatically (no pick to make) — except when a granted spell
+  // lets the player choose which ability casts it, which is the only decision we surface here.
   if ( adv.type === "ItemGrant" ) {
     const abilities = Array.from(adv.configuration?.spell?.ability ?? []);
     if ( abilities.length > 1 ) {
@@ -327,6 +333,7 @@ async function parseAdvancementChoice(adv, ctx) {
     return;
   }
 
+  // ItemChoice: choose N items/features from a pool (e.g. a feat, or a fighting style).
   if ( adv.type === "ItemChoice" ) {
     const cfg = adv.configuration ?? {};
     // ItemChoice levels live in `choices` keyed by character level; take the lowest ≤ 1.

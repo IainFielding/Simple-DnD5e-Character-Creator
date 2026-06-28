@@ -73,6 +73,8 @@ export async function runAdvancementManager(actor, items, skipAdvIds = new Set()
       manager.createLevelChangeSteps(item, 1);
       continue;
     }
+    // Species and background aren't levelled, so push their advancement flows by hand —
+    // both the level-0 grants and any tagged at level 1 (the only levels a new character has).
     for ( let l = 0; l < 2; l++ ) {
       for ( const flow of manager.constructor.flowsForLevel(item, l) ) {
         // The background ability increase is baked into the actor directly; skip its step.
