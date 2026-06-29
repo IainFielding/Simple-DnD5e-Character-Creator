@@ -84,10 +84,16 @@ export function warmSources() {
     const total = origins + classes.length + origins + (classes.length + backgrounds.length);
     let done = 0;
     const tick = () => emit(total ? Math.round((++done / total) * 100) : 100);
-    await source.warmAll(tick);
-    await spells.warmClasses(classes.map(c => c.uuid), tick);
-    await warmChoices(source, tick);
-    await equipment.warmAll(source, tick);
+    // The four phases populate separate memo caches and only depend on the index loaded
+    // above, so they run concurrently rather than back to back. Each caps its own in-flight
+    // reads (forEachLimit), and the shared `done` counter still totals every tick, so the
+    // bar advances smoothly to 100 however the phases interleave.
+    await Promise.all([
+      source.warmAll(tick),
+      spells.warmClasses(classes.map(c => c.uuid), tick),
+      warmChoices(source, tick),
+      equipment.warmAll(source, tick)
+    ]);
     emit(100);
     return cache;
   })();
