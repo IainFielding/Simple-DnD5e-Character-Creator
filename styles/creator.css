@@ -14,9 +14,11 @@
    "currently selected" state and engraved edges so selection always stands out from
    ordinary controls. Headings use Cinzel (carved-caps look), body text uses Spectral.
    All of these values come from the CSS custom properties (--cc-*) defined next, so
-   change a colour there and it updates everywhere. */
+   change a colour there and it updates everywhere.
 
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+   Cinzel and Spectral are self-hosted — their @font-face rules live in fonts.css,
+   loaded ahead of this file via module.json so the creator renders correctly
+   offline / on a LAN with no Google Fonts round-trip. */
 
 .sogrom-creator {
   /* Palette — Arcane Midnight (violet UI accent, gold reserved for selection). */
@@ -27,7 +29,9 @@
   /* Stronger hairline for emphasized edges / engraved separators. */
   --cc-line-2: #3c3950;
   --cc-text: #bfbccb;
-  --cc-muted: #807d92;
+  /* Secondary text. Lifted from the old #807d92 so it clears WCAG AA (4.5:1) even on
+     the darkest raised surface (--cc-panel-2), where the previous value fell to ~4.25. */
+  --cc-muted: #8f8ca3;
   /* Brightest text, for headings and active labels. */
   --cc-bright: #e7e5f0;
   --cc-accent: #9180f2;
@@ -40,9 +44,27 @@
   /* Selection highlight — gold, distinct from the violet UI accent. */
   --cc-select: #c8a24e;
   --cc-select-soft: rgba(200, 162, 78, 0.16);
+  /* Single semantic red for destructive actions and required-field markers, so the
+     two reds that used to drift (the asterisk and the danger button) stay in sync. */
+  --cc-danger: #d9586a;
 
   /* Subtle engraved-panel sheen reused across raised surfaces. */
   --cc-panel-grad: linear-gradient(180deg, #1a1826, #131220);
+
+  /* Haptic depth — a faint top-edge highlight stamped into raised surfaces so they
+     read as lit from above (machined) rather than printed flat. */
+  --cc-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* Double-bezel — a focal card's own border is the inner core; these layered
+     shadows wrap it in a concentric tray (4px body + 1px edge) so it reads as a
+     glass plate seated in a machined frame. Applied to focal cards only, not the
+     dense scan lists. The element keeps its own border + (distinct) background. */
+  --cc-bezel:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 0 4px var(--cc-panel),
+    0 0 0 5px var(--cc-line-2),
+    0 12px 28px -18px rgba(0, 0, 0, 0.75);
+  /* Spring easing reused for all motion — heavy, physical, never linear/ease-in-out. */
+  --cc-ease: cubic-bezier(0.32, 0.72, 0, 1);
 
   --cc-font-heading: 'Cinzel', 'Palatino Linotype', Georgia, serif;
   --cc-font-body: 'Spectral', 'Palatino Linotype', Georgia, serif;
@@ -52,6 +74,30 @@
 }
 
 .sogrom-creator * { box-sizing: border-box; }
+
+/* Placeholder text — pin it to the muted token (which clears AA) at full opacity so
+   it doesn't inherit the browser default grey or Firefox's reduced-opacity placeholder,
+   either of which would drop below the contrast floor. */
+.sogrom-creator ::placeholder { color: var(--cc-muted); opacity: 1; }
+
+/* Keyboard focus ring — one visible, consistent indicator for every interactive
+   control so keyboard and screen-magnifier users can always see where they are.
+   Uses :focus-visible (not :focus) so it shows on Tab/arrow navigation but stays
+   out of the way on mouse clicks. Outline (not box-shadow) so it never collides
+   with the tinted shadows on primary/finish buttons and follows each control's
+   own corner radius. The [tabindex] arm of :is() also lifts this rule's
+   specificity above the per-control :focus rules later in the file. */
+.sogrom-creator :is(a, button, input, select, textarea, [tabindex], [data-action]):focus-visible {
+  outline: 2px solid var(--cc-accent);
+  outline-offset: 2px;
+}
+/* Already-selected rows/cards/options carry their own gold ring (border + glow),
+   so a second violet focus outline around them reads as a clashing double ring.
+   Drop the outline here and let the gold selection ring serve as the focus cue too.
+   Comes after the rule above (same specificity) so it wins by source order. */
+.sogrom-creator .is-selected:focus-visible {
+  outline: none;
+}
 
 /* Inscriptional caps for every heading inside the creator. Specific rules later
    in the file (gold section eyebrows, aside titles) still override the colour;
@@ -255,9 +301,11 @@
   color: var(--cc-muted);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.25s var(--cc-ease), color 0.25s var(--cc-ease),
+    border-color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
 }
 .creator-rail-link:hover:not(:disabled) { background: var(--cc-panel); color: var(--cc-text); }
+.creator-rail-link:active:not(:disabled) { transform: scale(0.97); }
 .creator-rail-link:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .creator-rail-step.is-active .creator-rail-link {
@@ -383,16 +431,20 @@
   color: var(--cc-text);
   font-size: 0.95rem;
   cursor: pointer;
-  transition: filter 0.15s, background 0.15s;
+  box-shadow: var(--cc-sheen);
+  transition: filter 0.25s var(--cc-ease), background 0.25s var(--cc-ease),
+    border-color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
 }
 .creator-btn:hover:not(:disabled) { filter: brightness(1.15); border-color: var(--cc-line-2); }
+/* Physical press — the whole button gives slightly when struck. */
+.creator-btn:active:not(:disabled) { transform: scale(0.98); }
 .creator-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .creator-btn-primary {
   background: linear-gradient(180deg, #9d8cf5, #7d6ae6);
   border-color: var(--cc-accent);
   color: #fff;
   letter-spacing: 0.02em;
-  box-shadow: 0 0 0 1px var(--cc-accent-soft), 0 4px 14px var(--cc-accent-glow);
+  box-shadow: var(--cc-sheen), 0 0 0 1px var(--cc-accent-soft), 0 4px 14px var(--cc-accent-glow);
 }
 .creator-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
 /* Finish/Create — the climactic action gets gold instead of the per-step violet,
@@ -402,10 +454,63 @@
   border-color: var(--cc-gold);
   color: #2a200a;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
-  box-shadow: 0 0 0 1px var(--cc-gold-glow), 0 4px 14px var(--cc-gold-glow);
+  box-shadow: var(--cc-sheen), 0 0 0 1px var(--cc-gold-glow), 0 4px 14px var(--cc-gold-glow);
 }
 .creator-btn-finish:hover:not(:disabled) { filter: brightness(1.06); }
-.creator-btn-ghost { background: transparent; }
+.creator-btn-ghost { background: transparent; box-shadow: none; }
+
+/* Button-in-Button trailing/leading icon: the arrow is never naked — it sits in its
+   own recessed circle flush with the button's inner padding, and translates with
+   kinetic tension on hover so the control feels alive when pressed. */
+.creator-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  font-size: 0.8rem;
+  transition: transform 0.25s var(--cc-ease), background 0.25s var(--cc-ease);
+}
+/* Recess the icon circle against the dark ghost/secondary buttons, where a light
+   wash would float; on the filled primary/finish buttons the light wash reads right. */
+.creator-btn:not(.creator-btn-primary) .creator-btn-icon { background: rgba(0, 0, 0, 0.28); }
+.creator-btn--trail { padding-right: 0.5rem; }
+.creator-btn--lead { padding-left: 0.5rem; }
+.creator-btn--trail:hover:not(:disabled) .creator-btn-icon {
+  transform: translate(2px, -1px) scale(1.05);
+  background: rgba(255, 255, 255, 0.2);
+}
+.creator-btn--lead:hover:not(:disabled) .creator-btn-icon {
+  transform: translate(-2px, -1px) scale(1.05);
+}
+/* Honour reduced-motion: keep the depth/colour cues but drop every transform so
+   nothing slides, lifts, or springs. */
+@media (prefers-reduced-motion: reduce) {
+  .creator-btn,
+  .creator-btn-icon,
+  .creator-card,
+  .creator-pickrow,
+  .creator-pool-chip,
+  .creator-rail-link,
+  .creator-tab,
+  .creator-spell-tab,
+  .creator-choice-opt { transition: none; }
+  .creator-btn:active:not(:disabled),
+  .creator-btn--trail:hover:not(:disabled) .creator-btn-icon,
+  .creator-btn--lead:hover:not(:disabled) .creator-btn-icon,
+  .creator-card:hover,
+  .creator-card:active,
+  .creator-pickrow:hover,
+  .creator-pickrow:active,
+  .creator-pool-chip:hover,
+  .creator-rail-link:active:not(:disabled),
+  .creator-tab:active,
+  .creator-spell-tab:active,
+  .creator-choice-opt:active:not(.is-disabled) { transform: none; }
+}
 
 /* ---------------------------------------------- Loading
 
@@ -480,9 +585,12 @@
   border-radius: 12px;
   color: var(--cc-text);
   cursor: pointer;
-  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  box-shadow: var(--cc-sheen);
+  transition: transform 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    background 0.25s var(--cc-ease), box-shadow 0.25s var(--cc-ease);
 }
-.creator-card:hover { transform: translateY(-2px); border-color: var(--cc-select); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); }
+.creator-card:hover { transform: translateY(-3px); border-color: var(--cc-select); box-shadow: var(--cc-sheen), 0 8px 18px rgba(0, 0, 0, 0.5); }
+.creator-card:active { transform: translateY(-1px) scale(0.985); }
 .creator-card.is-selected {
   border-color: var(--cc-select);
   background: var(--cc-select-soft);
@@ -531,10 +639,12 @@
   margin-top: 1.5rem;
   padding: 1.25rem 1.5rem;
   background: var(--cc-panel-grad);
-  border: 1px solid var(--cc-line);
-  border-left: 3px solid var(--cc-accent);
+  /* Full accent-tinted hairline rather than a heavy left stripe: the violet
+     identity reads from the whole edge plus a symmetric glow, so the card stays
+     framed evenly instead of leaning on a one-sided accent bar. */
+  border: 1px solid color-mix(in srgb, var(--cc-accent) 38%, var(--cc-line));
   border-radius: 12px;
-  box-shadow: -8px 0 18px -14px var(--cc-accent-glow);
+  box-shadow: var(--cc-bezel), 0 0 18px -12px var(--cc-accent-glow);
 }
 .creator-detail-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
 .creator-detail-head h2 { margin: 0; border: none; font-size: 1.35rem; letter-spacing: 0.04em; }
@@ -688,9 +798,12 @@
   color: var(--cc-text);
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s, border-color 0.12s;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    transform 0.25s var(--cc-ease);
 }
-.creator-pickrow:hover { border-color: var(--cc-select); }
+.creator-pickrow:hover { border-color: var(--cc-select); transform: translateX(2px); }
+.creator-pickrow:active { transform: scale(0.99); }
 .creator-pickrow.is-selected {
   border-color: var(--cc-select);
   background: var(--cc-select-soft);
@@ -722,8 +835,10 @@
   min-height: 0;
   overflow-y: auto;
 }
-/* In this layout the detail panel owns the column rather than sitting beneath a grid. */
-.creator-pick-desc .creator-detail { margin-top: 0; }
+/* In this layout the detail panel owns the column rather than sitting beneath a grid.
+   The small inline margin leaves room for the bezel's outer tray ring so it doesn't
+   spill past the scrolling column and trip a horizontal scrollbar. */
+.creator-pick-desc .creator-detail { margin: 1px 6px 6px; }
 
 /* Placeholder shown before anything is picked. */
 .creator-pick-empty {
@@ -858,7 +973,12 @@
   border-radius: 999px;
   color: var(--cc-muted);
   cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
 }
+.creator-tab:hover:not(.is-active) { border-color: var(--cc-select); color: var(--cc-text); }
+.creator-tab:active { transform: scale(0.97); }
 .creator-tab.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
 
 .creator-points { display: flex; align-items: baseline; justify-content: center; gap: 0.5rem; margin-bottom: 1rem; }
@@ -888,9 +1008,11 @@
   border-radius: 9px;
   font-variant-numeric: tabular-nums;
   cursor: grab;
-  transition: opacity 0.12s, border-color 0.12s;
+  box-shadow: var(--cc-sheen);
+  transition: opacity 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    transform 0.25s var(--cc-ease);
 }
-.creator-pool-chip:hover { border-color: var(--cc-select); }
+.creator-pool-chip:hover { border-color: var(--cc-select); transform: translateY(-2px); }
 .creator-pool-chip.is-dragging { opacity: 0.5; cursor: grabbing; }
 /* A value already assigned to an ability dims out, so the remaining pool reads at a glance. */
 .creator-pool-chip.is-used { opacity: 0.3; color: var(--cc-muted); }
@@ -908,6 +1030,8 @@
   background: var(--cc-panel);
   border: 1px solid var(--cc-line);
   border-radius: 10px;
+  box-shadow: var(--cc-sheen);
+  transition: border-color 0.25s var(--cc-ease), background 0.25s var(--cc-ease);
 }
 .creator-ability-row.is-assigned { border-color: var(--cc-select); }
 /* Highlight an ability row while a pooled score is dragged over it. */
@@ -971,12 +1095,14 @@
   align-items: center;
   gap: 0.6rem;
   padding: 1.25rem;
-  background: var(--cc-panel);
+  background: var(--cc-panel-grad);
   border: 1px solid var(--cc-line);
   border-radius: 12px;
+  box-shadow: var(--cc-bezel);
   text-align: center;
 }
-.creator-summary-card.is-empty { border-style: dashed; }
+/* An unfilled slot stays a flat dashed placeholder — no machined tray around nothing. */
+.creator-summary-card.is-empty { border-style: dashed; background: var(--cc-panel); box-shadow: none; }
 .creator-summary-kind { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cc-accent); }
 .creator-summary-img { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; }
 .creator-summary-name { font-weight: 600; }
@@ -1016,7 +1142,7 @@
   cursor: default;
 }
 
-.creator-btn-danger { background: #b5495b; border-color: #b5495b; color: #fff; }
+.creator-btn-danger { background: var(--cc-danger); border-color: var(--cc-danger); color: #fff; }
 
 /* ---------------------------------------------- Details step
 
@@ -1132,7 +1258,7 @@
 }
 .creator-token-tab:last-child { border-right: none; }
 .creator-token-tab:hover:not(.is-active) { background: var(--cc-select-soft); color: var(--cc-text); }
-.creator-token-tab.is-active { background: var(--cc-gold); color: #1c1408; }
+.creator-token-tab.is-active { background: var(--cc-select); color: #1c1408; }
 
 .creator-setting-row {
   display: flex;
@@ -1210,10 +1336,11 @@
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 .creator-name-roll:hover { color: var(--cc-bg, #1b1b1f); background: var(--cc-gold); }
-/* Drop the click/focus box (outline + glow) — the hover colour change is feedback enough.
-   Scoped under .creator-details to outrank Foundry core's :focus-visible outline. */
-.creator-details .creator-name-roll:focus,
-.creator-details .creator-name-roll:focus-visible,
+/* Drop the click/focus box on pointer interaction (this also outranks Foundry
+   core's :focus outline) — the hover colour change is feedback enough. The
+   :not(:focus-visible) guard means keyboard focus still gets the shared accent
+   ring; only mouse-driven focus is stripped. */
+.creator-details .creator-name-roll:focus:not(:focus-visible),
 .creator-details .creator-name-roll:active { outline: none; box-shadow: none; }
 /* The options caret: a quieter sibling to the dice — narrower, muted until used. */
 .creator-name-opts { width: 1.8rem; font-size: 0.85rem; color: var(--cc-muted); border-color: var(--cc-muted); }
@@ -1302,7 +1429,7 @@
   color: var(--cc-text);
   background: var(--cc-panel);
 }
-.creator-required { color: #e05555; }
+.creator-required { color: var(--cc-danger); }
 
 .creator-detail-optional {
   margin: 0;
@@ -1318,10 +1445,13 @@
 .creator-detail-textwide { width: 100%; }
 .creator-detail-field { display: flex; flex-direction: column; gap: 0.3rem; }
 .creator-detail-field label {
-  font-size: 0.68rem;
+  /* These are read on every pass through the form, so they sit at the legible end of
+     the engraved-caps scale (0.74rem) rather than the 0.66–0.68rem floor used for
+     one-off dividers and tags elsewhere. */
+  font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--cc-muted);
 }
 .creator-details :is(input, textarea) {
@@ -1348,6 +1478,9 @@
    but adds tabs to switch between spell levels, a running tally of chosen spells
    across the top, and selected/disabled/at-limit states on the spell rows. */
 
+/* Spell-level tabs are a view switch (cantrips vs 1st-level), so they share the
+   method-tab recipe: muted pill at rest, gold when active — the one "currently
+   here" colour used by every view-switch tab in the creator. */
 .creator-spell-tabs { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 .creator-spell-tab {
   flex: 1;
@@ -1355,16 +1488,24 @@
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 0.5rem;
-  background: var(--cc-panel-2);
+  padding: 0.55rem 0.9rem;
+  background: var(--cc-panel);
   border: 1px solid var(--cc-line);
-  border-radius: 8px;
+  border-radius: 999px;
   color: var(--cc-muted);
   cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
 }
-.creator-spell-tab.is-active { border-color: var(--cc-accent); color: var(--cc-text); background: var(--cc-accent-soft); }
+.creator-spell-tab:hover:not(.is-active) { border-color: var(--cc-select); color: var(--cc-text); }
+.creator-spell-tab:active { transform: scale(0.97); }
+.creator-spell-tab.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
 .creator-spell-count { font-variant-numeric: tabular-nums; font-size: 0.8rem; }
 .creator-spell-tab.is-full .creator-spell-count { color: var(--cc-good); }
+/* On the active (gold) tab the green "full" count would muddy against gold, so the
+   count follows the tab's own dark active text instead. */
+.creator-spell-tab.is-active .creator-spell-count { color: inherit; }
 .creator-pickrow.is-focused { border-color: var(--cc-accent); }
 .creator-pickrow.is-disabled { opacity: 0.4; cursor: not-allowed; }
 .creator-spell-meta { color: var(--cc-muted); font-size: 0.85rem; margin: 0.2rem 0 0; }
@@ -1473,6 +1614,8 @@
   border: 1px solid var(--cc-line);
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: var(--cc-sheen);
+  transition: border-color 0.25s var(--cc-ease), background 0.25s var(--cc-ease);
 }
 .creator-decision.is-open { border-color: var(--cc-select); }
 .creator-decision.is-complete:not(.is-open) { background: var(--cc-panel-2); }
@@ -1548,8 +1691,12 @@
   border-radius: 999px;
   color: var(--cc-text);
   cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    transform 0.25s var(--cc-ease);
 }
 .creator-choice-opt:hover:not(.is-disabled) { border-color: var(--cc-select); }
+.creator-choice-opt:active:not(.is-disabled) { transform: scale(0.96); }
 .creator-choice-opt.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
 .creator-choice-opt.is-disabled { opacity: 0.35; cursor: not-allowed; }
 .creator-choice-opt-img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
@@ -1570,12 +1717,14 @@
   inset: 0;
   background: linear-gradient(115deg, transparent 35%, rgba(255, 240, 200, 0.22) 50%, transparent 65%);
   transform: translateX(-130%);
-  animation: cc-recommend-shine 4.5s ease-in-out infinite;
+  /* Slow cadence: a brief sweep with a long rest between, so the suggested pick is
+     hinted at without a sliver of motion perpetually catching the eye. */
+  animation: cc-recommend-shine 9s ease-in-out infinite;
   pointer-events: none;
 }
 @keyframes cc-recommend-shine {
-  0%, 55% { transform: translateX(-130%); }
-  75%, 100% { transform: translateX(130%); }
+  0%, 80% { transform: translateX(-130%); }
+  92%, 100% { transform: translateX(130%); }
 }
 @media (prefers-reduced-motion: reduce) {
   .creator-choice-opt.is-recommended::after { animation: none; }
@@ -1651,7 +1800,8 @@
   padding: 1.25rem;
   border: 1px solid var(--cc-line);
   border-radius: 12px;
-  background: var(--cc-panel);
+  background: var(--cc-panel-grad);
+  box-shadow: var(--cc-bezel);
 }
 @media (max-width: 900px) {
   .creator-review-columns { grid-template-columns: 1fr; }
@@ -1696,6 +1846,12 @@
   color: var(--cc-gold);
 }
 .creator-review-origin.is-empty { border-top-style: dashed; }
+/* Empty origin column: flat dashed placeholder, no machined tray (matches summary slots). */
+.creator-review-columns .creator-review-block.is-empty {
+  border-style: dashed;
+  background: var(--cc-panel);
+  box-shadow: none;
+}
 .creator-review-origin-head h2.is-muted { color: var(--cc-muted); font-style: italic; font-weight: 400; }
 .creator-review-text p { color: var(--cc-text); line-height: 1.5; margin: 0 0 0.5rem; }
 .creator-review-spells { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }

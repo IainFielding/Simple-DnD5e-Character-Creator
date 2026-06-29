@@ -29,6 +29,7 @@
     "scripts/main.mjs"
   ],
   "styles": [
+    "styles/fonts.css",
     "styles/creator.css"
   ],
   "languages": [

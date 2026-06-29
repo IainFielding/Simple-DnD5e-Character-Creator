@@ -2,7 +2,8 @@
   <!-- Left column: portrait & token -->
   <div class="creator-details-media">
     <div class="creator-portrait-frame">
-      <img class="creator-portrait-img creator-portrait-img--photo" src="{{portrait}}" alt="">
+      <img class="creator-portrait-img creator-portrait-img--photo" src="{{portrait}}"
+           alt="{{localize "sogrom-dnd5e-character-creator.step.details.portrait"}}">
     </div>
     <button type="button" class="creator-portrait-btn" data-action="stepAction" data-step-action="portrait">
       <i class="fa-solid fa-image"></i> {{localize "sogrom-dnd5e-character-creator.step.details.changePortrait"}}
@@ -22,7 +23,8 @@
     </div>
 
     <div class="creator-portrait-frame">
-      <img class="creator-portrait-img creator-portrait-img--token" src="{{tokenImg}}" alt="">
+      <img class="creator-portrait-img creator-portrait-img--token" src="{{tokenImg}}"
+           alt="{{localize "sogrom-dnd5e-character-creator.step.details.token"}}">
     </div>
     {{#if onRing}}
     <button type="button" class="creator-portrait-btn" data-action="stepAction" data-step-action="tokenRingImg">
