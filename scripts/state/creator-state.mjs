@@ -39,6 +39,18 @@ export class CreatorState {
   tokenTab = "token";
 
   /**
+   * Transient Details-step UI: which name pool the random-name roller draws from —
+   * "any" (both), "male", or "female". Independent of the free-text gender field. Not persisted.
+   */
+  nameGender = "any";
+
+  /**
+   * Transient Details-step UI: which naming style the roller uses — "auto" to follow the
+   * chosen species, or an explicit style key (e.g. "elf") to override it. Not persisted.
+   */
+  nameStyle = "auto";
+
+  /**
    * Level-1 spell picks (spellcaster classes only), each `{uuid, id, name, img, level}`.
    * Cleared whenever the class selection changes — a spell list is class-specific.
    */
@@ -244,12 +256,14 @@ export class CreatorState {
       biography: d.biography?.value ?? ""
     };
 
-    // Portrait & prototype-token visuals.
-    const token = actor.prototypeToken ?? {};
-    if ( actor.img ) this.portrait = actor.img;
-    if ( token.texture?.src ) this.tokenImg = token.texture.src;
-    if ( token.ring?.subject?.texture ) this.tokenRingImg = token.ring.subject.texture;
-    this.tokenRingEnabled = !!token.ring?.enabled;
-    this.tokenLockRotation = !!token.lockRotation;
+    // Portrait & prototype-token visuals. Read each from the actor; if a value is
+    // absent or can't be read, keep the field default declared above (FALLBACK_IMG).
+    const read = fn => { try { return fn(); } catch { return undefined; } };
+    const token = read(() => actor.prototypeToken) ?? {};
+    this.portrait = read(() => actor.img) || this.portrait;
+    this.tokenImg = read(() => token.texture?.src) || this.tokenImg;
+    this.tokenRingImg = read(() => token.ring?.subject?.texture) || this.tokenRingImg;
+    this.tokenRingEnabled = !!read(() => token.ring?.enabled);
+    this.tokenLockRotation = !!read(() => token.lockRotation);
   }
 }

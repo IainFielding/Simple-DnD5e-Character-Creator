@@ -65,8 +65,44 @@
         {{localize "sogrom-dnd5e-character-creator.step.details.nameLabel"}}
         <span class="creator-required">*</span>
       </label>
-      <input id="creator-cc-name" type="text" data-step-change="detail" data-detail="name"
-             value="{{name}}" placeholder="{{namePlaceholder}}" autocomplete="off">
+      <div class="creator-name-row">
+        <input id="creator-cc-name" type="text" data-step-change="detail" data-detail="name"
+               value="{{name}}" placeholder="{{namePlaceholder}}" autocomplete="off">
+        <button type="button" class="creator-name-roll" data-action="stepAction" data-step-action="generateName"
+                title="{{localize "sogrom-dnd5e-character-creator.step.details.generateName"}}"
+                aria-label="{{localize "sogrom-dnd5e-character-creator.step.details.generateName"}}">
+          <i class="fa-solid fa-dice"></i>
+        </button>
+        <button type="button" class="creator-name-roll creator-name-opts" data-action="stepAction" data-step-action="nameOptions"
+                aria-haspopup="true" aria-expanded="false"
+                title="{{localize "sogrom-dnd5e-character-creator.step.details.nameOptions"}}"
+                aria-label="{{localize "sogrom-dnd5e-character-creator.step.details.nameOptions"}}">
+          <i class="fa-solid fa-caret-down"></i>
+        </button>
+
+        <div class="creator-name-pop" role="group"
+             aria-label="{{localize "sogrom-dnd5e-character-creator.step.details.nameOptions"}}">
+          <div class="creator-name-gender">
+            <span class="creator-name-gender-label">{{localize "sogrom-dnd5e-character-creator.step.details.nameGender.label"}}</span>
+            <div class="creator-name-gender-options">
+              {{#each nameGenders}}
+              <button type="button" class="creator-name-gender-opt {{#if active}}is-active{{/if}}"
+                      data-action="stepAction" data-step-action="nameGender" data-gender="{{key}}">
+                {{label}}
+              </button>
+              {{/each}}
+            </div>
+          </div>
+          <div class="creator-name-style">
+            <label class="creator-name-style-label" for="creator-cc-namestyle">{{localize "sogrom-dnd5e-character-creator.step.details.nameStyle.label"}}</label>
+            <select id="creator-cc-namestyle" class="creator-name-style-select" data-step-change="nameStyle">
+              {{#each nameStyles}}
+              <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </div>
+        </div>
+      </div>
     </div>
 
     <p class="creator-detail-optional">{{localize "sogrom-dnd5e-character-creator.step.details.optional"}}</p>

@@ -306,7 +306,11 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #dispatch(action, el) {
     const step = this.#activeStep;
-    if ( step?.handle ) await step.handle(action, el, this.#ctx());
+    // A handler may return false to signal it has updated the DOM itself and a full re-render
+    // should be skipped — used by the Details name roller, whose stage re-render would otherwise
+    // rebuild (and visibly flicker) the portrait/token images in the left-hand media column.
+    const handled = step?.handle ? await step.handle(action, el, this.#ctx()) : undefined;
+    if ( handled === false ) return;
     this.render();
   }
 
