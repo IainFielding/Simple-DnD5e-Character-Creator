@@ -15,16 +15,18 @@
   </div>
 
   <footer class="creator-stage-foot">
-    <button type="button" class="creator-btn" data-action="navBack" {{#unless nav.canBack}}disabled{{/unless}}>
-      <i class="fa-solid fa-arrow-left"></i> {{nav.backLabel}}
+    <button type="button" class="creator-btn creator-btn--lead" data-action="navBack" {{#unless nav.canBack}}disabled{{/unless}}>
+      <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
+      {{nav.backLabel}}
     </button>
     {{#if isReview}}
     <button type="button" class="creator-btn creator-btn-primary creator-btn-finish" data-action="finish" {{#unless canFinish}}disabled{{/unless}}>
       {{finishLabel}}
     </button>
     {{else}}
-    <button type="button" class="creator-btn creator-btn-primary" data-action="navNext" {{#unless nav.canNext}}disabled{{/unless}}>
-      {{nav.nextLabel}} <i class="fa-solid fa-arrow-right"></i>
+    <button type="button" class="creator-btn creator-btn-primary creator-btn--trail" data-action="navNext" {{#unless nav.canNext}}disabled{{/unless}}>
+      {{nav.nextLabel}}
+      <span class="creator-btn-icon"><i class="fa-solid fa-arrow-right"></i></span>
     </button>
     {{/if}}
   </footer>
