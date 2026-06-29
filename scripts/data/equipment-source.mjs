@@ -1,6 +1,7 @@
 import { t, log } from "../config.mjs";
 import { getEnabledPacks } from "./compendium-util.mjs";
 import { TOOL_IMG, toolCategoryKey, toolChoices } from "./tool-source.mjs";
+import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /**
  * Resolves a class's and background's starting equipment into selectable options, and
@@ -67,14 +68,14 @@ export class EquipmentSource {
       ...source.classes().map(c => ["class", c.uuid]),
       ...source.backgrounds().map(c => ["background", c.uuid])
     ];
-    for ( const [key, uuid] of origins ) {
+    await forEachLimit(origins, WARM_CONCURRENCY, async ([key, uuid]) => {
       try {
         await this.#buildFor(uuid, key, source);
       } catch ( err ) {
         log(`failed to warm equipment for ${uuid}`, err);
       }
       onTick?.();
-    }
+    });
   }
 
   async #buildFor(uuid, key, source) {

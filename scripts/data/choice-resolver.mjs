@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
+import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /**
  * Resolves the player-facing advancement *choices* a set of origin items presents at
@@ -92,23 +93,21 @@ export async function resolveChoices(state, source) {
  * @param {() => void} [onTick]  Invoked once per origin warmed, for progress reporting.
  */
 export async function warmChoices(source, onTick) {
-  const groups = [
-    ["class", source.classes()],
-    ["species", source.species()],
-    ["background", source.backgrounds()]
+  const origins = [
+    ...source.classes().map(c => ["class", c.uuid]),
+    ...source.species().map(c => ["species", c.uuid]),
+    ...source.backgrounds().map(c => ["background", c.uuid])
   ];
-  for ( const [key, cards] of groups ) {
+  await forEachLimit(origins, WARM_CONCURRENCY, async ([key, uuid]) => {
     const field = ORIGIN_FIELDS[key];
-    for ( const card of cards ) {
-      const state = { classUuid: null, speciesUuid: null, backgroundUuid: null, advChoices: {}, [field]: card.uuid };
-      try {
-        await resolveChoices(state, source);
-      } catch ( err ) {
-        log(`failed to warm choices for ${card.uuid}`, err);
-      }
-      onTick?.();
+    const state = { classUuid: null, speciesUuid: null, backgroundUuid: null, advChoices: {}, [field]: uuid };
+    try {
+      await resolveChoices(state, source);
+    } catch ( err ) {
+      log(`failed to warm choices for ${uuid}`, err);
     }
-  }
+    onTick?.();
+  });
 }
 
 /** True once every requirement across all sources has enough picks. */

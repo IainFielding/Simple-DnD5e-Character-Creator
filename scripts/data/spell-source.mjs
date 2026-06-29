@@ -1,5 +1,6 @@
 import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, log } from "../config.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
+import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /** Index fields fetched for spells, so cards can show components/range without the full doc. */
 const SPELL_INDEX_FIELDS = new Set([
@@ -48,14 +49,14 @@ export class SpellSource {
    * @param {() => void} [onTick]  Invoked once per class warmed, for progress reporting.
    */
   async warmClasses(classUuids, onTick) {
-    for ( const uuid of classUuids ) {
+    await forEachLimit(classUuids, WARM_CONCURRENCY, async uuid => {
       try {
         await this.forClass(uuid);
       } catch ( err ) {
         log(`failed to warm spells for ${uuid}`, err);
       }
       onTick?.();
-    }
+    });
   }
 
   async #resolve(classUuid) {

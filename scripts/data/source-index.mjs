@@ -1,4 +1,5 @@
 import { log } from "../config.mjs";
+import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /**
  * Reads the available origin items (classes, species, backgrounds) out of the
@@ -48,21 +49,25 @@ export class SourceIndex {
    * cold `fromUuid`/`enrichHTML` round-trip per click. Each resolved document also stays
    * in Foundry's compendium cache, which warms the choice resolver's `fromUuid` lookups
    * too. Memoised maps absorb the work, so this is safe to call once after {@link load}.
-   * Failures on a single card are swallowed so one bad document can't abort the warm-up.
+   * Cards are warmed in concurrent batches so their compendium reads overlap, and the
+   * document is resolved once per card and shared across the three resolvers (rather than
+   * each re-fetching it). Failures on a single card are swallowed so one bad document
+   * can't abort the warm-up.
    * @param {() => void} [onTick]  Invoked once per card warmed, for progress reporting.
    */
   async warmAll(onTick) {
     const cards = [...this.#cards.class, ...this.#cards.race, ...this.#cards.background];
-    for ( const card of cards ) {
+    await forEachLimit(cards, WARM_CONCURRENCY, async card => {
       try {
-        await this.detail(card.uuid);
-        await this.advancementGroups(card.uuid);
-        await this.abilityScoreIncrease(card.uuid);
+        const doc = await fromUuid(card.uuid);
+        await this.detail(card.uuid, doc);
+        await this.advancementGroups(card.uuid, doc);
+        await this.abilityScoreIncrease(card.uuid, doc);
       } catch ( err ) {
         log(`failed to warm ${card.uuid}`, err);
       }
       onTick?.();
-    }
+    });
   }
 
   classes() { return this.#cards.class; }
@@ -135,13 +140,14 @@ export class SourceIndex {
    * Resolve the full document for a card and return its enriched description for
    * the detail panel. Memoised so repeated expand/collapse is cheap.
    * @param {string} uuid
+   * @param {object} [doc]  Pre-resolved document, to skip a redundant `fromUuid` during warm-up.
    * @returns {Promise<{name: string, img: string, enriched: string}|null>}
    */
-  async detail(uuid) {
+  async detail(uuid, doc) {
     if ( !uuid ) return null;
     if ( this.#details.has(uuid) ) return this.#details.get(uuid);
 
-    const doc = await fromUuid(uuid);
+    doc ??= await fromUuid(uuid);
     if ( !doc ) return null;
     const raw = doc.system?.description?.value ?? "";
     const enriched = await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, {
@@ -158,13 +164,14 @@ export class SourceIndex {
    * null when the item grants no allocatable increase. Memoised per UUID.
    *
    * @param {string} uuid
+   * @param {object} [doc]  Pre-resolved document, to skip a redundant `fromUuid` during warm-up.
    * @returns {Promise<{id: string, points: number, cap: number, fixed: Record<string, number>, locked: string[]}|null>}
    */
-  async abilityScoreIncrease(uuid) {
+  async abilityScoreIncrease(uuid, doc) {
     if ( !uuid ) return null;
     if ( this.#asi.has(uuid) ) return this.#asi.get(uuid);
 
-    const doc = await fromUuid(uuid);
+    doc ??= await fromUuid(uuid);
     const config = doc ? readAsi(doc) : null;
     this.#asi.set(uuid, config);
     return config;
@@ -177,13 +184,14 @@ export class SourceIndex {
    * and a level tag). Blocks with no content are omitted. Memoised per UUID.
    *
    * @param {string} uuid
+   * @param {object} [doc]  Pre-resolved document, to skip a redundant `fromUuid` during warm-up.
    * @returns {Promise<object[]|null>}
    */
-  async advancementGroups(uuid) {
+  async advancementGroups(uuid, doc) {
     if ( !uuid ) return null;
     if ( this.#groups.has(uuid) ) return this.#groups.get(uuid);
 
-    const doc = await fromUuid(uuid);
+    doc ??= await fromUuid(uuid);
     const groups = doc ? await this.#buildGroups(doc) : null;
     this.#groups.set(uuid, groups);
     return groups;
