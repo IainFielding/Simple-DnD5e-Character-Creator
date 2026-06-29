@@ -1,5 +1,6 @@
 import {
-  abilitiesContext, abilitiesHandle, abilitiesComplete, abilitiesSummary, ABILITY_ACTIONS
+  abilitiesContext, abilitiesHandle, abilitiesComplete, abilitiesSummary,
+  ABILITY_ACTIONS, POINT_BUY_LIVE_ACTIONS, patchPointBuy
 } from "./abilities-step.mjs";
 import { spellInfoFor } from "./spells-step.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
@@ -31,8 +32,23 @@ export const classStep = {
     return `${name} · ${abilitiesSummary(state)}`;
   },
 
-  async handle(action, el, { state, source, spells }) {
-    if ( ABILITY_ACTIONS.has(action) ) return abilitiesHandle(action, el, state);
+  async handle(action, el, { state, source, spells, app }) {
+    if ( ABILITY_ACTIONS.has(action) ) {
+      await abilitiesHandle(action, el, state);
+      // Point-buy steppers fire in rapid succession; a full stage re-render would rebuild
+      // the class pick-list images and flicker the class icons on every press. Patch the
+      // panel and the Next gate in place, refresh only the image-free rail (completion tick
+      // + downstream step reachability), and skip the default re-render.
+      if ( POINT_BUY_LIVE_ACTIONS.has(action) && state.abilityMethod === "point-buy" ) {
+        const stage = el.closest(".creator-stage");
+        patchPointBuy(stage, state);
+        const next = stage?.querySelector('.creator-stage-foot [data-action="navNext"]');
+        if ( next ) next.disabled = !(state.classUuid && abilitiesComplete(state));
+        app.render({ parts: ["rail"] });
+        return false;
+      }
+      return;
+    }
     if ( action === "pick-class" ) {
       const uuid = el.dataset.uuid;
       // Re-clicking the active card clears it, so a player can back out of a choice.

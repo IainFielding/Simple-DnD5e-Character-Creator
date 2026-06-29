@@ -1188,6 +1188,120 @@
   color: var(--cc-gold);
 }
 .creator-details .creator-detail-name input { font-size: 1.1rem; border-color: var(--cc-gold); }
+.creator-name-row { position: relative; display: flex; gap: 0.5rem; align-items: stretch; }
+.creator-name-row input { flex: 1 1 auto; }
+.creator-name-roll {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  /* No explicit height + min-height:0 lets the row's align-items:stretch size these to the
+     input, so the dice box always matches the name box exactly (Foundry's default button
+     min-height would otherwise make them taller). */
+  min-height: 0;
+  padding: 0;
+  font-size: 1.05rem;
+  color: var(--cc-gold);
+  background: transparent;
+  border: 1px solid var(--cc-gold);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.creator-name-roll:hover { color: var(--cc-bg, #1b1b1f); background: var(--cc-gold); }
+/* Drop the click/focus box (outline + glow) — the hover colour change is feedback enough.
+   Scoped under .creator-details to outrank Foundry core's :focus-visible outline. */
+.creator-details .creator-name-roll:focus,
+.creator-details .creator-name-roll:focus-visible,
+.creator-details .creator-name-roll:active { outline: none; box-shadow: none; }
+/* The options caret: a quieter sibling to the dice — narrower, muted until used. */
+.creator-name-opts { width: 1.8rem; font-size: 0.85rem; color: var(--cc-muted); border-color: var(--cc-muted); }
+.creator-name-opts:hover,
+.creator-name-opts.is-active { color: var(--cc-bg, #1b1b1f); background: var(--cc-gold); border-color: var(--cc-gold); }
+
+/* Random-name settings live in a popover hung under the name row, opened from the caret. */
+.creator-name-pop {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 16rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--cc-panel, #232331);
+  border: 1px solid var(--cc-gold);
+  border-radius: 5px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.creator-name-pop.is-open { display: flex; }
+/* A small pointer up toward the caret that opened it. */
+.creator-name-pop::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 0.7rem;
+  width: 8px;
+  height: 8px;
+  background: var(--cc-panel, #232331);
+  border-left: 1px solid var(--cc-gold);
+  border-top: 1px solid var(--cc-gold);
+  transform: rotate(45deg);
+}
+.creator-name-gender {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.creator-name-gender-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-muted, #807d92);
+}
+.creator-name-gender-options { display: inline-flex; border: 1px solid var(--cc-gold); border-radius: 4px; overflow: hidden; }
+.creator-name-gender-opt {
+  padding: 0.2rem 0.7rem;
+  font-size: 0.78rem;
+  color: var(--cc-gold);
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--cc-gold);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.creator-name-gender-opt:first-child { border-left: 0; }
+.creator-name-gender-opt:hover { background: rgba(190, 160, 90, 0.18); }
+.creator-name-gender-opt.is-active { color: var(--cc-bg, #1b1b1f); background: var(--cc-gold); }
+.creator-name-style {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.creator-name-style-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-muted, #807d92);
+}
+.creator-name-style-select {
+  flex: 1 1 auto;
+  padding: 0.18rem 0.4rem;
+  font-size: 0.8rem;
+  color: var(--cc-text);
+  background: var(--cc-bg);
+  border: 1px solid var(--cc-gold);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.creator-name-style-select:focus { outline: none; border-color: var(--cc-gold-bright); }
+/* The native dropdown list (options) defaults to white — paint it to match the panel. */
+.creator-name-style-select option {
+  color: var(--cc-text);
+  background: var(--cc-panel);
+}
 .creator-required { color: #e05555; }
 
 .creator-detail-optional {

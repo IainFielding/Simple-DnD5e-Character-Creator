@@ -1,4 +1,5 @@
 import { t } from "../config.mjs";
+import { generateName, nameStyleOptions } from "../data/name-generator.mjs";
 
 /**
  * The Details step: the character's name (the only mandatory field) plus the
@@ -37,13 +38,72 @@ export const detailsStep = {
     return state.details.name?.trim() ?? "";
   },
 
-  async handle(action, el, { state, app }) {
+  async handle(action, el, { state, source, app }) {
     switch ( action ) {
       // A text input / textarea changed — `data-detail` names the field.
       case "detail": {
         const field = el.dataset.detail;
         if ( field && (field in state.details) ) state.details[field] = el.value;
         return;
+      }
+      // Toggle the random-name options popover (pool + style). These are an optional extra,
+      // so they stay tucked away until the player opens them; close on an outside click or
+      // Escape. Done purely in the DOM (no re-render) to avoid flickering the media images.
+      case "nameOptions": {
+        const pop = el.parentElement?.querySelector(".creator-name-pop");
+        if ( !pop ) return false;
+        const open = pop.classList.toggle("is-open");
+        el.classList.toggle("is-active", open);
+        el.setAttribute("aria-expanded", open ? "true" : "false");
+        if ( open ) {
+          const close = ev => {
+            if ( ev.type === "keydown" && ev.key !== "Escape" ) return;
+            if ( ev.type === "pointerdown" && (pop.contains(ev.target) || el.contains(ev.target)) ) return;
+            pop.classList.remove("is-open");
+            el.classList.remove("is-active");
+            el.setAttribute("aria-expanded", "false");
+            document.removeEventListener("pointerdown", close, true);
+            document.removeEventListener("keydown", close, true);
+          };
+          document.addEventListener("pointerdown", close, true);
+          document.addEventListener("keydown", close, true);
+        }
+        return false;
+      }
+      // Pick which name pool the roller draws from: "any" | "male" | "female". Reflect the
+      // active option in place and skip the re-render, so the media images don't flicker.
+      case "nameGender": {
+        const choice = el.dataset.gender;
+        if ( ["any", "male", "female"].includes(choice) ) {
+          state.nameGender = choice;
+          for ( const btn of el.parentElement?.querySelectorAll(".creator-name-gender-opt") ?? [] ) {
+            btn.classList.toggle("is-active", btn === el);
+          }
+        }
+        return false;
+      }
+      // Choose which naming style the roller uses: "auto" (follow the species) or a style key.
+      // The native <select> already reflects the value, so no re-render is needed.
+      case "nameStyle": {
+        state.nameStyle = el.value || "auto";
+        return false;
+      }
+      // Roll a random name. Write the result straight to the field (and enable Next) instead of
+      // re-rendering, which would rebuild and flicker the portrait/token images on the left.
+      case "generateName": {
+        // "auto" follows the chosen species; an explicit style key overrides it.
+        const speciesId = source?.card(state.speciesUuid)?.identifier;
+        const style = (state.nameStyle && state.nameStyle !== "auto") ? state.nameStyle : speciesId;
+        // "any" passes no gender, so the generator draws from both pools at random.
+        const gender = state.nameGender === "any" ? "" : state.nameGender;
+        state.details.name = generateName(style, { gender });
+        const root = app?.element;
+        const input = root?.querySelector("#creator-cc-name");
+        if ( input ) input.value = state.details.name;
+        // A non-empty name completes this step; reflect that on the Next button in place.
+        const next = root?.querySelector("button[data-action='navNext']");
+        if ( next ) next.disabled = false;
+        return false;
       }
       case "portrait": return pickImage(state, app, "portrait");
       case "tokenImg": return pickImage(state, app, "tokenImg");
@@ -54,7 +114,7 @@ export const detailsStep = {
     }
   },
 
-  context({ state }) {
+  context({ state, source }) {
     const d = state.details;
     const field = key => ({
       key,
@@ -68,6 +128,25 @@ export const detailsStep = {
       name: d.name ?? "",
       namePlaceholder: t("step.details.namePlaceholder"),
       subtitle: t("step.details.subtitle"),
+      // Random-name pool selector: the active option drives the dice roll.
+      nameGenders: ["any", "male", "female"].map(key => ({
+        key,
+        label: t(`step.details.nameGender.${key}`),
+        active: state.nameGender === key
+      })),
+      // Naming-style selector: an "auto" option (follow the chosen species) plus every style.
+      nameStyles: (() => {
+        const speciesName = source?.card(state.speciesUuid)?.name;
+        const auto = {
+          key: "auto",
+          label: speciesName
+            ? t("step.details.nameStyle.auto", { species: speciesName })
+            : t("step.details.nameStyle.autoNone"),
+          selected: state.nameStyle === "auto"
+        };
+        const rest = nameStyleOptions().map(o => ({ ...o, selected: state.nameStyle === o.key }));
+        return [auto, ...rest];
+      })(),
       shortFields: DETAIL_FIELDS.map(field),
       gridTextFields: gridTextKeys.map(k => ({ ...field(k), rows: 3 })),
       wideTextFields: Object.entries(WIDE_TEXT_FIELDS).map(([k, rows]) => ({ ...field(k), rows })),

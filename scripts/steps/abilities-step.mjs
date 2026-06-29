@@ -98,6 +98,42 @@ export const ABILITY_ACTIONS = new Set([
   "ability-assign", "ability-drop", "ability-unassign", "ability-reset"
 ]);
 
+/**
+ * Point-buy actions that only nudge values inside the existing panel layout, so the
+ * panel can be patched in place rather than triggering a full stage re-render. The
+ * caller must still confirm `state.abilityMethod === "point-buy"` (reset is shared
+ * with the array/roll modes, where it rebuilds the pool and does need a re-render).
+ */
+export const POINT_BUY_LIVE_ACTIONS = new Set(["ability-inc", "ability-dec", "ability-reset"]);
+
+/**
+ * Live-patch the point-buy panel after a stepper press instead of re-rendering the
+ * stage. A full re-render rebuilds the class pick-list `<img>`s that sit beside the
+ * panel, which makes the class icons flicker on every +/- press; updating only the
+ * handful of changed nodes in place keeps them perfectly still. `root` is the stage
+ * element containing the panel.
+ */
+export function patchPointBuy(root, state) {
+  if ( !root || state.abilityMethod !== "point-buy" ) return;
+  const remaining = pointsRemaining(state);
+  const points = root.querySelector(".creator-points-value");
+  if ( points ) {
+    points.textContent = remaining;
+    points.classList.toggle("is-zero", remaining === 0);
+  }
+  for ( const key of ABILITIES ) {
+    const dec = root.querySelector(`[data-step-action="ability-dec"][data-ability="${key}"]`);
+    const row = dec?.closest(".creator-ability-row");
+    if ( !row ) continue;
+    const value = state.pointBuy[key];
+    row.querySelector(".creator-ability-score").textContent = value;
+    row.querySelector(".creator-ability-mod").textContent = formatMod(value);
+    dec.disabled = value <= PB_MIN;
+    const inc = row.querySelector('[data-step-action="ability-inc"]');
+    if ( inc ) inc.disabled = !canIncrease(state, key);
+  }
+}
+
 /* -------------------------------------------- */
 /*  Point-buy                                   */
 /* -------------------------------------------- */

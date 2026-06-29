@@ -78,6 +78,19 @@
         "lockRotation": "Lock rotation",
         "nameLabel": "Character name",
         "namePlaceholder": "Name your character",
+        "generateName": "Roll a random name for this species",
+        "nameOptions": "Random name options",
+        "nameGender": {
+          "label": "Random name:",
+          "any": "Any",
+          "male": "Male",
+          "female": "Female"
+        },
+        "nameStyle": {
+          "label": "Style",
+          "auto": "Chosen species ({species})",
+          "autoNone": "Chosen species"
+        },
         "optional": "Optional — flesh out who they are.",
         "field": {
           "alignment": "Alignment",
