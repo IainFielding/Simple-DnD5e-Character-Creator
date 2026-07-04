@@ -59,9 +59,31 @@ export class CreatorState {
 
   /**
    * Advancement choices made on the Choices step: source -> selKey -> chosen key/uuid[].
-   * Each source's bucket is cleared when that origin selection changes.
+   * Each source's bucket is cleared when that origin selection changes. Also holds the
+   * feat-spells step's picks: a feat's spell `ItemChoice` uuids under its advancement id, and the
+   * chosen casting ability under `"<advId>::ability"` (read by the assembler's `applyItemChoice`).
    */
   advChoices = { class: {}, background: {}, species: {} };
+
+  /**
+   * Feat-spells step (Magic Initiate) — the player's picks per grant, keyed `${source}:${featUuid}`:
+   * `{ list, ability, cantrips: uuid[], spells: uuid[] }`. The assembler reads these to create the
+   * feat's spells directly on the actor (the PHB feat carries no advancement to hang them on).
+   */
+  featSpells = {};
+
+  /**
+   * Cache of the resolved feat-spell *grants* (from {@link module:steps/feat-spells-step}), so the
+   * synchronous `applicable`/`isComplete` gates can read them. Refreshed whenever origin selections
+   * or feat picks change (the Choices and Feat-Spells steps both refresh it).
+   * @type {object[]}
+   */
+  featSpellCache = [];
+
+  /** Transient feat-spells-step UI: active grant, active tab, focused spell. Not persisted. */
+  activeFeatKey = null;
+  featSpellTab = "cantrips";
+  focusedFeatSpellUuid = null;
 
   /**
    * Transient Choices-step UI: which decision row of the guided checklist is expanded.
@@ -201,6 +223,7 @@ export class CreatorState {
     this.selectedCantrips = [];
     this.selectedSpells = [];
     this.advChoices.class = {};
+    this.#forgetFeatSpellLists("class");
     this.equipment.class = { selectedOption: 0, orSelections: {} };
   }
 
@@ -211,7 +234,15 @@ export class CreatorState {
    */
   resetSourceChoices(source) {
     this.advChoices[source] = {};
+    this.#forgetFeatSpellLists(source);
     if ( this.equipment[source] ) this.equipment[source] = { selectedOption: 0, orSelections: {} };
+  }
+
+  /** Drop the feat-spells picks belonging to one origin (keys `${source}:…`). */
+  #forgetFeatSpellLists(source) {
+    for ( const key of Object.keys(this.featSpells) ) {
+      if ( key.startsWith(`${source}:`) ) delete this.featSpells[key];
+    }
   }
 
   /* -------------------------------------------- */

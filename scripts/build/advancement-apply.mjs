@@ -268,6 +268,13 @@ async function manuallyApplyItemAdvancements(actor, item, source, advChoices, de
 
 /** Apply an ItemChoice by creating the chosen items and recording them, then cascading. */
 async function applyItemChoice(actor, item, adv, level, uuids, source, advChoices, depth) {
+  // Spell-type ItemChoices (Magic Initiate & variants) carry a spell configuration that stamps the
+  // granted spell's casting ability, preparation, source, and limited uses. The player chose the
+  // ability on the feat-spells step, stored under `"<advId>::ability"`; the rest comes from the
+  // advancement itself. Reuse dnd5e's own `applySpellChanges` so the result matches the native flow.
+  const spellCfg = adv.configuration?.spell;
+  const spellAbility = advChoices[source]?.[`${adv.id}::ability`];
+
   const toCreate = [];
   const added = {};
   for ( const uuid of uuids ) {
@@ -277,6 +284,10 @@ async function applyItemChoice(actor, item, adv, level, uuids, source, advChoice
     data._id = foundry.utils.randomID();
     if ( data._stats ) data._stats.compendiumSource = uuid;
     foundry.utils.setProperty(data, "flags.dnd5e.advancementOrigin", `${item.id}.${adv.id}`);
+    if ( doc.type === "spell" && spellCfg?.applySpellChanges ) {
+      try { spellCfg.applySpellChanges(data, { ability: spellAbility }); }
+      catch ( err ) { log(`applySpellChanges failed for ${uuid}`, err); }
+    }
     toCreate.push(data);
     added[data._id] = uuid;
   }

@@ -1,22 +1,81 @@
-<section class="creator-pick creator-spells creator-spells-browser">
-  {{#if isSpellcaster}}
-  <!-- Main column: intro, tabs, filters, and the spell list for the active tab -->
+{{!-- Feat spell choices (Magic Initiate & single-class variants). The main column holds the feat
+      switcher (when more than one), the list/ability pickers, and the filtered spell browser for the
+      active tab; the sidebar shows the focused spell with the running tally pinned beneath it. --}}
+<section class="creator-pick creator-spells creator-spells-browser feat-spells">
+  {{#if applicable}}
+  <!-- Main column -->
   <div class="creator-pick-side">
+    {{#if hasMultipleGrants}}
+    <div class="creator-spell-tabs feat-spells-switch">
+      {{#each grants}}
+      <button type="button" class="creator-spell-tab {{#if active}}is-active{{/if}} {{#if complete}}is-full{{/if}}"
+              data-action="stepAction" data-step-action="switch-feat" data-key="{{key}}">
+        <img class="feat-spells-switch-img" src="{{featImg}}" alt="">{{featName}}
+      </button>
+      {{/each}}
+    </div>
+    {{/if}}
+
     <p class="levelup-spells-intro">{{intro}}</p>
 
+    {{#if setupNeeded}}
+    <div class="feat-spells-setup">
+      {{#if showListPicker}}
+      <div class="feat-spells-choice {{#unless listChosen}}is-needed{{/unless}}">
+        <span class="feat-spells-choice-label">
+          <i class="fa-solid fa-book-sparkles"></i>
+          {{localize "sogrom-dnd5e-character-creator.step.featSpells.chooseList"}}
+          {{#if listChosen}}<i class="feat-spells-choice-tick fa-solid fa-check"></i>
+          {{else}}<span class="feat-spells-req">{{localize "sogrom-dnd5e-character-creator.step.featSpells.needChoice"}}</span>{{/if}}
+        </span>
+        <div class="feat-spells-segments">
+          {{#each listOptions}}
+          <button type="button" class="feat-spells-segment {{#if selected}}is-active{{/if}}"
+                  data-action="stepAction" data-step-action="choose-list" data-id="{{id}}">
+            <img class="feat-spells-segment-img" src="{{img}}" alt="">{{label}}
+          </button>
+          {{/each}}
+        </div>
+      </div>
+      {{/if}}
+
+      {{#if showAbilityPicker}}
+      <div class="feat-spells-choice {{#unless abilityChosen}}is-needed{{/unless}}">
+        <span class="feat-spells-choice-label">
+          <i class="fa-solid fa-brain"></i>
+          {{localize "sogrom-dnd5e-character-creator.step.featSpells.chooseAbility"}}
+          {{#if abilityChosen}}<i class="feat-spells-choice-tick fa-solid fa-check"></i>
+          {{else}}<span class="feat-spells-req">{{localize "sogrom-dnd5e-character-creator.step.featSpells.needChoice"}}</span>{{/if}}
+        </span>
+        <p class="feat-spells-choice-hint">{{localize "sogrom-dnd5e-character-creator.step.featSpells.abilityHint"}}</p>
+        <div class="feat-spells-segments">
+          {{#each abilityOptions}}
+          <button type="button" class="feat-spells-segment feat-spells-segment--ability {{#if selected}}is-active{{/if}} {{#if recommended}}is-recommended{{/if}}"
+                  data-action="stepAction" data-step-action="choose-ability" data-ability="{{key}}"
+                  {{#if recommended}}data-tooltip="{{../abilityRecommendTip}}"{{/if}}>
+            {{label}}{{#if recommended}} <span class="feat-spells-rec-tag"><i class="fa-solid fa-star"></i> {{localize "sogrom-dnd5e-character-creator.step.featSpells.recommended"}}</span>{{/if}}
+          </button>
+          {{/each}}
+        </div>
+      </div>
+      {{/if}}
+    </div>
+    {{/if}}
+
+    {{#if hasList}}
     <div class="creator-spell-tabs">
       {{#if hasCantrips}}
       <button type="button" class="creator-spell-tab {{#if isCantripsTab}}is-active{{/if}} {{#if cantripsFull}}is-full{{/if}}"
               data-action="stepAction" data-step-action="spell-tab" data-tab="cantrips">
         {{localize "sogrom-dnd5e-character-creator.step.spells.cantrips"}}
-        <span class="creator-spell-count">{{cantripCount}}/{{maxCantrips}}</span>
+        <span class="creator-spell-count">{{cantripHave}}/{{cantripCount}}</span>
       </button>
       {{/if}}
-      {{#if hasLevel1}}
-      <button type="button" class="creator-spell-tab {{#if isLevel1Tab}}is-active{{/if}} {{#if spellsFull}}is-full{{/if}}"
-              data-action="stepAction" data-step-action="spell-tab" data-tab="level1">
+      {{#if hasSpells}}
+      <button type="button" class="creator-spell-tab {{#if isSpellsTab}}is-active{{/if}} {{#if spellsFull}}is-full{{/if}}"
+              data-action="stepAction" data-step-action="spell-tab" data-tab="spells">
         {{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}
-        <span class="creator-spell-count">{{spellCount}}/{{maxSpells}}</span>
+        <span class="creator-spell-count">{{spellHave}}/{{spellCount}}</span>
       </button>
       {{/if}}
     </div>
@@ -30,7 +89,7 @@
                   placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
         </label>
         <div class="creator-spell-filters">
-          {{#if isLevel1Tab}}
+          {{#if isSpellsTab}}
           <label class="creator-spell-filter">
             <i class="fa-solid fa-layer-group"></i>
             <select data-spell-filter-level aria-label="{{localize 'sogrom-dnd5e-character-creator.levelup.step.spells.filterLevelAria'}}">
@@ -55,19 +114,26 @@
       {{#each list}}
       <li>
         <button type="button"
-                class="creator-pickrow {{#if active}}is-selected{{/if}} {{#if focused}}is-focused{{/if}} {{#if disabled}}is-disabled{{/if}}"
+                class="creator-pickrow {{#if active}}is-selected{{/if}} {{#if owned}}is-owned{{/if}} {{#if focused}}is-focused{{/if}} {{#if disabled}}is-disabled{{/if}}"
                 data-action="stepAction" data-step-action="focus-spell"
                 data-uuid="{{uuid}}" data-name="{{name}}" data-level="{{level}}" data-school="{{school}}"
                 data-tooltip="{{ccItemTooltip uuid}}">
           <img class="creator-pickrow-img" src="{{img}}" alt="">
           <span class="creator-pickrow-name">{{name}}</span>
+          {{#if owned}}<span class="creator-pickrow-tag">{{localize "sogrom-dnd5e-character-creator.step.featSpells.knownTag"}}</span>{{/if}}
           {{#if active}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}
         </button>
       </li>
       {{else}}
-      <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.step.spells.empty"}}</p>
+      <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.levelup.step.spells.empty"}}</p>
       {{/each}}
     </ul>
+    {{else}}
+    <div class="feat-spells-await">
+      <i class="fa-solid fa-arrow-up"></i>
+      <p>{{localize "sogrom-dnd5e-character-creator.step.featSpells.pickListFirst"}}</p>
+    </div>
+    {{/if}}
   </div>
 
   <!-- Sidebar: focused spell (scrolls), with the running tally pinned at the bottom -->
@@ -87,6 +153,11 @@
         </div>
       </header>
 
+      {{#if focused.owned}}
+      <div class="feat-spells-known-note">
+        <i class="fa-solid fa-circle-check"></i> {{localize "sogrom-dnd5e-character-creator.step.featSpells.alreadyKnown"}}
+      </div>
+      {{else}}
       <button type="button" class="creator-btn {{#if focused.active}}creator-btn-danger{{else}}creator-btn-primary{{/if}}"
               data-action="stepAction" data-step-action="pick-spell"
               data-uuid="{{focused.uuid}}" data-level="{{focused.level}}"
@@ -97,21 +168,22 @@
         <i class="fa-solid fa-plus"></i> {{localize "sogrom-dnd5e-character-creator.step.spells.add"}}
         {{/if}}
       </button>
+      {{/if}}
 
       <div class="creator-detail-body">{{{focused.description}}}</div>
     </article>
     {{else}}
     <div class="creator-pick-empty">
-      <i class="fa-solid fa-wand-magic-sparkles"></i>
-      <h2>{{localize "sogrom-dnd5e-character-creator.step.spells.label"}}</h2>
+      <i class="fa-solid fa-hand-sparkles"></i>
+      <h2>{{featName}}</h2>
       <p>{{localize "sogrom-dnd5e-character-creator.step.spells.selectHint"}}</p>
     </div>
     {{/if}}
     </div>
 
-    <!-- Running tally of everything picked so far, grouped by level. -->
+    <!-- Running tally of the feat's chosen spells, grouped cantrips vs leveled. -->
     <div class="creator-spell-selected">
-      <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.step.spells.selected"}}</span>
+      <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.step.featSpells.selected"}}</span>
       {{#if hasSelected}}
       <div class="creator-spell-groups">
         {{#if selectedCantrips.length}}
@@ -144,7 +216,7 @@
   {{else}}
   <div class="creator-pick-empty creator-spells-none">
     <i class="fa-solid fa-ban"></i>
-    <h2>{{localize "sogrom-dnd5e-character-creator.step.spells.label"}}</h2>
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.featSpells.label"}}</h2>
     <p>{{hint}}</p>
   </div>
   {{/if}}

@@ -151,15 +151,20 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
         ...stepContext
       },
       isReview: step.id === "review",
-      nav: {
-        index: this.#current,
-        total: STEPS.length,
-        position: t("nav.position", { current: this.#current + 1, total: STEPS.length }),
-        canBack: this.#current > 0,
-        canNext: this.#current < STEPS.length - 1 && flags[this.#current],
-        backLabel: t("nav.back"),
-        nextLabel: t("nav.next")
-      },
+      nav: (() => {
+        // Position and Back/Next are measured over the *visible* steps, so a hidden step neither
+        // occupies a number nor is landed on when paging through.
+        const visible = this.#visibleIndices();
+        return {
+          index: this.#current,
+          total: visible.length,
+          position: t("nav.position", { current: visible.indexOf(this.#current) + 1, total: visible.length }),
+          canBack: this.#prevVisible(this.#current) >= 0,
+          canNext: this.#nextVisible(this.#current) >= 0 && flags[this.#current],
+          backLabel: t("nav.back"),
+          nextLabel: t("nav.next")
+        };
+      })(),
       canFinish: REQUIRED_STEPS.every(s => s.isComplete(this.state)),
       finishLabel: t("nav.create")
     };
@@ -175,9 +180,36 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
       el.addEventListener("change", ev => this.#dispatch(el.dataset.stepChange, ev.currentTarget));
     }
     this.#wireDragDrop(root);
-    // Client-side card filtering — no re-render, so the field keeps focus while typing.
+    // Client-side filtering — no re-render, so the field keeps focus while typing. The spell steps
+    // add level/school dropdowns; when present, search + dropdowns drive the combined spell filter,
+    // otherwise the search box filters the card/list grid by name.
     const search = root.querySelector("[data-creator-search]");
-    if ( search ) search.addEventListener("input", ev => this.#filterCards(ev.currentTarget.value));
+    const spellFilters = root.querySelectorAll("[data-spell-filter-level], [data-spell-filter-school]");
+    if ( spellFilters.length ) {
+      const apply = () => this.#applySpellFilters();
+      if ( search ) search.addEventListener("input", apply);
+      for ( const sel of spellFilters ) sel.addEventListener("change", apply);
+    } else if ( search ) {
+      search.addEventListener("input", ev => this.#filterCards(ev.currentTarget.value));
+    }
+  }
+
+  /**
+   * Hide pick-rows that don't match the active spell filters — name search, spell level, and spell
+   * school — combined (a row must satisfy all three). Each control reads its value straight from the
+   * DOM so any of them can drive the pass. Mirrors {@link LevelUpShell}'s spell-list filter.
+   */
+  #applySpellFilters() {
+    const root = this.element;
+    const needle = (root.querySelector("[data-creator-search]")?.value ?? "").trim().toLowerCase();
+    const level = root.querySelector("[data-spell-filter-level]")?.value ?? "";
+    const school = root.querySelector("[data-spell-filter-school]")?.value ?? "";
+    for ( const row of root.querySelectorAll(".creator-pickrow") ) {
+      const matchesName = !needle || (row.dataset.name ?? "").toLowerCase().includes(needle);
+      const matchesLevel = !level || (row.dataset.level ?? "") === level;
+      const matchesSchool = !school || (row.dataset.school ?? "") === school;
+      (row.closest("li") ?? row).classList.toggle("is-hidden", !(matchesName && matchesLevel && matchesSchool));
+    }
   }
 
   /**
@@ -260,24 +292,53 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     return index === 0 || flags.slice(0, index).every(Boolean);
   }
 
+  /**
+   * Whether a step is hidden from the flow right now — a step that opts into {@link
+   * hideWhenInapplicable} is dropped entirely (not just greyed) while it doesn't apply, so the
+   * Feat-Spells step appears in the header only once a feat that needs it is chosen.
+   */
+  #hidden(step) {
+    return step.hideWhenInapplicable && !(step.applicable?.(this.state) ?? true);
+  }
+
+  /** STEPS indices currently shown, in order (hidden steps omitted). */
+  #visibleIndices() {
+    return STEPS.map((_s, i) => i).filter(i => !this.#hidden(STEPS[i]));
+  }
+
+  /** The next / previous visible step index from `from`, or -1 if none. */
+  #nextVisible(from) {
+    for ( let i = from + 1; i < STEPS.length; i++ ) if ( !this.#hidden(STEPS[i]) ) return i;
+    return -1;
+  }
+  #prevVisible(from) {
+    for ( let i = from - 1; i >= 0; i-- ) if ( !this.#hidden(STEPS[i]) ) return i;
+    return -1;
+  }
+
   #railContext(flags) {
-    return STEPS.map((s, i) => {
-      // A step can opt out of applicability (e.g. Spells for a non-caster); the rail greys
-      // it out and shows no completion tick even though it doesn't block the build.
+    const rail = [];
+    let ordinal = 0;
+    STEPS.forEach((s, i) => {
+      if ( this.#hidden(s) ) return;        // dropped from the header until it applies
+      // A step can still opt out of applicability while remaining visible (e.g. Spells for a
+      // non-caster); the rail greys it out and shows no completion tick.
       const applicable = s.applicable?.(this.state) ?? true;
-      return {
+      ordinal += 1;
+      rail.push({
         index: i,
         id: s.id,
         label: t(s.labelKey),
         icon: s.icon,
-        ordinal: i + 1,
+        ordinal,
         active: i === this.#current,
         applicable,
         complete: flags[i] && s.id !== "review" && applicable,
         reachable: this.#reachable(i, flags),
         summary: s.summary?.(this.state, this.source) ?? ""
-      };
+      });
     });
+    return rail;
   }
 
   #filterCards(query) {
@@ -327,15 +388,17 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static #onNext() {
-    if ( this.#current < STEPS.length - 1 && this.#activeStep.isComplete(this.state) ) {
-      this.#current += 1;
+    const next = this.#nextVisible(this.#current);
+    if ( next >= 0 && this.#activeStep.isComplete(this.state) ) {
+      this.#current = next;
       this.render();
     }
   }
 
   static #onBack() {
-    if ( this.#current > 0 ) {
-      this.#current -= 1;
+    const prev = this.#prevVisible(this.#current);
+    if ( prev >= 0 ) {
+      this.#current = prev;
       this.render();
     }
   }

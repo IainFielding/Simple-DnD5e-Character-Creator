@@ -66,6 +66,35 @@ export class SpellSource {
     return payload;
   }
 
+  /** classId -> level-≤1 spell-list payload for a feat's spell choice (Magic Initiate), memoised. */
+  #byList = new Map();
+
+  /**
+   * The cantrips and level-1 spells of a single class's spell **list**, addressed by class
+   * identifier rather than a class item's UUID. Backs the feat-spells step (Magic Initiate and its
+   * single-class variants): the feat's `restriction.list` names a class id, and the player draws all
+   * of the feat's spells from that one list. Unlike {@link forClass} there is no "known count" — the
+   * counts come from the feat's own advancements — so this returns only the pools. Memoised per
+   * `${classId}:${maxLevel}`.
+   * @param {string} classId
+   * @param {number} [maxLevel=1]
+   * @returns {Promise<{cantrips: object[], level1: object[]}>}
+   */
+  async forSpellList(classId, maxLevel = 1) {
+    if ( !classId ) return { cantrips: [], level1: [] };
+    const key = `${classId}:${maxLevel}`;
+    if ( this.#byList.has(key) ) return this.#byList.get(key);
+
+    const all = deduplicateSpells(await loadSpellsForClass(classId, maxLevel, "class"));
+    const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+    const payload = {
+      cantrips: all.filter(s => s.level === 0).sort(byName),
+      level1: all.filter(s => s.level === 1).sort(byName)
+    };
+    this.#byList.set(key, payload);
+    return payload;
+  }
+
   async #resolveAtLevel(classUuid, maxSpellLevel, listType) {
     const doc = await fromUuid(classUuid);
     const progression = doc?.system?.spellcasting?.progression;

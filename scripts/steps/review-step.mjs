@@ -1,6 +1,7 @@
 import { ABILITIES, t } from "../config.mjs";
 import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
 import { resolveChoices, advancementArray, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
+import { resolveFeatSpells, grantedSpellCards } from "./feat-spells-step.mjs";
 import { summarizeOption } from "../data/equipment-source.mjs";
 
 // The three origin sections, in display order: each carries the state field holding its
@@ -42,6 +43,41 @@ function reviewSpells(state) {
 }
 
 /**
+ * The spells chosen for each Magic Initiate-style feat, grouped by the origin that grants the feat,
+ * so they sit under that origin's heading in the same cantrips/level-1 pattern as the class spells.
+ * @returns {Promise<Record<string, {featName:string, cantrips:object[], level1:object[]}[]>>}
+ */
+async function reviewFeatSpells(state, source) {
+  const grants = state.featSpellCache?.length ? state.featSpellCache : await resolveFeatSpells(state, source);
+  const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+  const resolve = async uuids => (await Promise.all((uuids ?? []).map(async uuid => {
+    const doc = await fromUuid(uuid).catch(() => null);
+    return doc ? { name: doc.name, img: doc.img, uuid } : null;
+  }))).filter(Boolean).sort(byName);
+
+  const bySource = {};
+  for ( const grant of grants ) {
+    const picks = state.featSpells[grant.key];
+    if ( !picks ) continue;
+    const cantrips = await resolve(picks.cantrips);
+    const level1 = await resolve(picks.spells);
+    if ( !cantrips.length && !level1.length ) continue;
+    (bySource[grant.source] ??= []).push({ featName: grant.featName, cantrips, level1 });
+  }
+  return bySource;
+}
+
+/** Spells an origin grants outright (e.g. a species that hands out a cantrip), split cantrips/level-1. */
+async function originGrantedSpells(doc) {
+  const cards = await grantedSpellCards(doc);
+  const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+  const map = s => ({ name: s.name, img: s.img, uuid: s.uuid });
+  const cantrips = cards.filter(s => s.level === 0).sort(byName).map(map);
+  const level1 = cards.filter(s => s.level > 0).sort(byName).map(map);
+  return { cantrips, level1, hasAny: cantrips.length + level1.length > 0 };
+}
+
+/**
  * The chosen starting equipment for the summary, keyed by origin source so each
  * origin block can show its own gear. Empty sources are omitted.
  * @returns {Promise<Record<string, {items: object[], gold: string, hasAny: boolean}>>}
@@ -71,7 +107,7 @@ async function reviewEquipment(state, source, equipment) {
  * its own heading. Unchosen origins still render as a placeholder card. Item-backed values
  * keep their uuid/img so the template can render clickable, tooltip-bearing content links.
  */
-async function reviewSections(state, source, equipBySource, spells) {
+async function reviewSections(state, source, equipBySource, spells, featSpellsBySource) {
   const resolved = await resolveChoices(state, source);
   const out = [];
   for ( const { key, field, labelKey, emptyKey } of ORIGIN_META ) {
@@ -79,6 +115,7 @@ async function reviewSections(state, source, equipBySource, spells) {
     const card = uuid ? source.card(uuid) : null;
     const doc = uuid ? await fromUuid(uuid).catch(() => null) : null;
     const rows = doc ? [...await fixedGrants(doc), ...summaryPicks(resolved, key)] : [];
+    const grantedSpells = doc ? await originGrantedSpells(doc) : null;
     out.push({
       key,
       kind: t(labelKey),
@@ -88,6 +125,10 @@ async function reviewSections(state, source, equipBySource, spells) {
       img: card?.img ?? doc?.img ?? "icons/svg/mystery-man.svg",
       rows,
       spells: (key === "class" && spells.hasAny) ? spells : null,
+      // Spells an origin grants outright (e.g. a species cantrip), in the same cantrips/level-1 layout.
+      grantedSpells: grantedSpells?.hasAny ? grantedSpells : null,
+      // Feat spells (Magic Initiate) sit under whichever origin grants the feat.
+      featSpells: featSpellsBySource[key] ?? null,
       equipment: equipBySource[key] ?? null
     });
   }
@@ -153,7 +194,8 @@ async function fixedGrants(doc) {
         const uuid = (typeof i === "string") ? i : i?.uuid;
         if ( !uuid ) continue;
         const granted = await fromUuid(uuid).catch(() => null);
-        if ( granted ) add(
+        // Granted spells are shown in their own cantrips/level-1 block (originGrantedSpells), not here.
+        if ( granted && granted.type !== "spell" ) add(
           granted.type === "feat" ? t("advancement.features") : t("advancement.grantedItems"),
           { name: granted.name, uuid, img: granted.img }
         );
@@ -196,6 +238,7 @@ export const reviewStep = {
     const deltas = state.backgroundDeltas();
     const equipBySource = await reviewEquipment(state, source, equipment);
     const spells = reviewSpells(state);
+    const featSpellsBySource = await reviewFeatSpells(state, source);
     const methodKeys = {
       "point-buy": "step.abilities.pointBuy",
       "standard-array": "step.abilities.standardArray",
@@ -222,7 +265,7 @@ export const reviewStep = {
         };
       }),
       details: reviewDetails(state),
-      sections: await reviewSections(state, source, equipBySource, spells)
+      sections: await reviewSections(state, source, equipBySource, spells, featSpellsBySource)
     };
   }
 };

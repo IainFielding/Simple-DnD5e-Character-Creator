@@ -110,10 +110,13 @@ export async function warmChoices(source, onTick) {
   });
 }
 
-/** True once every requirement across all sources has enough picks. */
+/**
+ * True once every requirement across all sources has enough picks. Spell-type choices
+ * (`spellStep`) are excluded — they gate the dedicated feat-spells step, not this one.
+ */
 export function choicesComplete(resolved) {
   for ( const src of resolved?.sources ?? [] ) {
-    for ( const req of src.requirements ) if ( !req.complete ) return false;
+    for ( const req of src.requirements ) if ( !req.spellStep && !req.complete ) return false;
   }
   return true;
 }
@@ -341,6 +344,28 @@ async function parseAdvancementChoice(adv, ctx) {
     const choiceLevel = Object.keys(cfg.choices ?? {})
       .map(Number).filter(l => Number.isFinite(l) && l <= 1).sort((a, b) => a - b)[0];
     if ( choiceLevel === undefined ) return;
+
+    // Spell-type ItemChoice — the Magic Initiate shape (choose N cantrips/spells from a class
+    // list). Surfaced as a lightweight `SpellChoice` requirement rather than an item pool: the
+    // dedicated feat-spells step renders it (`spellStep`), and its `ownerUuid` makes the granting
+    // feature a takeover target so the AdvancementManager never prompts for it (§7 of the plan).
+    if ( cfg.type === "spell" ) {
+      const count = Number(cfg.choices[choiceLevel]?.count ?? cfg.choices[choiceLevel] ?? 0);
+      if ( !count ) return;
+      const chosen = sel[adv._id] ?? [];
+      reqs.push({
+        advId: adv._id, selKey: adv._id, source, ownerUuid, type: "SpellChoice", spellStep: true,
+        level: choiceLevel,
+        spellLevel: Number(cfg.restriction?.level ?? 0),
+        count,
+        classList: Array.from(cfg.restriction?.list ?? []).map(k => String(k).replace(/^class:/, "")),
+        abilityKeys: Array.from(cfg.spell?.ability ?? []),
+        title: adv.title || t("advancement.chooseItems"),
+        chosenCount: chosen.length,
+        complete: chosen.length >= count
+      });
+      return;
+    }
     level = choiceLevel;
     const levelChoices = cfg.choices[choiceLevel];
     const count = Number(levelChoices?.count ?? levelChoices ?? 0);
@@ -348,18 +373,25 @@ async function parseAdvancementChoice(adv, ctx) {
 
     const options = [];
     const seen = new Set();
+    // Also track option names: `allowDrops` scans every enabled pack, so an item the pool
+    // already lists (e.g. a PHB-module fighting style) can reappear as a same-named SRD copy
+    // with a different UUID. Dedupe by name too so those don't double up.
+    const seenNames = new Set();
+    const nameKey = n => (n ?? "").trim().toLowerCase();
     for ( const p of Array.from(cfg.pool ?? []) ) {
       const uuid = typeof p === "string" ? p : p?.uuid;
       if ( !uuid || seen.has(uuid) ) continue;
       const doc = await fromUuid(uuid).catch(() => null);
       if ( !doc ) continue;
       seen.add(uuid);
+      seenNames.add(nameKey(doc.name));
       options.push({ key: uuid, uuid, label: doc.name, img: doc.img });
     }
     if ( cfg.allowDrops && cfg.restriction?.subtype ) {
       for ( const opt of await findRestrictedItems(cfg) ) {
-        if ( seen.has(opt.key) ) continue;
+        if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
         seen.add(opt.key);
+        seenNames.add(nameKey(opt.label));
         options.push(opt);
       }
     }

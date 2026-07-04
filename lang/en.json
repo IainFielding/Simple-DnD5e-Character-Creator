@@ -228,6 +228,7 @@
       },
       "spells": {
         "label": "Spells",
+        "intro": "Choose the cantrips and 1st-level spells your {class} knows at level 1.",
         "cantrips": "Cantrips",
         "level1": "1st-Level Spells",
         "selected": "Your Spells",
@@ -240,6 +241,22 @@
         "ritual": "Ritual",
         "add": "Add spell",
         "remove": "Remove spell"
+      },
+      "featSpells": {
+        "label": "Feat Spells",
+        "intro": "{feat} grants spells — choose a spell list, its casting ability, and the spells you learn.",
+        "chooseList": "Spell list",
+        "chooseAbility": "Casting ability",
+        "needChoice": "Choose one",
+        "recommended": "Recommended",
+        "abilityHint": "Sets the attack bonus and save DC for these feat spells. Pick the mental ability your character is strongest in.",
+        "recommendAbility": "Matches your {class} spellcasting ability",
+        "knownTag": "Known",
+        "alreadyKnown": "You already know this spell from another source, so it can't be chosen here.",
+        "pickListFirst": "Choose a spell list above to see the spells you can learn.",
+        "selected": "Learning",
+        "picked": "{count}/{total} chosen",
+        "none": "None of your choices grant extra spells — nothing to choose here."
       },
       "choices": {
         "label": "Choices",
@@ -259,6 +276,7 @@
         "noSpecies": "No species chosen",
         "noBackground": "No background chosen",
         "notChosen": "Not chosen",
+        "grantedSpells": "Spells",
         "bonusFromBackground": "+{bonus} from background"
       },
       "abilities": {

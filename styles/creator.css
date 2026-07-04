@@ -1595,11 +1595,15 @@
 .creator-spell-chip img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid var(--cc-line); }
 .creator-spell-chip:hover { border-color: var(--cc-gold); color: var(--cc-gold); }
 
-/* ---- Level-up spell browser: two columns, choices wide + description sidebar ----
+/* ---- Spell browser: two columns, choices wide + description sidebar ----
    The spell choices take the wide main column (~2/3) so long spell names have room; the focused
-   spell's description sits in a narrower ~1/3 sidebar with the running tally pinned beneath it (as
-   in the creation browser). Scoped to .levelup-spells so the creation browser is untouched. */
-.levelup-spells { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+   spell's description sits in a narrower ~1/3 sidebar with the running tally pinned beneath it.
+   Shared by the level-up spell step, the restyled creation Spells step, and the feat-spells step
+   (`.creator-spells-browser`). Guarded to wide stages so the <1100px rule can stack the columns. */
+@media (min-width: 1101px) {
+  .levelup-spells,
+  .creator-spells-browser { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+}
 
 /* Search box + level/school filter dropdowns share the top toolbar row, wrapping when tight. */
 .creator-spell-search-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
@@ -1629,6 +1633,104 @@
   cursor: pointer;
 }
 .creator-spell-filter select option { background: var(--cc-panel); color: var(--cc-text); }
+
+/* ---- Feat-spells step (Magic Initiate): a spell-list picker and a casting-ability picker sit
+   above the spell browser; when a feat grants more than one such choice, a switcher tops the column. */
+.feat-spells-switch { flex-wrap: wrap; }
+.feat-spells-switch-img,
+.feat-spells-segment-img {
+  width: 20px; height: 20px; border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--cc-line); margin-right: 0.4rem;
+}
+
+/* Setup panel: groups the list + ability decisions into one framed block so they read as required
+   set-up before the spell browser, rather than blending into it. */
+.feat-spells-setup {
+  margin: 0 0 1rem;
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+}
+.feat-spells-choice { margin: 0; }
+/* An unmade decision is flagged: an amber rail and a soft glow draw the eye to it. */
+.feat-spells-choice.is-needed {
+  margin: -0.35rem -0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-left: 3px solid var(--cc-accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cc-accent) 8%, transparent);
+}
+.feat-spells-choice-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-text);
+}
+.feat-spells-choice-label > i:first-child { color: var(--cc-accent); }
+.feat-spells-choice-tick { color: var(--cc-good); font-size: 0.8rem; }
+/* "Choose one" badge, pulsing gently until the decision is made. */
+.feat-spells-req {
+  margin-left: auto;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #1a1206;
+  background: var(--cc-accent);
+  border-radius: 999px;
+  animation: feat-spells-pulse 1.8s var(--cc-ease) infinite;
+}
+@keyframes feat-spells-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.feat-spells-choice-hint { margin: -0.15rem 0 0.5rem; color: var(--cc-muted); font-size: 0.8rem; line-height: 1.35; }
+.feat-spells-rec-tag {
+  margin-left: 0.45rem;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--cc-accent);
+  white-space: nowrap;
+}
+.feat-spells-segment.is-active .feat-spells-rec-tag { color: inherit; }
+.feat-spells-segments { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.feat-spells-segment {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  color: var(--cc-muted);
+  cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease), color 0.25s var(--cc-ease);
+}
+.feat-spells-segment:hover:not(.is-active) { border-color: var(--cc-select); color: var(--cc-text); }
+.feat-spells-segment.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
+.feat-spells-segment.is-recommended:not(.is-active) { border-color: var(--cc-accent); color: var(--cc-text); }
+.feat-spells-segment .fa-star { margin-left: 0.35rem; font-size: 0.7rem; color: var(--cc-accent); }
+.feat-spells-segment.is-active .fa-star { color: inherit; }
+/* Note shown in place of the Add button when the focused spell is already known elsewhere. */
+.feat-spells-known-note {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;
+  font-size: 0.85rem; color: var(--cc-muted);
+  background: var(--cc-panel); border: 1px dashed var(--cc-line); border-radius: 8px;
+}
+.feat-spells-known-note i { color: var(--cc-good); }
+/* Prompt shown in the list column until a spell list is chosen. */
+.feat-spells-await {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.6rem; padding: 2rem 1rem; text-align: center; color: var(--cc-muted);
+}
+.feat-spells-await i { font-size: 1.4rem; color: var(--cc-accent); }
 
 /* ---------------------------------------------- Choices step
 
