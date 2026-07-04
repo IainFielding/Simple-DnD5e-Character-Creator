@@ -273,7 +273,8 @@ async function parseAdvancementChoice(adv, ctx) {
         if ( sel[selKey] ) sel[selKey] = sel[selKey].filter(k => valid.has(k));
         const req = buildChoiceReq({
           advId: adv._id, choiceIndex: ci, source, ownerUuid, type: "Trait", level,
-          title: adv.title || t("advancement.expertise"), hint: adv.hint, count, options, sel, crossTaken
+          title: adv.title || t("advancement.expertise"), hint: adv.hint, count, options, sel, crossTaken,
+          mode
         });
         req.isExpertise = true;
         if ( !options.length ) req.emptyNote = t("choice.emptyNoteSkills");
@@ -292,7 +293,8 @@ async function parseAdvancementChoice(adv, ctx) {
       reqs.push(buildChoiceReq({
         advId: adv._id, choiceIndex: ci, source, ownerUuid, type: "Trait", level,
         title: adv.title || traitChoiceTitle(pool), hint: adv.hint,
-        count, options, sel, crossDedupe: true, dedupeGroup: mode, crossTaken
+        count, options, sel, crossDedupe: true, dedupeGroup: mode, crossTaken,
+        mode, poolType: (pool[0] ?? "").split(":")[0]
       }));
     }
     return;
@@ -370,10 +372,35 @@ async function parseAdvancementChoice(adv, ctx) {
   }
 }
 
+/**
+ * A plain-language explainer for a block: what the choice is and how many to pick. Used as the
+ * block's guidance when the advancement carries no `hint` of its own, so every decision reads
+ * with a sentence telling the player what it is and what's expected (e.g. weapon mastery).
+ * @param {{type:string, mode?:string, poolType?:string, count:number}} descriptor
+ */
+function choiceBlurb({ type, mode = "default", poolType = null, count = 1 }) {
+  // Blocks that are inherently a single pick read as complete sentences on their own.
+  if ( type === "Size" ) return t("choice.blurb.size");
+  if ( type === "SpellAbility" ) return t("choice.blurb.spellAbility");
+
+  let desc;
+  if ( type === "ItemChoice" ) desc = t("choice.blurb.itemChoice");
+  else if ( mode === "expertise" ) desc = t("choice.blurb.expertise");
+  else if ( mode === "mastery" ) desc = t("choice.blurb.mastery");
+  else {
+    const key = { weapon: "weapon", skills: "skills", tool: "tool", languages: "languages",
+      armor: "armor", saves: "saves", ci: "resist", di: "resist", dr: "resist" }[poolType] ?? "trait";
+    desc = t(`choice.blurb.${key}`);
+  }
+  const choose = count > 1 ? t("choice.chooseCount", { count }) : t("choice.chooseOne");
+  return `${desc} ${choose}.`;
+}
+
 /** Assemble one requirement descriptor and merge in the player's current picks. */
 function buildChoiceReq({
   advId, choiceIndex = null, source, ownerUuid = null, type, level = 0, title, hint,
-  count, options, sel, crossDedupe = false, dedupeGroup = "default", crossTaken
+  count, options, sel, crossDedupe = false, dedupeGroup = "default", crossTaken,
+  mode = "default", poolType = null
 }) {
   const selKey = choiceIndex == null ? advId : `${advId}#${choiceIndex}`;
   const chosen = sel[selKey] ?? [];
@@ -400,7 +427,7 @@ function buildChoiceReq({
 
   return {
     advId, choiceIndex, selKey, source, ownerUuid, type, level,
-    title, hint: hint || "", count,
+    title, hint: hint || choiceBlurb({ type, mode, poolType, count }), count,
     countLabel: count > 1 ? t("choice.chooseCount", { count }) : t("choice.chooseOne"),
     showProgress: count > 1,
     chosenCount: chosen.length,
@@ -533,11 +560,18 @@ function toolPoolCategory(entry) {
   return parts.length ? toolCategoryKey(parts[0]) : null;
 }
 
-/** Scan enabled compendiums for items matching an `allowDrops` restriction, memoised. */
-async function findRestrictedItems(cfg) {
+/**
+ * Scan enabled compendiums for items matching an `allowDrops` restriction, memoised.
+ * When `maxLevel` is given, items are filtered to those the character qualifies for by
+ * `system.prerequisites.level` (matching the native ItemChoice flow's feature-level gate — used at
+ * level-up so, e.g., a level-2 Artificer's "Replicate Magic Item" only lists level-2 infusions).
+ * @param {object} cfg              The ItemChoice advancement configuration.
+ * @param {number|null} [maxLevel]  Highest prerequisite level to include; null disables the gate.
+ */
+export async function findRestrictedItems(cfg, maxLevel = null) {
   const docType = cfg.type;
   const r = cfg.restriction ?? {};
-  const sig = `${docType}|${r.type || ""}|${r.subtype || ""}`;
+  const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}`;
   if ( restrictedCache.has(sig) ) return restrictedCache.get(sig);
 
   const results = [];
@@ -545,12 +579,15 @@ async function findRestrictedItems(cfg) {
     if ( pack.metadata.type !== "Item" ) continue;
     if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) continue;
     try {
-      const index = await pack.getIndex({ fields: ["type", "system.type.value", "system.type.subtype"] });
+      const index = await pack.getIndex({
+        fields: ["type", "system.type.value", "system.type.subtype", "system.prerequisites.level"]
+      });
       for ( const e of index ) {
         if ( docType && e.type !== docType ) continue;
         const ty = e.system?.type ?? {};
         if ( r.type && ty.value !== r.type ) continue;
         if ( r.subtype && ty.subtype !== r.subtype ) continue;
+        if ( (maxLevel != null) && (Number(e.system?.prerequisites?.level ?? 0) > maxLevel) ) continue;
         results.push({ key: e.uuid, uuid: e.uuid, label: e.name, img: e.img });
       }
     } catch ( err ) {

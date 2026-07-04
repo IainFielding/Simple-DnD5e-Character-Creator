@@ -1,0 +1,31 @@
+<section class="creator-levelup creator-levelup-traits">
+  {{#each sections}}
+  <div class="creator-choice-section {{#if complete}}is-complete{{/if}}">
+    {{#unless collapsed}}
+    <header class="creator-choice-head">
+      <h2>{{title}}</h2>
+      <span class="creator-choice-count">{{count}}</span>
+    </header>
+    {{/unless}}
+
+    {{#each groups}}
+    {{#if label}}<h3 class="creator-choice-group-head">{{label}}</h3>{{/if}}
+    <ul class="creator-choice-grid">
+      {{#each options}}
+      <li>
+        <button type="button" class="creator-choice-card {{#if owned}}creator-choice-card--owned{{/if}} {{#if selected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="traitToggle"
+                data-index="{{../../index}}" data-key="{{key}}"
+                data-tooltip="{{label}}" {{#if disabled}}disabled{{/if}}>
+          {{#if owned}}<span class="creator-choice-card-badge">{{localize "sogrom-dnd5e-character-creator.levelup.step.traits.known"}}</span>{{/if}}
+          {{#if img}}<img class="creator-choice-card-img" src="{{img}}" alt="">{{/if}}
+          <span class="creator-choice-card-name">{{label}}</span>
+          {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+        </button>
+      </li>
+      {{/each}}
+    </ul>
+    {{/each}}
+  </div>
+  {{/each}}
+</section>

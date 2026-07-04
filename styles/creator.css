@@ -497,7 +497,7 @@
   .creator-rail-link,
   .creator-tab,
   .creator-spell-tab,
-  .creator-choice-opt { transition: none; }
+  .creator-choice-card { transition: none; }
   .creator-btn:active:not(:disabled),
   .creator-btn--trail:hover:not(:disabled) .creator-btn-icon,
   .creator-btn--lead:hover:not(:disabled) .creator-btn-icon,
@@ -508,8 +508,7 @@
   .creator-pool-chip:hover,
   .creator-rail-link:active:not(:disabled),
   .creator-tab:active,
-  .creator-spell-tab:active,
-  .creator-choice-opt:active:not(.is-disabled) { transform: none; }
+  .creator-spell-tab:active { transform: none; }
 }
 
 /* ---------------------------------------------- Loading
@@ -1513,6 +1512,37 @@
 .creator-spells { grid-template-rows: minmax(0, 1fr); }
 .creator-spells-none { grid-column: 1 / -1; grid-row: 1 / -1; }
 
+/* Level-up spell step: a one-line intro above the tabs, and a small spell-level badge on each
+   pick-row (the leveled tab mixes spell levels, so each row states its own). */
+.levelup-spells-intro { margin: 0 0 0.75rem; color: var(--cc-muted); font-size: 0.9rem; line-height: 1.4; }
+.creator-pickrow-tag {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  color: var(--cc-accent);
+  background: var(--cc-panel-2, var(--cc-panel));
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+}
+/* When a row carries both a level badge and a selected tick, keep them side by side at the right. */
+.creator-pickrow-tag + .creator-pickrow-tick { margin-left: 0.4rem; }
+
+/* Level-up spell swaps (Phase 4b): a known spell offered as a swap-out candidate reads muted with a
+   bookmark; once marked for replacement it strikes through and the arrows glow. */
+.levelup-spells-swaphint { margin: -0.35rem 0 0.75rem; color: var(--cc-muted); font-size: 0.82rem; line-height: 1.35; }
+.levelup-spells-swaphint i { color: var(--cc-accent); margin-right: 0.25rem; }
+.creator-pickrow.is-owned { border-style: dashed; }
+.creator-pickrow.is-owned .creator-pickrow-name { color: var(--cc-muted); }
+.creator-pickrow.is-owned .creator-pickrow-tick { color: var(--cc-muted); }
+.creator-pickrow.is-swapping {
+  border-color: var(--cc-danger, #c66);
+  background: color-mix(in srgb, var(--cc-danger, #c66) 12%, transparent);
+}
+.creator-pickrow.is-swapping .creator-pickrow-name { color: var(--cc-text); text-decoration: line-through; opacity: 0.75; }
+.creator-pickrow.is-swapping .creator-pickrow-tick { color: var(--cc-danger, #c66); }
+
 /* The description column scrolls its detail, with the picked-spell tally pinned beneath it. */
 .creator-spells .creator-pick-desc { display: flex; flex-direction: column; overflow: hidden; }
 .creator-pick-desc-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -1564,6 +1594,41 @@
 .creator-spell-chip i { display: none; }
 .creator-spell-chip img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid var(--cc-line); }
 .creator-spell-chip:hover { border-color: var(--cc-gold); color: var(--cc-gold); }
+
+/* ---- Level-up spell browser: two columns, choices wide + description sidebar ----
+   The spell choices take the wide main column (~2/3) so long spell names have room; the focused
+   spell's description sits in a narrower ~1/3 sidebar with the running tally pinned beneath it (as
+   in the creation browser). Scoped to .levelup-spells so the creation browser is untouched. */
+.levelup-spells { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+
+/* Search box + level/school filter dropdowns share the top toolbar row, wrapping when tight. */
+.creator-spell-search-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.creator-spell-search-row .creator-search { flex: 1 1 220px; width: auto; }
+.creator-spell-filters { display: flex; flex: 1 1 260px; gap: 0.5rem; }
+.creator-spell-filter {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 9px;
+  color: var(--cc-muted);
+}
+.creator-spell-filter i { flex: 0 0 auto; font-size: 0.8rem; }
+.creator-spell-filter select {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--cc-text);
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+}
+.creator-spell-filter select option { background: var(--cc-panel); color: var(--cc-text); }
 
 /* ---------------------------------------------- Choices step
 
@@ -1680,38 +1745,43 @@
 .creator-choice-empty { color: var(--cc-muted); font-style: italic; font-size: 0.85rem; }
 .creator-choice-group { margin-top: 0.5rem; }
 .creator-choice-group-label { font-size: 0.75rem; text-transform: uppercase; color: var(--cc-muted); }
-.creator-choice-options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
-.creator-choice-opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.7rem;
-  background: var(--cc-panel-2);
-  border: 1px solid var(--cc-line);
-  border-radius: 999px;
-  color: var(--cc-text);
-  cursor: pointer;
-  box-shadow: var(--cc-sheen);
-  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
-    transform 0.25s var(--cc-ease);
+/* Options are rendered as the same image-forward cards as the level-up selections page
+   (`.creator-choice-card`, defined in the level-up section below), so the two screens read the
+   same. Creation's options, though, are mostly short text (proficiencies, abilities, languages)
+   rather than the level-up page's item pictures — so scope the cards compact and left-aligned
+   here, with the image optional, and only give the grid extra room on decisions that do carry
+   item art ("choose a feature"). */
+.creator-choices .creator-choice-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.6rem;
 }
-.creator-choice-opt:hover:not(.is-disabled) { border-color: var(--cc-select); }
-.creator-choice-opt:active:not(.is-disabled) { transform: scale(0.96); }
-.creator-choice-opt.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
-.creator-choice-opt.is-disabled { opacity: 0.35; cursor: not-allowed; }
-.creator-choice-opt-img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
-.creator-choice-opt-tick { color: var(--cc-select); font-size: 0.75rem; }
+.creator-choices .creator-choice-card {
+  min-height: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+}
+.creator-choices .creator-choice-card-img { width: 40px; height: 40px; }
+.creator-choices .creator-choice-card-name { font-size: 0.9rem; text-align: left; }
+/* Decisions that offer item art (a "choose a feature" pick) get roomier cards. */
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img) {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.creator-choices .creator-choice-card.is-disabled { opacity: 0.35; cursor: not-allowed; }
 
-/* A recommended option (e.g. the class's default spellcasting ability): a soft gold glow,
-   a leading star, and a slow shine sweep so the suggested pick stands out tastefully. */
-.creator-choice-opt.is-recommended {
-  position: relative;
+/* A recommended option (e.g. the class's default spellcasting ability): a soft gold glow, a
+   corner star, and a slow shine sweep so the suggested pick stands out tastefully. */
+.creator-choices .creator-choice-card.is-recommended,
+.creator-levelup-grant .creator-choice-card.is-recommended {
   overflow: hidden;
   border-color: var(--cc-gold);
   box-shadow: 0 0 8px -2px var(--cc-gold);
 }
-.creator-choice-opt-star { color: var(--cc-gold); font-size: 0.7rem; }
-.creator-choice-opt.is-recommended::after {
+.creator-choice-card-star { flex-shrink: 0; color: var(--cc-gold); font-size: 0.75rem; }
+.creator-choices .creator-choice-card.is-recommended::after,
+.creator-levelup-grant .creator-choice-card.is-recommended::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1727,7 +1797,8 @@
   92%, 100% { transform: translateX(130%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .creator-choice-opt.is-recommended::after { animation: none; }
+  .creator-choices .creator-choice-card.is-recommended::after,
+  .creator-levelup-grant .creator-choice-card.is-recommended::after { animation: none; }
 }
 
 /* ---------------------------------------------- Equipment step
@@ -1921,3 +1992,424 @@
   justify-content: center;
   margin-top: 0.4rem;
 }
+
+/* ---------------------------------------------- Level-up
+
+   The level-up shell reuses the creator's rail/stage chrome and review styles; only the
+   hit-points step introduces its own controls. The sheet-header fallback button (shown only
+   when the world disables native advancements) lives outside the window, like the launch one. */
+
+.creator-step-intro {
+  margin: 0 0 1.25rem;
+  color: var(--cc-text);
+  max-width: 52ch;
+}
+
+.creator-levelup-hp .creator-hp-row {
+  margin-bottom: 1.5rem;
+}
+
+.creator-hp-head {
+  margin-bottom: 0.6rem;
+}
+
+.creator-hp-level {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-gold);
+}
+
+.creator-hp-choices {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.creator-hp-choice {
+  flex: 1 1 200px;
+  /* Fixed height + border-box so all three cards match exactly: the avg/roll cards are <button>s
+     (Foundry forces height:28px on those) while the manual card is a <label>, so a shared
+     min-height alone resolves to different heights between the two element types. */
+  box-sizing: border-box;
+  height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+  color: var(--cc-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.creator-hp-choice:hover { border-color: var(--cc-line-2); }
+.creator-hp-choice.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+
+.creator-hp-choice-label {
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.creator-hp-choice-value {
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--cc-gold-bright);
+  line-height: 1;
+}
+
+/* Manual entry sits in the same card frame; its number field mirrors the value typography. */
+.creator-hp-choice--manual { cursor: default; }
+
+.creator-hp-input {
+  width: 6rem;
+  height: 1.9rem;
+  box-sizing: border-box;
+  text-align: center;
+  /* Match the value span's rendered height exactly (same 1.9rem, line-height 1) so the manual card
+     is the same height as the average/roll cards — the input is their only differing element. */
+  font-size: 1.9rem;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--cc-gold-bright);
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line-2);
+  border-radius: 8px;
+  padding: 0 0.4rem;
+}
+.creator-hp-input:focus { border-color: var(--cc-select); outline: none; }
+/* Drop the number spinner so it can't nudge the centred value sideways. */
+.creator-hp-input { appearance: textfield; -moz-appearance: textfield; }
+.creator-hp-input::-webkit-outer-spin-button,
+.creator-hp-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.creator-hp-total {
+  margin: 0.7rem 0 0;
+  color: var(--cc-muted);
+}
+.creator-hp-total strong { color: var(--cc-gold-bright); font-size: 1.1rem; }
+
+.sogrom-levelup-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 0.4rem;
+}
+
+/* Level-up: each of a level's decisions sits in its own panel with an icon header + status pill. */
+.levelup-level { display: flex; flex-direction: column; gap: 1.5rem; max-width: 1100px; margin-inline: auto; }
+.levelup-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.levelup-block.is-complete { border-color: var(--cc-line-2); }
+
+/* The header doubles as a collapse toggle (like the creation choice checklist): the whole row is a
+   button that shows/hides the body, with a chevron that flips when open. */
+.levelup-block-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.8rem 1.1rem;
+  background: var(--cc-panel);
+  border: none;
+  border-bottom: 1px solid var(--cc-line);
+  color: var(--cc-text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.levelup-block-head:hover { background: var(--cc-panel-2); }
+/* Collapsed: no body below, so drop the divider the header would otherwise draw under itself. */
+.levelup-block:not(.is-open) .levelup-block-head { border-bottom-color: transparent; }
+.levelup-block-chevron {
+  flex: 0 0 auto;
+  color: var(--cc-muted);
+  font-size: 0.8rem;
+  transition: transform 0.2s ease;
+}
+.levelup-block.is-open .levelup-block-chevron { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .levelup-block-chevron { transition: none; }
+}
+.levelup-block-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--cc-select-soft);
+  color: var(--cc-gold-bright);
+  font-size: 0.95rem;
+}
+.levelup-block-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  border: none;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.levelup-block-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  white-space: nowrap;
+}
+.levelup-block-status.is-done {
+  color: var(--cc-gold-bright);
+  border-color: var(--cc-select);
+  background: var(--cc-select-soft);
+}
+
+.levelup-block-body { padding: 1.1rem; }
+/* The panel owns the heading and spacing now, so reset the partials' own outer margins. */
+.levelup-block-body > .creator-levelup,
+.levelup-block-body > .creator-pick,
+.levelup-block-body > .creator-review { margin: 0; }
+.levelup-block-body .creator-choice-section:last-child { margin-bottom: 0; }
+/* The subclass picker fills its parent's height for its two scrolling columns; inside a panel
+   there is no stage to fill, so give it a definite, self-contained height. */
+.levelup-block--subclass .creator-pick { height: clamp(360px, 50vh, 600px); }
+
+/* The ASI screen reuses the pick layout with two columns — description on the left (a chosen feat,
+   or the ability-improvement placeholder), the stacked ability scores in the aside on the right. One
+   layout for both cases keeps the ability boxes pinned in place when switching between feat and
+   points. As with the subclass pick, a panel has no stage to fill, so give it a definite height. */
+.creator-pick--asi { grid-template-columns: minmax(0, 1fr) 340px; }
+/* Size to content rather than filling a stage; only the description column caps its height and
+   scrolls (for a long feat). The ability aside sizes to its rows, so it never grows a scrollbar. */
+.levelup-block--asi .creator-pick--asi { height: auto; align-items: start; }
+.levelup-block--asi .creator-pick--asi .creator-pick-desc {
+  height: auto;
+  max-height: clamp(320px, 45vh, 560px);
+}
+.creator-pick--asi .creator-class-aside { max-height: none; overflow: visible; }
+
+/* Icon badge standing in for the item art in the ASI placeholder's detail header (56px = img size). */
+.creator-detail-icon {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--cc-line-2);
+  background: var(--cc-panel-2);
+  color: var(--cc-gold-bright);
+  font-size: 1.6rem;
+}
+
+/* Density tiers — vary card + icon size by how many options a pick offers (set per block). */
+.levelup-block[data-density="compact"] .creator-choice-grid {
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 0.6rem;
+}
+.levelup-block[data-density="compact"] .creator-choice-card {
+  min-height: 96px;
+  padding: 0.8rem 0.6rem;
+  gap: 0.5rem;
+}
+.levelup-block[data-density="compact"] .creator-choice-card-img { width: 40px; height: 40px; }
+.levelup-block[data-density="compact"] .creator-choice-card-name { font-size: 0.85rem; }
+
+.levelup-block[data-density="chip"] .creator-choice-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+.levelup-block[data-density="chip"] .creator-choice-card {
+  flex-direction: row;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0.55rem 0.8rem;
+  gap: 0.55rem;
+}
+.levelup-block[data-density="chip"] .creator-choice-card-name { font-size: 0.9rem; text-align: left; }
+
+.creator-levelup-choices .creator-choice-section {
+  margin-bottom: 1.75rem;
+}
+
+.creator-choice-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.creator-choice-head h2 { border: none; margin: 0; font-size: 1.15rem; }
+.creator-choice-count { color: var(--cc-muted); font-size: 0.85rem; white-space: nowrap; }
+
+.creator-choice-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+/* Category header within a choice section (e.g. Simple vs Martial Weapons). */
+.creator-choice-group-head {
+  border: none;
+  margin: 1.5rem 0 0.85rem;
+  font-size: 0.95rem;
+  color: var(--cc-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.creator-choice-group-head:first-child { margin-top: 0; }
+
+.creator-choice-card {
+  position: relative;
+  width: 100%;
+  min-height: 170px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 1.5rem 1rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+  color: var(--cc-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.creator-choice-card:hover:not(:disabled) { border-color: var(--cc-line-2); }
+.creator-choice-card.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-choice-card:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.creator-choice-card-img {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--cc-line);
+}
+.creator-choice-card-name { font-size: 1.05rem; text-align: center; line-height: 1.25; }
+
+.creator-choice-card-check {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.45rem;
+  color: var(--cc-gold-bright);
+  font-size: 0.85rem;
+}
+
+/* Replacement: the owned pick sits in the same grid, badged "Current", and dims when unticked. */
+.creator-choice-hint { margin: 0 0 1rem; color: var(--cc-muted); font-size: 0.85rem; }
+
+.creator-choice-card-badge {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.45rem;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--cc-select-soft);
+  color: var(--cc-gold-bright);
+  border: 1px solid var(--cc-select);
+}
+
+/* An owned pick that's been unticked (marked for replacement) reads as struck-out and faded. */
+.creator-choice-card--owned:not(.is-selected) {
+  opacity: 0.5;
+  border-style: dashed;
+}
+.creator-choice-card--owned:not(.is-selected) .creator-choice-card-name { text-decoration: line-through; }
+
+/* ---- Spell grant with a choosable casting ability (species lineage spells) ---- */
+/* The granted spell(s), shown as small read-only chips above the ability picker. */
+.creator-grant-spells {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.creator-grant-spell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem 0.35rem 0.4rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+}
+.creator-grant-spell-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--cc-line);
+}
+.creator-grant-spell-name { font-size: 0.9rem; }
+
+/* The ability picker is a short, label-only row — keep the cards compact, not the tall image tier. */
+.creator-grant-abilities { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.creator-grant-abilities .creator-choice-card {
+  min-height: 0;
+  padding: 0.85rem 1rem;
+}
+
+/* ---- Ability Score Improvement ----
+   The level-up ASI reuses the creation panels wholesale: the Background increase aside for the
+   plain "spend your points" case, and the pick layout (description + ability aside) for a chosen
+   feat. Only the multi-record separator is bespoke here. */
+.creator-asi-section + .creator-asi-section { margin-top: 1.5rem; }
+
+/* ---- Subclass ---- */
+.creator-subclass-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
+.creator-subclass-choose {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  font-size: 1.05rem;
+  background: var(--cc-select-soft);
+  border: 1px solid var(--cc-select);
+  border-radius: 12px;
+  color: var(--cc-gold-bright);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.creator-subclass-choose:hover { border-color: var(--cc-gold-bright); }
+
+.creator-subclass-chosen { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
+.creator-subclass-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem 1.4rem;
+  background: var(--cc-select-soft);
+  border: 1px solid var(--cc-select);
+  border-radius: 12px;
+  color: var(--cc-text);
+  font-size: 1.2rem;
+}
+.creator-subclass-card img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; }

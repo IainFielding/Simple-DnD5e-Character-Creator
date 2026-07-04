@@ -22,6 +22,9 @@ export class SpellSource {
   /** classUuid -> resolved spell payload, memoised. */
   #byClass = new Map();
 
+  /** `${classUuid}:${maxSpellLevel}` -> level-up spell pool, memoised. */
+  #byLevelUp = new Map();
+
   /** spell uuid -> enriched description html, memoised (loaded on focus). */
   #descriptions = new Map();
 
@@ -38,6 +41,44 @@ export class SpellSource {
     const payload = await this.#resolve(classUuid);
     this.#byClass.set(classUuid, payload);
     return payload;
+  }
+
+  /**
+   * The level-up spell pool for a class: every spell it can learn from cantrips up to
+   * `maxSpellLevel`, grouped by spell level. Unlike {@link forClass} (which is level-1 only for
+   * creation), this loads the class's whole castable range so a mid-game caster can pick the new
+   * spells a level-up unlocked. The *counts* the player may add are computed by the level-up spell
+   * step from the actor's derived data ({@link cantripsKnownAtLevel} / `preparation.max`); this only
+   * supplies the options. Memoised per `${classUuid}:${maxSpellLevel}`.
+   * @param {string} classUuid
+   * @param {number} maxSpellLevel   Highest spell level the actor has slots for.
+   * @param {"class"|"subclass"} [listType="class"]  Registry list type — "subclass" for a
+   *   subclass caster (Eldritch Knight / Arcane Trickster), whose list is registered under it.
+   * @returns {Promise<{isSpellcaster:boolean, byLevel?:Record<number,object[]>, classId?:string, maxSpellLevel?:number}>}
+   */
+  async forClassAtLevel(classUuid, maxSpellLevel, listType = "class") {
+    if ( !classUuid ) return { isSpellcaster: false };
+    const key = `${listType}:${classUuid}:${maxSpellLevel}`;
+    if ( this.#byLevelUp.has(key) ) return this.#byLevelUp.get(key);
+
+    const payload = await this.#resolveAtLevel(classUuid, maxSpellLevel, listType);
+    this.#byLevelUp.set(key, payload);
+    return payload;
+  }
+
+  async #resolveAtLevel(classUuid, maxSpellLevel, listType) {
+    const doc = await fromUuid(classUuid);
+    const progression = doc?.system?.spellcasting?.progression;
+    if ( !doc || !progression || progression === "none" ) return { isSpellcaster: false };
+
+    const classId = doc.system?.identifier ?? doc.name?.toLowerCase() ?? "";
+    const all = deduplicateSpells(await loadSpellsForClass(classId, maxSpellLevel, listType));
+    const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+    const byLevel = {};
+    for ( let l = 0; l <= maxSpellLevel; l++ ) byLevel[l] = all.filter(s => s.level === l).sort(byName);
+
+    log(`level-up spells for "${classId}" (≤ lvl ${maxSpellLevel}): ${all.length} total`);
+    return { isSpellcaster: true, byLevel, classId, maxSpellLevel };
   }
 
   /**
@@ -97,12 +138,12 @@ export class SpellSource {
 /* -------------------------------------------- */
 
 /**
- * The level-1 value of a class's cantrips-known / spells-known ScaleValue advancement,
- * falling back to the supplied table when the class carries no such scale. `kind` is
- * "cantrip" (matches titles containing "cantrip") or "spell" (a spells-known scale
- * that is neither a cantrip nor a slot scale).
+ * The value of a class's cantrips-known / spells-known ScaleValue advancement at a given class
+ * `level` (default 1 for creation), falling back to the supplied table when the class carries no
+ * such scale. `kind` is "cantrip" (matches titles containing "cantrip") or "spell" (a spells-known
+ * scale that is neither a cantrip nor a slot scale).
  */
-function scaleCount(doc, classId, kind, fallback) {
+function scaleCount(doc, classId, kind, fallback, level = 1) {
   for ( const adv of advancementEntries(doc) ) {
     if ( (adv.type ?? adv.constructor?.typeName) !== "ScaleValue" ) continue;
     const title = (adv.title ?? adv.configuration?.identifier ?? "").toLowerCase();
@@ -111,11 +152,30 @@ function scaleCount(doc, classId, kind, fallback) {
     // "spells known" scale that is neither the cantrip scale nor a spell-*slot* scale.
     if ( kind === "cantrip" && !isCantrip ) continue;
     if ( kind === "spell" && (isCantrip || !title.includes("spell") || title.includes("slot")) ) continue;
+    // A ScaleValue table only carries entries at the levels it changes; take the highest entry
+    // at or below the requested level so a mid-tier level reads the last increase, not a gap.
     const scale = adv.configuration?.scale ?? {};
-    const val = scale[1] ?? scale["1"];
+    let val;
+    for ( let l = level; l >= 1; l-- ) {
+      const entry = scale[l] ?? scale[String(l)];
+      if ( entry !== undefined ) { val = entry; break; }
+    }
     if ( val !== undefined ) return Number(val.value ?? val) || 0;
   }
   return fallback[classId] ?? 0;
+}
+
+/**
+ * The number of cantrips a spellcasting class knows at a given class `level`, read from its
+ * "Cantrips Known" ScaleValue advancement (the level-up spell step's cantrip capacity). Falls back
+ * to the level-1 table only when the class carries no cantrip scale, which no real caster does.
+ * @param {Item5e|object} classDoc   The class item or document.
+ * @param {number} level             The class's current level.
+ * @returns {number}
+ */
+export function cantripsKnownAtLevel(classDoc, level) {
+  const classId = classDoc?.system?.identifier ?? classDoc?.name?.toLowerCase() ?? "";
+  return scaleCount(classDoc, classId, "cantrip", DEFAULT_CANTRIPS, level);
 }
 
 /* -------------------------------------------- */
@@ -134,21 +194,21 @@ function scaleCount(doc, classId, kind, fallback) {
  * which pack a spell happens to live in. {@link fetchSpellsByUuids} resolves the
  * level reliably instead.
  */
-async function loadSpellsForClass(classId) {
+async function loadSpellsForClass(classId, maxLevel = 1, listType = "class") {
   const uuids = new Set();
 
   try {
     const registry = dnd5e.registry?.spellLists;
-    const list = registry?.forType?.("class", classId);
+    const list = registry?.forType?.(listType, classId);
     if ( list ) for ( const uuid of list.uuids ?? [] ) uuids.add(uuid);
   } catch ( err ) {
     log("spell list registry lookup failed", err);
   }
 
   if ( !uuids.size ) await scanSpellListPacks(classId, uuids);
-  if ( uuids.size ) return fetchSpellsByUuids(uuids);
+  if ( uuids.size ) return fetchSpellsByUuids(uuids, maxLevel);
 
-  return scanSpellsByClassTag(classId);
+  return scanSpellsByClassTag(classId, maxLevel);
 }
 
 /** Legacy fallback: collect spell UUIDs from any `spellList` item matching the class. */
@@ -185,14 +245,14 @@ function collectSpellUuids(doc, uuids) {
  * UUID it doesn't return (pack not browsable, index not loaded) is reconciled with a
  * direct `fromUuid` so the list is complete rather than all-or-nothing.
  */
-async function fetchSpellsByUuids(uuids) {
+async function fetchSpellsByUuids(uuids, maxLevel = 1) {
   const found = new Map();
   const browser = dnd5e.applications?.CompendiumBrowser;
   if ( browser?.fetch ) {
     try {
       const all = await browser.fetch(Item, {
         types: new Set(["spell"]),
-        filters: [{ k: "system.level", o: "lte", v: 1 }],
+        filters: [{ k: "system.level", o: "lte", v: maxLevel }],
         indexFields: SPELL_INDEX_FIELDS
       });
       for ( const e of all ) {
@@ -205,13 +265,13 @@ async function fetchSpellsByUuids(uuids) {
   for ( const uuid of uuids ) {
     if ( found.has(uuid) ) continue;
     const doc = await fromUuid(uuid).catch(() => null);
-    if ( doc?.type === "spell" && (doc.system?.level ?? 99) <= 1 ) found.set(uuid, buildSpellFromEntry(doc));
+    if ( doc?.type === "spell" && (doc.system?.level ?? 99) <= maxLevel ) found.set(uuid, buildSpellFromEntry(doc));
   }
   return [...found.values()];
 }
 
 /** Last-resort scan: every level-≤1 spell tagged with the class identifier. */
-async function scanSpellsByClassTag(classId) {
+async function scanSpellsByClassTag(classId, maxLevel = 1) {
   const enabled = getEnabledPacks();
   const out = [];
   const seen = new Set();
@@ -220,7 +280,7 @@ async function scanSpellsByClassTag(classId) {
     try {
       const index = await pack.getIndex({ fields: ["type", "system.level"] });
       for ( const entry of index ) {
-        if ( entry.type !== "spell" || (entry.system?.level ?? 99) > 1 || seen.has(entry._id) ) continue;
+        if ( entry.type !== "spell" || (entry.system?.level ?? 99) > maxLevel || seen.has(entry._id) ) continue;
         seen.add(entry._id);
         const doc = await pack.getDocument(entry._id);
         if ( !doc ) continue;
@@ -263,7 +323,7 @@ function deduplicateSpells(spells) {
 }
 
 /** A lightweight spell card from an index entry or full document; description loads on focus. */
-function buildSpellFromEntry(entry) {
+export function buildSpellFromEntry(entry) {
   const level = entry.system?.level ?? 0;
   const schoolKey = entry.system?.school ?? "";
   const props = entry.system?.properties;

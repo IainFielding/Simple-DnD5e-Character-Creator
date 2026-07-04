@@ -1,0 +1,32 @@
+<section class="creator-levelup creator-levelup-hp">
+  <p class="creator-step-intro">{{intro}}</p>
+
+  {{#each rows}}
+  <div class="creator-hp-row" data-index="{{index}}">
+    {{#if levelLabel}}<header class="creator-hp-head"><span class="creator-hp-level">{{levelLabel}}</span></header>{{/if}}
+
+    <div class="creator-hp-choices">
+      <button type="button" class="creator-hp-choice {{#if isAverage}}is-selected{{/if}}"
+              data-action="stepAction" data-step-action="hpAverage" data-index="{{index}}">
+        <span class="creator-hp-choice-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.average"}}</span>
+        <span class="creator-hp-choice-value">+{{average}}</span>
+      </button>
+
+      <button type="button" class="creator-hp-choice {{#if isRoll}}is-selected{{/if}}"
+              data-action="stepAction" data-step-action="hpRoll" data-index="{{index}}">
+        <span class="creator-hp-choice-label"><i class="fa-solid fa-dice-d20"></i> {{rollLabel}}</span>
+        <span class="creator-hp-choice-value">{{#if rolled}}+{{rolled}}{{else}}<i class="fa-solid fa-dice"></i>{{/if}}</span>
+      </button>
+
+      <label class="creator-hp-choice creator-hp-choice--manual {{#if isManual}}is-selected{{/if}}">
+        <span class="creator-hp-choice-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.custom"}}</span>
+        <input type="number" class="creator-hp-input" min="1" max="{{max}}" value="{{current}}"
+               data-step-change="hpManual" data-index="{{index}}">
+      </label>
+    </div>
+
+    <p class="creator-hp-total">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.thisLevel"}}
+      <strong>+{{total}}</strong></p>
+  </div>
+  {{/each}}
+</section>

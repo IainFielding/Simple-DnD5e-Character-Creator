@@ -26,6 +26,9 @@ export class SourceIndex {
   /** granted-item uuid -> { name, img, type } metadata (or null), memoised. */
   #meta = new Map();
 
+  /** All indexed subclass cards (across classes), fetched once on first request. */
+  #subclasses = null;
+
   loaded = false;
 
   /**
@@ -74,6 +77,40 @@ export class SourceIndex {
   species() { return this.#cards.race; }
   backgrounds() { return this.#cards.background; }
 
+  /**
+   * The subclass cards belonging to one class, by its identifier. Fetched (and cached) lazily on
+   * first request — independent of {@link load}, so the level-up flow can use it without warming
+   * the full origin index. {@link detail} and {@link advancementGroups} work on these UUIDs too.
+   * @param {string} classIdentifier
+   * @returns {Promise<object[]>}
+   */
+  async subclasses(classIdentifier) {
+    if ( !this.#subclasses ) {
+      const browser = dnd5e.applications?.CompendiumBrowser;
+      let entries = [];
+      if ( browser?.fetch ) {
+        try {
+          entries = await browser.fetch(Item, {
+            types: new Set(["subclass"]),
+            indexFields: new Set(["system.classIdentifier"])
+          });
+        } catch ( err ) {
+          log("Compendium Browser fetch failed for subclasses, scanning packs directly", err);
+        }
+      }
+      if ( !entries.length ) entries = await this.#scanPacks("subclass");
+      this.#subclasses = entries.map(e => ({
+        uuid: e.uuid,
+        name: e.name,
+        img: e.img || "icons/svg/item-bag.svg",
+        classIdentifier: e.system?.classIdentifier ?? ""
+      }));
+    }
+    return this.#subclasses
+      .filter(c => c.classIdentifier === classIdentifier)
+      .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
+  }
+
   /** Look up a single card across all types by its UUID. */
   card(uuid) {
     if ( !uuid ) return null;
@@ -116,7 +153,7 @@ export class SourceIndex {
     for ( const pack of game.packs ) {
       if ( pack.metadata.type !== "Item" ) continue;
       try {
-        const index = await pack.getIndex({ fields: ["type", "system.identifier"] });
+        const index = await pack.getIndex({ fields: ["type", "system.identifier", "system.classIdentifier"] });
         for ( const e of index ) if ( e.type === type ) out.push(e);
       } catch ( err ) {
         log(`pack scan failed for ${pack.collection}`, err);

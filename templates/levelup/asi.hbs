@@ -1,0 +1,79 @@
+<section class="creator-levelup creator-levelup-asi">
+  {{#each sections}}
+  {{!-- One layout for both cases so the ability boxes never move: the description column on the left
+        (a feat, or the ASI placeholder), the stacked ability scores pinned in the aside on the right. --}}
+  <div class="creator-asi-section creator-pick creator-pick--asi" data-index="{{index}}">
+
+    <div class="creator-pick-desc">
+      {{#if isFeat}}
+      {{#if detail}}
+      <article class="creator-detail">
+        <header class="creator-detail-head">
+          <img class="creator-detail-img" src="{{detail.img}}" alt="">
+          <h2>{{detail.name}}</h2>
+        </header>
+        <div class="creator-detail-body">{{{detail.enriched}}}</div>
+      </article>
+      {{/if}}
+      <div class="creator-ability-actions">
+        <button type="button" class="creator-btn creator-btn-ghost" data-action="stepAction" data-step-action="asiFeat" data-index="{{index}}">
+          <i class="fa-solid fa-repeat"></i> {{localize "sogrom-dnd5e-character-creator.levelup.step.asi.changeFeat"}}
+        </button>
+        <button type="button" class="creator-btn creator-btn-ghost" data-action="stepAction" data-step-action="asiAbilities" data-index="{{index}}">
+          {{localize "sogrom-dnd5e-character-creator.levelup.step.asi.useAbilities"}}
+        </button>
+      </div>
+
+      {{else}}
+      <article class="creator-detail">
+        <header class="creator-detail-head">
+          <span class="creator-detail-icon"><i class="fa-solid fa-arrow-up"></i></span>
+          <h2>{{localize "sogrom-dnd5e-character-creator.levelup.step.asi.improvementTitle"}}</h2>
+        </header>
+        <div class="creator-detail-body">
+          <p>{{{improvementDesc}}}</p>
+        </div>
+      </article>
+      {{#if allowFeat}}
+      <div class="creator-ability-actions">
+        <button type="button" class="creator-btn creator-btn-ghost" data-action="stepAction" data-step-action="asiFeat" data-index="{{index}}">
+          <i class="fa-solid fa-medal"></i> {{localize "sogrom-dnd5e-character-creator.levelup.step.asi.takeFeat"}}
+        </button>
+      </div>
+      {{/if}}
+      {{/if}}
+    </div>
+
+    <aside class="creator-class-aside">
+      <h2 class="creator-aside-title">{{localize "sogrom-dnd5e-character-creator.step.bgAbilities.label"}}</h2>
+      {{#if hasChoice}}
+      <p class="creator-asi-hint">{{localize "sogrom-dnd5e-character-creator.levelup.step.asi.hint" points=points cap=cap}}</p>
+      <div class="creator-points">
+        <span class="creator-points-value {{#if allSpent}}is-zero{{/if}}">{{remaining}}</span>
+        <span class="creator-points-label">{{localize "sogrom-dnd5e-character-creator.step.abilities.pointsLeft"}}</span>
+      </div>
+      {{/if}}
+
+      <ul class="creator-ability-list">
+        {{#each rows}}
+        <li class="creator-ability-row {{#if locked}}is-locked{{/if}} {{#if bonusLabel}}is-assigned{{/if}}">
+          <span class="creator-ability-name">{{label}}</span>
+          <div class="creator-stepper">
+            <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="asiDec"
+                    data-index="{{../stepIndex}}" data-key="{{key}}" {{#unless canDec}}disabled{{/unless}}>&minus;</button>
+            <span class="creator-ability-score">
+              {{total}}
+              {{#if locked}}<i class="creator-ability-lock fa-solid fa-lock" title="{{localize 'sogrom-dnd5e-character-creator.levelup.step.asi.locked'}}"></i>{{/if}}
+            </span>
+            <button type="button" class="creator-step-btn" data-action="stepAction" data-step-action="asiInc"
+                    data-index="{{../stepIndex}}" data-key="{{key}}" {{#unless canInc}}disabled{{/unless}}>+</button>
+          </div>
+          <span class="creator-ability-mod">{{bonusLabel}}</span>
+        </li>
+        {{/each}}
+      </ul>
+    </aside>
+
+  </div>
+  {{/each}}
+</section>

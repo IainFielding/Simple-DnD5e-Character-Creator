@@ -1,0 +1,38 @@
+<section class="creator-levelup creator-levelup-grant">
+  {{#each sections}}
+  <div class="creator-choice-section">
+    {{#unless collapsed}}
+    <header class="creator-choice-head">
+      <h2>{{title}}</h2>
+    </header>
+    {{/unless}}
+
+    {{#if spells.length}}
+    <ul class="creator-grant-spells">
+      {{#each spells}}
+      <li class="creator-grant-spell" data-tooltip="{{ccItemTooltip uuid}}">
+        <img class="creator-grant-spell-img" src="{{img}}" alt="">
+        <span class="creator-grant-spell-name">{{name}}</span>
+      </li>
+      {{/each}}
+    </ul>
+    {{/if}}
+
+    <p class="creator-choice-hint">{{prompt}}</p>
+    <ul class="creator-choice-grid creator-grant-abilities">
+      {{#each abilities}}
+      <li>
+        <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}} {{#if recommended}}is-recommended{{/if}}"
+                data-action="stepAction" data-step-action="grantAbility"
+                data-index="{{../index}}" data-key="{{key}}"
+                {{#if recommendTip}}data-tooltip="{{recommendTip}}"{{/if}}>
+          {{#if recommended}}<i class="creator-choice-card-star fa-solid fa-star" aria-hidden="true"></i>{{/if}}
+          <span class="creator-choice-card-name">{{label}}</span>
+          {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+        </button>
+      </li>
+      {{/each}}
+    </ul>
+  </div>
+  {{/each}}
+</section>

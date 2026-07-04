@@ -2,6 +2,7 @@ import { MODULE_ID, SETTINGS, DEFAULTS, tpl, t, log } from "./config.mjs";
 import { STEPS } from "./steps/registry.mjs";
 import { CreatorShell } from "./app/creator-shell.mjs";
 import { warmSources } from "./data/source-cache.mjs";
+import { registerLevelUp } from "./levelup/intercept.mjs";
 
 /* -------------------------------------------- */
 /*  Init: settings + templates                  */
@@ -55,6 +56,15 @@ function registerSettings() {
       windowed: t("settings.displayMode.windowed")
     }
   });
+  game.settings.register(MODULE_ID, SETTINGS.mode, {
+    name: t("settings.mode.name"),
+    hint: t("settings.mode.hint"),
+    scope: "world", config: true, type: String, default: DEFAULTS.mode,
+    choices: {
+      "creation": t("settings.mode.creation"),
+      "creation-levelup": t("settings.mode.creationLevelup")
+    }
+  });
 }
 
 /**
@@ -93,6 +103,11 @@ Hooks.once("ready", () => {
     return;
   }
   log("ready");
+
+  // Install the level-up takeover hooks (primary: wrap the native AdvancementManager;
+  // fallback: a sheet button when the world has disabled native advancements). Both paths
+  // self-gate on the `mode` setting and Hero Mancer, so this is safe to register unconditionally.
+  registerLevelUp();
 
   // Pre-warm the shared compendium index in the background, so the builder opens instantly
   // instead of showing its loading screen on first use. Gated to users who can create actors

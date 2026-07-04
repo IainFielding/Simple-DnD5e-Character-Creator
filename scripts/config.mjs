@@ -16,14 +16,37 @@ export const SETTINGS = {
   contextMenu: "showContextMenu",
   pointBuyBudget: "pointBuyBudget",
   rollFormula: "abilityRollFormula",
-  displayMode: "displayMode"
+  displayMode: "displayMode",
+  mode: "mode"
 };
 
 export const DEFAULTS = {
   pointBuyBudget: 27,
   rollFormula: "4d6kh3",
-  displayMode: "fullscreen"
+  displayMode: "fullscreen",
+  mode: "creation"
 };
+
+/**
+ * Whether the module owns the level-up experience as well as creation, per the `mode`
+ * world setting. `"creation"` (default) leaves the actor sheet and the native advancement
+ * flow untouched; `"creation-levelup"` opts the table into the level-up takeover (§5 of the
+ * level-up plan). Both level-up trigger paths are gated on this.
+ * @returns {boolean}
+ */
+export function levelUpEnabled() {
+  return game.settings.get(MODULE_ID, SETTINGS.mode) === "creation-levelup";
+}
+
+/**
+ * Whether the Hero Mancer module is active. It occupies the same level-up/multiclass space
+ * but replaces dnd5e's advancement engine rather than wrapping it, so we stand down entirely
+ * when it is present (§6) to avoid duplicate buttons and a disabled native engine.
+ * @returns {boolean}
+ */
+export function heroMancerActive() {
+  return !!game.modules.get("hero-mancer")?.active;
+}
 
 /**
  * Fallback counts of cantrips / level-1 spells known at level 1, keyed by class

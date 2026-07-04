@@ -3,17 +3,23 @@
         `.loading[data-uuid]` placeholder is what dnd5e's tooltip observer fills in. --}}
   {{#*inline "itemTip"}} data-tooltip="<section class='loading' data-uuid='{{uuid}}'><i class='fas fa-spinner fa-spin-pulse'></i></section>" data-tooltip-class="dnd5e2 dnd5e-tooltip item-tooltip themed theme-light"{{/inline}}
 
+  {{!-- One selectable option, rendered as a level-up-style card so the choice screen matches the
+        level-up selections page. The image is optional — most creation choices (proficiencies,
+        abilities, languages) are text-only, so those cards run compact; "choose a feature" picks
+        carry an item image. --}}
   {{#*inline "choiceOption"}}
-  <button type="button"
-          class="creator-choice-opt {{#if isSelected}}is-selected{{/if}} {{#if recommended}}is-recommended{{/if}} {{#if disabled}}is-disabled{{/if}}"
-          data-action="stepAction" data-step-action="pick-choice"
-          data-choice-source="{{source}}" data-sel-key="{{selKey}}" data-key="{{key}}" data-count="{{count}}"
-          {{#if disabled}}disabled data-tooltip="{{disabledReason}}"{{else}}{{#if uuid}}{{> itemTip uuid=uuid}}{{else}}{{#if recommendTip}} data-tooltip="{{recommendTip}}"{{/if}}{{/if}}{{/if}}>
-    {{#if recommended}}<i class="creator-choice-opt-star fa-solid fa-star" aria-hidden="true"></i>{{/if}}
-    {{#if img}}<img class="creator-choice-opt-img" src="{{img}}" alt="">{{/if}}
-    <span class="creator-choice-opt-label">{{label}}</span>
-    {{#if isSelected}}<i class="creator-choice-opt-tick fa-solid fa-check"></i>{{/if}}
-  </button>
+  <li>
+    <button type="button"
+            class="creator-choice-card {{#if isSelected}}is-selected{{/if}} {{#if recommended}}is-recommended{{/if}} {{#if disabled}}is-disabled{{/if}}"
+            data-action="stepAction" data-step-action="pick-choice"
+            data-choice-source="{{source}}" data-sel-key="{{selKey}}" data-key="{{key}}" data-count="{{count}}"
+            {{#if disabled}}disabled data-tooltip="{{disabledReason}}"{{else}}{{#if uuid}}{{> itemTip uuid=uuid}}{{else}}{{#if recommendTip}} data-tooltip="{{recommendTip}}"{{/if}}{{/if}}{{/if}}>
+      {{#if recommended}}<i class="creator-choice-card-star fa-solid fa-star" aria-hidden="true"></i>{{/if}}
+      {{#if img}}<img class="creator-choice-card-img" src="{{img}}" alt="">{{/if}}
+      <span class="creator-choice-card-name">{{label}}</span>
+      {{#if isSelected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+    </button>
+  </li>
   {{/inline}}
 
   {{#if isEmpty}}
@@ -62,15 +68,15 @@
           {{#each groups}}
           <div class="creator-choice-group">
             <span class="creator-choice-group-label">{{label}}</span>
-            <div class="creator-choice-options">
+            <ul class="creator-choice-grid">
               {{#each options}}{{> choiceOption}}{{/each}}
-            </div>
+            </ul>
           </div>
           {{/each}}
         {{else}}
-          <div class="creator-choice-options">
+          <ul class="creator-choice-grid">
             {{#each options}}{{> choiceOption}}{{/each}}
-          </div>
+          </ul>
         {{/if}}
       </div>
     </div>

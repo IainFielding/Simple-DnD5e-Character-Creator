@@ -29,6 +29,105 @@
       "launch": "Simple Character Builder",
       "resume": "Simple Character Builder"
     },
+    "levelup": {
+      "window": {
+        "title": "Level Up — {name} (Level {level})"
+      },
+      "nav": {
+        "apply": "Apply Level-Up",
+        "done": "Done"
+      },
+      "button": "Level Up",
+      "notify": {
+        "applyFailed": "Level-up could not be applied. See the console for details.",
+        "spellsFailed": "The chosen spells could not be added. The level-up itself was applied — add them from the sheet.",
+        "takeoverFailed": "The level-up could not be prepared. The character was not changed — try again or use the system's own level-up.",
+        "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow."
+      },
+      "step": {
+        "level": {
+          "label": "Level {level}"
+        },
+        "hp": {
+          "label": "Hit Points",
+          "intro": "Increase your {class}'s hit points — take the reliable average, or roll the hit die and take your chances.",
+          "summary": "+{hp} HP",
+          "levelLabel": "Level {level}",
+          "average": "Take Average",
+          "roll": "Roll {die}",
+          "custom": "Enter Manually",
+          "thisLevel": "This level:"
+        },
+        "choices": {
+          "label": "Features",
+          "summary": "{done}/{total} chosen",
+          "choose": "Choose a Feature",
+          "count": "{current} / {max} chosen",
+          "current": "Current",
+          "replaceHint": "Your current choice is ticked. Untick it to swap, then pick another."
+        },
+        "traits": {
+          "label": "Weapon Mastery",
+          "summary": "{done}/{total} chosen",
+          "choose": "Choose Weapon Masteries",
+          "count": "{current} / {max} chosen",
+          "known": "Known"
+        },
+        "asi": {
+          "label": "Ability Scores",
+          "remaining": "{points} points to spend",
+          "hint": "Raise your ability scores by {points} points, up to +{cap} in any one.",
+          "improvementTitle": "Ability Score Improvement",
+          "improvementDesc": "You gain the following benefits:<br>{points} ability score increases",
+          "feat": "Feat",
+          "takeFeat": "Take a feat instead",
+          "changeFeat": "Choose a different feat",
+          "useAbilities": "Improve abilities instead",
+          "locked": "This choice can't raise this ability"
+        },
+        "subclass": {
+          "label": "Subclass",
+          "intro": "Your class branches here — choose the subclass that shapes the rest of your journey.",
+          "choose": "Choose a Subclass",
+          "change": "Choose a different subclass"
+        },
+        "grant": {
+          "label": "Spell",
+          "prompt": "Choose the spellcasting ability for this spell."
+        },
+        "review": {
+          "label": "Review",
+          "gained": "{class}: Level {from} → {to}",
+          "hp": "+{gain} (new maximum {max})",
+          "features": "New Features"
+        },
+        "spells": {
+          "label": "Spells",
+          "intro": "Your {class} training opens new magic — choose the spells you learn at this level.",
+          "cantrips": "Cantrips",
+          "spells": "Spells",
+          "levelTag": "Lvl {level}",
+          "need": "Choose {count} more",
+          "picked": "{count} chosen",
+          "noneNeeded": "No new spells to choose this level.",
+          "swapHint": "You may also swap one spell you know — pick a known spell and choose Swap Out to trade it for another.",
+          "swapOut": "Swap Out",
+          "keep": "Keep",
+          "add": "Learn Spell",
+          "remove": "Forget Spell",
+          "selected": "Learning",
+          "selectedNone": "Nothing chosen yet.",
+          "selectHint": "Pick a spell from the list to read it, then learn it.",
+          "filterAllLevels": "All levels",
+          "filterAllSchools": "All schools",
+          "filterLevelAria": "Filter by spell level",
+          "filterSchoolAria": "Filter by spell school",
+          "empty": "No spells available.",
+          "concentration": "Concentration",
+          "ritual": "Ritual"
+        }
+      }
+    },
     "notify": {
       "noPermission": "You do not have permission to create actors.",
       "indexFailed": "Could not read the compendiums. Check that the dnd5e content packs are enabled.",
@@ -188,7 +287,22 @@
       "simpleWeapons": "Simple Weapons",
       "martialWeapons": "Martial Weapons",
       "other": "Other",
-      "fallback": "Choice"
+      "fallback": "Choice",
+      "blurb": {
+        "mastery": "Weapon mastery lets you use a weapon's special mastery property when you attack with it.",
+        "weapon": "Weapon proficiency adds your proficiency bonus to attack rolls made with these weapons.",
+        "skills": "Skill proficiency adds your proficiency bonus to ability checks made with that skill.",
+        "tool": "Tool proficiency adds your proficiency bonus when you work with these tools.",
+        "languages": "Languages let you speak, read, and write with those who know them.",
+        "armor": "Armor proficiency lets you wear this armor without penalty.",
+        "saves": "Saving-throw proficiency adds your proficiency bonus to that saving throw.",
+        "resist": "These reduce or ward off certain kinds of harm.",
+        "expertise": "Expertise doubles your proficiency bonus for the chosen skills.",
+        "trait": "Pick from the options below.",
+        "size": "Your species can be more than one size — pick the token size your character uses.",
+        "spellAbility": "Pick which ability score you use to cast this spell.",
+        "itemChoice": "Pick from the options below to add to your character."
+      }
     },
     "advancement": {
       "size": "Size",
@@ -247,6 +361,12 @@
         "hint": "How the Character Creator opens: Fullscreen covers the whole screen; Windowed opens a draggable, resizable window.",
         "fullscreen": "Fullscreen",
         "windowed": "Windowed"
+      },
+      "mode": {
+        "name": "Module mode",
+        "hint": "Whether the module also takes over the level-up experience. Creation only leaves levelling to the system; Creation + Level-Up re-skins the system's level-up for a calmer, one-decision-per-screen flow.",
+        "creation": "Creation only",
+        "creationLevelup": "Creation + Level-Up"
       }
     }
   }

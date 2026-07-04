@@ -1,0 +1,36 @@
+<section class="creator-review creator-levelup-review">
+  <div class="creator-review-block">
+    <h2>{{title}}</h2>
+    <ul class="creator-trait-list">
+      <li class="creator-trait">
+        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.label"}}</span>
+        <span class="creator-trait-value">{{hpLabel}}</span>
+      </li>
+      {{#if hasAbilities}}
+      <li class="creator-trait">
+        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.asi.label"}}</span>
+        <span class="creator-trait-value">
+          {{#each abilities}}<span class="creator-review-val">{{abbr}} {{delta}} <small>({{value}})</small></span>{{/each}}
+        </span>
+      </li>
+      {{/if}}
+      {{#if hasMasteries}}
+      <li class="creator-trait">
+        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.traits.label"}}</span>
+        <span class="creator-trait-value">{{masteries}}</span>
+      </li>
+      {{/if}}
+    </ul>
+  </div>
+
+  {{#if hasGains}}
+  <div class="creator-review-block">
+    <h2>{{localize "sogrom-dnd5e-character-creator.levelup.step.review.features"}}</h2>
+    <ul class="creator-review-spells">
+      {{#each gained}}
+      <li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
+      {{/each}}
+    </ul>
+  </div>
+  {{/if}}
+</section>
