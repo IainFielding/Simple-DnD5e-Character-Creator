@@ -130,6 +130,7 @@ jobs:
             LICENSE                              \
             scripts/                             \
             styles/                              \
+            fonts/                               \
             lang/                                \
             templates/                           \
             assets/
