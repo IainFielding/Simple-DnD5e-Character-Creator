@@ -1,9 +1,10 @@
 import {
-  abilitiesContext, abilitiesHandle, abilitiesComplete, abilitiesSummary,
+  abilitiesContext, abilitiesHandle, abilitiesComplete, abilitiesSummary, abilitiesHint,
   ABILITY_ACTIONS, POINT_BUY_LIVE_ACTIONS, patchPointBuy
 } from "./abilities-step.mjs";
 import { spellInfoFor } from "./spells-step.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
+import { t } from "../config.mjs";
 
 /**
  * The Class step. Class selection and ability scores share one step: the class
@@ -23,6 +24,12 @@ export const classStep = {
 
   isComplete(state) {
     return !!state.classUuid && abilitiesComplete(state);
+  },
+
+  /** Why Next is blocked: no class, or ability scores still to finish. */
+  incompleteHint(state) {
+    if ( !state.classUuid ) return t("step.class.hint");
+    return abilitiesHint(state);
   },
 
   /** Rail summary: class name, then the resolved score line beneath it. */

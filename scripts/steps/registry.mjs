@@ -4,6 +4,7 @@ import { backgroundStep } from "./background-step.mjs";
 import { detailsStep } from "./details-step.mjs";
 import { spellsStep } from "./spells-step.mjs";
 import { choicesStep } from "./choices-step.mjs";
+import { featSpellsStep } from "./feat-spells-step.mjs";
 import { equipmentStep } from "./equipment-step.mjs";
 import { reviewStep } from "./review-step.mjs";
 
@@ -21,11 +22,13 @@ export const STEPS = [
     icon: "fa-solid fa-paw",
     labelKey: "step.species.label",
     field: "speciesUuid",
+    hintKey: "step.species.hint",
     cards: src => src.species()
   }),
   detailsStep,
   spellsStep,
   choicesStep,
+  featSpellsStep,
   equipmentStep,
   reviewStep
 ];

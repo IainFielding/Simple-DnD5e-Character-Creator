@@ -1,3 +1,10 @@
+{{!--
+  The "rail": the top bar listing every step as a numbered marker the player can jump between.
+  Each entry comes from the shell's #railContext() and carries flags that drive its CSS classes:
+    active    – the step currently on screen        complete  – done (shows a tick instead of a number)
+    reachable – earlier steps done, so it's clickable  applicable – shown but greyed (e.g. Spells for a non-caster)
+  Clicking a marker fires data-action="goto" with its index; the shell handles the navigation.
+--}}
 <header class="creator-topbar">
   <div class="creator-topbar-brand">
     <span>{{localize "sogrom-dnd5e-character-creator.window.brand"}}</span>

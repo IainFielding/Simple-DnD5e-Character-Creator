@@ -1,3 +1,9 @@
+{{!--
+  The Class step: like origin.hbs (list + description) but with a third column — the ability-score
+  panel (abilities-step.mjs) as a fixed aside — so the player sets scores while choosing a class.
+  Data from class-step.mjs context(): `cards`, `detail`, `groups`, and `abilities` for the panel.
+  Cards fire data-action="pick-class"; ability controls fire their own ability* actions.
+--}}
 <section class="creator-pick">
   <!-- Left column: vertical class picker -->
   <div class="creator-pick-side">

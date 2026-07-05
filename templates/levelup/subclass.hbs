@@ -1,19 +1,9 @@
-{{!--
-  Shared template for the three "origin" picks (class-less species/background/etc.): a searchable
-  list of cards on the left, and the selected card's enriched description + granted traits on the
-  right. Data comes from origin-step.mjs context(): `cards`, `hasSelection`, `detail`, `groups`.
-  Clicking a card fires data-action="pick-origin"; the left column filters live via data-creator-search.
---}}
+{{!-- Level-up subclass block (inside level.hbs): the same list+description layout as the creation
+      class step, scoped to one class's subclasses. Cards fire pick-subclass; data from subclass-step.mjs. --}}
 <section class="creator-pick creator-pick--solo">
-  <!-- Left column: vertical picker -->
+  <!-- Left column: subclass picker -->
   <div class="creator-pick-side">
     <div class="creator-toolbar creator-toolbar--stacked">
-      <label class="creator-search">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="search" data-creator-search autocomplete="off"
-               aria-label="{{localize 'sogrom-dnd5e-character-creator.common.search'}}"
-               placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
-      </label>
       <span class="creator-count">{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
     </div>
 
@@ -21,8 +11,8 @@
       {{#each cards}}
       <li>
         <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}}"
-                data-action="stepAction" data-step-action="pick-origin"
-                data-uuid="{{uuid}}" data-name="{{name}}">
+                data-action="stepAction" data-step-action="pick-subclass"
+                data-index="{{../index}}" data-uuid="{{uuid}}" data-name="{{name}}">
           <img class="creator-pickrow-img" src="{{img}}" alt="">
           <span class="creator-pickrow-name">{{name}}</span>
           {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}
@@ -34,7 +24,7 @@
     </ul>
   </div>
 
-  <!-- Center column: description -->
+  <!-- Right: subclass description + features -->
   <div class="creator-pick-desc">
     {{#if hasSelection}}
     <article class="creator-detail">
@@ -75,9 +65,9 @@
     </article>
     {{else}}
     <div class="creator-pick-empty">
-      <i class="fa-solid fa-paw"></i>
-      <h2>{{localize "sogrom-dnd5e-character-creator.step.species.label"}}</h2>
-      <p>{{localize "sogrom-dnd5e-character-creator.common.selectHint"}}</p>
+      <i class="fa-solid fa-sitemap"></i>
+      <h2>{{localize "sogrom-dnd5e-character-creator.levelup.step.subclass.label"}}</h2>
+      <p>{{localize "sogrom-dnd5e-character-creator.levelup.step.subclass.intro"}}</p>
     </div>
     {{/if}}
   </div>

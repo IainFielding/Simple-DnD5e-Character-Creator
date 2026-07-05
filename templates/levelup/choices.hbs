@@ -1,0 +1,42 @@
+{{!-- Level-up feature-choice block (inside level.hbs): the ItemChoice picks a level grants (a
+      Fighting Style, a Maneuver, …). Cards fire choiceToggle / choiceReplace; data from choices-step.mjs. --}}
+<section class="creator-levelup creator-levelup-choices">
+  {{#each sections}}
+  <div class="creator-choice-section {{#if complete}}is-complete{{/if}}">
+    {{#unless collapsed}}
+    <header class="creator-choice-head">
+      <h2>{{title}}</h2>
+      <span class="creator-choice-count">{{count}}</span>
+    </header>
+    {{/unless}}
+    {{#if hint}}<p class="creator-choice-hint">{{hint}}</p>{{/if}}
+
+    <ul class="creator-choice-grid">
+      {{#each options}}
+      <li>
+        {{#if owned}}
+        <button type="button" class="creator-choice-card creator-choice-card--owned {{#if selected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="choiceReplace"
+                data-index="{{../index}}" data-original="{{originalId}}"
+                data-tooltip="{{ccItemTooltip uuid}}">
+          <span class="creator-choice-card-badge">{{localize "sogrom-dnd5e-character-creator.levelup.step.choices.current"}}</span>
+          <img class="creator-choice-card-img" src="{{img}}" alt="">
+          <span class="creator-choice-card-name">{{name}}</span>
+          {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+        </button>
+        {{else}}
+        <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="choiceToggle"
+                data-index="{{../index}}" data-uuid="{{uuid}}"
+                data-tooltip="{{ccItemTooltip uuid}}" {{#if disabled}}disabled{{/if}}>
+          <img class="creator-choice-card-img" src="{{img}}" alt="">
+          <span class="creator-choice-card-name">{{name}}</span>
+          {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+        </button>
+        {{/if}}
+      </li>
+      {{/each}}
+    </ul>
+  </div>
+  {{/each}}
+</section>

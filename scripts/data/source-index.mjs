@@ -8,10 +8,21 @@ import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
  * resolves full documents (with enriched descriptions) when a card is opened.
  *
  * One instance is created per builder session and loaded once.
+ *
+ * For a junior dev, two ideas run through this file:
+ *   - "card" vs full document: a card is a tiny {uuid, name, img, identifier} record — cheap to
+ *     list hundreds of in a grid. The full document (its description, advancements, etc.) is only
+ *     loaded via fromUuid() when the player actually opens that card. A UUID is Foundry's global
+ *     address for a document; fromUuid(uuid) fetches it (async), fromUuidSync(uuid) if already cached.
+ *   - memoisation: the private #maps below cache each expensive resolution by UUID, so re-opening a
+ *     card, or the warm-up touching it twice, never repeats the work. (Fields prefixed with # are
+ *     JavaScript private fields — only reachable inside this class.)
+ * "Advancement" is a dnd5e term: the rules an item applies as you gain it/level up (grant a feature,
+ * a proficiency, an ability increase, etc.). Much of this module is about reading those.
  */
 export class SourceIndex {
 
-  /** type id -> card[] */
+  /** type id -> card[]. Note dnd5e's item type for "species" is historically "race". */
   #cards = { class: [], race: [], background: [] };
 
   /** uuid -> { name, img, enriched } resolved detail, memoised. */
@@ -25,6 +36,9 @@ export class SourceIndex {
 
   /** granted-item uuid -> { name, img, type } metadata (or null), memoised. */
   #meta = new Map();
+
+  /** All indexed subclass cards (across classes), fetched once on first request. */
+  #subclasses = null;
 
   loaded = false;
 
@@ -74,6 +88,40 @@ export class SourceIndex {
   species() { return this.#cards.race; }
   backgrounds() { return this.#cards.background; }
 
+  /**
+   * The subclass cards belonging to one class, by its identifier. Fetched (and cached) lazily on
+   * first request — independent of {@link load}, so the level-up flow can use it without warming
+   * the full origin index. {@link detail} and {@link advancementGroups} work on these UUIDs too.
+   * @param {string} classIdentifier
+   * @returns {Promise<object[]>}
+   */
+  async subclasses(classIdentifier) {
+    if ( !this.#subclasses ) {
+      const browser = dnd5e.applications?.CompendiumBrowser;
+      let entries = [];
+      if ( browser?.fetch ) {
+        try {
+          entries = await browser.fetch(Item, {
+            types: new Set(["subclass"]),
+            indexFields: new Set(["system.classIdentifier"])
+          });
+        } catch ( err ) {
+          log("Compendium Browser fetch failed for subclasses, scanning packs directly", err);
+        }
+      }
+      if ( !entries.length ) entries = await this.#scanPacks("subclass");
+      this.#subclasses = entries.map(e => ({
+        uuid: e.uuid,
+        name: e.name,
+        img: e.img || "icons/svg/item-bag.svg",
+        classIdentifier: e.system?.classIdentifier ?? ""
+      }));
+    }
+    return this.#subclasses
+      .filter(c => c.classIdentifier === classIdentifier)
+      .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
+  }
+
   /** Look up a single card across all types by its UUID. */
   card(uuid) {
     if ( !uuid ) return null;
@@ -85,6 +133,10 @@ export class SourceIndex {
   }
 
   /* -------------------------------------------- */
+
+  // Two ways to discover content: ask dnd5e's Compendium Browser (which already applies the world's
+  // source filtering for us), or, if that API isn't there, scan the packs by hand. Every #index and
+  // subclasses() call tries the browser first and falls back to #scanPacks.
 
   /**
    * Fetch the index for one document subtype via the dnd5e Compendium Browser,
@@ -116,7 +168,7 @@ export class SourceIndex {
     for ( const pack of game.packs ) {
       if ( pack.metadata.type !== "Item" ) continue;
       try {
-        const index = await pack.getIndex({ fields: ["type", "system.identifier"] });
+        const index = await pack.getIndex({ fields: ["type", "system.identifier", "system.classIdentifier"] });
         for ( const e of index ) if ( e.type === type ) out.push(e);
       } catch ( err ) {
         log(`pack scan failed for ${pack.collection}`, err);

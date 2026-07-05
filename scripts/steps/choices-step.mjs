@@ -1,5 +1,6 @@
 import { t } from "../config.mjs";
 import { resolveChoices, choicesComplete } from "../data/choice-resolver.mjs";
+import { resolveFeatSpells } from "./feat-spells-step.mjs";
 
 /**
  * Flatten a resolved choice set into the ordered list of individual decisions the checklist
@@ -10,6 +11,8 @@ function flattenDecisions(resolved) {
   const out = [];
   for ( const s of resolved?.sources ?? [] ) {
     for ( const r of s.requirements ) {
+      // Spell-type choices (Magic Initiate) are decided on the dedicated feat-spells step, not here.
+      if ( r.spellStep ) continue;
       out.push({ key: `${r.source}:${r.selKey}`, complete: r.complete, req: r, sourceName: s.name, sourceImg: s.img });
     }
   }
@@ -41,12 +44,28 @@ export const choicesStep = {
     return state.choiceCache ? choicesComplete(state.choiceCache) : false;
   },
 
+  /** Why Next is blocked: how many decisions are still open. */
+  incompleteHint(state) {
+    const resolved = state.choiceCache;
+    if ( !resolved?.hasAny ) return null;
+    let total = 0, done = 0;
+    for ( const s of resolved.sources ) for ( const r of s.requirements ) {
+      if ( r.spellStep ) continue;
+      total++; if ( r.complete ) done++;
+    }
+    const remain = total - done;
+    return remain > 0 ? t("step.choices.hint", { count: remain }) : null;
+  },
+
   /** Rail summary: "3/4 made" once there's anything to decide. */
   summary(state) {
     const resolved = state.choiceCache;
     if ( !resolved?.hasAny ) return "";
     let total = 0, done = 0;
-    for ( const s of resolved.sources ) for ( const r of s.requirements ) { total++; if ( r.complete ) done++; }
+    for ( const s of resolved.sources ) for ( const r of s.requirements ) {
+      if ( r.spellStep ) continue;             // decided on the feat-spells step, not here
+      total++; if ( r.complete ) done++;
+    }
     return total ? t("step.choices.progress", { done, total }) : "";
   },
 
@@ -92,6 +111,9 @@ export const choicesStep = {
   async context({ state, source }) {
     const resolved = await resolveChoices(state, source);
     state.choiceCache = resolved;
+    // Keep the feat-spells gate fresh: a feat granted here (e.g. a background's Magic Initiate)
+    // must light up the following step's rail entry before the player navigates onto it.
+    state.featSpellCache = await resolveFeatSpells(state, source);
 
     // Flatten every decision into one checklist, each carrying its requirement data plus an
     // origin chip and a status label (a "1/2" progress, a "Choose one" prompt, or a tick).
@@ -119,13 +141,15 @@ export const choicesStep = {
     for ( const d of decisions ) d.open = d.key === state.openDecision;
 
     return {
-      hasChoices: resolved.hasAny,
+      // Derived from the *rendered* decisions, so a source whose only requirement is a spell
+      // choice (handled on the feat-spells step) doesn't render an empty checklist here.
+      hasChoices: total > 0,
       decisions,
       done,
       total,
       pct,
       allDone: total > 0 && done === total,
-      isEmpty: !resolved.hasAny
+      isEmpty: total === 0
     };
   }
 };

@@ -1,0 +1,26 @@
+{{!-- One screen for a single gained level: every decision that level introduces, each in its own
+      panel with an icon header and a status pill. The block's `template` field names the per-type
+      partial and its data is spread alongside, so the partial sees what it expects; `density` sizes
+      the option grid. Blocks appear/disappear reactively as earlier picks reveal later choices. --}}
+<div class="levelup-level">
+  {{#each blocks}}
+  <section class="levelup-block levelup-block--{{type}} {{#if complete}}is-complete{{/if}} {{#if open}}is-open{{/if}}" data-density="{{density}}">
+    <button type="button" class="levelup-block-head"
+            data-action="stepAction" data-step-action="toggle-block" data-block="{{key}}"
+            aria-expanded="{{#if open}}true{{else}}false{{/if}}">
+      <span class="levelup-block-icon"><i class="{{icon}}"></i></span>
+      <h2 class="levelup-block-title">{{label}}</h2>
+      {{#if showStatus}}
+      <span class="levelup-block-status {{#if complete}}is-done{{/if}}">
+        {{#if complete}}<i class="fa-solid fa-check"></i>{{/if}}
+        {{#if status}}{{status}}{{/if}}
+      </span>
+      {{/if}}
+      <i class="levelup-block-chevron fa-solid fa-chevron-down" aria-hidden="true"></i>
+    </button>
+    <div class="levelup-block-body" {{#unless open}}hidden{{/unless}}>
+      {{> (lookup this "template") this}}
+    </div>
+  </section>
+  {{/each}}
+</div>

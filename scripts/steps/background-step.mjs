@@ -1,4 +1,4 @@
-import { ABILITIES } from "../config.mjs";
+import { ABILITIES, t } from "../config.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 
 /**
@@ -23,6 +23,14 @@ export const backgroundStep = {
     // Unresolved (undefined) or no increase to make (null) — selection alone suffices.
     if ( !asi ) return true;
     return pointsRemaining(state, asi) === 0;
+  },
+
+  /** Why Next is blocked: no background, or ability-increase points still to spend. */
+  incompleteHint(state) {
+    if ( !state.backgroundUuid ) return t("step.background.hint");
+    const asi = state.backgroundAsi;
+    if ( asi && pointsRemaining(state, asi) > 0 ) return t("step.background.hintPoints", { count: pointsRemaining(state, asi) });
+    return null;
   },
 
   /** Rail summary: background name, then the chosen increases beneath it. */
@@ -65,7 +73,14 @@ export const backgroundStep = {
     const selected = state.backgroundUuid;
     const detail = selected ? await source.detail(selected) : null;
     const groups = selected ? await source.advancementGroups(selected) : null;
-    const list = source.backgrounds().map(c => ({ ...c, selected: c.uuid === selected }));
+
+    // Tag each card with the abilities its increase can raise (space-joined, for the
+    // client-side filter's `data-abilities`), drawn from the same cached ASI config the
+    // aside panel uses. The ASI records are already warmed, so these resolve instantly.
+    const list = await Promise.all(source.backgrounds().map(async c => {
+      const asi = await source.abilityScoreIncrease(c.uuid);
+      return { ...c, selected: c.uuid === selected, abilities: increasedAbilities(asi).join(" ") };
+    }));
 
     // Resolve (and cache) the increase config for the active background, so the panel
     // and the completion check share one source of truth.
@@ -79,10 +94,18 @@ export const backgroundStep = {
       hasSelection: !!selected,
       detail,
       groups,
+      abilityOptions: ABILITIES.map(key => ({ value: key, label: abilityLabel(key) })),
       abilities: abilitiesContext(state)
     };
   }
 };
+
+/** The abilities a background's increase can raise: everything not locked out, plus any
+ *  score with a fixed bump. Empty for a background that grants no increase. */
+function increasedAbilities(asi) {
+  if ( !asi ) return [];
+  return ABILITIES.filter(k => !asi.locked.includes(k) || Number(asi.fixed?.[k] ?? 0) > 0);
+}
 
 /* -------------------------------------------- */
 /*  Ability-increase panel                      */

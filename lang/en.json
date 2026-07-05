@@ -12,7 +12,9 @@
       "reset": "Reset",
       "on": "On",
       "off": "Off",
-      "selectHint": "Choose an option from the list to see its full description."
+      "selectHint": "Choose an option from the list to see its full description.",
+      "noResults": "No matches for “{query}”.",
+      "noResultsFilters": "No matches — try adjusting the filters."
     },
     "loading": {
       "indexing": "Reading the compendiums…",
@@ -23,11 +25,118 @@
       "next": "Next",
       "create": "Create Character",
       "cancel": "Cancel",
-      "position": "Step {current} of {total}"
+      "position": "Step {current} of {total}",
+      "incomplete": "Finish this step to continue.",
+      "missing": "Still needed: {steps}"
+    },
+    "cancel": {
+      "title": "Discard unsaved choices?",
+      "body": "Nothing you've picked has been saved yet. If you close now, those choices will be discarded — you'll have to make them again."
     },
     "menu": {
       "launch": "Simple Character Builder",
       "resume": "Simple Character Builder"
+    },
+    "levelup": {
+      "window": {
+        "title": "Level Up — {name} (Level {level})"
+      },
+      "nav": {
+        "apply": "Apply Level-Up",
+        "done": "Done"
+      },
+      "button": "Level Up",
+      "notify": {
+        "applyFailed": "Level-up could not be applied. See the console for details.",
+        "spellsFailed": "The chosen spells could not be added. The level-up itself was applied — add them from the sheet.",
+        "takeoverFailed": "The level-up could not be prepared. The character was not changed — try again or use the system's own level-up.",
+        "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow."
+      },
+      "step": {
+        "level": {
+          "label": "Level {level}"
+        },
+        "hp": {
+          "label": "Hit Points",
+          "intro": "Increase your {class}'s hit points — take the reliable average, or roll the hit die and take your chances.",
+          "summary": "+{hp} HP",
+          "levelLabel": "Level {level}",
+          "average": "Average HP",
+          "max": "Max HP",
+          "roll": "Roll {die}",
+          "custom": "Enter Manually",
+          "gained": "Hit Points Gained",
+          "thisLevel": "This level:"
+        },
+        "choices": {
+          "label": "Features",
+          "summary": "{done}/{total} chosen",
+          "choose": "Choose a Feature",
+          "count": "{current} / {max} chosen",
+          "current": "Current",
+          "replaceHint": "Your current choice is ticked. Untick it to swap, then pick another."
+        },
+        "traits": {
+          "label": "Weapon Mastery",
+          "summary": "{done}/{total} chosen",
+          "choose": "Choose Weapon Masteries",
+          "count": "{current} / {max} chosen",
+          "known": "Known"
+        },
+        "asi": {
+          "label": "Ability Scores",
+          "remaining": "{points} points to spend",
+          "hint": "Raise your ability scores by {points} points, up to +{cap} in any one.",
+          "improvementTitle": "Ability Score Improvement",
+          "improvementDesc": "You gain the following benefits:<br>{points} ability score increases",
+          "feat": "Feat",
+          "takeFeat": "Take a feat instead",
+          "changeFeat": "Choose a different feat",
+          "useAbilities": "Improve abilities instead",
+          "locked": "This choice can't raise this ability"
+        },
+        "subclass": {
+          "label": "Subclass",
+          "intro": "Your class branches here — choose the subclass that shapes the rest of your journey.",
+          "choose": "Choose a Subclass",
+          "change": "Choose a different subclass"
+        },
+        "grant": {
+          "label": "Spell",
+          "prompt": "Choose the spellcasting ability for this spell."
+        },
+        "review": {
+          "label": "Review",
+          "gained": "{class}: Level {from} → {to}",
+          "hp": "+{gain} (new maximum {max})",
+          "features": "New Features"
+        },
+        "spells": {
+          "label": "Spells",
+          "intro": "Your {class} training opens new magic — choose the spells you learn at this level.",
+          "cantrips": "Cantrips",
+          "spells": "Spells",
+          "levelTag": "Lvl {level}",
+          "need": "Choose {count} more",
+          "picked": "{count} chosen",
+          "noneNeeded": "No new spells to choose this level.",
+          "swapHint": "You may also swap one spell you know — pick a known spell and choose Swap Out to trade it for another.",
+          "swapOut": "Swap Out",
+          "keep": "Keep",
+          "add": "Learn Spell",
+          "remove": "Forget Spell",
+          "selected": "Learning",
+          "selectedNone": "Nothing chosen yet.",
+          "selectHint": "Pick a spell from the list to read it, then learn it.",
+          "filterAllLevels": "All levels",
+          "filterAllSchools": "All schools",
+          "filterLevelAria": "Filter by spell level",
+          "filterSchoolAria": "Filter by spell school",
+          "empty": "No spells available.",
+          "concentration": "Concentration",
+          "ritual": "Ritual"
+        }
+      }
     },
     "notify": {
       "noPermission": "You do not have permission to create actors.",
@@ -37,6 +146,7 @@
     "step": {
       "class": {
         "label": "Class & Abilities",
+        "hint": "Choose a class to continue.",
         "traits": "Class Traits",
         "features": "Class Features",
         "spells": "Spells",
@@ -54,18 +164,24 @@
       },
       "species": {
         "label": "Species",
+        "hint": "Choose a species to continue.",
         "traits": "Traits",
         "features": "Features",
         "spells": "Spells"
       },
       "background": {
         "label": "Background",
+        "hint": "Choose a background to continue.",
+        "hintPoints": "Assign your {count} remaining ability point(s).",
         "traits": "Proficiencies",
         "features": "Features",
-        "spells": "Spells"
+        "spells": "Spells",
+        "filterAllAbilities": "Any ability",
+        "filterAbilityAria": "Filter by increased ability"
       },
       "details": {
         "label": "Details",
+        "hint": "Enter a name for your character.",
         "subtitle": "Give your character a name and, if you like, the finer points of who they are.",
         "portrait": "Portrait",
         "token": "Token",
@@ -129,6 +245,8 @@
       },
       "spells": {
         "label": "Spells",
+        "hint": "Choose {count} more spell(s) to continue.",
+        "intro": "Choose the cantrips and 1st-level spells your {class} knows at level 1.",
         "cantrips": "Cantrips",
         "level1": "1st-Level Spells",
         "selected": "Your Spells",
@@ -142,8 +260,26 @@
         "add": "Add spell",
         "remove": "Remove spell"
       },
+      "featSpells": {
+        "label": "Feat Spells",
+        "intro": "{feat} grants spells — choose a spell list, its casting ability, and the spells you learn.",
+        "chooseList": "Spell list",
+        "chooseAbility": "Casting ability",
+        "needChoice": "Choose one",
+        "recommended": "Recommended",
+        "abilityHint": "Sets the attack bonus and save DC for these feat spells. Pick the mental ability your character is strongest in.",
+        "recommendAbility": "Matches your {class} spellcasting ability",
+        "knownTag": "Known",
+        "alreadyKnown": "You already know this spell from another source, so it can't be chosen here.",
+        "pickListFirst": "Choose a spell list above to see the spells you can learn.",
+        "selected": "Learning",
+        "picked": "{count}/{total} chosen",
+        "hint": "Choose {count} more feat spell(s) to continue.",
+        "none": "None of your choices grant extra spells — nothing to choose here."
+      },
       "choices": {
         "label": "Choices",
+        "hint": "{count} decision(s) still to make.",
         "none": "Your chosen class, background, and species need no further decisions.",
         "progress": "{done}/{total} made",
         "decisions": "{done} / {total} decisions"
@@ -160,6 +296,7 @@
         "noSpecies": "No species chosen",
         "noBackground": "No background chosen",
         "notChosen": "Not chosen",
+        "grantedSpells": "Spells",
         "bonusFromBackground": "+{bonus} from background"
       },
       "abilities": {
@@ -170,7 +307,10 @@
         "pointsLeft": "points left",
         "rollScores": "Roll Stats",
         "unassigned": "—",
-        "rollPrompt": "Roll to generate six scores, then assign them to your abilities."
+        "rollPrompt": "Roll to generate six scores, then assign them to your abilities.",
+        "hintPoints": "Spend all {count} remaining ability point(s).",
+        "hintAssign": "Assign a score to every ability.",
+        "hintRoll": "Roll your ability scores, then assign them."
       },
       "bgAbilities": {
         "label": "Ability Increase",
@@ -188,7 +328,22 @@
       "simpleWeapons": "Simple Weapons",
       "martialWeapons": "Martial Weapons",
       "other": "Other",
-      "fallback": "Choice"
+      "fallback": "Choice",
+      "blurb": {
+        "mastery": "Weapon mastery lets you use a weapon's special mastery property when you attack with it.",
+        "weapon": "Weapon proficiency adds your proficiency bonus to attack rolls made with these weapons.",
+        "skills": "Skill proficiency adds your proficiency bonus to ability checks made with that skill.",
+        "tool": "Tool proficiency adds your proficiency bonus when you work with these tools.",
+        "languages": "Languages let you speak, read, and write with those who know them.",
+        "armor": "Armor proficiency lets you wear this armor without penalty.",
+        "saves": "Saving-throw proficiency adds your proficiency bonus to that saving throw.",
+        "resist": "These reduce or ward off certain kinds of harm.",
+        "expertise": "Expertise doubles your proficiency bonus for the chosen skills.",
+        "trait": "Pick from the options below.",
+        "size": "Your species can be more than one size — pick the token size your character uses.",
+        "spellAbility": "Pick which ability score you use to cast this spell.",
+        "itemChoice": "Pick from the options below to add to your character."
+      }
     },
     "advancement": {
       "size": "Size",
@@ -247,6 +402,12 @@
         "hint": "How the Character Creator opens: Fullscreen covers the whole screen; Windowed opens a draggable, resizable window.",
         "fullscreen": "Fullscreen",
         "windowed": "Windowed"
+      },
+      "mode": {
+        "name": "Module mode",
+        "hint": "Whether the module also takes over the level-up experience. Creation only leaves levelling to the system; Creation + Level-Up re-skins the system's level-up for a calmer, one-decision-per-screen flow.",
+        "creation": "Creation only",
+        "creationLevelup": "Creation + Level-Up"
       }
     }
   }

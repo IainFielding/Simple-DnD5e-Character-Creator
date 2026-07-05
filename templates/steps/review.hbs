@@ -1,3 +1,9 @@
+{{!--
+  The Review step: a read-only summary of every choice before the character is built. Portrait +
+  ability scores up top, then one block per origin (class/species/background) showing its grants,
+  picks, spells, and gear. No actions here — the "Create" button lives in the stage footer.
+  Data from review-step.mjs context(): `abilities`, `details`, and `sections` (the origin blocks).
+--}}
 <section class="creator-review">
   <div class="creator-review-portrait">
     <div class="creator-portrait-frame">
@@ -68,6 +74,44 @@
       </ul>
       {{/if}}
     </div>
+    {{/if}}
+
+    {{#if grantedSpells.hasAny}}
+    <div class="creator-review-sub">
+      <h3>{{localize "sogrom-dnd5e-character-creator.step.review.grantedSpells"}}</h3>
+      {{#if grantedSpells.cantrips.length}}
+      <h4>{{localize "sogrom-dnd5e-character-creator.step.spells.cantrips"}}</h4>
+      <ul class="creator-review-spells">
+        {{#each grantedSpells.cantrips}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>{{/each}}
+      </ul>
+      {{/if}}
+      {{#if grantedSpells.level1.length}}
+      <h4>{{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}</h4>
+      <ul class="creator-review-spells">
+        {{#each grantedSpells.level1}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>{{/each}}
+      </ul>
+      {{/if}}
+    </div>
+    {{/if}}
+
+    {{#if featSpells}}
+    {{#each featSpells}}
+    <div class="creator-review-sub">
+      <h3>{{featName}}</h3>
+      {{#if cantrips.length}}
+      <h4>{{localize "sogrom-dnd5e-character-creator.step.spells.cantrips"}}</h4>
+      <ul class="creator-review-spells">
+        {{#each cantrips}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>{{/each}}
+      </ul>
+      {{/if}}
+      {{#if level1.length}}
+      <h4>{{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}</h4>
+      <ul class="creator-review-spells">
+        {{#each level1}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>{{/each}}
+      </ul>
+      {{/if}}
+    </div>
+    {{/each}}
     {{/if}}
 
     {{#if equipment.hasAny}}

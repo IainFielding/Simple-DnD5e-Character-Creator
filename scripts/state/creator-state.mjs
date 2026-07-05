@@ -7,6 +7,15 @@ import { ABILITIES, t } from "../config.mjs";
  * derivations that several layers need (resolved ability scores). All UI
  * concerns live in the step modules; all persistence lives in the assembler.
  * Nothing here imports an Application or touches the DOM.
+ *
+ * For a junior dev: think of this as the "form data" for the whole wizard. Steps read
+ * and write these fields; nothing here is saved to the world until the assembler runs at
+ * Create. A few field types recur:
+ *   - selections (e.g. classUuid)      – what the player picked, stored as compendium UUIDs
+ *   - "…Cache" / "…Info" fields         – pre-resolved data so the *synchronous* isComplete()
+ *                                         gates can run without awaiting compendium reads
+ *   - "Transient …" fields              – pure UI state (active tab, focused row); not persisted
+ * Fields are given as class field initialisers, so a fresh CreatorState starts at these defaults.
  */
 export class CreatorState {
 
@@ -59,9 +68,31 @@ export class CreatorState {
 
   /**
    * Advancement choices made on the Choices step: source -> selKey -> chosen key/uuid[].
-   * Each source's bucket is cleared when that origin selection changes.
+   * Each source's bucket is cleared when that origin selection changes. Also holds the
+   * feat-spells step's picks: a feat's spell `ItemChoice` uuids under its advancement id, and the
+   * chosen casting ability under `"<advId>::ability"` (read by the assembler's `applyItemChoice`).
    */
   advChoices = { class: {}, background: {}, species: {} };
+
+  /**
+   * Feat-spells step (Magic Initiate) — the player's picks per grant, keyed `${source}:${featUuid}`:
+   * `{ list, ability, cantrips: uuid[], spells: uuid[] }`. The assembler reads these to create the
+   * feat's spells directly on the actor (the PHB feat carries no advancement to hang them on).
+   */
+  featSpells = {};
+
+  /**
+   * Cache of the resolved feat-spell *grants* (from {@link module:steps/feat-spells-step}), so the
+   * synchronous `applicable`/`isComplete` gates can read them. Refreshed whenever origin selections
+   * or feat picks change (the Choices and Feat-Spells steps both refresh it).
+   * @type {object[]}
+   */
+  featSpellCache = [];
+
+  /** Transient feat-spells-step UI: active grant, active tab, focused spell. Not persisted. */
+  activeFeatKey = null;
+  featSpellTab = "cantrips";
+  focusedFeatSpellUuid = null;
 
   /**
    * Transient Choices-step UI: which decision row of the guided checklist is expanded.
@@ -138,6 +169,10 @@ export class CreatorState {
   /* -------------------------------------------- */
   /*  Derived data                                */
   /* -------------------------------------------- */
+  //
+  // These methods compute values from the raw fields above rather than storing them, so there's
+  // only one place the truth lives. The "reset…" methods below clear fields that depend on a
+  // selection, and are called when that selection changes (e.g. a new class wipes its spell picks).
 
   /**
    * The pool of assignable values for the current method, or null for point-buy.
@@ -201,6 +236,7 @@ export class CreatorState {
     this.selectedCantrips = [];
     this.selectedSpells = [];
     this.advChoices.class = {};
+    this.#forgetFeatSpellLists("class");
     this.equipment.class = { selectedOption: 0, orSelections: {} };
   }
 
@@ -211,7 +247,15 @@ export class CreatorState {
    */
   resetSourceChoices(source) {
     this.advChoices[source] = {};
+    this.#forgetFeatSpellLists(source);
     if ( this.equipment[source] ) this.equipment[source] = { selectedOption: 0, orSelections: {} };
+  }
+
+  /** Drop the feat-spells picks belonging to one origin (keys `${source}:…`). */
+  #forgetFeatSpellLists(source) {
+    for ( const key of Object.keys(this.featSpells) ) {
+      if ( key.startsWith(`${source}:`) ) delete this.featSpells[key];
+    }
   }
 
   /* -------------------------------------------- */
@@ -226,6 +270,9 @@ export class CreatorState {
   #prefillFromActor(actor) {
     if ( !actor ) return;
 
+    // An item on the actor remembers the compendium entry it was copied from in _stats.compendiumSource.
+    // That UUID is exactly what our selection fields store, so we can map an existing actor's class/
+    // background/species items back to the picks that produced them. (dnd5e's item type for species is "race".)
     const source = item => item?._stats?.compendiumSource ?? null;
     this.classUuid = source(actor.items?.find(i => i.type === "class"));
     this.backgroundUuid = source(actor.items?.find(i => i.type === "background"));

@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
+import { phbWeaponIcon } from "./weapon-source.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /**
@@ -12,6 +13,20 @@ import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
  * (`state.advChoices`) and returns fresh requirements every call, so the step and the
  * build path share one source of truth with no cache to fall stale. It prunes picks
  * that another source now grants outright, mutating `state.advChoices` in place.
+ *
+ * ── For a junior dev: how to read this file ──
+ * A dnd5e item (a class, species, background, or a feature it grants) carries "advancements":
+ * typed rules like ItemGrant (give this item), Trait (give/choose a proficiency), ItemChoice
+ * (choose N features), Size, and AbilityScoreImprovement. Some are automatic; some ask the player
+ * to choose. This module turns the choice-bearing ones into "requirements" — plain, UI-agnostic
+ * descriptors ({ title, options, count, complete, selKey, ... }) that the Choices step renders and
+ * the assembler later applies. The pipeline top to bottom:
+ *   resolveChoices(state)        entry point — loops the three origins
+ *     └ prepareRequirements(doc) gathers the origin + its granted features (levelOneOwners)
+ *         └ parseAdvancementChoice(adv)  one advancement -> zero or more requirements (by adv.type)
+ *             └ buildChoiceReq(...)      assembles one requirement + merges the player's current picks
+ * "selKey" is the stable id under which a requirement's picks are stored in state.advChoices.
+ * "cross-source dedupe" = if two origins offer the same skill, picking it in one greys it out in the other.
  */
 
 const ORIGIN_FIELDS = {
@@ -110,10 +125,13 @@ export async function warmChoices(source, onTick) {
   });
 }
 
-/** True once every requirement across all sources has enough picks. */
+/**
+ * True once every requirement across all sources has enough picks. Spell-type choices
+ * (`spellStep`) are excluded — they gate the dedicated feat-spells step, not this one.
+ */
 export function choicesComplete(resolved) {
   for ( const src of resolved?.sources ?? [] ) {
-    for ( const req of src.requirements ) if ( !req.complete ) return false;
+    for ( const req of src.requirements ) if ( !req.spellStep && !req.complete ) return false;
   }
   return true;
 }
@@ -230,7 +248,23 @@ function proficientSkillKeys(owners, sel) {
       }
     }
   }
-  return [...keys].map(k => ({ key: k, label: traitKeyLabel(k) }));
+  return [...keys].map(k => ({ key: k, label: traitKeyLabel(k), img: traitKeyIcon(k) }));
+}
+
+/** The system's generic icon for a trait key (skills, tools, languages, …), or null. */
+const traitKeyIcon = k => dnd5e.documents.Trait?.keyIcon?.(k) ?? null;
+
+/**
+ * Stamp each trait option with the icon the level-up trait screen uses — PHB weapon art where a
+ * weapon key resolves to a ship item, else the system's generic key icon — so character-creation
+ * choice cards render the same iconned grid. Options already carrying an `img` (tool picks) keep it.
+ * @param {{key:string, label:string, img?:string}[]} options
+ * @returns {Promise<object[]>}
+ */
+async function decorateTraitIcons(options) {
+  return Promise.all(options.map(async o => o.img
+    ? o
+    : { ...o, img: (await phbWeaponIcon(o.key)) ?? traitKeyIcon(o.key) }));
 }
 
 /** Parse a single advancement into zero or more requirements, appended to `reqs`. */
@@ -273,7 +307,8 @@ async function parseAdvancementChoice(adv, ctx) {
         if ( sel[selKey] ) sel[selKey] = sel[selKey].filter(k => valid.has(k));
         const req = buildChoiceReq({
           advId: adv._id, choiceIndex: ci, source, ownerUuid, type: "Trait", level,
-          title: adv.title || t("advancement.expertise"), hint: adv.hint, count, options, sel, crossTaken
+          title: adv.title || t("advancement.expertise"), hint: adv.hint, count, options, sel, crossTaken,
+          mode
         });
         req.isExpertise = true;
         if ( !options.length ) req.emptyNote = t("choice.emptyNoteSkills");
@@ -292,7 +327,8 @@ async function parseAdvancementChoice(adv, ctx) {
       reqs.push(buildChoiceReq({
         advId: adv._id, choiceIndex: ci, source, ownerUuid, type: "Trait", level,
         title: adv.title || traitChoiceTitle(pool), hint: adv.hint,
-        count, options, sel, crossDedupe: true, dedupeGroup: mode, crossTaken
+        count, options, sel, crossDedupe: true, dedupeGroup: mode, crossTaken,
+        mode, poolType: (pool[0] ?? "").split(":")[0]
       }));
     }
     return;
@@ -339,6 +375,28 @@ async function parseAdvancementChoice(adv, ctx) {
     const choiceLevel = Object.keys(cfg.choices ?? {})
       .map(Number).filter(l => Number.isFinite(l) && l <= 1).sort((a, b) => a - b)[0];
     if ( choiceLevel === undefined ) return;
+
+    // Spell-type ItemChoice — the Magic Initiate shape (choose N cantrips/spells from a class
+    // list). Surfaced as a lightweight `SpellChoice` requirement rather than an item pool: the
+    // dedicated feat-spells step renders it (`spellStep`), and its `ownerUuid` makes the granting
+    // feature a takeover target so the AdvancementManager never prompts for it (§7 of the plan).
+    if ( cfg.type === "spell" ) {
+      const count = Number(cfg.choices[choiceLevel]?.count ?? cfg.choices[choiceLevel] ?? 0);
+      if ( !count ) return;
+      const chosen = sel[adv._id] ?? [];
+      reqs.push({
+        advId: adv._id, selKey: adv._id, source, ownerUuid, type: "SpellChoice", spellStep: true,
+        level: choiceLevel,
+        spellLevel: Number(cfg.restriction?.level ?? 0),
+        count,
+        classList: Array.from(cfg.restriction?.list ?? []).map(k => String(k).replace(/^class:/, "")),
+        abilityKeys: Array.from(cfg.spell?.ability ?? []),
+        title: adv.title || t("advancement.chooseItems"),
+        chosenCount: chosen.length,
+        complete: chosen.length >= count
+      });
+      return;
+    }
     level = choiceLevel;
     const levelChoices = cfg.choices[choiceLevel];
     const count = Number(levelChoices?.count ?? levelChoices ?? 0);
@@ -346,18 +404,25 @@ async function parseAdvancementChoice(adv, ctx) {
 
     const options = [];
     const seen = new Set();
+    // Also track option names: `allowDrops` scans every enabled pack, so an item the pool
+    // already lists (e.g. a PHB-module fighting style) can reappear as a same-named SRD copy
+    // with a different UUID. Dedupe by name too so those don't double up.
+    const seenNames = new Set();
+    const nameKey = n => (n ?? "").trim().toLowerCase();
     for ( const p of Array.from(cfg.pool ?? []) ) {
       const uuid = typeof p === "string" ? p : p?.uuid;
       if ( !uuid || seen.has(uuid) ) continue;
       const doc = await fromUuid(uuid).catch(() => null);
       if ( !doc ) continue;
       seen.add(uuid);
+      seenNames.add(nameKey(doc.name));
       options.push({ key: uuid, uuid, label: doc.name, img: doc.img });
     }
     if ( cfg.allowDrops && cfg.restriction?.subtype ) {
       for ( const opt of await findRestrictedItems(cfg) ) {
-        if ( seen.has(opt.key) ) continue;
+        if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
         seen.add(opt.key);
+        seenNames.add(nameKey(opt.label));
         options.push(opt);
       }
     }
@@ -370,10 +435,35 @@ async function parseAdvancementChoice(adv, ctx) {
   }
 }
 
+/**
+ * A plain-language explainer for a block: what the choice is and how many to pick. Used as the
+ * block's guidance when the advancement carries no `hint` of its own, so every decision reads
+ * with a sentence telling the player what it is and what's expected (e.g. weapon mastery).
+ * @param {{type:string, mode?:string, poolType?:string, count:number}} descriptor
+ */
+function choiceBlurb({ type, mode = "default", poolType = null, count = 1 }) {
+  // Blocks that are inherently a single pick read as complete sentences on their own.
+  if ( type === "Size" ) return t("choice.blurb.size");
+  if ( type === "SpellAbility" ) return t("choice.blurb.spellAbility");
+
+  let desc;
+  if ( type === "ItemChoice" ) desc = t("choice.blurb.itemChoice");
+  else if ( mode === "expertise" ) desc = t("choice.blurb.expertise");
+  else if ( mode === "mastery" ) desc = t("choice.blurb.mastery");
+  else {
+    const key = { weapon: "weapon", skills: "skills", tool: "tool", languages: "languages",
+      armor: "armor", saves: "saves", ci: "resist", di: "resist", dr: "resist" }[poolType] ?? "trait";
+    desc = t(`choice.blurb.${key}`);
+  }
+  const choose = count > 1 ? t("choice.chooseCount", { count }) : t("choice.chooseOne");
+  return `${desc} ${choose}.`;
+}
+
 /** Assemble one requirement descriptor and merge in the player's current picks. */
 function buildChoiceReq({
   advId, choiceIndex = null, source, ownerUuid = null, type, level = 0, title, hint,
-  count, options, sel, crossDedupe = false, dedupeGroup = "default", crossTaken
+  count, options, sel, crossDedupe = false, dedupeGroup = "default", crossTaken,
+  mode = "default", poolType = null
 }) {
   const selKey = choiceIndex == null ? advId : `${advId}#${choiceIndex}`;
   const chosen = sel[selKey] ?? [];
@@ -400,7 +490,7 @@ function buildChoiceReq({
 
   return {
     advId, choiceIndex, selKey, source, ownerUuid, type, level,
-    title, hint: hint || "", count,
+    title, hint: hint || choiceBlurb({ type, mode, poolType, count }), count,
     countLabel: count > 1 ? t("choice.chooseCount", { count }) : t("choice.chooseOne"),
     showProgress: count > 1,
     chosenCount: chosen.length,
@@ -439,16 +529,20 @@ export function traitChoiceTitle(pool = []) {
   return TRAIT_TITLE[type] ? t(TRAIT_TITLE[type]) : t("choice.fallback");
 }
 
-/** Expand a Trait pool (including `*` wildcards) into concrete `{key,label}` options. */
+/**
+ * Expand a Trait pool into concrete options, each iconned to match the level-up trait screen.
+ * Tool pools already resolve with their own art; every other option is decorated here.
+ */
 async function expandTraitPool(pool = []) {
+  const toolOpts = await expandToolPool(Array.from(pool ?? []));
+  if ( toolOpts ) return toolOpts;               // tool picks ship their own compendium art
+  return decorateTraitIcons(await expandTraitKeys(pool));
+}
+
+/** Expand a Trait pool (including `*` wildcards) into concrete `{key,label}` options. */
+async function expandTraitKeys(pool = []) {
   const Trait = dnd5e.documents.Trait;
   pool = Array.from(pool ?? []);
-
-  // Tool category/wildcard pools (e.g. the Monk's "tool:art:*" + "tool:music:*") expand
-  // unreliably through the generic Trait wildcard helper, so resolve them straight from the
-  // tool compendium — the same proven source the starting-equipment tool picks use.
-  const toolOpts = await expandToolPool(pool);
-  if ( toolOpts ) return toolOpts;
 
   if ( !pool.some(k => k.includes("*")) ) return pool.map(k => ({ key: k, label: traitKeyLabel(k) }));
 
@@ -533,11 +627,18 @@ function toolPoolCategory(entry) {
   return parts.length ? toolCategoryKey(parts[0]) : null;
 }
 
-/** Scan enabled compendiums for items matching an `allowDrops` restriction, memoised. */
-async function findRestrictedItems(cfg) {
+/**
+ * Scan enabled compendiums for items matching an `allowDrops` restriction, memoised.
+ * When `maxLevel` is given, items are filtered to those the character qualifies for by
+ * `system.prerequisites.level` (matching the native ItemChoice flow's feature-level gate — used at
+ * level-up so, e.g., a level-2 Artificer's "Replicate Magic Item" only lists level-2 infusions).
+ * @param {object} cfg              The ItemChoice advancement configuration.
+ * @param {number|null} [maxLevel]  Highest prerequisite level to include; null disables the gate.
+ */
+export async function findRestrictedItems(cfg, maxLevel = null) {
   const docType = cfg.type;
   const r = cfg.restriction ?? {};
-  const sig = `${docType}|${r.type || ""}|${r.subtype || ""}`;
+  const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}`;
   if ( restrictedCache.has(sig) ) return restrictedCache.get(sig);
 
   const results = [];
@@ -545,12 +646,15 @@ async function findRestrictedItems(cfg) {
     if ( pack.metadata.type !== "Item" ) continue;
     if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) continue;
     try {
-      const index = await pack.getIndex({ fields: ["type", "system.type.value", "system.type.subtype"] });
+      const index = await pack.getIndex({
+        fields: ["type", "system.type.value", "system.type.subtype", "system.prerequisites.level"]
+      });
       for ( const e of index ) {
         if ( docType && e.type !== docType ) continue;
         const ty = e.system?.type ?? {};
         if ( r.type && ty.value !== r.type ) continue;
         if ( r.subtype && ty.subtype !== r.subtype ) continue;
+        if ( (maxLevel != null) && (Number(e.system?.prerequisites?.level ?? 0) > maxLevel) ) continue;
         results.push({ key: e.uuid, uuid: e.uuid, label: e.name, img: e.img });
       }
     } catch ( err ) {

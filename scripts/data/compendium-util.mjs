@@ -1,6 +1,11 @@
 /**
  * Shared compendium helpers for the data layer. Kept tiny and dependency-free so the
  * spell and equipment loaders can share one definition of "which packs count".
+ *
+ * For a junior dev: a "compendium pack" is a Foundry content library (a bundle of Items,
+ * Actors, etc.) shipped by a system or module — e.g. the dnd5e classes pack, or the PHB
+ * module's spells pack. A GM can toggle sources on/off in dnd5e's settings, and these two
+ * helpers answer "which packs are we allowed to read from?" so every loader agrees.
  */
 
 /**

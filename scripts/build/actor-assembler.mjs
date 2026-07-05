@@ -1,6 +1,7 @@
 import { ABILITIES, MODULE_ID, log } from "../config.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { collectEquipment } from "../data/equipment-source.mjs";
+import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
 import {
   buildChoicePlan, runAdvancementManager, recordBackgroundAsiValue, applyChoicePlan
 } from "./advancement-apply.mjs";
@@ -15,6 +16,13 @@ import {
  * shows a prompt — any advancement the player already resolved in the wizard is skipped
  * here and applied by hand afterwards (see {@link module:build/advancement-apply}).
  * Finally the chosen spells, then the starting equipment, are granted.
+ *
+ * For a junior dev: this is the ONLY place that writes to the world — every step before this just
+ * mutated the in-memory CreatorState. Two Foundry APIs do the writing: actor.update(changes) sets
+ * fields on the actor (using "dotted.path" keys), and actor.createEmbeddedDocuments("Item", [...])
+ * adds items (class, spells, gear) onto the actor. The `render: false` option on those calls stops
+ * the actor sheet redrawing after every single write, so the build doesn't flicker. Read the
+ * numbered steps in assembleActor() top to bottom — that's the whole build sequence.
  *
  * @param {import("../state/creator-state.mjs").CreatorState} state
  * @param {import("../data/source-index.mjs").SourceIndex} source
@@ -77,10 +85,66 @@ export async function assembleActor(state, source, equipment) {
   // 4. Spells chosen on the Spells step, as prepared class spells.
   await addSpells(actor, state);
 
+  // 4b. Spells chosen on the Feat-Spells step (Magic Initiate), created directly on the actor —
+  //     the PHB feat carries no advancement to grant them, so we add them by hand.
+  await applyFeatSpells(actor, state, source);
+
   // 5. Starting equipment and currency chosen on the Choices step.
   if ( equipment ) await grantEquipment(actor, state, source, equipment);
 
   return actor;
+}
+
+/**
+ * Create the spells the player chose for each Magic Initiate-style feat, linked to the granted feat
+ * on the actor. Cantrips are added at-will; the level-1 spell is always prepared and gains the
+ * feat's once-per-long-rest free casting, and all of them cast off the chosen ability. Mirrors the
+ * dnd5e spell-configuration the advancement flow would apply, done manually because the compendium
+ * feat has no advancement of its own.
+ */
+async function applyFeatSpells(actor, state, source) {
+  const grants = await resolveFeatSpells(state, source);
+  for ( const grant of grants ) {
+    const picks = state.featSpells[grant.key];
+    if ( !picks ) continue;
+    const list = grant.classList.length === 1 ? grant.classList[0] : picks.list;
+    if ( !list ) continue;
+    const ability = (grant.abilityKeys.length === 1 ? grant.abilityKeys[0] : picks.ability)
+      || grant.abilityKeys[0] || "int";
+
+    // Find the granted feat item so the spells can be tagged to it (grouping + cleanup on the sheet).
+    const feat = actor.items.find(i => i.type === "feat"
+      && (i._stats?.compendiumSource === grant.featUuid || i.system?.identifier === grant.featIdentifier));
+    const sourceTag = `feat:${grant.featIdentifier}`;
+
+    const data = [];
+    for ( const uuid of picks.cantrips ?? [] ) data.push(await buildFeatSpell(uuid, { ability, cantrip: true, feat, sourceTag }));
+    for ( const uuid of picks.spells ?? [] ) data.push(await buildFeatSpell(uuid, { ability, cantrip: false, feat, sourceTag }));
+    const clean = data.filter(Boolean);
+    if ( clean.length ) await actor.createEmbeddedDocuments("Item", clean, { render: false });
+  }
+}
+
+/** Build one feat spell's item data with the Magic Initiate casting configuration applied. */
+async function buildFeatSpell(uuid, { ability, cantrip, feat, sourceTag }) {
+  const doc = await fromUuid(uuid).catch(() => null);
+  if ( !doc ) { log(`feat spell not found: ${uuid}`); return null; }
+  const obj = doc.toObject();
+  if ( obj._stats ) obj._stats.compendiumSource = uuid;
+  foundry.utils.setProperty(obj, "system.ability", ability);
+  foundry.utils.setProperty(obj, "system.sourceItem", sourceTag);
+  if ( feat ) foundry.utils.setProperty(obj, "flags.dnd5e.advancementOrigin", `${feat.id}.`);
+  if ( !cantrip ) {
+    // The level-1 spell is always prepared and castable once per long rest without a slot.
+    foundry.utils.setProperty(obj, "system.method", "spell");
+    foundry.utils.setProperty(obj, "system.prepared", 2);
+    foundry.utils.setProperty(obj, "system.uses.max", "1");
+    foundry.utils.setProperty(obj, "system.uses.spent", 0);
+    const recovery = Array.isArray(obj.system?.uses?.recovery) ? obj.system.uses.recovery : [];
+    recovery.push({ period: "lr", type: "recoverAll" });
+    foundry.utils.setProperty(obj, "system.uses.recovery", recovery);
+  }
+  return obj;
 }
 
 /**

@@ -9,6 +9,10 @@ import { t } from "../config.mjs";
  * it knows before the step counts as done. A non-caster has nothing to pick, so the step
  * never blocks — and the rail greys it out via {@link spellsStep.applicable}. The known
  * counts come from {@link spellInfoFor}, cached on `state.spellInfo` so this stays sync.
+ *
+ * Domain terms for a junior: "cantrips" are level-0 spells; "level-1 spells" are the first real
+ * spells. Each class knows a fixed number of each at level 1 (its maxCantrips / maxSpells). The
+ * two are picked on separate tabs but tracked in two separate arrays on the state.
  */
 export const spellsStep = {
   id: "spells",
@@ -22,6 +26,15 @@ export const spellsStep = {
     if ( !info.isSpellcaster ) return true; // non-caster: nothing to choose (rail greys it)
     return state.selectedCantrips.length >= info.maxCantrips
         && state.selectedSpells.length >= info.maxSpells;
+  },
+
+  /** Why Next is blocked: how many spells are still to be chosen. */
+  incompleteHint(state) {
+    const info = state.spellInfo;
+    if ( !info?.isSpellcaster ) return null;
+    const remain = Math.max(0, info.maxCantrips - state.selectedCantrips.length)
+                 + Math.max(0, info.maxSpells - state.selectedSpells.length);
+    return remain ? t("step.spells.hint", { count: remain }) : null;
   },
 
   // The Spells step only applies to spellcasters; the rail greys it out otherwise.
@@ -61,7 +74,7 @@ export const spellsStep = {
     }
   },
 
-  async context({ state, spells }) {
+  async context({ state, spells, source }) {
     const data = await spells.forClass(state.classUuid);
     // Keep the completion gate's view of the class in sync with what we render.
     state.spellInfo = {
@@ -114,9 +127,20 @@ export const spellsStep = {
       };
     }
 
+    // Filter dropdown options drawn from the active list, mirroring the level-up spell browser so
+    // the two screens read the same. The level filter is only meaningful on the leveled tab.
+    const levelOptions = [...new Set(list.filter(s => s.level > 0).map(s => s.level))]
+      .sort((a, b) => a - b)
+      .map(level => ({ value: level, label: t("levelup.step.spells.levelTag", { level }) }));
+    const schoolOptions = [...new Set(list.map(s => s.school).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, game.i18n.lang))
+      .map(school => ({ value: school, label: school }));
+    const className = source?.card(state.classUuid)?.name ?? "";
+
     return {
       isSpellcaster: true,
       tab,
+      intro: t("step.spells.intro", { class: className }),
       isCantripsTab: tab === "cantrips",
       isLevel1Tab: tab === "level1",
       hasCantrips: maxCantrips > 0,
@@ -128,8 +152,11 @@ export const spellsStep = {
       cantripsFull: maxCantrips > 0 && state.selectedCantrips.length >= maxCantrips,
       spellsFull: maxSpells > 0 && state.selectedSpells.length >= maxSpells,
       atLimit,
+      needLabel: t("levelup.step.spells.need", { count: Math.max(0, activeMax - activeBucket.length) }),
       list,
       count: list.length,
+      levelOptions,
+      schoolOptions,
       selectedCantrips,
       selectedSpells,
       hasSelected: selectedCantrips.length + selectedSpells.length > 0,

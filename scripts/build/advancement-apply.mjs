@@ -15,8 +15,17 @@ import { advancementArray } from "../data/choice-resolver.mjs";
  *
  * All functions are pure of UI/state — they take explicit data so the assembler stays
  * the only orchestrator.
+ *
+ * Why this is fiddly, for a junior dev: normally when you add a class to an actor, dnd5e pops up an
+ * "AdvancementManager" wizard asking the player to make every choice (skills, features, etc.). We've
+ * ALREADY asked all that in our own UI, so we don't want that wizard to prompt again. The trick:
+ * run the manager but (a) delete the steps for choices the player already made ("skip"), then
+ * (b) apply those choices ourselves afterwards by calling each advancement's own apply() method
+ * ("manual apply"). A "takeover" is a granted feature we recreate by hand because it carries its own
+ * nested choices. The `depth` params guard against a feature that grants a feature that grants… forever.
  */
 
+// The advancement types whose choices the wizard resolves, so the manager should skip them here.
 const ADV_TYPES = ["Trait", "Size", "ItemChoice"];
 
 /**
@@ -268,6 +277,13 @@ async function manuallyApplyItemAdvancements(actor, item, source, advChoices, de
 
 /** Apply an ItemChoice by creating the chosen items and recording them, then cascading. */
 async function applyItemChoice(actor, item, adv, level, uuids, source, advChoices, depth) {
+  // Spell-type ItemChoices (Magic Initiate & variants) carry a spell configuration that stamps the
+  // granted spell's casting ability, preparation, source, and limited uses. The player chose the
+  // ability on the feat-spells step, stored under `"<advId>::ability"`; the rest comes from the
+  // advancement itself. Reuse dnd5e's own `applySpellChanges` so the result matches the native flow.
+  const spellCfg = adv.configuration?.spell;
+  const spellAbility = advChoices[source]?.[`${adv.id}::ability`];
+
   const toCreate = [];
   const added = {};
   for ( const uuid of uuids ) {
@@ -277,6 +293,10 @@ async function applyItemChoice(actor, item, adv, level, uuids, source, advChoice
     data._id = foundry.utils.randomID();
     if ( data._stats ) data._stats.compendiumSource = uuid;
     foundry.utils.setProperty(data, "flags.dnd5e.advancementOrigin", `${item.id}.${adv.id}`);
+    if ( doc.type === "spell" && spellCfg?.applySpellChanges ) {
+      try { spellCfg.applySpellChanges(data, { ability: spellAbility }); }
+      catch ( err ) { log(`applySpellChanges failed for ${uuid}`, err); }
+    }
     toCreate.push(data);
     added[data._id] = uuid;
   }

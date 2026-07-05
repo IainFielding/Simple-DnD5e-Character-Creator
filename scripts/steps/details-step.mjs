@@ -11,6 +11,9 @@ import { generateName, nameStyleOptions } from "../data/name-generator.mjs";
  * actions. Nothing here touches the actor — the assembler reads this state on build.
  */
 
+// The biography fields are defined here as plain lists so the template can loop over them and the
+// handler can validate a changed field against them, instead of hard-coding 15 near-identical inputs.
+
 /** The short single-line fields, in display order. */
 export const DETAIL_FIELDS = [
   "alignment", "faith", "gender", "eyes", "hair", "skin", "height", "weight", "age"
@@ -31,6 +34,11 @@ export const detailsStep = {
   // A name is the one thing the character cannot be built without.
   isComplete(state) {
     return !!state.details.name?.trim();
+  },
+
+  /** Why Next is blocked: no name entered yet. */
+  incompleteHint(state) {
+    return state.details.name?.trim() ? null : t("step.details.hint");
   },
 
   /** Rail summary: the chosen name (or nothing yet). */
@@ -173,6 +181,8 @@ const IMAGE_TARGET = { portrait: "portrait", tokenImg: "tokenImg", tokenRingImg:
  */
 function pickImage(state, app, slot) {
   const prop = IMAGE_TARGET[slot];
+  // FilePicker moved namespace across Foundry versions; try the modern location, fall back to the
+  // old global so the module keeps working on both.
   const Picker = foundry.applications.apps.FilePicker?.implementation ?? FilePicker;
   const picker = new Picker({
     type: "image",
