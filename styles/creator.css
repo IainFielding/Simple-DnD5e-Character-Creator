@@ -1586,6 +1586,8 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 
 /* The description column scrolls its detail, with the picked-spell tally pinned beneath it. */
 .creator-spells .creator-pick-desc { display: flex; flex-direction: column; overflow: hidden; }
+/* Flat fill on the focused-spell detail card — no panel gradient on the spell pages. */
+.creator-spells .creator-detail { background: var(--cc-panel); }
 .creator-pick-desc-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
 /* Running tally of picked spells, pinned to the bottom of the description column. */
