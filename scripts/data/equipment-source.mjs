@@ -12,9 +12,19 @@ import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
  *
  * One instance per builder session; built option sets are memoised per origin UUID. It
  * reads selections from `state.equipment` but is otherwise free of UI/state coupling.
+ *
+ * For a junior dev: dnd5e stores starting gear as a small tree of nodes, each with a `type`:
+ *   AND      – take all children together (a bundle)
+ *   OR       – choose one child (this is what becomes a lettered A/B/C option)
+ *   linked   – a specific item (a leaf)
+ *   tool     – "any tool of category X" — expands to a sub-pick (see tool-source.mjs)
+ *   currency – a lump of starting gold
+ * We flatten that tree into player-facing "options" (A, B, C…), remembering their choice in
+ * state.equipment[key] as { selectedOption, orSelections }, and later read it back to grant the gear.
  */
 
 const VALID_TYPES = new Set(["AND", "OR", "linked", "currency", "tool"]);
+// Letters used to label the top-level options a player chooses between (Option A, Option B, …).
 const OPTION_LABELS = "ABCDEFGH";
 
 /** Spellcasting-focus picks per class identifier; items are referenced by identifier. */

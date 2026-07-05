@@ -1,3 +1,9 @@
+{{!--
+  Shared template for the three "origin" picks (class-less species/background/etc.): a searchable
+  list of cards on the left, and the selected card's enriched description + granted traits on the
+  right. Data comes from origin-step.mjs context(): `cards`, `hasSelection`, `detail`, `groups`.
+  Clicking a card fires data-action="pick-origin"; the left column filters live via data-creator-search.
+--}}
 <section class="creator-pick creator-pick--solo">
   <!-- Left column: vertical picker -->
   <div class="creator-pick-side">

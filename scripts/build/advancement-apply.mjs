@@ -15,8 +15,17 @@ import { advancementArray } from "../data/choice-resolver.mjs";
  *
  * All functions are pure of UI/state — they take explicit data so the assembler stays
  * the only orchestrator.
+ *
+ * Why this is fiddly, for a junior dev: normally when you add a class to an actor, dnd5e pops up an
+ * "AdvancementManager" wizard asking the player to make every choice (skills, features, etc.). We've
+ * ALREADY asked all that in our own UI, so we don't want that wizard to prompt again. The trick:
+ * run the manager but (a) delete the steps for choices the player already made ("skip"), then
+ * (b) apply those choices ourselves afterwards by calling each advancement's own apply() method
+ * ("manual apply"). A "takeover" is a granted feature we recreate by hand because it carries its own
+ * nested choices. The `depth` params guard against a feature that grants a feature that grants… forever.
  */
 
+// The advancement types whose choices the wizard resolves, so the manager should skip them here.
 const ADV_TYPES = ["Trait", "Size", "ItemChoice"];
 
 /**

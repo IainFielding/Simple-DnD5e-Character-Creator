@@ -1,3 +1,9 @@
+{{!--
+  The Background step: the origin list/description layout plus an ability-increase panel on the
+  right (2024 backgrounds grant a small ability-score increase the player allocates here). The
+  right column only appears once a background with an increase is picked (`abilities.selected`).
+  Data from background-step.mjs context(): `cards`, `detail`, `groups`, `abilities` (the panel).
+--}}
 <section class="creator-pick {{#unless abilities.selected}}creator-pick--solo{{/unless}}">
   <!-- Left column: vertical picker -->
   <div class="creator-pick-side">
@@ -8,6 +14,13 @@
                aria-label="{{localize 'sogrom-dnd5e-character-creator.common.search'}}"
                placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
       </label>
+      <label class="creator-spell-filter creator-bg-filter">
+        <i class="fa-solid fa-dumbbell"></i>
+        <select data-bg-filter-ability aria-label="{{localize 'sogrom-dnd5e-character-creator.step.background.filterAbilityAria'}}">
+          <option value="">{{localize "sogrom-dnd5e-character-creator.step.background.filterAllAbilities"}}</option>
+          {{#each abilityOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
+        </select>
+      </label>
       <span class="creator-count">{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
     </div>
 
@@ -16,7 +29,7 @@
       <li>
         <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}}"
                 data-action="stepAction" data-step-action="pick-origin"
-                data-uuid="{{uuid}}" data-name="{{name}}">
+                data-uuid="{{uuid}}" data-name="{{name}}" data-abilities="{{abilities}}">
           <img class="creator-pickrow-img" src="{{img}}" alt="">
           <span class="creator-pickrow-name">{{name}}</span>
           {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}

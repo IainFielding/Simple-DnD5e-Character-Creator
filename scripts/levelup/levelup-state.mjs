@@ -26,6 +26,14 @@ import { computeSpellPlan } from "./steps/lvl-spells-step.mjs";
  * levelled, the from→to character levels for display, and a reference to the {@link LevelUpDriver}
  * that owns the working clone and the hit-point decisions. All mutation of the clone happens
  * through the driver; this object holds no DOM or Application concerns.
+ *
+ * For a junior dev — the mental model of a level-up:
+ *   - The real actor is NOT touched while the player is deciding. The driver holds a "clone" (an
+ *     in-memory copy), and every decision is applied to that clone. Cancel = throw the clone away.
+ *   - "commit" is the moment the clone's changes are written to the real actor (on Apply). After
+ *     that, `committed` is true and the post-commit spell step edits the real actor directly.
+ *   - This is the counterpart of CreatorState: it's the "form data" for a level-up. The getters
+ *     below (hpSteps, asiSteps, …) just forward to the driver's decision arrays for convenience.
  */
 export class LevelUpState {
 

@@ -1,3 +1,9 @@
+{{!--
+  The Spells step (creation): pick the cantrips and level-1 spells a spellcasting class knows. Two
+  tabs (cantrips / level-1), a filterable list of the class's spells, and a running "picked" tally.
+  Non-casters get a short "nothing to choose" message instead (the {{else}} of `isSpellcaster`).
+  Data from spells-step.mjs context(); clicking a spell fires data-action="pick-spell".
+--}}
 <section class="creator-pick creator-spells creator-spells-browser">
   {{#if isSpellcaster}}
   <!-- Main column: intro, tabs, filters, and the spell list for the active tab -->

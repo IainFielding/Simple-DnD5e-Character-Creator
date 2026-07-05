@@ -12,6 +12,12 @@ import { grantStep } from "./grant-step.mjs";
  * first, then the subclass pick (which can reveal features below it), then ASI/feat, then feature
  * and trait choices. Each is the same module that used to be its own rail step; here it contributes
  * a *block* to one combined screen instead of owning a screen of its own.
+ *
+ * For a junior dev: don't confuse these with the creation "step modules". A creation step (see
+ * origin-step.mjs) owns a whole screen and implements isComplete/context/handle. These level-up
+ * "components" instead implement isCompleteAt(state, level) and sectionsAt(ctx, level) — the extra
+ * `level` arg is because ONE screen shows all decisions for one character level, and each component
+ * contributes a block to it. levelStep() below is the real step; it just composes these components.
  */
 const COMPONENTS = [hpStep, subclassStep, asiStep, choicesStep, traitStep, grantStep];
 

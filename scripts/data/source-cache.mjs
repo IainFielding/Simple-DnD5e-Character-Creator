@@ -15,6 +15,13 @@ import { getEnabledPacks } from "./compendium-util.mjs";
  * that finishes awaits the same in-flight work behind its loading screen. The per-window
  * {@link module:state/creator-state.CreatorState} stays separate — only these read-only indexes
  * are shared here.
+ *
+ * For a junior dev: "warming" means pre-reading slow compendium data into memory *before* the UI
+ * asks for it, so the first render is instant instead of stalling on disk/pack reads. This module
+ * is a module-level singleton (the `cache`, `warming`, and `signature` variables persist for the
+ * whole session). The `warming` promise is shared so that if ten windows ask at once, the work runs
+ * once and everyone awaits the same promise. "Stale" = the GM changed which compendiums are enabled,
+ * so the cache no longer matches the world and must be rebuilt.
  */
 
 /** @type {{source: SourceIndex, spells: SpellSource, equipment: EquipmentSource}|null} */

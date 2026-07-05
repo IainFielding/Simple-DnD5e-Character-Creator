@@ -7,6 +7,15 @@ import { ABILITIES, t } from "../config.mjs";
  * derivations that several layers need (resolved ability scores). All UI
  * concerns live in the step modules; all persistence lives in the assembler.
  * Nothing here imports an Application or touches the DOM.
+ *
+ * For a junior dev: think of this as the "form data" for the whole wizard. Steps read
+ * and write these fields; nothing here is saved to the world until the assembler runs at
+ * Create. A few field types recur:
+ *   - selections (e.g. classUuid)      – what the player picked, stored as compendium UUIDs
+ *   - "…Cache" / "…Info" fields         – pre-resolved data so the *synchronous* isComplete()
+ *                                         gates can run without awaiting compendium reads
+ *   - "Transient …" fields              – pure UI state (active tab, focused row); not persisted
+ * Fields are given as class field initialisers, so a fresh CreatorState starts at these defaults.
  */
 export class CreatorState {
 
@@ -160,6 +169,10 @@ export class CreatorState {
   /* -------------------------------------------- */
   /*  Derived data                                */
   /* -------------------------------------------- */
+  //
+  // These methods compute values from the raw fields above rather than storing them, so there's
+  // only one place the truth lives. The "reset…" methods below clear fields that depend on a
+  // selection, and are called when that selection changes (e.g. a new class wipes its spell picks).
 
   /**
    * The pool of assignable values for the current method, or null for point-buy.
@@ -257,6 +270,9 @@ export class CreatorState {
   #prefillFromActor(actor) {
     if ( !actor ) return;
 
+    // An item on the actor remembers the compendium entry it was copied from in _stats.compendiumSource.
+    // That UUID is exactly what our selection fields store, so we can map an existing actor's class/
+    // background/species items back to the picks that produced them. (dnd5e's item type for species is "race".)
     const source = item => item?._stats?.compendiumSource ?? null;
     this.classUuid = source(actor.items?.find(i => i.type === "class"));
     this.backgroundUuid = source(actor.items?.find(i => i.type === "background"));

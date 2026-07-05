@@ -16,6 +16,12 @@ const SPELL_INDEX_FIELDS = new Set([
  * This is the spell counterpart of {@link SourceIndex}: it reads dnd5e's spell-list
  * registry (with pack-scan fallbacks) and presents lightweight spell cards. It never
  * touches state or the DOM.
+ *
+ * For a junior dev: dnd5e keeps a "spell-list registry" that maps each class to the spells on its
+ * list. This class queries that (falling back to scanning packs if needed) and hands back small
+ * spell "cards". As with SourceIndex, the private #maps memoise results so re-opening a step is
+ * instant. Two distinct jobs: forClass() = the level-1 creation view; forClassAtLevel() = the wider
+ * pool a mid-game level-up can pick from.
  */
 export class SpellSource {
 

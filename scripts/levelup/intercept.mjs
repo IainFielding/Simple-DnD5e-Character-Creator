@@ -14,6 +14,12 @@ import { LevelUpShell } from "./levelup-shell.mjs";
  *
  * Both paths self-gate on the `mode` setting and stand down entirely when Hero Mancer is active.
  * Call once, at `ready`.
+ *
+ * For a junior dev: "intercept" = we hook the dnd5e level-up so our own UI runs instead of the
+ * system's default wizard. The clean way in is the `preAdvancementManagerRender` hook: it fires
+ * just before the native wizard paints, and if our handler returns `false` the native UI is
+ * cancelled — leaving us to open our shell in its place. We only take over level-ups we know we
+ * can fully handle (see LevelUpDriver.canDrive); anything else we let the system handle normally.
  */
 export function registerLevelUp() {
   // The level-up step partials are pulled in by the stage's dynamic Handlebars partial, so they
@@ -45,6 +51,8 @@ export function registerLevelUp() {
  */
 function onPreAdvancementManagerRender(manager) {
   // Temporary diagnostics for the Phase 1 bring-up: report why we did or didn't take over.
+  // NOTE (junior): this console.table/log block is developer scaffolding for the in-progress
+  // level-up feature — safe to strip once the takeover is stable. It only logs; it changes nothing.
   const steps = manager?.steps ?? [];
   const actorLevel = manager?.actor?.system?.details?.level ?? 0;
   const classItem = steps.find(s => s.class)?.class?.item;

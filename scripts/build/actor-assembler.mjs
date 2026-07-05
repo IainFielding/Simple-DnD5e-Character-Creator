@@ -17,6 +17,13 @@ import {
  * here and applied by hand afterwards (see {@link module:build/advancement-apply}).
  * Finally the chosen spells, then the starting equipment, are granted.
  *
+ * For a junior dev: this is the ONLY place that writes to the world — every step before this just
+ * mutated the in-memory CreatorState. Two Foundry APIs do the writing: actor.update(changes) sets
+ * fields on the actor (using "dotted.path" keys), and actor.createEmbeddedDocuments("Item", [...])
+ * adds items (class, spells, gear) onto the actor. The `render: false` option on those calls stops
+ * the actor sheet redrawing after every single write, so the build doesn't flicker. Read the
+ * numbered steps in assembleActor() top to bottom — that's the whole build sequence.
+ *
  * @param {import("../state/creator-state.mjs").CreatorState} state
  * @param {import("../data/source-index.mjs").SourceIndex} source
  * @returns {Promise<Actor>} The built actor.

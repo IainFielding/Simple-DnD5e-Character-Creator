@@ -1,3 +1,15 @@
+{{!--
+  The "stage": the main panel of both the creator and level-up windows (the right-hand side; the
+  step list is rail.hbs). It's a fixed frame — a header (step title + "3 of 9"), a body, and a
+  footer with the Back/Next/Create buttons — and the body swaps in whichever step is active.
+
+  The data comes from the shell's _prepareContext(): `step` (the active step's context, including
+  its own template path), `nav` (button state + hints), and the `isReview`/`loading` flags.
+
+  For a junior: the one line doing the real work is the dynamic partial below —
+  `{{> (lookup step "template") step}}` means "render the template named in step.template, passing
+  it the step object". That's how one stage frame hosts every different step's markup.
+--}}
 <div class="creator-stage">
   {{#if loading}}
   <div class="creator-loading">
@@ -19,6 +31,11 @@
       <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
       {{nav.backLabel}}
     </button>
+    {{#if isReview}}
+    {{#if finishHint}}<span class="creator-nav-hint" role="status"><i class="fa-solid fa-circle-info"></i>{{finishHint}}</span>{{/if}}
+    {{else}}
+    {{#if nav.hint}}<span class="creator-nav-hint" role="status"><i class="fa-solid fa-circle-info"></i>{{nav.hint}}</span>{{/if}}
+    {{/if}}
     {{#if isReview}}
     <button type="button" class="creator-btn creator-btn-primary creator-btn-finish" data-action="finish" {{#unless canFinish}}disabled{{/unless}}>
       {{finishLabel}}

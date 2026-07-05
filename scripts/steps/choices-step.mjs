@@ -44,6 +44,19 @@ export const choicesStep = {
     return state.choiceCache ? choicesComplete(state.choiceCache) : false;
   },
 
+  /** Why Next is blocked: how many decisions are still open. */
+  incompleteHint(state) {
+    const resolved = state.choiceCache;
+    if ( !resolved?.hasAny ) return null;
+    let total = 0, done = 0;
+    for ( const s of resolved.sources ) for ( const r of s.requirements ) {
+      if ( r.spellStep ) continue;
+      total++; if ( r.complete ) done++;
+    }
+    const remain = total - done;
+    return remain > 0 ? t("step.choices.hint", { count: remain }) : null;
+  },
+
   /** Rail summary: "3/4 made" once there's anything to decide. */
   summary(state) {
     const resolved = state.choiceCache;

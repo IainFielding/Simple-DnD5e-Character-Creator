@@ -45,9 +45,11 @@ export const hpStep = {
         max: record.advancement.hitDieValue,
         rollLabel: t("levelup.step.hp.roll", { die: record.hitDie }),
         isAverage: record.mode === "avg",
+        isMax: record.mode === "max",
         isRoll: record.mode === "roll",
         isManual: record.mode === "manual",
-        // The roll button shows its result; the manual field is seeded with the current number.
+        // The roll button shows its result; the value box is seeded with the current number and
+        // stays editable so the player can type a hit-point total directly.
         rolled: record.mode === "roll" ? contributed(record) : null,
         current: contributed(record),
         total: contributed(record)
@@ -59,6 +61,7 @@ export const hpStep = {
     const record = state.hpSteps[Number(el.dataset.index)];
     if ( !record ) return;
     if ( action === "hpAverage" ) await driver.applyHitPoints(record, "avg");
+    else if ( action === "hpMax" ) await driver.applyHitPoints(record, "max", "max");
     else if ( action === "hpRoll" ) await driver.rollHitPoints(record);
     else if ( action === "hpManual" ) {
       const n = Math.round(Number(el.value));

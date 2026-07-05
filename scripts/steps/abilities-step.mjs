@@ -1,10 +1,17 @@
 import { ABILITIES, MODULE_ID, abilityRollFormula, pointBuyBudget, t } from "../config.mjs";
 
-/** PHB point-buy price of each reachable score. */
-const POINT_BUY_COST = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
-const PB_MIN = 8;
-const PB_MAX = 15;
+// D&D 5e offers three ways to set ability scores; this panel supports all three:
+//   point-buy       – spend a budget of points to raise scores from 8, each step costing more
+//   standard-array  – assign the fixed set [15,14,13,12,10,8] across the six abilities
+//   roll            – roll dice for six values, then assign them
+// The point-buy and pool (array/roll) paths are kept fairly separate below.
 
+/** PHB point-buy price of each reachable score (8 is free; 14 and 15 cost extra). */
+const POINT_BUY_COST = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
+const PB_MIN = 8;   // lowest score point-buy allows
+const PB_MAX = 15;  // highest score point-buy allows
+
+// The D&D ability modifier: (score - 10) / 2, rounded down, shown with an explicit + or - sign.
 const formatMod = score => {
   const mod = Math.floor((score - 10) / 2);
   return mod >= 0 ? `+${mod}` : `${mod}`;
@@ -29,6 +36,14 @@ export function abilitiesComplete(state) {
   const pool = state.abilityPool() ?? [];
   if ( !pool.length ) return false;
   return ABILITIES.every(k => state.assignment[k] != null);
+}
+
+/** Why the ability panel isn't done yet, for the Next-button hint — or null when it is. */
+export function abilitiesHint(state) {
+  if ( abilitiesComplete(state) ) return null;
+  if ( state.abilityMethod === "point-buy" ) return t("step.abilities.hintPoints", { count: pointsRemaining(state) });
+  if ( !(state.abilityPool() ?? []).length ) return t("step.abilities.hintRoll");
+  return t("step.abilities.hintAssign");
 }
 
 /** Compact "15 / 14 / …" line for the rail. */

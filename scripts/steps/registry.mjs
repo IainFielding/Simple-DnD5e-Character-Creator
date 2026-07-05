@@ -22,6 +22,7 @@ export const STEPS = [
     icon: "fa-solid fa-paw",
     labelKey: "step.species.label",
     field: "speciesUuid",
+    hintKey: "step.species.hint",
     cards: src => src.species()
   }),
   detailsStep,

@@ -18,6 +18,11 @@ import { advancementArray } from "../data/choice-resolver.mjs";
  * list, and abilities from them instead — so both forms funnel through the same step and apply path.
  */
 
+// Key term used throughout this file: a "grant" is our normalised description of one feat's spell
+// choice — `{ key, source, featUuid, featName, classList, abilityKeys, cantripCount, spellCount,
+// spellLevel, mode }`. resolveFeatSpells() produces one per applicable feat; every helper below
+// takes a grant plus the state and reads/writes the player's picks in state.featSpells[grant.key].
+
 /** Magic Initiate's identity and fixed shape, used when the feat carries no advancement data. */
 const MI_IDENTIFIER = /magic-initiate/i;
 const MI_NAME = /magic initiate/i;
@@ -43,6 +48,19 @@ export const featSpellsStep = {
     const grants = state.featSpellCache ?? [];
     if ( !grants.length ) return true;            // nothing to choose — never blocks the build
     return grants.every(g => grantComplete(state, g));
+  },
+
+  /** Why Next is blocked: how many feat spells are still to be chosen. */
+  incompleteHint(state) {
+    const grants = state.featSpellCache ?? [];
+    let picked = 0, total = 0;
+    for ( const g of grants ) {
+      const b = state.featSpells[g.key];
+      picked += (b?.cantrips.length ?? 0) + (b?.spells.length ?? 0);
+      total += g.cantripCount + g.spellCount;
+    }
+    const remain = Math.max(0, total - picked);
+    return remain ? t("step.featSpells.hint", { count: remain }) : null;
   },
 
   /** Rail summary: how many of the feats' spells are chosen in total. */

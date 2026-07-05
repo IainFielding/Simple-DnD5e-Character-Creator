@@ -3,14 +3,23 @@
  *
  * Kept deliberately free of Application/DOM concerns so every layer (state, data,
  * steps, build) can import from here without pulling in the UI.
+ *
+ * For a junior dev: this is the "grab bag" module every other file imports from.
+ * If you need a constant or a tiny helper that has nothing to do with the UI, it
+ * probably lives here. Nothing in this file touches the DOM or a Foundry Application.
  */
 
+// The module's unique id. Must match the "id" field in module.json. Foundry uses it
+// to namespace our settings, templates, and localisation keys so they never collide
+// with another module's.
 export const MODULE_ID = "sogrom-dnd5e-character-creator";
 
 /** Ability keys in canonical display order. */
 export const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 
-/** Settings keys, centralised so registration and reads never drift. */
+// The string keys for every world setting this module registers with Foundry.
+// Centralising them here means the code that *registers* a setting and the code that
+// *reads* it always use the exact same key — no risk of a typo silently reading `undefined`.
 export const SETTINGS = {
   launchButton: "showLaunchButton",
   contextMenu: "showContextMenu",
@@ -20,6 +29,8 @@ export const SETTINGS = {
   mode: "mode"
 };
 
+// The fallback value for each setting, used when the world hasn't overridden it (and as
+// the `default` we hand to Foundry at registration time).
 export const DEFAULTS = {
   pointBuyBudget: 27,
   rollFormula: "4d6kh3",
@@ -63,31 +74,37 @@ export const DEFAULT_LEVEL1_SPELLS = {
 };
 
 /**
- * Localise a module-scoped key. Call only after i18n is ready (never in static
- * field initialisers). Pass `data` to interpolate `{token}` placeholders.
+ * Turn a translation key into the text the player sees, in their configured language.
+ * We prefix the key with the module id so it resolves against *our* entries in lang/en.json
+ * (e.g. t("step.class.label") reads "sogrom-dnd5e-character-creator.step.class.label").
+ *
+ * Call only after i18n is ready (never in static field initialisers), because `game.i18n`
+ * isn't populated until Foundry's setup phase. Pass `data` to fill `{token}` placeholders.
  * @param {string} key            Key relative to the module namespace.
  * @param {object} [data]         Optional interpolation data.
  * @returns {string}
  */
 export function t(key, data) {
   const full = `${MODULE_ID}.${key}`;
+  // `format` fills in {placeholders}; `localize` is the plain lookup with none.
   return data ? game.i18n.format(full, data) : game.i18n.localize(full);
 }
 
-/** Path to a template file shipped by this module. */
+/** Build the full path to one of this module's template files (e.g. tpl("stage.hbs")). */
 export function tpl(relative) {
   return `modules/${MODULE_ID}/templates/${relative}`;
 }
 
-/** Resolved point-buy budget, falling back to the default for invalid settings. */
+/** Read the point-buy budget setting, guarding against a GM entering a bad value (0, text, etc.). */
 export function pointBuyBudget() {
   const raw = Number(game.settings.get(MODULE_ID, SETTINGS.pointBuyBudget));
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULTS.pointBuyBudget;
 }
 
-/** Resolved (and validated) ability-roll formula. */
+/** Read the ability-roll formula setting; fall back to the default if it isn't valid dice syntax. */
 export function abilityRollFormula() {
   const raw = String(game.settings.get(MODULE_ID, SETTINGS.rollFormula) ?? "").trim();
+  // Roll.validate is dnd5e/Foundry's own dice-syntax checker, so we never store a formula that throws.
   return raw && Roll.validate(raw) ? raw : DEFAULTS.rollFormula;
 }
 

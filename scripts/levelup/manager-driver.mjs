@@ -17,6 +17,20 @@ import { phbWeaponIcon } from "../data/weapon-source.mjs";
  * advancement (granted features, scale values, fixed traits/size) applies automatically. The
  * synchronous {@link canDrive} gate ensures we only claim such level-ups; anything carrying an
  * ASI, subclass, or feature/trait *choice* is left to the native flow for now.
+ *
+ * ── For a junior dev: how to read this ~900-line file ──
+ * The system's AdvancementManager is a state machine with a private `steps` array and a private
+ * cursor. Normally it renders a wizard and walks itself. We can't call its private walk, so we
+ * re-implement the walk here against its `clone` (a throwaway copy of the actor). Roughly:
+ *   canDrive / isStepSupported  – the GATE: can we handle this whole level-up? If not, bail out.
+ *   prepare()                    – WALK every step: auto-apply the ones with no choice, and collect
+ *                                  the ones that DO need a choice into the decision arrays (hpSteps,
+ *                                  asiSteps, choiceSteps, traitSteps, subclassSteps, grantSteps).
+ *   the apply/reverse helpers    – when the player picks in the UI, apply it to the clone (reversible).
+ *   commit()                     – write the finished clone onto the real actor.
+ * "Synthesis" = choosing something (a subclass, a feat) can spawn NEW advancement steps mid-walk;
+ * the code below detects those new items and folds their decisions in. Read prepare() first, then
+ * follow one advancement type (e.g. HitPoints) through record -> apply -> commit to see the pattern.
  */
 export class LevelUpDriver {
 

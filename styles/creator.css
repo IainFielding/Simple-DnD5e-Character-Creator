@@ -127,7 +127,31 @@
   padding: 0;
   border: none;
   background: var(--cc-bg);
-  z-index: 80;
+  /* Sit above Foundry's window layer (--z-index-window: 100, bumped higher each time a
+     window is focused) so an open app — e.g. the actor sheet a level-up launches from —
+     can't peek through the takeover. Kept just under the tooltip/notification layers so
+     our own tooltips and ui.notifications still surface over the creator. */
+  z-index: calc(var(--z-index-tooltip, 9999) - 1);
+}
+
+/* Let Dice So Nice's rolling canvas show over the fullscreen takeover. DSN appends
+   #dice-box-canvas to <body> and, on each roll, writes an inline z-index equal to
+   Foundry's window counter (++ApplicationV2._maxZ, ~100s) — far below our ~9998
+   fullscreen layer, so in-creator rolls (HP, abilities) would be hidden behind it.
+   Scoped to when the fullscreen creator is open, and !important to beat the inline
+   style DSN sets per roll. Windowed mode needs no override: its real Foundry window
+   participates in _maxZ, so a roll naturally lands above it. */
+body:has(.sogrom-creator-fullscreen) #dice-box-canvas {
+  z-index: var(--z-index-tooltip, 9999) !important;
+}
+
+/* Same trap for the dnd5e Compendium Browser opened from inside the creator (e.g. the
+   feat picker on an ASI level-up, CompendiumBrowser.selectOne). It renders as its own
+   ApplicationV2 window whose z-index is Foundry's inline _maxZ (~100s), so the ~9998
+   fullscreen takeover buries it. Lift it above the takeover while fullscreen is open;
+   !important beats the inline z-index Foundry rewrites on render/focus. */
+body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
+  z-index: var(--z-index-tooltip, 9999) !important;
 }
 
 /* Arcane Midnight ambience — soft violet auras top and bottom with a faint gold
@@ -407,12 +431,25 @@
 .creator-stage-foot {
   flex: 0 0 auto;
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem 2rem;
   border-top: 1px solid var(--cc-line);
   background: var(--cc-panel);
 }
+
+/* Why a greyed Next/Create is greyed — sits centred between Back and the primary action. */
+.creator-nav-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  color: var(--cc-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.creator-nav-hint i { color: var(--cc-gold); opacity: 0.85; }
 
 /* ---------------------------------------------- Buttons
 
@@ -732,6 +769,8 @@
 }
 
 .creator-empty { color: var(--cc-muted); font-style: italic; padding: 1rem 0; }
+/* "No matches" line appended into a pick-list whose rows are all filtered out. */
+.creator-no-results { color: var(--cc-muted); font-style: italic; padding: 1rem 0.25rem; list-style: none; }
 
 /* ---------------------------------------------- Pick steps (list + description [+ aside]) */
 
@@ -762,6 +801,8 @@
 }
 .creator-toolbar--stacked { flex-direction: column; align-items: stretch; gap: 0.5rem; }
 .creator-toolbar--stacked .creator-search { width: 100%; }
+/* Reuse the spell-filter chip for the background step's increased-ability dropdown, full-width in the stacked rail. */
+.creator-toolbar--stacked .creator-bg-filter { flex: 0 0 auto; width: 100%; }
 
 /* Two-column option grid; collapses to one column on a narrow window (see media query).
    align-content:start keeps rows packed to the top when the list is short. */
@@ -2122,25 +2163,32 @@
   color: var(--cc-gold);
 }
 
-.creator-hp-choices {
+/* The three source buttons sit in a row; the result box sits beside them (wrapping below on
+   narrow screens) and shows the hit points the player will actually gain this level. */
+.creator-hp-controls {
   display: flex;
-  gap: 1rem;
+  gap: 1.25rem;
   flex-wrap: wrap;
+  align-items: stretch;
 }
 
-.creator-hp-choice {
-  flex: 1 1 200px;
-  /* Fixed height + border-box so all three cards match exactly: the avg/roll cards are <button>s
-     (Foundry forces height:28px on those) while the manual card is a <label>, so a shared
-     min-height alone resolves to different heights between the two element types. */
+.creator-hp-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  flex: 1 1 340px;
+}
+
+.creator-hp-btn {
+  flex: 1 1 140px;
   box-sizing: border-box;
   height: 78px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem;
   background: var(--cc-panel-2);
   border: 1px solid var(--cc-line);
   border-radius: 12px;
@@ -2149,38 +2197,59 @@
   transition: border-color 0.15s, background 0.15s;
 }
 
-.creator-hp-choice:hover { border-color: var(--cc-line-2); }
-.creator-hp-choice.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-hp-btn:hover { border-color: var(--cc-line-2); }
+.creator-hp-btn.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
 
-.creator-hp-choice-label {
-  font-size: 1rem;
+.creator-hp-btn-label {
+  font-size: 0.95rem;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
 }
 
-.creator-hp-choice-value {
-  font-size: 1.9rem;
+.creator-hp-btn-value {
+  font-size: 1.7rem;
   font-weight: 700;
   color: var(--cc-gold-bright);
   line-height: 1;
 }
 
-/* Manual entry sits in the same card frame; its number field mirrors the value typography. */
-.creator-hp-choice--manual { cursor: default; }
+/* The value box: the number the level-up will commit. Editable, so typing a figure here is the
+   manual override; it highlights (like the buttons) when the current value came from manual entry. */
+.creator-hp-result {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line-2);
+  border-radius: 12px;
+}
+.creator-hp-result.is-manual { border-color: var(--cc-select); background: var(--cc-select-soft); }
+
+.creator-hp-result-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-muted);
+  text-align: center;
+}
 
 .creator-hp-input {
-  width: 6rem;
-  height: 1.9rem;
+  width: 5rem;
+  height: 2.3rem;
   box-sizing: border-box;
   text-align: center;
-  /* Match the value span's rendered height exactly (same 1.9rem, line-height 1) so the manual card
-     is the same height as the average/roll cards — the input is their only differing element. */
-  font-size: 1.9rem;
+  font-size: 2.1rem;
   line-height: 1;
   font-weight: 700;
   color: var(--cc-gold-bright);
-  background: var(--cc-panel);
+  background: var(--cc-panel-2);
   border: 1px solid var(--cc-line-2);
   border-radius: 8px;
   padding: 0 0.4rem;
@@ -2190,12 +2259,6 @@
 .creator-hp-input { appearance: textfield; -moz-appearance: textfield; }
 .creator-hp-input::-webkit-outer-spin-button,
 .creator-hp-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-
-.creator-hp-total {
-  margin: 0.7rem 0 0;
-  color: var(--cc-muted);
-}
-.creator-hp-total strong { color: var(--cc-gold-bright); font-size: 1.1rem; }
 
 .sogrom-levelup-btn {
   display: inline-flex;

@@ -14,6 +14,14 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
  *
  * It shares the creator's rail/stage chrome by reusing those templates as its PARTS; §3.1 of
  * the plan extracts a common base mixin once a second shell exists, which is now.
+ *
+ * For a junior dev: this is the same ApplicationV2 pattern as creator-shell.mjs (see the big
+ * teaching note there for DEFAULT_OPTIONS/PARTS/actions/_prepareContext). Two things are specific
+ * to level-up:
+ *   1. The step list is REBUILT every render (buildSteps), because choices reveal more choices —
+ *      e.g. picking a subclass adds its feature steps. So the rail can grow between renders.
+ *   2. The finish button is two-phase: first press = "Apply" (commit the level to the actor);
+ *      second press only appears if new spells were unlocked = "Done" (save the spell picks).
  */
 export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
@@ -274,5 +282,20 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static #onCancel() {
     this.close();
+  }
+
+  /**
+   * Every exit funnels through here — the Cancel button, the window frame's close, and any
+   * programmatic close. The sheet's level selector shows the *target* level the player picked to
+   * open this wizard, but that pick is never persisted: the driver works on a throwaway clone and
+   * only {@link LevelUpDriver#commit} touches the real actor. So on any close we re-render the actor
+   * sheet, snapping the selector back to the character's actual level after a cancel. When the
+   * level-up was committed the same re-render simply reflects the new level.
+   * @override
+   */
+  _onClose(options) {
+    super._onClose(options);
+    const sheet = this.state.actor?.sheet;
+    if ( sheet?.rendered ) sheet.render(true);
   }
 }

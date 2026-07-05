@@ -12,7 +12,9 @@
       "reset": "Reset",
       "on": "On",
       "off": "Off",
-      "selectHint": "Choose an option from the list to see its full description."
+      "selectHint": "Choose an option from the list to see its full description.",
+      "noResults": "No matches for “{query}”.",
+      "noResultsFilters": "No matches — try adjusting the filters."
     },
     "loading": {
       "indexing": "Reading the compendiums…",
@@ -23,7 +25,13 @@
       "next": "Next",
       "create": "Create Character",
       "cancel": "Cancel",
-      "position": "Step {current} of {total}"
+      "position": "Step {current} of {total}",
+      "incomplete": "Finish this step to continue.",
+      "missing": "Still needed: {steps}"
+    },
+    "cancel": {
+      "title": "Discard unsaved choices?",
+      "body": "Nothing you've picked has been saved yet. If you close now, those choices will be discarded — you'll have to make them again."
     },
     "menu": {
       "launch": "Simple Character Builder",
@@ -53,9 +61,11 @@
           "intro": "Increase your {class}'s hit points — take the reliable average, or roll the hit die and take your chances.",
           "summary": "+{hp} HP",
           "levelLabel": "Level {level}",
-          "average": "Take Average",
+          "average": "Average HP",
+          "max": "Max HP",
           "roll": "Roll {die}",
           "custom": "Enter Manually",
+          "gained": "Hit Points Gained",
           "thisLevel": "This level:"
         },
         "choices": {
@@ -136,6 +146,7 @@
     "step": {
       "class": {
         "label": "Class & Abilities",
+        "hint": "Choose a class to continue.",
         "traits": "Class Traits",
         "features": "Class Features",
         "spells": "Spells",
@@ -153,18 +164,24 @@
       },
       "species": {
         "label": "Species",
+        "hint": "Choose a species to continue.",
         "traits": "Traits",
         "features": "Features",
         "spells": "Spells"
       },
       "background": {
         "label": "Background",
+        "hint": "Choose a background to continue.",
+        "hintPoints": "Assign your {count} remaining ability point(s).",
         "traits": "Proficiencies",
         "features": "Features",
-        "spells": "Spells"
+        "spells": "Spells",
+        "filterAllAbilities": "Any ability",
+        "filterAbilityAria": "Filter by increased ability"
       },
       "details": {
         "label": "Details",
+        "hint": "Enter a name for your character.",
         "subtitle": "Give your character a name and, if you like, the finer points of who they are.",
         "portrait": "Portrait",
         "token": "Token",
@@ -228,6 +245,7 @@
       },
       "spells": {
         "label": "Spells",
+        "hint": "Choose {count} more spell(s) to continue.",
         "intro": "Choose the cantrips and 1st-level spells your {class} knows at level 1.",
         "cantrips": "Cantrips",
         "level1": "1st-Level Spells",
@@ -256,10 +274,12 @@
         "pickListFirst": "Choose a spell list above to see the spells you can learn.",
         "selected": "Learning",
         "picked": "{count}/{total} chosen",
+        "hint": "Choose {count} more feat spell(s) to continue.",
         "none": "None of your choices grant extra spells — nothing to choose here."
       },
       "choices": {
         "label": "Choices",
+        "hint": "{count} decision(s) still to make.",
         "none": "Your chosen class, background, and species need no further decisions.",
         "progress": "{done}/{total} made",
         "decisions": "{done} / {total} decisions"
@@ -287,7 +307,10 @@
         "pointsLeft": "points left",
         "rollScores": "Roll Stats",
         "unassigned": "—",
-        "rollPrompt": "Roll to generate six scores, then assign them to your abilities."
+        "rollPrompt": "Roll to generate six scores, then assign them to your abilities.",
+        "hintPoints": "Spend all {count} remaining ability point(s).",
+        "hintAssign": "Assign a score to every ability.",
+        "hintRoll": "Roll your ability scores, then assign them."
       },
       "bgAbilities": {
         "label": "Ability Increase",

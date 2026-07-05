@@ -8,10 +8,21 @@ import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
  * resolves full documents (with enriched descriptions) when a card is opened.
  *
  * One instance is created per builder session and loaded once.
+ *
+ * For a junior dev, two ideas run through this file:
+ *   - "card" vs full document: a card is a tiny {uuid, name, img, identifier} record — cheap to
+ *     list hundreds of in a grid. The full document (its description, advancements, etc.) is only
+ *     loaded via fromUuid() when the player actually opens that card. A UUID is Foundry's global
+ *     address for a document; fromUuid(uuid) fetches it (async), fromUuidSync(uuid) if already cached.
+ *   - memoisation: the private #maps below cache each expensive resolution by UUID, so re-opening a
+ *     card, or the warm-up touching it twice, never repeats the work. (Fields prefixed with # are
+ *     JavaScript private fields — only reachable inside this class.)
+ * "Advancement" is a dnd5e term: the rules an item applies as you gain it/level up (grant a feature,
+ * a proficiency, an ability increase, etc.). Much of this module is about reading those.
  */
 export class SourceIndex {
 
-  /** type id -> card[] */
+  /** type id -> card[]. Note dnd5e's item type for "species" is historically "race". */
   #cards = { class: [], race: [], background: [] };
 
   /** uuid -> { name, img, enriched } resolved detail, memoised. */
@@ -122,6 +133,10 @@ export class SourceIndex {
   }
 
   /* -------------------------------------------- */
+
+  // Two ways to discover content: ask dnd5e's Compendium Browser (which already applies the world's
+  // source filtering for us), or, if that API isn't there, scan the packs by hand. Every #index and
+  // subclasses() call tries the browser first and falls back to #scanPacks.
 
   /**
    * Fetch the index for one document subtype via the dnd5e Compendium Browser,

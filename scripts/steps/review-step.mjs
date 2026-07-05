@@ -4,6 +4,14 @@ import { resolveChoices, advancementArray, traitChoiceTitle, traitKeyLabel } fro
 import { resolveFeatSpells, grantedSpellCards } from "./feat-spells-step.mjs";
 import { summarizeOption } from "../data/equipment-source.mjs";
 
+/*
+ * The Review step (the step module itself is at the bottom of the file). It's read-only: it gathers
+ * everything the player has chosen — abilities, biography, and per-origin grants/picks/spells/gear —
+ * into one summary for a final look before Create. Most of this file is small `review…` helper
+ * functions, each building one slice of that summary; reviewStep.context() stitches them together.
+ * Nothing here mutates state or writes to the actor.
+ */
+
 // The three origin sections, in display order: each carries the state field holding its
 // chosen UUID, the section heading (kind) label, and the placeholder when nothing is picked.
 const ORIGIN_META = [

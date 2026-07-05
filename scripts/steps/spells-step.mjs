@@ -9,6 +9,10 @@ import { t } from "../config.mjs";
  * it knows before the step counts as done. A non-caster has nothing to pick, so the step
  * never blocks — and the rail greys it out via {@link spellsStep.applicable}. The known
  * counts come from {@link spellInfoFor}, cached on `state.spellInfo` so this stays sync.
+ *
+ * Domain terms for a junior: "cantrips" are level-0 spells; "level-1 spells" are the first real
+ * spells. Each class knows a fixed number of each at level 1 (its maxCantrips / maxSpells). The
+ * two are picked on separate tabs but tracked in two separate arrays on the state.
  */
 export const spellsStep = {
   id: "spells",
@@ -22,6 +26,15 @@ export const spellsStep = {
     if ( !info.isSpellcaster ) return true; // non-caster: nothing to choose (rail greys it)
     return state.selectedCantrips.length >= info.maxCantrips
         && state.selectedSpells.length >= info.maxSpells;
+  },
+
+  /** Why Next is blocked: how many spells are still to be chosen. */
+  incompleteHint(state) {
+    const info = state.spellInfo;
+    if ( !info?.isSpellcaster ) return null;
+    const remain = Math.max(0, info.maxCantrips - state.selectedCantrips.length)
+                 + Math.max(0, info.maxSpells - state.selectedSpells.length);
+    return remain ? t("step.spells.hint", { count: remain }) : null;
   },
 
   // The Spells step only applies to spellcasters; the rail greys it out otherwise.

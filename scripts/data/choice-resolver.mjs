@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
+import { phbWeaponIcon } from "./weapon-source.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /**
@@ -12,6 +13,20 @@ import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
  * (`state.advChoices`) and returns fresh requirements every call, so the step and the
  * build path share one source of truth with no cache to fall stale. It prunes picks
  * that another source now grants outright, mutating `state.advChoices` in place.
+ *
+ * ── For a junior dev: how to read this file ──
+ * A dnd5e item (a class, species, background, or a feature it grants) carries "advancements":
+ * typed rules like ItemGrant (give this item), Trait (give/choose a proficiency), ItemChoice
+ * (choose N features), Size, and AbilityScoreImprovement. Some are automatic; some ask the player
+ * to choose. This module turns the choice-bearing ones into "requirements" — plain, UI-agnostic
+ * descriptors ({ title, options, count, complete, selKey, ... }) that the Choices step renders and
+ * the assembler later applies. The pipeline top to bottom:
+ *   resolveChoices(state)        entry point — loops the three origins
+ *     └ prepareRequirements(doc) gathers the origin + its granted features (levelOneOwners)
+ *         └ parseAdvancementChoice(adv)  one advancement -> zero or more requirements (by adv.type)
+ *             └ buildChoiceReq(...)      assembles one requirement + merges the player's current picks
+ * "selKey" is the stable id under which a requirement's picks are stored in state.advChoices.
+ * "cross-source dedupe" = if two origins offer the same skill, picking it in one greys it out in the other.
  */
 
 const ORIGIN_FIELDS = {
@@ -233,7 +248,23 @@ function proficientSkillKeys(owners, sel) {
       }
     }
   }
-  return [...keys].map(k => ({ key: k, label: traitKeyLabel(k) }));
+  return [...keys].map(k => ({ key: k, label: traitKeyLabel(k), img: traitKeyIcon(k) }));
+}
+
+/** The system's generic icon for a trait key (skills, tools, languages, …), or null. */
+const traitKeyIcon = k => dnd5e.documents.Trait?.keyIcon?.(k) ?? null;
+
+/**
+ * Stamp each trait option with the icon the level-up trait screen uses — PHB weapon art where a
+ * weapon key resolves to a ship item, else the system's generic key icon — so character-creation
+ * choice cards render the same iconned grid. Options already carrying an `img` (tool picks) keep it.
+ * @param {{key:string, label:string, img?:string}[]} options
+ * @returns {Promise<object[]>}
+ */
+async function decorateTraitIcons(options) {
+  return Promise.all(options.map(async o => o.img
+    ? o
+    : { ...o, img: (await phbWeaponIcon(o.key)) ?? traitKeyIcon(o.key) }));
 }
 
 /** Parse a single advancement into zero or more requirements, appended to `reqs`. */
@@ -498,16 +529,20 @@ export function traitChoiceTitle(pool = []) {
   return TRAIT_TITLE[type] ? t(TRAIT_TITLE[type]) : t("choice.fallback");
 }
 
-/** Expand a Trait pool (including `*` wildcards) into concrete `{key,label}` options. */
+/**
+ * Expand a Trait pool into concrete options, each iconned to match the level-up trait screen.
+ * Tool pools already resolve with their own art; every other option is decorated here.
+ */
 async function expandTraitPool(pool = []) {
+  const toolOpts = await expandToolPool(Array.from(pool ?? []));
+  if ( toolOpts ) return toolOpts;               // tool picks ship their own compendium art
+  return decorateTraitIcons(await expandTraitKeys(pool));
+}
+
+/** Expand a Trait pool (including `*` wildcards) into concrete `{key,label}` options. */
+async function expandTraitKeys(pool = []) {
   const Trait = dnd5e.documents.Trait;
   pool = Array.from(pool ?? []);
-
-  // Tool category/wildcard pools (e.g. the Monk's "tool:art:*" + "tool:music:*") expand
-  // unreliably through the generic Trait wildcard helper, so resolve them straight from the
-  // tool compendium — the same proven source the starting-equipment tool picks use.
-  const toolOpts = await expandToolPool(pool);
-  if ( toolOpts ) return toolOpts;
 
   if ( !pool.some(k => k.includes("*")) ) return pool.map(k => ({ key: k, label: traitKeyLabel(k) }));
 
