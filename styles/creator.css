@@ -2011,11 +2011,12 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .creator-review-columns .creator-review-block {
   margin-top: 0;
-  padding: 1.25rem;
-  border: 1px solid var(--cc-line);
-  border-radius: 12px;
-  background: var(--cc-panel-grad);
-  box-shadow: var(--cc-bezel);
+  padding: 1.25rem 0 0;
+  border: none;
+  border-top: 2px solid var(--cc-gold);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
 }
 @media (max-width: 900px) {
   .creator-review-columns { grid-template-columns: 1fr; }
@@ -2059,12 +2060,9 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   letter-spacing: 0.08em;
   color: var(--cc-gold);
 }
-.creator-review-origin.is-empty { border-top-style: dashed; }
-/* Empty origin column: flat dashed placeholder, no machined tray (matches summary slots). */
+/* Empty origin column: the gold line goes dashed to read as an unfilled slot. */
 .creator-review-columns .creator-review-block.is-empty {
-  border-style: dashed;
-  background: var(--cc-panel);
-  box-shadow: none;
+  border-top-style: dashed;
 }
 .creator-review-origin-head h2.is-muted { color: var(--cc-muted); font-style: italic; font-weight: 400; }
 .creator-review-text p { color: var(--cc-text); line-height: 1.5; margin: 0 0 0.5rem; }

@@ -1,5 +1,6 @@
 import { t } from "../config.mjs";
 import { advancementArray } from "../data/choice-resolver.mjs";
+import { MAGIC_INITIATE_LISTS } from "../data/spell-source.mjs";
 
 /**
  * The Feat Spells step: the spell picks a feat defers to the player — the Magic Initiate shape and
@@ -27,7 +28,7 @@ import { advancementArray } from "../data/choice-resolver.mjs";
 const MI_IDENTIFIER = /magic-initiate/i;
 const MI_NAME = /magic initiate/i;
 const MI_DEFAULTS = { cantripCount: 2, spellCount: 1, spellLevel: 1, abilityKeys: ["int", "wis", "cha"] };
-const CLASS_LISTS = ["cleric", "druid", "wizard"];
+const CLASS_LISTS = MAGIC_INITIATE_LISTS;
 
 export const featSpellsStep = {
   id: "featSpells",

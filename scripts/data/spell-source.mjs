@@ -2,6 +2,10 @@ import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, log } from "../config.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
+/** The class spell lists a Magic Initiate-style feat can draw from — warmed up front so the
+ *  feat-spells step opens instantly. Kept in sync with feat-spells-step's CLASS_LISTS. */
+export const MAGIC_INITIATE_LISTS = ["cleric", "druid", "wizard"];
+
 /** Index fields fetched for spells, so cards can show components/range without the full doc. */
 const SPELL_INDEX_FIELDS = new Set([
   "system.level", "system.school", "system.identifier", "system.properties",
@@ -130,6 +134,27 @@ export class SpellSource {
         await this.forClass(uuid);
       } catch ( err ) {
         log(`failed to warm spells for ${uuid}`, err);
+      }
+      onTick?.();
+    });
+  }
+
+  /**
+   * Pre-resolve the level-≤`maxLevel` spell **lists** the feat-spells step reads, so reaching the
+   * Magic Initiate feat-spell picker is instant rather than loading each class list on the click
+   * that opens it. This fills the `#byList` memo that {@link forSpellList} reads — a cache distinct
+   * from the class payloads {@link warmClasses} fills — so the two must both be warmed. A single
+   * list's failure is swallowed so it can't abort the rest of the warm-up.
+   * @param {string[]} classIds
+   * @param {number} [maxLevel=1]
+   * @param {() => void} [onTick]  Invoked once per list warmed, for progress reporting.
+   */
+  async warmLists(classIds, maxLevel = 1, onTick) {
+    await forEachLimit(classIds, WARM_CONCURRENCY, async id => {
+      try {
+        await this.forSpellList(id, maxLevel);
+      } catch ( err ) {
+        log(`failed to warm spell list for ${id}`, err);
       }
       onTick?.();
     });

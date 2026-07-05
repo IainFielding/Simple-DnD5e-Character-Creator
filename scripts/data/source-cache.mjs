@@ -1,6 +1,6 @@
 import { log } from "../config.mjs";
 import { SourceIndex } from "./source-index.mjs";
-import { SpellSource } from "./spell-source.mjs";
+import { SpellSource, MAGIC_INITIATE_LISTS } from "./spell-source.mjs";
 import { EquipmentSource } from "./equipment-source.mjs";
 import { warmChoices } from "./choice-resolver.mjs";
 import { getEnabledPacks } from "./compendium-util.mjs";
@@ -87,11 +87,13 @@ export function warmSources() {
     const backgrounds = source.backgrounds();
     const origins = classes.length + species.length + backgrounds.length;
     // One tick each for: origin details (warmAll), class spell lists (warmClasses), per-origin
-    // advancement-choice scans (warmChoices), and class+background equipment (equipment.warmAll).
-    const total = origins + classes.length + origins + (classes.length + backgrounds.length);
+    // advancement-choice scans (warmChoices), class+background equipment (equipment.warmAll), and
+    // the Magic Initiate feat spell lists (warmLists).
+    const total = origins + classes.length + origins + (classes.length + backgrounds.length)
+      + MAGIC_INITIATE_LISTS.length;
     let done = 0;
     const tick = () => emit(total ? Math.round((++done / total) * 100) : 100);
-    // The four phases populate separate memo caches and only depend on the index loaded
+    // The five phases populate separate memo caches and only depend on the index loaded
     // above, so they run concurrently rather than back to back. Each caps its own in-flight
     // reads (forEachLimit), and the shared `done` counter still totals every tick, so the
     // bar advances smoothly to 100 however the phases interleave.
@@ -99,7 +101,8 @@ export function warmSources() {
       source.warmAll(tick),
       spells.warmClasses(classes.map(c => c.uuid), tick),
       warmChoices(source, tick),
-      equipment.warmAll(source, tick)
+      equipment.warmAll(source, tick),
+      spells.warmLists(MAGIC_INITIATE_LISTS, 1, tick)
     ]);
     emit(100);
     return cache;
