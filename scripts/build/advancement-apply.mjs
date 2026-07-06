@@ -198,7 +198,7 @@ export async function applyChoicePlan(actor, plan, resolved, advChoices, originI
  * picks, so without folding the grants back in the manual apply path drops them (and the
  * manager can't, since it skipped the advancement to let the wizard own the choice).
  */
-function mergeTraitGrants(adv, recordedKeys = []) {
+export function mergeTraitGrants(adv, recordedKeys = []) {
   const grants = Array.from(adv?.configuration?.grants ?? []);
   return [...new Set([...grants, ...recordedKeys])];
 }
