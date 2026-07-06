@@ -84,6 +84,17 @@
 
   {{#with abilities}}
   <aside class="creator-class-aside">
+    {{#if ../hasSelection}}
+    <div class="creator-quick-build">
+      <button type="button" class="creator-btn creator-quick-build-btn"
+              data-action="stepAction" data-step-action="quick-build">
+        <i class="fa-solid fa-bolt"></i>
+        {{localize "sogrom-dnd5e-character-creator.quickBuild.button"}}
+      </button>
+      <p class="creator-quick-build-hint">{{localize "sogrom-dnd5e-character-creator.quickBuild.hint"}}</p>
+    </div>
+    {{/if}}
+
     <h2 class="creator-aside-title">{{localize "sogrom-dnd5e-character-creator.step.abilities.label"}}</h2>
 
     <div class="creator-method-tabs">

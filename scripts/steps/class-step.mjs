@@ -4,7 +4,8 @@ import {
 } from "./abilities-step.mjs";
 import { spellInfoFor } from "./spells-step.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
-import { t } from "../config.mjs";
+import { applyQuickBuild } from "../data/quick-build.mjs";
+import { t, log } from "../config.mjs";
 
 /**
  * The Class step. Class selection and ability scores share one step: the class
@@ -39,7 +40,37 @@ export const classStep = {
     return `${name} · ${abilitiesSummary(state)}`;
   },
 
-  async handle(action, el, { state, source, spells, app }) {
+  async handle(action, el, { state, source, spells, equipment, app }) {
+    if ( action === "quick-build" ) {
+      if ( !state.classUuid ) return;
+      // Filling replaces existing picks, so confirm first when the player has already made some.
+      if ( hasMeaningfulPicks(state) ) {
+        const ok = await foundry.applications.api.DialogV2.confirm({
+          window: { title: t("quickBuild.confirmTitle"), icon: "fa-solid fa-bolt" },
+          content: `<p>${t("quickBuild.confirmBody")}</p>`,
+          modal: true,
+          rejectClose: false
+        });
+        if ( !ok ) return false;
+      }
+      // The fill awaits several compendium reads; latch the button so a double-click can't
+      // start a second fill over the first (same hardening as the Create button).
+      el.disabled = true;
+      el.classList.add("is-busy");
+      try {
+        const result = await applyQuickBuild({ state, source, spells, equipment });
+        if ( !result.ok ) ui.notifications?.warn(t("quickBuild.partial"));
+      } catch ( err ) {
+        log("quick build failed", err);
+        ui.notifications?.error(t("quickBuild.failed"));
+        el.disabled = false;
+        el.classList.remove("is-busy");
+        return;                                   // re-render shows whatever state remains
+      }
+      // Lands on Review when every gate passed; otherwise on the first incomplete step.
+      app.gotoStep("review");
+      return false;                               // gotoStep rendered; skip the dispatch render
+    }
     if ( ABILITY_ACTIONS.has(action) ) {
       await abilitiesHandle(action, el, state);
       // Point-buy steppers fire in rapid succession; a full stage re-render would rebuild
@@ -85,3 +116,20 @@ export const classStep = {
     };
   }
 };
+
+/**
+ * Whether the player has made picks beyond this step that Quick Build would overwrite —
+ * origins, a name, spells, or any advancement choice. Class + ability tinkering alone
+ * doesn't count: quick build re-derives those, and prompting there would nag the exact
+ * player the button is for.
+ */
+function hasMeaningfulPicks(state) {
+  return !!(
+    state.backgroundUuid
+    || state.speciesUuid
+    || state.details.name?.trim()
+    || state.selectedCantrips.length
+    || state.selectedSpells.length
+    || Object.values(state.advChoices).some(bucket => Object.keys(bucket).length)
+  );
+}

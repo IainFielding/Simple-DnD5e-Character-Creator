@@ -34,6 +34,14 @@
       "title": "Discard unsaved choices?",
       "body": "Nothing you've picked has been saved yet. If you close now, those choices will be discarded — you'll have to make them again."
     },
+    "quickBuild": {
+      "button": "Quick Build",
+      "hint": "Fill everything with the recommended build for this class — a suggested background, a random species, skills, and spells. You can adjust any step afterwards.",
+      "confirmTitle": "Overwrite current choices?",
+      "confirmBody": "Quick Build replaces your background, species, name, ability scores, spells, and other choices with the recommended set. Continue?",
+      "partial": "Quick Build finished with some gaps — check the remaining steps.",
+      "failed": "Quick Build failed; your choices were left as they were."
+    },
     "menu": {
       "launch": "Simple Character Builder",
       "resume": "Simple Character Builder"
