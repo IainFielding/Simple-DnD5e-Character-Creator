@@ -493,6 +493,23 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     this.render();
   }
 
+  /**
+   * Public navigation for step handlers: jump to a step by id when it is currently reachable
+   * (Quick Build uses this to land on Review after filling the state). When the requested step's
+   * prerequisites aren't all complete, fall back to the first incomplete step instead, so a
+   * partial fill still lands the player somewhere sensible.
+   * @param {string} id  A step id from STEPS (e.g. "review").
+   * @returns {boolean}  Whether the requested step was reached.
+   */
+  gotoStep(id) {
+    const index = STEPS.findIndex(s => s.id === id);
+    if ( index < 0 ) return false;
+    const reached = this.#reachable(index);
+    this.#current = reached ? index : this.#firstIncompleteIndex();
+    this.render();
+    return reached;
+  }
+
   // The methods below are the targets of the `actions` map in DEFAULT_OPTIONS. Foundry calls them
   // on click with (event, target) and `this` bound to the app. Most just move #current and re-render.
 
