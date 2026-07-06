@@ -57,16 +57,17 @@ export class LevelUpState {
   collapsedBlocks = new Set();
 
   /**
-   * Whether the level grant has been committed to the real actor. The spell step (§3.4) runs
-   * *after* commit and edits the actor directly, so the shell flips this on Apply, then locks the
-   * level screens and reveals the spell step. Starts false; the level-up decisions drive the clone
-   * until it is set.
+   * Whether the level grant has been committed to the real actor. Flipped by the shell's Apply
+   * right after the driver's clone lands, so the spell staging that follows (and any close-path
+   * logic) reads the updated actor rather than the clone. Starts false; the level-up decisions
+   * drive the clone until it is set, and the window closes shortly after it flips.
    */
   committed = false;
 
   /**
-   * Spells chosen on the post-commit spell step, staged here and written to the actor on Finish
-   * (mirroring how creation stages picks then grants them). Cleared only by closing the window.
+   * Spells chosen on the pre-review spell step, staged here and written to the actor by the
+   * shell's single Apply after the level commit (mirroring how creation stages picks then grants
+   * them). Discarded with everything else on cancel.
    * @type {{uuid:string, id:string, name:string, img:string, level:number}[]}
    */
   selectedCantrips = [];
@@ -108,8 +109,8 @@ export class LevelUpState {
   }
 
   /**
-   * Whether a post-commit spell step should be appended: the leveled class is a caster and this
-   * level-up opened new cantrip or prepared-spell capacity.
+   * Whether a spell step should appear (between the level screens and the review): the leveled
+   * class is a caster and this level-up opened new cantrip or prepared-spell capacity.
    * @returns {boolean}
    */
   hasSpellStep() {
@@ -155,7 +156,8 @@ export class LevelUpState {
    */
   hasPlayerInput() {
     const d = this.driver;
-    return this.hpSteps.some(r => r.mode !== "avg")
+    return this.hasStagedSpells()
+      || this.hpSteps.some(r => r.mode !== "avg")
       || this.subclassSteps.some(r => d.subclassState(r).chosen)
       || this.traitSteps.some(r => d.traitState(r).chosen.size > 0)
       || this.choiceSteps.some(r => {
@@ -169,8 +171,8 @@ export class LevelUpState {
   }
 
   /**
-   * Whether the post-commit spell step holds staged, unsaved picks (or a marked swap) that
-   * closing the window would silently discard.
+   * Whether the spell step holds staged, unsaved picks (or a marked swap) that closing the
+   * window would silently discard.
    * @returns {boolean}
    */
   hasStagedSpells() {

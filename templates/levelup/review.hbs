@@ -1,66 +1,83 @@
-{{!-- Level-up review screen: read-only summary of what this level-up granted (subclass, HP gained,
-      ability increases, proficiency bonus, spell slots, weapon masteries, scale-value bumps, new
-      features). No actions — "Apply" is in the stage footer. Data from lvl-review-step.mjs
-      context(), computed by diffing the driver's clone against the actor. --}}
+{{!--
+  Level-up review, laid out like the creation Review step: portrait + ability-score strip up top
+  (badges mark scores this level-up raised), then one origin column per class — plus species and
+  background when they gained something. The levelled class's block carries the character-wide
+  gains (HP, proficiency, spell slots, masteries) alongside its features, with every new
+  feature/spell badged "New". No actions here — "Apply" lives in the stage footer. Data from
+  lvl-review-step.mjs context().
+--}}
 <section class="creator-review creator-levelup-review">
-  <div class="creator-review-block">
-    <h2>{{title}}</h2>
-    <ul class="creator-trait-list">
-      {{#if hasSubclasses}}
-      <li class="creator-trait">
-        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.subclass.label"}}</span>
-        <span class="creator-trait-value">{{subclasses}}</span>
-      </li>
-      {{/if}}
-      <li class="creator-trait">
-        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.label"}}</span>
-        <span class="creator-trait-value">{{hpLabel}}</span>
-      </li>
-      {{#if hasAbilities}}
-      <li class="creator-trait">
-        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.asi.label"}}</span>
-        <span class="creator-trait-value">
-          {{#each abilities}}<span class="creator-review-val">{{abbr}} {{delta}} <small>({{value}})</small></span>{{/each}}
-        </span>
-      </li>
-      {{/if}}
-      {{#if profChanged}}
-      <li class="creator-trait">
-        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.review.profBonus"}}</span>
-        <span class="creator-trait-value">{{profLabel}}</span>
-      </li>
-      {{/if}}
-      {{#if slots.length}}
-      <li class="creator-trait">
-        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.review.spellSlots"}}</span>
-        <span class="creator-trait-value">
-          {{#each slots}}<span class="creator-review-val">{{label}} {{change}}</span>{{/each}}
-        </span>
-      </li>
-      {{/if}}
-      {{#if hasMasteries}}
-      <li class="creator-trait">
-        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.traits.label"}}</span>
-        <span class="creator-trait-value">{{masteries}}</span>
-      </li>
-      {{/if}}
-      {{#each scales}}
-      <li class="creator-trait">
-        <span class="creator-trait-label">{{label}}</span>
-        <span class="creator-trait-value">{{change}}</span>
+  <div class="creator-review-portrait">
+    <div class="creator-portrait-frame">
+      <img class="creator-portrait-img creator-portrait-img--photo" src="{{portrait}}" alt="">
+    </div>
+  </div>
+
+  <div class="creator-review-abilities">
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.abilities.label"}}</h2>
+    <ul class="creator-score-strip">
+      {{#each abilities}}
+      <li class="creator-score">
+        <span class="creator-score-abbr">{{abbr}}</span>
+        <span class="creator-score-value">{{value}}</span>
+        <span class="creator-score-mod">{{modifier}}</span>
+        {{#if bonus}}<span class="creator-score-bonus" data-tooltip="{{bonusTip}}">{{bonus}}</span>{{/if}}
       </li>
       {{/each}}
     </ul>
   </div>
 
-  {{#if hasGains}}
-  <div class="creator-review-block">
-    <h2>{{localize "sogrom-dnd5e-character-creator.levelup.step.review.features"}}</h2>
-    <ul class="creator-review-spells">
-      {{#each gained}}
-      <li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
-      {{/each}}
-    </ul>
+  <div class="creator-review-columns creator-levelup-columns">
+    {{#each sections}}
+    <div class="creator-review-block creator-review-origin {{#if leveled}}is-leveled{{/if}}">
+      <header class="creator-review-origin-head">
+        <span class="creator-review-kind">{{kind}}</span>
+        <img class="creator-review-origin-img" src="{{img}}" alt="">
+        <h2>{{name}}</h2>
+        {{#if levelLabel}}
+        <span class="creator-levelup-lvlbadge {{#if leveled}}is-hot{{/if}}">
+          {{#if leveled}}<i class="fa-solid fa-angles-up"></i>{{/if}} {{levelLabel}}
+        </span>
+        {{/if}}
+      </header>
+
+      {{#if rows.length}}
+      <ul class="creator-trait-list">
+        {{#each rows}}
+        <li class="creator-trait">
+          <span class="creator-trait-label">{{title}}</span>
+          <span class="creator-trait-value">
+            {{#each values}}
+            {{#if uuid}}<a class="content-link creator-item-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{else}}<span class="creator-review-val">{{name}}</span>{{/if}}{{#if isNew}}<span class="creator-new-pill">{{localize "sogrom-dnd5e-character-creator.levelup.step.review.newPill"}}</span>{{/if}}
+            {{/each}}
+          </span>
+        </li>
+        {{/each}}
+      </ul>
+      {{/if}}
+
+      {{#if features.length}}
+      <div class="creator-review-sub">
+        <h3>{{localize "sogrom-dnd5e-character-creator.levelup.step.review.features"}}</h3>
+        <ul class="creator-review-spells creator-levelup-featlist">
+          {{#each features}}
+          <li class="{{#if isNew}}is-new{{/if}}"><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a>{{#if isNew}}<span class="creator-new-pill">{{localize "sogrom-dnd5e-character-creator.levelup.step.review.newPill"}}</span>{{/if}}</li>
+          {{/each}}
+        </ul>
+      </div>
+      {{/if}}
+
+      {{#if spells.length}}
+      <div class="creator-review-sub">
+        <h3>{{localize "sogrom-dnd5e-character-creator.levelup.step.review.newSpells"}}</h3>
+        <ul class="creator-review-spells creator-levelup-featlist">
+          {{#each spells}}
+          <li class="{{#if isNew}}is-new{{/if}}"><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a>{{#if isNew}}<span class="creator-new-pill">{{localize "sogrom-dnd5e-character-creator.levelup.step.review.newPill"}}</span>{{/if}}</li>
+          {{/each}}
+        </ul>
+      </div>
+      {{/if}}
+    </div>
+    {{/each}}
   </div>
-  {{/if}}
 </section>

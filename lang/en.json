@@ -51,18 +51,12 @@
         "title": "Level Up — {name} (Level {level})"
       },
       "nav": {
-        "apply": "Apply Level-Up",
-        "done": "Done",
-        "close": "Close"
+        "apply": "Apply Level-Up"
       },
       "button": "Level Up",
       "cancel": {
         "title": "Discard this level-up?",
-        "body": "Nothing has been applied to your character yet. If you close now, everything you've chosen here — hit points, features, and other picks — will be discarded."
-      },
-      "cancelSpells": {
-        "title": "Close without adding spells?",
-        "body": "The level-up itself has already been applied and will be kept, but the spells you've selected here have not been saved yet. Close anyway? You can still add spells from the character sheet later."
+        "body": "Nothing has been applied to your character yet. If you close now, everything you've chosen here — hit points, features, spells, and other picks — will be discarded."
       },
       "notify": {
         "applyFailed": "Level-up could not be applied. See the console for details.",
@@ -126,12 +120,20 @@
         },
         "review": {
           "label": "Review",
-          "gained": "{class}: Level {from} → {to}",
           "hp": "+{gain} (new maximum {max})",
-          "features": "New Features",
+          "features": "Features",
+          "newSpells": "New Spells",
+          "newPill": "New",
           "profBonus": "Proficiency Bonus",
           "spellSlots": "Spell Slots",
-          "pactSlots": "Pact Magic"
+          "pactSlots": "Pact Magic",
+          "swappedOut": "Swapped Out",
+          "kindClass": "Class",
+          "kindSpecies": "Species",
+          "kindBackground": "Background",
+          "level": "Level {level}",
+          "levelUp": "Level {from} → {to}",
+          "abilityTip": "Increased by this level-up"
         },
         "spells": {
           "label": "Spells",

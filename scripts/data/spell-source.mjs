@@ -29,14 +29,26 @@ const SPELL_INDEX_FIELDS = new Set([
  */
 export class SpellSource {
 
-  /** classUuid -> resolved spell payload, memoised. */
+  // Every memo below stores the in-flight *promise*, not the resolved payload, so concurrent
+  // callers (the ready warm-up, a level-up window's background warm, and the step that finally
+  // renders) converge on a single load instead of racing duplicates. A failed load un-caches
+  // itself so a later call can retry.
+
+  /** classUuid -> spell-payload promise, memoised. */
   #byClass = new Map();
 
-  /** `${classUuid}:${maxSpellLevel}` -> level-up spell pool, memoised. */
+  /**
+   * `${listType}:${classUuid}:${maxSpellLevel}` -> level-up spell-pool *promise*, memoised.
+   * The promise (not the resolved payload) is stored so a background warm-up and the spell
+   * step share a single in-flight load instead of racing two.
+   */
   #byLevelUp = new Map();
 
-  /** spell uuid -> enriched description html, memoised (loaded on focus). */
+  /** spell uuid -> enriched-description promise, memoised (loaded on focus). */
   #descriptions = new Map();
+
+  /** maxSpellLevel -> promise of Map(uuid -> browser index entry), one browse shared by all classes. */
+  #spellFetches = new Map();
 
   /**
    * Spell options for a class, or a non-caster marker. Memoised per class UUID.
@@ -46,11 +58,43 @@ export class SpellSource {
    */
   async forClass(classUuid) {
     if ( !classUuid ) return { isSpellcaster: false };
-    if ( this.#byClass.has(classUuid) ) return this.#byClass.get(classUuid);
+    if ( !this.#byClass.has(classUuid) ) {
+      const promise = this.#resolve(classUuid)
+        .catch(err => { this.#byClass.delete(classUuid); throw err; });
+      this.#byClass.set(classUuid, promise);
+    }
+    return this.#byClass.get(classUuid);
+  }
 
-    const payload = await this.#resolve(classUuid);
-    this.#byClass.set(classUuid, payload);
-    return payload;
+  /**
+   * One Compendium Browser pass over every spell of level ≤ `maxLevel`, shared across classes:
+   * the warm-up resolves a dozen class lists against the same pool instead of each paying its own
+   * full-pack browse. Resolves null when the browser API is unavailable or the browse fails
+   * (un-caching itself first), leaving callers to their direct-lookup fallback.
+   * @param {number} maxLevel
+   * @returns {Promise<Map<string, object>|null>}
+   */
+  #fetchSpellPool(maxLevel) {
+    if ( !this.#spellFetches.has(maxLevel) ) {
+      const promise = (async () => {
+        const browser = dnd5e.applications?.CompendiumBrowser;
+        if ( !browser?.fetch ) return null;
+        const all = await browser.fetch(Item, {
+          types: new Set(["spell"]),
+          filters: [{ k: "system.level", o: "lte", v: maxLevel }],
+          indexFields: SPELL_INDEX_FIELDS
+        });
+        const map = new Map();
+        for ( const e of all ) if ( e.uuid ) map.set(e.uuid, e);
+        return map;
+      })().catch(err => {
+        log("Compendium Browser spell fetch failed, using direct lookups", err);
+        this.#spellFetches.delete(maxLevel);
+        return null;
+      });
+      this.#spellFetches.set(maxLevel, promise);
+    }
+    return this.#spellFetches.get(maxLevel);
   }
 
   /**
@@ -69,14 +113,17 @@ export class SpellSource {
   async forClassAtLevel(classUuid, maxSpellLevel, listType = "class") {
     if ( !classUuid ) return { isSpellcaster: false };
     const key = `${listType}:${classUuid}:${maxSpellLevel}`;
-    if ( this.#byLevelUp.has(key) ) return this.#byLevelUp.get(key);
-
-    const payload = await this.#resolveAtLevel(classUuid, maxSpellLevel, listType);
-    this.#byLevelUp.set(key, payload);
-    return payload;
+    // Memoise the in-flight promise so the level-up shell's background warm-up and the spell
+    // step's own load converge on one fetch; a failed load un-caches itself so it can retry.
+    if ( !this.#byLevelUp.has(key) ) {
+      const promise = this.#resolveAtLevel(classUuid, maxSpellLevel, listType)
+        .catch(err => { this.#byLevelUp.delete(key); throw err; });
+      this.#byLevelUp.set(key, promise);
+    }
+    return this.#byLevelUp.get(key);
   }
 
-  /** classId -> level-≤1 spell-list payload for a feat's spell choice (Magic Initiate), memoised. */
+  /** classId -> spell-list payload promise for a feat's spell choice (Magic Initiate), memoised. */
   #byList = new Map();
 
   /**
@@ -93,16 +140,22 @@ export class SpellSource {
   async forSpellList(classId, maxLevel = 1) {
     if ( !classId ) return { cantrips: [], level1: [] };
     const key = `${classId}:${maxLevel}`;
-    if ( this.#byList.has(key) ) return this.#byList.get(key);
+    if ( !this.#byList.has(key) ) {
+      const promise = this.#resolveList(classId, maxLevel)
+        .catch(err => { this.#byList.delete(key); throw err; });
+      this.#byList.set(key, promise);
+    }
+    return this.#byList.get(key);
+  }
 
-    const all = deduplicateSpells(await loadSpellsForClass(classId, maxLevel, "class"));
+  async #resolveList(classId, maxLevel) {
+    const all = deduplicateSpells(
+      await loadSpellsForClass(classId, maxLevel, "class", this.#fetchSpellPool(maxLevel)));
     const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
-    const payload = {
+    return {
       cantrips: all.filter(s => s.level === 0).sort(byName),
       level1: all.filter(s => s.level === 1).sort(byName)
     };
-    this.#byList.set(key, payload);
-    return payload;
   }
 
   async #resolveAtLevel(classUuid, maxSpellLevel, listType) {
@@ -111,7 +164,8 @@ export class SpellSource {
     if ( !doc || !progression || progression === "none" ) return { isSpellcaster: false };
 
     const classId = doc.system?.identifier ?? doc.name?.toLowerCase() ?? "";
-    const all = deduplicateSpells(await loadSpellsForClass(classId, maxSpellLevel, listType));
+    const all = deduplicateSpells(
+      await loadSpellsForClass(classId, maxSpellLevel, listType, this.#fetchSpellPool(maxSpellLevel)));
     const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
     const byLevel = {};
     for ( let l = 0; l <= maxSpellLevel; l++ ) byLevel[l] = all.filter(s => s.level === l).sort(byName);
@@ -169,7 +223,7 @@ export class SpellSource {
     const maxCantrips = scaleCount(doc, classId, "cantrip", DEFAULT_CANTRIPS);
     const maxSpells = scaleCount(doc, classId, "spell", DEFAULT_LEVEL1_SPELLS);
 
-    const all = deduplicateSpells(await loadSpellsForClass(classId));
+    const all = deduplicateSpells(await loadSpellsForClass(classId, 1, "class", this.#fetchSpellPool(1)));
     const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
     const cantrips = all.filter(s => s.level === 0).sort(byName);
     const level1 = all.filter(s => s.level === 1).sort(byName);
@@ -182,14 +236,17 @@ export class SpellSource {
   /** Enriched description html for the focused spell, memoised. */
   async description(uuid) {
     if ( !uuid ) return "";
-    if ( this.#descriptions.has(uuid) ) return this.#descriptions.get(uuid);
-    const doc = await fromUuid(uuid);
-    const raw = doc?.system?.description?.value ?? "";
-    const html = raw
-      ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, { relativeTo: doc, secrets: false })
-      : "";
-    this.#descriptions.set(uuid, html);
-    return html;
+    if ( !this.#descriptions.has(uuid) ) {
+      const promise = (async () => {
+        const doc = await fromUuid(uuid);
+        const raw = doc?.system?.description?.value ?? "";
+        return raw
+          ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, { relativeTo: doc, secrets: false })
+          : "";
+      })().catch(err => { this.#descriptions.delete(uuid); throw err; });
+      this.#descriptions.set(uuid, promise);
+    }
+    return this.#descriptions.get(uuid);
   }
 }
 
@@ -253,8 +310,10 @@ export function cantripsKnownAtLevel(classDoc, level) {
  * it — so the level filter would intermittently discard real spells depending on
  * which pack a spell happens to live in. {@link fetchSpellsByUuids} resolves the
  * level reliably instead.
+ * @param {Promise<Map<string, object>|null>} [poolPromise]  The caller's shared browser fetch
+ *   (see SpellSource##fetchSpellPool), so many classes resolve against one browse.
  */
-async function loadSpellsForClass(classId, maxLevel = 1, listType = "class") {
+async function loadSpellsForClass(classId, maxLevel = 1, listType = "class", poolPromise = null) {
   const uuids = new Set();
 
   try {
@@ -266,7 +325,7 @@ async function loadSpellsForClass(classId, maxLevel = 1, listType = "class") {
   }
 
   if ( !uuids.size ) await scanSpellListPacks(classId, uuids);
-  if ( uuids.size ) return fetchSpellsByUuids(uuids, maxLevel);
+  if ( uuids.size ) return fetchSpellsByUuids(uuids, maxLevel, poolPromise);
 
   return scanSpellsByClassTag(classId, maxLevel);
 }
@@ -300,33 +359,31 @@ function collectSpellUuids(doc, uuids) {
 }
 
 /**
- * Resolve the class's spell UUIDs into level-≤1 spell cards. The Compendium Browser
- * supplies reliable `system.level` for every browsable pack in one bulk query; any
- * UUID it doesn't return (pack not browsable, index not loaded) is reconciled with a
- * direct `fromUuid` so the list is complete rather than all-or-nothing.
+ * Resolve the class's spell UUIDs into level-≤`maxLevel` spell cards. The shared browser pool
+ * (one bulk query per max level, reused by every class) supplies reliable `system.level` for
+ * every browsable pack; any UUID it doesn't cover (pack not browsable, index not loaded, no
+ * browser API) is reconciled with a direct `fromUuid` so the list is complete rather than
+ * all-or-nothing.
+ * @param {Set<string>} uuids
+ * @param {number} [maxLevel=1]
+ * @param {Promise<Map<string, object>|null>} [poolPromise]
  */
-async function fetchSpellsByUuids(uuids, maxLevel = 1) {
+async function fetchSpellsByUuids(uuids, maxLevel = 1, poolPromise = null) {
   const found = new Map();
-  const browser = dnd5e.applications?.CompendiumBrowser;
-  if ( browser?.fetch ) {
-    try {
-      const all = await browser.fetch(Item, {
-        types: new Set(["spell"]),
-        filters: [{ k: "system.level", o: "lte", v: maxLevel }],
-        indexFields: SPELL_INDEX_FIELDS
-      });
-      for ( const e of all ) {
-        if ( e.uuid && uuids.has(e.uuid) ) found.set(e.uuid, buildSpellFromEntry(e));
-      }
-    } catch ( err ) {
-      log("Compendium Browser spell fetch failed, using direct lookups", err);
+  const pool = poolPromise ? await poolPromise : null;
+  if ( pool ) {
+    for ( const uuid of uuids ) {
+      const entry = pool.get(uuid);
+      if ( entry ) found.set(uuid, buildSpellFromEntry(entry));
     }
   }
-  for ( const uuid of uuids ) {
-    if ( found.has(uuid) ) continue;
+  // Reconcile the misses concurrently (capped) — sequential fromUuid awaits made this loop the
+  // slowest part of a cold list load. Order doesn't matter: every caller sorts the result.
+  const misses = [...uuids].filter(uuid => !found.has(uuid));
+  await forEachLimit(misses, WARM_CONCURRENCY, async uuid => {
     const doc = await fromUuid(uuid).catch(() => null);
     if ( doc?.type === "spell" && (doc.system?.level ?? 99) <= maxLevel ) found.set(uuid, buildSpellFromEntry(doc));
-  }
+  });
   return [...found.values()];
 }
 

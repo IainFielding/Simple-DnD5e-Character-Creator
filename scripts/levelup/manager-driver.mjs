@@ -920,10 +920,18 @@ export class LevelUpDriver {
   /* -------------------------------------------- */
 
   /**
-   * Persist the driven clone onto the real actor — a faithful port of the manager's private
-   * `#complete`: diff the clone's items into create/update/delete sets and write everything
-   * with `isAdvancement: true`, then fire the system's completion hook so other modules and
-   * the sheet react exactly as they would after a native level-up.
+   * Persist the driven clone onto the real actor — a port of the manager's private `#complete`:
+   * diff the clone's items into create/update/delete sets and write everything with
+   * `isAdvancement: true`, then fire the system's completion hook so other modules react exactly
+   * as they would after a native level-up.
+   *
+   * Two deliberate departures from the native code, both for Apply speed:
+   *  - The native manager re-writes *every* item the actor owns (`diff: false` over the full
+   *    list), so applying scales with inventory size. Untouched items are byte-identical between
+   *    the clone and the actor, so they are compared and skipped here — only what the level-up
+   *    actually changed is written.
+   *  - The four writes suppress their per-operation renders (each would re-render the open
+   *    character sheet behind the wizard); the sheet is re-rendered once at the end instead.
    * @returns {Promise<Actor5e>}  The updated real actor.
    */
   async commit() {
@@ -932,9 +940,10 @@ export class LevelUpDriver {
     delete updates.items;
 
     const { toCreate, toUpdate, toDelete } = items.reduce((obj, item) => {
-      if ( !this.actor.items.get(item._id) ) obj.toCreate.push(item);
+      const existing = this.actor.items.get(item._id);
+      if ( !existing ) obj.toCreate.push(item);
       else {
-        obj.toUpdate.push(item);
+        if ( !foundry.utils.equals(existing.toObject(), item) ) obj.toUpdate.push(item);
         obj.toDelete.findSplice(id => id === item._id);
       }
       return obj;
@@ -946,13 +955,15 @@ export class LevelUpDriver {
     }
 
     await Promise.all([
-      this.actor.update(updates, { isAdvancement: true }),
-      this.actor.createEmbeddedDocuments("Item", toCreate, { keepId: true, isAdvancement: true }),
-      this.actor.updateEmbeddedDocuments("Item", toUpdate, { diff: false, recursive: false, isAdvancement: true }),
-      this.actor.deleteEmbeddedDocuments("Item", toDelete, { isAdvancement: true })
+      this.actor.update(updates, { isAdvancement: true, render: false }),
+      this.actor.createEmbeddedDocuments("Item", toCreate, { keepId: true, isAdvancement: true, render: false }),
+      this.actor.updateEmbeddedDocuments("Item", toUpdate, { diff: false, recursive: false, isAdvancement: true, render: false }),
+      this.actor.deleteEmbeddedDocuments("Item", toDelete, { isAdvancement: true, render: false })
     ]);
 
     Hooks.callAll("dnd5e.advancementManagerComplete", this.manager);
+    // The one render the four suppressed ops deferred to: surface the new level on the sheet.
+    if ( this.actor.sheet?.rendered ) this.actor.sheet.render();
     return this.actor;
   }
 }

@@ -1,4 +1,4 @@
-import { MODULE_ID, SETTINGS, DEFAULTS, launchWindowOptions, tpl, t, log } from "./config.mjs";
+import { MODULE_ID, SETTINGS, DEFAULTS, launchWindowOptions, tpl, t, log, levelUpEnabled, heroMancerActive } from "./config.mjs";
 import { STEPS } from "./steps/registry.mjs";
 import { CreatorShell } from "./app/creator-shell.mjs";
 import { warmSources } from "./data/source-cache.mjs";
@@ -115,11 +115,14 @@ Hooks.once("ready", () => {
   registerLevelUp();
 
   // Pre-warm the shared compendium index in the background, so the builder opens instantly
-  // instead of showing its loading screen on first use. Gated to users who can create actors
-  // (the launch button's audience) to avoid taxing clients that will never open it, and deferred
-  // to idle so it never competes with the rest of world startup. A window opened before this
-  // finishes simply awaits the same work behind its loading screen.
-  if ( game.user?.can("ACTOR_CREATE") ) {
+  // instead of showing its loading screen on first use. Gated to the audiences that will
+  // actually open a window — users who can create actors (the launch button), and, when the
+  // level-up takeover is on, players who own a character (the level-up flow) — to avoid taxing
+  // clients that will never open either. Deferred to idle so it never competes with the rest of
+  // world startup. A window opened before this finishes simply awaits the same in-flight work.
+  const levelUpAudience = levelUpEnabled() && !heroMancerActive()
+    && game.actors?.some(a => (a.type === "character") && a.isOwner);
+  if ( game.user?.can("ACTOR_CREATE") || levelUpAudience ) {
     const warm = () => warmSources().catch(() => {});
     if ( typeof requestIdleCallback === "function" ) requestIdleCallback(warm, { timeout: 3000 });
     else window.setTimeout(warm, 1000);
