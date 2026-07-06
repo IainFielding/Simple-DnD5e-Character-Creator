@@ -51,10 +51,17 @@
         "title": "Level Up — {name} (Level {level})"
       },
       "nav": {
-        "apply": "Apply Level-Up",
-        "done": "Done"
+        "apply": "Apply Level-Up"
       },
       "button": "Level Up",
+      "chooseClass": {
+        "title": "Level Up Which Class?",
+        "body": "Choose the class that gains this level."
+      },
+      "cancel": {
+        "title": "Discard this level-up?",
+        "body": "Nothing has been applied to your character yet. If you close now, everything you've chosen here — hit points, features, spells, and other picks — will be discarded."
+      },
       "notify": {
         "applyFailed": "Level-up could not be applied. See the console for details.",
         "spellsFailed": "The chosen spells could not be added. The level-up itself was applied — add them from the sheet.",
@@ -75,7 +82,8 @@
           "roll": "Roll {die}",
           "custom": "Enter Manually",
           "gained": "Hit Points Gained",
-          "thisLevel": "This level:"
+          "thisLevel": "This level:",
+          "conBreakdown": "{con} Con = {total} HP"
         },
         "choices": {
           "label": "Features",
@@ -116,9 +124,20 @@
         },
         "review": {
           "label": "Review",
-          "gained": "{class}: Level {from} → {to}",
           "hp": "+{gain} (new maximum {max})",
-          "features": "New Features"
+          "features": "Features",
+          "newSpells": "New Spells",
+          "newPill": "New",
+          "profBonus": "Proficiency Bonus",
+          "spellSlots": "Spell Slots",
+          "pactSlots": "Pact Magic",
+          "swappedOut": "Swapped Out",
+          "kindClass": "Class",
+          "kindSpecies": "Species",
+          "kindBackground": "Background",
+          "level": "Level {level}",
+          "levelUp": "Level {from} → {to}",
+          "abilityTip": "Increased by this level-up"
         },
         "spells": {
           "label": "Spells",
@@ -414,9 +433,24 @@
       },
       "mode": {
         "name": "Module mode",
-        "hint": "Whether the module also takes over the level-up experience. Creation only leaves levelling to the system; Creation + Level-Up re-skins the system's level-up for a calmer, one-decision-per-screen flow.",
+        "hint": "Whether the module also takes over the level-up experience. Creation + Level-Up (the default) re-skins the system's level-up for a calmer, one-screen-per-level flow; Creation only leaves levelling to the system.",
         "creation": "Creation only",
         "creationLevelup": "Creation + Level-Up"
+      },
+      "levelUpButton": {
+        "name": "Show Level Up button",
+        "hint": "Adds a “Level Up” button to the character sheet's header for the character's owner. Levelling through the sheet's own class controls still works either way."
+      },
+      "levelUpHpMode": {
+        "name": "Level-up hit points",
+        "hint": "Which hit-point options players see when levelling up. Player's choice also offers taking the maximum or typing a value; Average or roll matches the written rules; Average only applies the average automatically.",
+        "choice": "Player's choice (average, max, roll, or manual)",
+        "averageRoll": "Average or roll",
+        "average": "Average only"
+      },
+      "levelUpHpRollToChat": {
+        "name": "Post hit-die rolls to chat",
+        "hint": "When a player rolls hit points during a level-up, also post the roll to chat so the whole table can see the result."
       }
     }
   }

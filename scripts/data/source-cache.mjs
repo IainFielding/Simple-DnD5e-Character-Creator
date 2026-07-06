@@ -10,7 +10,9 @@ import { getEnabledPacks } from "./compendium-util.mjs";
  *
  * The three data sources ({@link SourceIndex}, {@link SpellSource}, {@link EquipmentSource})
  * hold only compendium-derived caches — no per-session selection state — so a single set is
- * built and indexed once per world session and reused by every CreatorShell. A background warm
+ * built and indexed once per world session and reused by every CreatorShell *and* LevelUpShell
+ * (the level-up warms only what it needs — the subclass index and its spell pool — but shares
+ * these instances so that work survives the window and benefits the next one). A background warm
  * kicked off at `ready` (see main.mjs) means the builder opens instantly; a window opened before
  * that finishes awaits the same in-flight work behind its loading screen. The per-window
  * {@link module:state/creator-state.CreatorState} stays separate — only these read-only indexes

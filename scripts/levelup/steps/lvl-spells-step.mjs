@@ -111,15 +111,16 @@ function bucketFor(state, plan) {
 }
 
 /**
- * The post-commit **Spells** step (§3.4). Unlike the per-level section providers this is a
- * standalone rail step appended after Review — it runs once the level grant is already on the
- * actor, reads the true derived slot/prepared capacity, and lets the player add the cantrips and
- * spells the level unlocked. Picks are staged on `state.selected*` and written to the actor when
- * the window finishes (the shell's Phase B), mirroring the creation flow's staged `addSpells`.
+ * The **Spells** step. Unlike the per-level section providers this is a standalone rail step,
+ * sitting between the level screens and the Review: it reads the new slot/prepared capacity off
+ * the driver's clone (whose derived data already reflects the gained level) and lets the player
+ * pick the cantrips and spells the level unlocked. Picks are staged on `state.selected*`, shown
+ * on the Review screen, and written to the actor by the shell's single Apply right after the
+ * level commit — mirroring the creation flow's staged `addSpells`.
  *
- * Add-only: no swapping this phase. Completion is advisory (`isComplete` → true) so the player is
- * never trapped — the level is already applied, and any unfilled capacity can be finished on the
- * sheet later.
+ * Completion is advisory (`isComplete` → true) so the player is never trapped — an empty or
+ * unappealing pool never blocks Apply, and any unfilled capacity can be finished on the sheet
+ * later.
  */
 export const lvlSpellsStep = {
   id: "spells",
@@ -127,7 +128,7 @@ export const lvlSpellsStep = {
   labelKey: "levelup.step.spells.label",
   template: "levelup/spells",
 
-  // Always satisfiable — the level is committed by the time this shows, so "Done" is never blocked.
+  // Always satisfiable — spell picks are optional, so this never blocks Review or Apply.
   isComplete() { return true; },
 
   summary(state) {
@@ -332,16 +333,18 @@ function byLevelThenName(a, b) {
  */
 export async function applyLevelUpSpells(actor, sourceTag, picks) {
   if ( !picks.length ) return;
+  // Load the picked spells' source documents in parallel — sequential fromUuid awaits made
+  // Finish scale with the number of picks when any doc wasn't already in the pack cache.
+  const docs = await Promise.all(picks.map(pick => fromUuid(pick.uuid).catch(() => null)));
   const data = [];
-  for ( const pick of picks ) {
-    const doc = await fromUuid(pick.uuid).catch(() => null);
-    if ( !doc ) continue;
+  docs.forEach((doc, i) => {
+    if ( !doc ) return;
     const obj = doc.toObject();
-    if ( obj._stats ) obj._stats.compendiumSource = pick.uuid;
+    if ( obj._stats ) obj._stats.compendiumSource = picks[i].uuid;
     foundry.utils.setProperty(obj, "system.prepared", 1);
     foundry.utils.setProperty(obj, "system.method", "spell");
     if ( sourceTag ) foundry.utils.setProperty(obj, "system.sourceItem", sourceTag);
     data.push(obj);
-  }
+  });
   if ( data.length ) await actor.createEmbeddedDocuments("Item", data, { render: false });
 }

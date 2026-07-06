@@ -1,4 +1,4 @@
-import { MODULE_ID, SETTINGS, DEFAULTS, launchWindowOptions, tpl, t, log } from "./config.mjs";
+import { MODULE_ID, SETTINGS, DEFAULTS, launchWindowOptions, tpl, t, log, levelUpEnabled, heroMancerActive } from "./config.mjs";
 import { STEPS } from "./steps/registry.mjs";
 import { CreatorShell } from "./app/creator-shell.mjs";
 import { warmSources } from "./data/source-cache.mjs";
@@ -81,6 +81,26 @@ function registerSettings() {
       "creation-levelup": t("settings.mode.creationLevelup")
     }
   });
+  game.settings.register(MODULE_ID, SETTINGS.levelUpButton, {
+    name: t("settings.levelUpButton.name"),
+    hint: t("settings.levelUpButton.hint"),
+    scope: "world", config: true, type: Boolean, default: DEFAULTS.levelUpButton
+  });
+  game.settings.register(MODULE_ID, SETTINGS.levelUpHpMode, {
+    name: t("settings.levelUpHpMode.name"),
+    hint: t("settings.levelUpHpMode.hint"),
+    scope: "world", config: true, type: String, default: DEFAULTS.levelUpHpMode,
+    choices: {
+      "choice": t("settings.levelUpHpMode.choice"),
+      "average-roll": t("settings.levelUpHpMode.averageRoll"),
+      "average": t("settings.levelUpHpMode.average")
+    }
+  });
+  game.settings.register(MODULE_ID, SETTINGS.levelUpHpRollToChat, {
+    name: t("settings.levelUpHpRollToChat.name"),
+    hint: t("settings.levelUpHpRollToChat.hint"),
+    scope: "world", config: true, type: Boolean, default: DEFAULTS.levelUpHpRollToChat
+  });
 }
 
 /* -------------------------------------------- */
@@ -100,11 +120,14 @@ Hooks.once("ready", () => {
   registerLevelUp();
 
   // Pre-warm the shared compendium index in the background, so the builder opens instantly
-  // instead of showing its loading screen on first use. Gated to users who can create actors
-  // (the launch button's audience) to avoid taxing clients that will never open it, and deferred
-  // to idle so it never competes with the rest of world startup. A window opened before this
-  // finishes simply awaits the same work behind its loading screen.
-  if ( game.user?.can("ACTOR_CREATE") ) {
+  // instead of showing its loading screen on first use. Gated to the audiences that will
+  // actually open a window — users who can create actors (the launch button), and, when the
+  // level-up takeover is on, players who own a character (the level-up flow) — to avoid taxing
+  // clients that will never open either. Deferred to idle so it never competes with the rest of
+  // world startup. A window opened before this finishes simply awaits the same in-flight work.
+  const levelUpAudience = levelUpEnabled() && !heroMancerActive()
+    && game.actors?.some(a => (a.type === "character") && a.isOwner);
+  if ( game.user?.can("ACTOR_CREATE") || levelUpAudience ) {
     const warm = () => warmSources().catch(() => {});
     if ( typeof requestIdleCallback === "function" ) requestIdleCallback(warm, { timeout: 3000 });
     else window.setTimeout(warm, 1000);

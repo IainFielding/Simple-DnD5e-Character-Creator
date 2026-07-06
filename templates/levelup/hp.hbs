@@ -1,5 +1,6 @@
-{{!-- Level-up HP block (rendered inside level.hbs). One row per gained level: average / roll /
-      manual. Buttons fire hp* actions (hpAverage, hpRoll, hpManual); data from hp-step.mjs sectionsAt(). --}}
+{{!-- Level-up HP block (rendered inside level.hbs). One row per gained level: average / max /
+      roll / manual, per the GM's levelUpHpMode setting (allowMax/allowRoll/allowManual flags).
+      Buttons fire hp* actions (hpAverage, hpRoll, hpManual); data from hp-step.mjs sectionsAt(). --}}
 <section class="creator-levelup creator-levelup-hp">
   <p class="creator-step-intro">{{intro}}</p>
 
@@ -15,23 +16,32 @@
           <span class="creator-hp-btn-value">+{{average}}</span>
         </button>
 
+        {{#if ../allowMax}}
         <button type="button" class="creator-hp-btn {{#if isMax}}is-selected{{/if}}"
                 data-action="stepAction" data-step-action="hpMax" data-index="{{index}}">
           <span class="creator-hp-btn-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.max"}}</span>
           <span class="creator-hp-btn-value">+{{max}}</span>
         </button>
+        {{/if}}
 
+        {{#if ../allowRoll}}
         <button type="button" class="creator-hp-btn {{#if isRoll}}is-selected{{/if}}"
                 data-action="stepAction" data-step-action="hpRoll" data-index="{{index}}">
           <span class="creator-hp-btn-label"><i class="fa-solid fa-dice-d20"></i> {{rollLabel}}</span>
           <span class="creator-hp-btn-value">{{#if rolled}}+{{rolled}}{{else}}<i class="fa-solid fa-dice"></i>{{/if}}</span>
         </button>
+        {{/if}}
       </div>
 
       <label class="creator-hp-result {{#if isManual}}is-manual{{/if}}">
         <span class="creator-hp-result-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.gained"}}</span>
+        {{#if ../allowManual}}
         <input type="number" class="creator-hp-input" min="1" max="{{max}}" value="{{current}}"
                data-step-change="hpManual" data-index="{{index}}">
+        {{else}}
+        <input type="number" class="creator-hp-input" value="{{current}}" readonly tabindex="-1">
+        {{/if}}
+        <span class="creator-hp-con">{{conBreakdown}}</span>
       </label>
     </div>
   </div>

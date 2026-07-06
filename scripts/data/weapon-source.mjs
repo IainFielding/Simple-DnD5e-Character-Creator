@@ -32,9 +32,16 @@ let phbWeaponImgs = null;
  * Returns an empty map when no PHB weapon pack is active.
  * @returns {Promise<Map<string, string>>}
  */
+/** Lower-cased letters/digits only, so "Quarterstaff" compares equal to "quarterstaff". */
+function slug(text) {
+  return String(text ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 async function phbWeaponMap() {
   if ( phbWeaponImgs ) return phbWeaponImgs;
   const map = new Map();
+  // Bases whose image came from the item *named* for them, which no variant may displace.
+  const canonical = new Set();
   const enabled = getEnabledPacks();
   for ( const pack of game.packs ) {
     if ( pack.metadata.type !== "Item" ) continue;
@@ -45,7 +52,17 @@ async function phbWeaponMap() {
       for ( const e of index ) {
         if ( e.type !== "weapon" ) continue;
         const base = e.system?.type?.baseItem;
-        if ( base && e.img && !map.has(base) ) map.set(base, e.img);
+        if ( !base || !e.img ) continue;
+        // Several items can share a base — the PHB's Staff, Wooden staff, and Quarterstaff are
+        // all baseItem "quarterstaff" — and the index order would otherwise let a variant's art
+        // win. The canonical base weapon is the one named for the base id, so it always wins;
+        // a variant's image is only a fallback when no canonical entry exists.
+        if ( slug(e.name) === slug(base) ) {
+          map.set(base, e.img);
+          canonical.add(base);
+        } else if ( !canonical.has(base) && !map.has(base) ) {
+          map.set(base, e.img);
+        }
       }
     } catch ( err ) {
       log(`PHB weapon icon scan failed for ${pack.collection}`, err);

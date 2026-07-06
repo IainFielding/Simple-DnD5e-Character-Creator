@@ -1,10 +1,10 @@
 import { MODULE_ID, tpl, t, log } from "../config.mjs";
 import { buildSteps } from "./registry.mjs";
-import { SourceIndex } from "../data/source-index.mjs";
-import { SpellSource } from "../data/spell-source.mjs";
+import { getSources, isStale, invalidateSources } from "../data/source-cache.mjs";
+import { forEachLimit, WARM_CONCURRENCY } from "../data/concurrency.mjs";
 import { applyLevelUpSpells, spellChanges } from "./steps/lvl-spells-step.mjs";
 
-const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 /**
  * The level-up window. Like the creator's shell it is deliberately thin — it owns navigation
@@ -20,8 +20,9 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
  * to level-up:
  *   1. The step list is REBUILT every render (buildSteps), because choices reveal more choices —
  *      e.g. picking a subclass adds its feature steps. So the rail can grow between renders.
- *   2. The finish button is two-phase: first press = "Apply" (commit the level to the actor);
- *      second press only appears if new spells were unlocked = "Done" (save the spell picks).
+ *   2. Nothing touches the real actor until the single Apply on the review step: the level
+ *      decisions live on the driver's clone, the spell picks are staged on the state, and
+ *      {@link #applyLevelUp} writes both in one go before closing.
  */
 export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
@@ -56,15 +57,53 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   /** @type {object[]} The per-session step set (built from the driver's surfaced decisions). */
   #steps;
   #current = 0;
-  /** A non-warmed source index, used only by the subclass picker to list/describe subclasses. */
-  #source = new SourceIndex();
-  /** Spell source for the post-commit spell step (§3.4); loads the class's castable spell pool. */
-  #spells = new SpellSource();
+  /** The shared compendium index (subclass picker, origin details) — see {@link getSources}. */
+  #source;
+  /** The shared spell source; the post-commit spell step's pool persists across windows. */
+  #spells;
 
   constructor(state, options = {}) {
     super(options);
     this.state = state;
     this.#steps = buildSteps(state);
+    // Reuse the world's shared, warm-once compendium caches (read-only — no session state): the
+    // level-up benefits from the background warm at `ready`, and its own loads (the subclass
+    // index, the spell pool) stay cached for the next level-up instead of dying with this window.
+    // A changed enabled-source set means those caches no longer reflect the world; rebuild first.
+    if ( isStale() ) invalidateSources();
+    const { source, spells } = getSources();
+    this.#source = source;
+    this.#spells = spells;
+    // Subclass decisions are fixed once the driver has prepared, so their data can start
+    // loading immediately — long before the player scrolls down to the subclass block.
+    this.#warmSubclasses();
+  }
+
+  /**
+   * Start loading the subclass picker's data in the background while the player is still on the
+   * earlier decisions: the world's subclass index, then the detail panel and feature groups of
+   * this class's own subclasses. Fire-and-forget — everything lands in the shared source cache's
+   * promise-memos, so the subclass block reads it back instantly (or joins the tail of this same
+   * work). A single card's failure only costs that card its warmth.
+   */
+  async #warmSubclasses() {
+    try {
+      for ( const record of this.state.subclassSteps ) {
+        const identifier = record.advancement?.item?.identifier;
+        if ( !identifier ) continue;
+        const cards = await this.#source.subclasses(identifier);
+        await forEachLimit(cards, WARM_CONCURRENCY, async card => {
+          try {
+            await this.#source.detail(card.uuid);
+            await this.#source.advancementGroups(card.uuid);
+          } catch ( err ) {
+            log(`failed to warm subclass ${card.uuid}`, err);
+          }
+        });
+      }
+    } catch ( err ) {
+      log("subclass warm-up failed", err);
+    }
   }
 
   get title() {
@@ -107,22 +146,20 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
         label: step.label ?? t(step.labelKey),
         ...stepContext
       },
-      // The finish button shows on the review step (Apply) and, once committed, on the spell step
-      // (Done). Both replace Next in the footer; the label distinguishes the two phases.
-      isReview: step.id === "review" || step.id === "spells",
+      // The finish button (Apply) replaces Next in the footer on the review step only.
+      isReview: step.id === "review",
       nav: {
         index: this.#current,
         total: this.#steps.length,
         position: t("nav.position", { current: this.#current + 1, total: this.#steps.length }),
-        // Once committed the level screens are locked behind us — only the spell step is live.
-        canBack: this.#current > 0 && !this.state.committed,
+        canBack: this.#current > 0,
         canNext: this.#current < this.#steps.length - 1 && flags[this.#current]
           && this.#reachable(this.#current + 1, flags),
         backLabel: t("nav.back"),
         nextLabel: t("nav.next")
       },
-      canFinish: this.state.committed || this.#requiredSteps.every(s => s.isComplete(this.state)),
-      finishLabel: this.state.committed ? t("levelup.nav.done") : t("levelup.nav.apply")
+      canFinish: this.#requiredSteps.every(s => s.isComplete(this.state)),
+      finishLabel: t("levelup.nav.apply")
     };
   }
 
@@ -144,16 +181,43 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   /** @override */
   _onRender(context, options) {
     super._onRender(context, options);
+    this.#warmSpellPool();
     for ( const el of this.element.querySelectorAll("[data-step-change]") ) {
       el.addEventListener("change", ev => this.#dispatch(el.dataset.stepChange, ev.currentTarget));
     }
-    // Client-side spell-list filters on the spell step — search box plus the level/school dropdowns.
-    // All filter in the DOM without a re-render, so the search field keeps focus while typing.
-    const search = this.element.querySelector("[data-creator-search]");
-    if ( search ) search.addEventListener("input", () => this.#applySpellFilters());
-    for ( const sel of this.element.querySelectorAll("[data-spell-filter-level], [data-spell-filter-school]") ) {
-      sel.addEventListener("change", () => this.#applySpellFilters());
+    // Client-side spell-list filters on the spell step — search box plus the level/school
+    // dropdowns. All filter in the DOM without a re-render, so the search field keeps focus
+    // while typing; their values live on the state so the re-render a spell click causes
+    // restores them (a rebuilt control would otherwise reset to "show everything").
+    const filters = [
+      [this.element.querySelector("[data-creator-search]"), "spellSearch", "input"],
+      [this.element.querySelector("[data-spell-filter-level]"), "spellLevelFilter", "change"],
+      [this.element.querySelector("[data-spell-filter-school]"), "spellSchoolFilter", "change"]
+    ].filter(([el]) => el);
+    for ( const [el, key, event] of filters ) {
+      el.value = this.state[key];
+      el.addEventListener(event, () => {
+        this.state[key] = el.value;
+        this.#applySpellFilters();
+      });
     }
+    if ( filters.length ) this.#applySpellFilters();
+  }
+
+  /**
+   * Start loading the level-up spell pool in the background while the player is still making
+   * level decisions, so reaching the post-commit spell step doesn't stall on the compendium
+   * fetch. Fire-and-forget: the pool is memoised per class/level key inside {@link SpellSource}
+   * (as an in-flight promise, so the spell step's own load joins this one rather than racing it),
+   * which also makes re-running on every render free — and re-running matters, because the plan
+   * can change mid-wizard: picking an Eldritch Knight-style subclass turns the class into a
+   * caster only after that pick, and this warms the new key the render after it happens.
+   */
+  #warmSpellPool() {
+    const plan = this.state.spellPlan();
+    if ( !plan.isSpellcaster || !plan.hasDelta || !plan.castUuid ) return;
+    this.#spells.forClassAtLevel(plan.castUuid, plan.maxSpellLevel, plan.listType)
+      .catch(err => log("level-up spell pool warm-up failed", err));
   }
 
   /**
@@ -182,10 +246,6 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** A step is reachable once every step before it is complete. */
   #reachable(index, flags = this.#steps.map(s => s.isComplete(this.state))) {
-    // After commit the level-up is applied and its screens are frozen — only the spell step is live.
-    if ( this.state.committed ) return this.#steps[index]?.id === "spells";
-    // Pre-commit the spell step is gated behind Apply; it is never reached by Next or the rail.
-    if ( this.#steps[index]?.id === "spells" ) return false;
     return index === 0 || flags.slice(0, index).every(Boolean);
   }
 
@@ -221,67 +281,84 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static #onBack() {
-    if ( this.#current > 0 && !this.state.committed ) {
+    if ( this.#current > 0 ) {
       this.#current -= 1;
       this.render();
     }
   }
 
-  /**
-   * The finish button drives a two-phase completion so the spell step (§3.4) can run against the
-   * committed actor within the same window:
-   *  - **Phase A** (not yet committed) — validate the level decisions, commit the driver's clone to
-   *    the real actor, then either advance to the spell step or, for a non-caster, close.
-   *  - **Phase B** (committed, on the spell step) — write the staged spell picks and close.
-   */
   static async #onFinish() {
-    if ( !this.state.committed ) return this.#applyLevelUp();
-    return this.#finishSpells();
+    return this.#applyLevelUp();
   }
 
-  /** Phase A: commit the level grant, then reveal the spell step or close. */
+  /** Re-entrancy guard: a second Apply click while the first is writing must be a no-op. */
+  #applying = false;
+
+  /**
+   * Apply the whole level-up in one go: commit the driver's clone (the level decisions), then
+   * write the staged spell picks and any swap onto the freshly-updated actor, then close. The
+   * spell picks are staged on the state by the pre-review spell step, so a single Apply covers
+   * everything the review screen showed. A commit failure leaves the actor untouched and the
+   * window open for a retry; a spell failure after a successful commit keeps the level (it is
+   * already applied) and tells the player to add the spells from the sheet.
+   */
   async #applyLevelUp() {
-    if ( !this.#requiredSteps.every(s => s.isComplete(this.state)) ) return;
+    if ( this.#applying || !this.#requiredSteps.every(s => s.isComplete(this.state)) ) return;
+    this.#applying = true;
     try {
       await this.state.driver.commit();
     } catch ( err ) {
       log("level-up apply failed", err);
       ui.notifications?.error(t("levelup.notify.applyFailed"));
+      this.#applying = false;
       return;
     }
     this.state.committed = true;
 
-    // If the level-up opened spell capacity, stay open on the (now unlocked) spell step; otherwise
-    // we're done — close and surface the updated sheet, exactly as before.
-    this.#steps = buildSteps(this.state);
-    const spellIndex = this.#steps.findIndex(s => s.id === "spells");
-    if ( spellIndex >= 0 ) {
-      this.#current = spellIndex;
-      return this.render();
-    }
-    await this.close();
-    this.state.actor?.sheet?.render(true);
-  }
-
-  /** Phase B: persist the staged spell picks (and any swaps) onto the committed actor, then close. */
-  async #finishSpells() {
+    // The sourceTag guard covers a rare edge: picks staged while the class was briefly a caster
+    // (an Eldritch Knight pick later undone) must not be created against a non-caster.
     const { actor } = this.state;
     const { sourceTag, create, deleteIds } = spellChanges(this.state);
-    try {
-      // Delete swapped-out spells first so a replacement of the same name can't momentarily collide.
-      if ( deleteIds.length ) await actor.deleteEmbeddedDocuments("Item", deleteIds, { render: false });
-      await applyLevelUpSpells(actor, sourceTag, create);
-    } catch ( err ) {
-      log("level-up spell grant failed", err);
-      ui.notifications?.error(t("levelup.notify.spellsFailed"));
-      return;
+    if ( sourceTag && (create.length || deleteIds.length) ) {
+      try {
+        // Create the replacements before deleting the swapped-out spell, so a failure part-way
+        // can only ever leave an extra spell to tidy up — never a destroyed one.
+        await applyLevelUpSpells(actor, sourceTag, create);
+        if ( deleteIds.length ) await actor.deleteEmbeddedDocuments("Item", deleteIds, { render: false });
+      } catch ( err ) {
+        log("level-up spell grant failed", err);
+        ui.notifications?.error(t("levelup.notify.spellsFailed"));
+      }
     }
-    await this.close();
+
+    await this.close({ force: true });
     actor?.sheet?.render(true);
   }
 
   static #onCancel() {
     this.close();
+  }
+
+  /**
+   * Confirm before a close that would lose the player's work. Every exit path funnels through
+   * here — the Cancel button, the window frame's close, Escape, and programmatic closes. Nothing
+   * touches the real actor until Apply, so closing with decisions made (or spells staged)
+   * discards the whole level-up — safe, but rolled HP and picked features silently vanish, hence
+   * the prompt. Apply itself passes `force` because its work is already saved; an untouched
+   * window (or a pre-seeded one the player never interacted with) closes without ceremony.
+   * @override
+   */
+  async close(options = {}) {
+    if ( !options.force && !this.state.committed && this.state.hasPlayerInput() ) {
+      const proceed = await DialogV2.confirm({
+        window: { title: t("levelup.cancel.title"), icon: "fa-solid fa-triangle-exclamation" },
+        content: `<p>${t("levelup.cancel.body")}</p>`,
+        modal: true,
+        rejectClose: false
+      });
+      if ( !proceed ) return this;
+    }
+    return super.close(options);
   }
 
   /**

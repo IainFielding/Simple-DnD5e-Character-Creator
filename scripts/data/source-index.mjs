@@ -25,19 +25,24 @@ export class SourceIndex {
   /** type id -> card[]. Note dnd5e's item type for "species" is historically "race". */
   #cards = { class: [], race: [], background: [] };
 
-  /** uuid -> { name, img, enriched } resolved detail, memoised. */
+  // Every memo below stores the in-flight *promise*, not the resolved value, so concurrent
+  // callers (the ready warm-up, a level-up window's background warm, and the step that finally
+  // renders) share a single load instead of racing duplicates. A failed load un-caches itself
+  // so a later call can retry.
+
+  /** uuid -> promise of { name, img, enriched } resolved detail, memoised. */
   #details = new Map();
 
-  /** uuid -> ability-score-improvement config (or null), memoised. */
+  /** uuid -> promise of ability-score-improvement config (or null), memoised. */
   #asi = new Map();
 
-  /** uuid -> categorized advancement groups (or null), memoised. */
+  /** uuid -> promise of categorized advancement groups (or null), memoised. */
   #groups = new Map();
 
-  /** granted-item uuid -> { name, img, type } metadata (or null), memoised. */
+  /** granted-item uuid -> promise of { name, img, type } metadata (or null), memoised. */
   #meta = new Map();
 
-  /** All indexed subclass cards (across classes), fetched once on first request. */
+  /** Promise of all indexed subclass cards (across classes), fetched once on first request. */
   #subclasses = null;
 
   loaded = false;
@@ -97,29 +102,35 @@ export class SourceIndex {
    */
   async subclasses(classIdentifier) {
     if ( !this.#subclasses ) {
-      const browser = dnd5e.applications?.CompendiumBrowser;
-      let entries = [];
-      if ( browser?.fetch ) {
-        try {
-          entries = await browser.fetch(Item, {
-            types: new Set(["subclass"]),
-            indexFields: new Set(["system.classIdentifier"])
-          });
-        } catch ( err ) {
-          log("Compendium Browser fetch failed for subclasses, scanning packs directly", err);
-        }
-      }
-      if ( !entries.length ) entries = await this.#scanPacks("subclass");
-      this.#subclasses = entries.map(e => ({
-        uuid: e.uuid,
-        name: e.name,
-        img: e.img || "icons/svg/item-bag.svg",
-        classIdentifier: e.system?.classIdentifier ?? ""
-      }));
+      this.#subclasses = this.#fetchSubclasses()
+        .catch(err => { this.#subclasses = null; throw err; });
     }
-    return this.#subclasses
+    return (await this.#subclasses)
       .filter(c => c.classIdentifier === classIdentifier)
       .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
+  }
+
+  /** The world-wide subclass fetch behind {@link subclasses}: one browse, cached as cards. */
+  async #fetchSubclasses() {
+    const browser = dnd5e.applications?.CompendiumBrowser;
+    let entries = [];
+    if ( browser?.fetch ) {
+      try {
+        entries = await browser.fetch(Item, {
+          types: new Set(["subclass"]),
+          indexFields: new Set(["system.classIdentifier"])
+        });
+      } catch ( err ) {
+        log("Compendium Browser fetch failed for subclasses, scanning packs directly", err);
+      }
+    }
+    if ( !entries.length ) entries = await this.#scanPacks("subclass");
+    return entries.map(e => ({
+      uuid: e.uuid,
+      name: e.name,
+      img: e.img || "icons/svg/item-bag.svg",
+      classIdentifier: e.system?.classIdentifier ?? ""
+    }));
   }
 
   /** Look up a single card across all types by its UUID. */
@@ -197,17 +208,22 @@ export class SourceIndex {
    */
   async detail(uuid, doc) {
     if ( !uuid ) return null;
-    if ( this.#details.has(uuid) ) return this.#details.get(uuid);
+    if ( !this.#details.has(uuid) ) {
+      const promise = this.#resolveDetail(uuid, doc)
+        .catch(err => { this.#details.delete(uuid); throw err; });
+      this.#details.set(uuid, promise);
+    }
+    return this.#details.get(uuid);
+  }
 
+  async #resolveDetail(uuid, doc) {
     doc ??= await fromUuid(uuid);
     if ( !doc ) return null;
     const raw = doc.system?.description?.value ?? "";
     const enriched = await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, {
       relativeTo: doc, secrets: false
     });
-    const detail = { name: doc.name, img: doc.img, enriched };
-    this.#details.set(uuid, detail);
-    return detail;
+    return { name: doc.name, img: doc.img, enriched };
   }
 
   /**
@@ -221,12 +237,14 @@ export class SourceIndex {
    */
   async abilityScoreIncrease(uuid, doc) {
     if ( !uuid ) return null;
-    if ( this.#asi.has(uuid) ) return this.#asi.get(uuid);
-
-    doc ??= await fromUuid(uuid);
-    const config = doc ? readAsi(doc) : null;
-    this.#asi.set(uuid, config);
-    return config;
+    if ( !this.#asi.has(uuid) ) {
+      const promise = (async () => {
+        doc ??= await fromUuid(uuid);
+        return doc ? readAsi(doc) : null;
+      })().catch(err => { this.#asi.delete(uuid); throw err; });
+      this.#asi.set(uuid, promise);
+    }
+    return this.#asi.get(uuid);
   }
 
   /**
@@ -241,12 +259,14 @@ export class SourceIndex {
    */
   async advancementGroups(uuid, doc) {
     if ( !uuid ) return null;
-    if ( this.#groups.has(uuid) ) return this.#groups.get(uuid);
-
-    doc ??= await fromUuid(uuid);
-    const groups = doc ? await this.#buildGroups(doc) : null;
-    this.#groups.set(uuid, groups);
-    return groups;
+    if ( !this.#groups.has(uuid) ) {
+      const promise = (async () => {
+        doc ??= await fromUuid(uuid);
+        return doc ? await this.#buildGroups(doc) : null;
+      })().catch(err => { this.#groups.delete(uuid); throw err; });
+      this.#groups.set(uuid, promise);
+    }
+    return this.#groups.get(uuid);
   }
 
   /** Walk an item's level-1 traits and every granted feature/spell into display blocks. */
@@ -313,17 +333,20 @@ export class SourceIndex {
    *  feeding the raw form to `data-uuid` leaves the hover tooltip permanently blank. */
   async #resolveMeta(uuid) {
     if ( !uuid ) return null;
-    if ( this.#meta.has(uuid) ) return this.#meta.get(uuid);
-    let meta = null;
-    try {
-      const doc = fromUuidSync(uuid) ?? await fromUuid(uuid);
-      if ( doc ) meta = { uuid: doc.uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
-    } catch {
-      const doc = await fromUuid(uuid).catch(() => null);
-      if ( doc ) meta = { uuid: doc.uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
+    if ( !this.#meta.has(uuid) ) {
+      const promise = (async () => {
+        try {
+          const doc = fromUuidSync(uuid) ?? await fromUuid(uuid);
+          if ( doc ) return { uuid: doc.uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
+        } catch {
+          const doc = await fromUuid(uuid).catch(() => null);
+          if ( doc ) return { uuid: doc.uuid, name: doc.name, img: doc.img || "icons/svg/item-bag.svg", type: doc.type };
+        }
+        return null;
+      })();
+      this.#meta.set(uuid, promise);
     }
-    this.#meta.set(uuid, meta);
-    return meta;
+    return this.#meta.get(uuid);
   }
 }
 

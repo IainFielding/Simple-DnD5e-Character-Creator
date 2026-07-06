@@ -51,7 +51,7 @@ function routeFor(action) {
 export function levelStep(level) {
   return {
     id: `level-${level}`,
-    icon: "fa-solid fa-angles-up",
+    icon: "fa-solid fa-trophy-star",
     label: t("levelup.step.level.label", { level }),
     template: "levelup/level",
     level,

@@ -57,16 +57,17 @@ export class LevelUpState {
   collapsedBlocks = new Set();
 
   /**
-   * Whether the level grant has been committed to the real actor. The spell step (§3.4) runs
-   * *after* commit and edits the actor directly, so the shell flips this on Apply, then locks the
-   * level screens and reveals the spell step. Starts false; the level-up decisions drive the clone
-   * until it is set.
+   * Whether the level grant has been committed to the real actor. Flipped by the shell's Apply
+   * right after the driver's clone lands, so the spell staging that follows (and any close-path
+   * logic) reads the updated actor rather than the clone. Starts false; the level-up decisions
+   * drive the clone until it is set, and the window closes shortly after it flips.
    */
   committed = false;
 
   /**
-   * Spells chosen on the post-commit spell step, staged here and written to the actor on Finish
-   * (mirroring how creation stages picks then grants them). Cleared only by closing the window.
+   * Spells chosen on the pre-review spell step, staged here and written to the actor by the
+   * shell's single Apply after the level commit (mirroring how creation stages picks then grants
+   * them). Discarded with everything else on cancel.
    * @type {{uuid:string, id:string, name:string, img:string, level:number}[]}
    */
   selectedCantrips = [];
@@ -75,6 +76,16 @@ export class LevelUpState {
   /** Transient UI state for the spell step: the active tab and the focused spell's UUID. */
   spellTab = "cantrips";
   focusedSpellUuid = null;
+
+  /**
+   * The spell list's client-side filters (name search, spell level, school). They filter the DOM
+   * directly, but every spell click re-renders the stage and rebuilds the controls — so the
+   * values live here and the shell restores them after each render rather than letting them
+   * reset. Cleared only with the window.
+   */
+  spellSearch = "";
+  spellLevelFilter = "";
+  spellSchoolFilter = "";
 
   /**
    * Phase 4b spell swaps: an owned cantrip / leveled spell the player has marked to replace this
@@ -108,8 +119,8 @@ export class LevelUpState {
   }
 
   /**
-   * Whether a post-commit spell step should be appended: the leveled class is a caster and this
-   * level-up opened new cantrip or prepared-spell capacity.
+   * Whether a spell step should appear (between the level screens and the review): the leveled
+   * class is a caster and this level-up opened new cantrip or prepared-spell capacity.
    * @returns {boolean}
    */
   hasSpellStep() {
@@ -144,6 +155,39 @@ export class LevelUpState {
   /** The spell-grant ability decisions (a species lineage spell at a class level). */
   get grantSteps() {
     return this.driver.grantSteps;
+  }
+
+  /**
+   * Whether the player has actually made a decision yet — used by the shell to decide if closing
+   * before Apply deserves a "discard this level-up?" confirmation. Pre-seeded defaults (average
+   * hit points, a granted spell's default casting ability) don't count; anything the player
+   * picked, rolled, or spent does.
+   * @returns {boolean}
+   */
+  hasPlayerInput() {
+    const d = this.driver;
+    return this.hasStagedSpells()
+      || this.hpSteps.some(r => r.mode !== "avg")
+      || this.subclassSteps.some(r => d.subclassState(r).chosen)
+      || this.traitSteps.some(r => d.traitState(r).chosen.size > 0)
+      || this.choiceSteps.some(r => {
+        const st = d.choiceState(r);
+        return st.selected.size > 0 || !!st.replacing;
+      })
+      || this.asiSteps.some(r => {
+        const st = d.asiState(r);
+        return st.type === "feat" || st.assigned > 0;
+      });
+  }
+
+  /**
+   * Whether the spell step holds staged, unsaved picks (or a marked swap) that closing the
+   * window would silently discard.
+   * @returns {boolean}
+   */
+  hasStagedSpells() {
+    return this.selectedCantrips.length > 0 || this.selectedSpells.length > 0
+      || !!this.swapCantrip || !!this.swapSpell;
   }
 
   /**

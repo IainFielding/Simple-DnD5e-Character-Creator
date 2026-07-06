@@ -409,15 +409,14 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   letter-spacing: 0.06em;
   border: none;
 }
-/* Illuminated-capital accent: a slim violet bar leading the step title. */
+/* Illuminated-capital accent: a slim gold bar leading the step title. */
 .creator-stage-head h1::before {
   content: "";
   flex: 0 0 auto;
   width: 4px;
   height: 1.4em;
   border-radius: 2px;
-  background: linear-gradient(180deg, var(--cc-accent), var(--cc-gold));
-  box-shadow: 0 0 8px var(--cc-accent-glow);
+  background: var(--cc-gold);
 }
 .creator-stage-pos {
   color: var(--cc-muted);
@@ -2159,6 +2158,67 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
    hit-points step introduces its own controls. The sheet-header fallback button (shown only
    when the world disables native advancements) lives outside the window, like the launch one. */
 
+/* ------------------------------ Level-up review
+
+   Reuses the creation review's portrait / score-strip / origin-column layout. The column count
+   flexes with however many origins have something to show (each class, plus species/background
+   when they gained something); the levelled class is framed and glowing so a multiclass
+   character reads at a glance which part of the sheet moved. */
+
+/* Column tracks size to their content count rather than stretching: a lone class block stays a
+   readable card width, two or three sit side by side, and the set is centered in the stage. */
+.creator-levelup-columns {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 420px));
+  justify-content: center;
+}
+
+/* The levelled class keeps the creation columns' quiet look; its gold top rule doubles up
+   (like an inscription's rule) instead of shouting with a filled, glowing frame. */
+.creator-levelup-columns .creator-review-block.is-leveled {
+  border-top: 6px double var(--cc-gold);
+}
+
+/* The level tag under an origin's name: quiet for an unchanged class, gold for the level jump. */
+.creator-levelup-lvlbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.65rem;
+  border: 1px solid var(--cc-line-2);
+  border-radius: 999px;
+  background: var(--cc-panel-2);
+  font-size: 0.78rem;
+  color: var(--cc-muted);
+}
+.creator-levelup-lvlbadge.is-hot {
+  border-color: var(--cc-gold);
+  background: var(--cc-gold);
+  color: #1a1206;
+  font-weight: 700;
+}
+
+/* "New" pill marking what this level-up granted. */
+.creator-new-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--cc-gold);
+  color: #1a1206;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Feature/spell chips: a gained entry gets a soft gold frame so it stands out from the known set. */
+.creator-levelup-featlist li.is-new {
+  padding: 0.2rem 0.55rem 0.2rem 0.35rem;
+  border: 1px solid var(--cc-gold);
+  border-radius: 999px;
+  background: var(--cc-select-soft);
+}
+
 .creator-step-intro {
   margin: 0 0 1.25rem;
   color: var(--cc-text);
@@ -2276,8 +2336,27 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-hp-input { appearance: textfield; -moz-appearance: textfield; }
 .creator-hp-input::-webkit-outer-spin-button,
 .creator-hp-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+/* The GM's HP mode can make the box display-only; keep it legible, just not interactive. */
+.creator-hp-input[readonly] { pointer-events: none; border-color: var(--cc-line-2); }
 
-.sogrom-levelup-btn {
+/* The "+2 Con = 9 HP" line under the die value, tying the row's numbers to the review's total. */
+.creator-hp-con {
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* "Level Up" in the dnd5e sheet header: a .gold-button icon sitting with the short/long rest
+   pair, so it needs no styling of its own — but the character sheet's button row is absolutely
+   positioned with no spare room, so shift it left one icon-width to fit. The Action Tracker
+   module shifts the same row by two icons (-76px, .sogrom-has-tracker); when both are present
+   the combined rule wins on specificity and adds the widths together. */
+.dnd5e2.character .sheet-header-buttons.sogrom-has-levelup { transform: translateX(-38px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-levelup { transform: translateX(-114px); }
+
+/* Fallback placement for sheets without the v2 header row: a labelled title-bar button. */
+.sogrom-levelup-btn--window {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
