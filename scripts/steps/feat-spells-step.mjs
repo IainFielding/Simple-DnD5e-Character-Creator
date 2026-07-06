@@ -161,10 +161,10 @@ export const featSpellsStep = {
  * the Player's Handbook module's advancement-less feat as well as the system's advancement-carrying
  * one. Keyed `${source}:${featUuid}` so a feat grantable from two origins stays distinct.
  * @param {import("../state/creator-state.mjs").CreatorState} state
- * @param {import("../data/source-index.mjs").SourceIndex} source
+ * @param {import("../data/source-index.mjs").SourceIndex} _source Unused; kept for call-site parity.
  * @returns {Promise<object[]>}
  */
-export async function resolveFeatSpells(state, source) {
+export async function resolveFeatSpells(state, _source) {
   const grants = [];
   const seen = new Set();
   for ( const [key, field] of [["class", "classUuid"], ["background", "backgroundUuid"], ["species", "speciesUuid"]] ) {
