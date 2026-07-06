@@ -1,10 +1,17 @@
-{{!-- Level-up review screen: read-only summary of what this level-up granted (HP gained, ability
-      increases, weapon masteries, new features). No actions — "Apply" is in the stage footer.
-      Data from lvl-review-step.mjs context(), computed by diffing the driver's clone against the actor. --}}
+{{!-- Level-up review screen: read-only summary of what this level-up granted (subclass, HP gained,
+      ability increases, proficiency bonus, spell slots, weapon masteries, scale-value bumps, new
+      features). No actions — "Apply" is in the stage footer. Data from lvl-review-step.mjs
+      context(), computed by diffing the driver's clone against the actor. --}}
 <section class="creator-review creator-levelup-review">
   <div class="creator-review-block">
     <h2>{{title}}</h2>
     <ul class="creator-trait-list">
+      {{#if hasSubclasses}}
+      <li class="creator-trait">
+        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.subclass.label"}}</span>
+        <span class="creator-trait-value">{{subclasses}}</span>
+      </li>
+      {{/if}}
       <li class="creator-trait">
         <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.label"}}</span>
         <span class="creator-trait-value">{{hpLabel}}</span>
@@ -17,12 +24,32 @@
         </span>
       </li>
       {{/if}}
+      {{#if profChanged}}
+      <li class="creator-trait">
+        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.review.profBonus"}}</span>
+        <span class="creator-trait-value">{{profLabel}}</span>
+      </li>
+      {{/if}}
+      {{#if slots.length}}
+      <li class="creator-trait">
+        <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.review.spellSlots"}}</span>
+        <span class="creator-trait-value">
+          {{#each slots}}<span class="creator-review-val">{{label}} {{change}}</span>{{/each}}
+        </span>
+      </li>
+      {{/if}}
       {{#if hasMasteries}}
       <li class="creator-trait">
         <span class="creator-trait-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.traits.label"}}</span>
         <span class="creator-trait-value">{{masteries}}</span>
       </li>
       {{/if}}
+      {{#each scales}}
+      <li class="creator-trait">
+        <span class="creator-trait-label">{{label}}</span>
+        <span class="creator-trait-value">{{change}}</span>
+      </li>
+      {{/each}}
     </ul>
   </div>
 

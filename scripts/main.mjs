@@ -81,6 +81,21 @@ function registerSettings() {
       "creation-levelup": t("settings.mode.creationLevelup")
     }
   });
+  game.settings.register(MODULE_ID, SETTINGS.levelUpHpMode, {
+    name: t("settings.levelUpHpMode.name"),
+    hint: t("settings.levelUpHpMode.hint"),
+    scope: "world", config: true, type: String, default: DEFAULTS.levelUpHpMode,
+    choices: {
+      "choice": t("settings.levelUpHpMode.choice"),
+      "average-roll": t("settings.levelUpHpMode.averageRoll"),
+      "average": t("settings.levelUpHpMode.average")
+    }
+  });
+  game.settings.register(MODULE_ID, SETTINGS.levelUpHpRollToChat, {
+    name: t("settings.levelUpHpRollToChat.name"),
+    hint: t("settings.levelUpHpRollToChat.hint"),
+    scope: "world", config: true, type: Boolean, default: DEFAULTS.levelUpHpRollToChat
+  });
 }
 
 /* -------------------------------------------- */

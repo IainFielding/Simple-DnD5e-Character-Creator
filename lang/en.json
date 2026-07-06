@@ -52,9 +52,18 @@
       },
       "nav": {
         "apply": "Apply Level-Up",
-        "done": "Done"
+        "done": "Done",
+        "close": "Close"
       },
       "button": "Level Up",
+      "cancel": {
+        "title": "Discard this level-up?",
+        "body": "Nothing has been applied to your character yet. If you close now, everything you've chosen here — hit points, features, and other picks — will be discarded."
+      },
+      "cancelSpells": {
+        "title": "Close without adding spells?",
+        "body": "The level-up itself has already been applied and will be kept, but the spells you've selected here have not been saved yet. Close anyway? You can still add spells from the character sheet later."
+      },
       "notify": {
         "applyFailed": "Level-up could not be applied. See the console for details.",
         "spellsFailed": "The chosen spells could not be added. The level-up itself was applied — add them from the sheet.",
@@ -75,7 +84,8 @@
           "roll": "Roll {die}",
           "custom": "Enter Manually",
           "gained": "Hit Points Gained",
-          "thisLevel": "This level:"
+          "thisLevel": "This level:",
+          "conBreakdown": "{con} Con = {total} HP"
         },
         "choices": {
           "label": "Features",
@@ -118,7 +128,10 @@
           "label": "Review",
           "gained": "{class}: Level {from} → {to}",
           "hp": "+{gain} (new maximum {max})",
-          "features": "New Features"
+          "features": "New Features",
+          "profBonus": "Proficiency Bonus",
+          "spellSlots": "Spell Slots",
+          "pactSlots": "Pact Magic"
         },
         "spells": {
           "label": "Spells",
@@ -417,6 +430,17 @@
         "hint": "Whether the module also takes over the level-up experience. Creation only leaves levelling to the system; Creation + Level-Up re-skins the system's level-up for a calmer, one-decision-per-screen flow.",
         "creation": "Creation only",
         "creationLevelup": "Creation + Level-Up"
+      },
+      "levelUpHpMode": {
+        "name": "Level-up hit points",
+        "hint": "Which hit-point options players see when levelling up. Player's choice also offers taking the maximum or typing a value; Average or roll matches the written rules; Average only applies the average automatically.",
+        "choice": "Player's choice (average, max, roll, or manual)",
+        "averageRoll": "Average or roll",
+        "average": "Average only"
+      },
+      "levelUpHpRollToChat": {
+        "name": "Post hit-die rolls to chat",
+        "hint": "When a player rolls hit points during a level-up, also post the roll to chat so the whole table can see the result."
       }
     }
   }

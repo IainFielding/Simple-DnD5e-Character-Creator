@@ -37,7 +37,9 @@ export const SETTINGS = {
   pointBuyBudget: "pointBuyBudget",
   rollFormula: "abilityRollFormula",
   displayMode: "displayMode",
-  mode: "mode"
+  mode: "mode",
+  levelUpHpMode: "levelUpHpMode",
+  levelUpHpRollToChat: "levelUpHpRollToChat"
 };
 
 // The fallback value for each setting, used when the world hasn't overridden it (and as
@@ -46,8 +48,37 @@ export const DEFAULTS = {
   pointBuyBudget: 27,
   rollFormula: "4d6kh3",
   displayMode: "fullscreen",
-  mode: "creation"
+  mode: "creation",
+  levelUpHpMode: "choice",
+  levelUpHpRollToChat: false
 };
+
+/**
+ * The valid values of the level-up hit-point mode setting, from most to least permissive:
+ *  - `"choice"`       — average, roll, max, or a manually-typed value (the module's original behaviour).
+ *  - `"average-roll"` — average or roll only (the 2024 rules as written); no max, no manual entry.
+ *  - `"average"`      — average only; the buttons collapse to a single pre-made decision.
+ */
+export const HP_MODES = ["choice", "average-roll", "average"];
+
+/**
+ * How much freedom players get on the level-up hit-point decision, per the world setting.
+ * Guards against an unknown stored value by falling back to the default.
+ * @returns {"choice"|"average-roll"|"average"}
+ */
+export function levelUpHpMode() {
+  const raw = game.settings.get(MODULE_ID, SETTINGS.levelUpHpMode);
+  return HP_MODES.includes(raw) ? raw : DEFAULTS.levelUpHpMode;
+}
+
+/**
+ * Whether a level-up hit-die roll should also post the system's roll card to chat, so the
+ * table can see the result — off by default to keep the wizard quiet.
+ * @returns {boolean}
+ */
+export function levelUpHpRollToChat() {
+  return !!game.settings.get(MODULE_ID, SETTINGS.levelUpHpRollToChat);
+}
 
 /**
  * Whether the module owns the level-up experience as well as creation, per the `mode`

@@ -1,4 +1,4 @@
-import { log } from "../config.mjs";
+import { log, levelUpHpRollToChat } from "../config.mjs";
 import { phbWeaponIcon } from "../data/weapon-source.mjs";
 
 /**
@@ -331,16 +331,19 @@ export class LevelUpDriver {
 
   /**
    * Roll this class's hit die on the clone and return the rolled total, leaving the decision
-   * applied. Mirrors {@link HitPointsFlow} but suppresses the chat card (the wizard shows the
-   * result inline; a roll message would be noise mid-flow).
+   * applied. Mirrors {@link HitPointsFlow}, but the chat card is the GM's call (the
+   * `levelUpHpRollToChat` world setting): off by default so the wizard shows the result inline
+   * without mid-flow chat noise, on when the table wants the roll visible to everyone.
    * @param {object} record   One of {@link hpSteps}.
    * @returns {Promise<number>}
    */
   async rollHitPoints(record) {
-    const roll = await this.clone.rollClassHitPoints(record.item, { chatMessage: false });
-    // Show the Dice So Nice 3D animation (if installed) without spamming chat, then take the
-    // result. Awaiting lets the dice settle before the value updates on screen.
-    if ( roll && game.dice3d ) {
+    const toChat = levelUpHpRollToChat();
+    const roll = await this.clone.rollClassHitPoints(record.item, { chatMessage: toChat });
+    // Without a chat card, show the Dice So Nice 3D animation (if installed) ourselves; with one,
+    // Dice So Nice already animates the message's roll. Awaiting lets the dice settle before the
+    // value updates on screen.
+    if ( roll && game.dice3d && !toChat ) {
       try { await game.dice3d.showForRoll(roll, game.user, true); } catch ( err ) { log("dice animation failed", err); }
     }
     const total = roll?.total ?? record.average;

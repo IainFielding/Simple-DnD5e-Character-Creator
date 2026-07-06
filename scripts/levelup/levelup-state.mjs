@@ -147,6 +147,38 @@ export class LevelUpState {
   }
 
   /**
+   * Whether the player has actually made a decision yet — used by the shell to decide if closing
+   * before Apply deserves a "discard this level-up?" confirmation. Pre-seeded defaults (average
+   * hit points, a granted spell's default casting ability) don't count; anything the player
+   * picked, rolled, or spent does.
+   * @returns {boolean}
+   */
+  hasPlayerInput() {
+    const d = this.driver;
+    return this.hpSteps.some(r => r.mode !== "avg")
+      || this.subclassSteps.some(r => d.subclassState(r).chosen)
+      || this.traitSteps.some(r => d.traitState(r).chosen.size > 0)
+      || this.choiceSteps.some(r => {
+        const st = d.choiceState(r);
+        return st.selected.size > 0 || !!st.replacing;
+      })
+      || this.asiSteps.some(r => {
+        const st = d.asiState(r);
+        return st.type === "feat" || st.assigned > 0;
+      });
+  }
+
+  /**
+   * Whether the post-commit spell step holds staged, unsaved picks (or a marked swap) that
+   * closing the window would silently discard.
+   * @returns {boolean}
+   */
+  hasStagedSpells() {
+    return this.selectedCantrips.length > 0 || this.selectedSpells.length > 0
+      || !!this.swapCantrip || !!this.swapSpell;
+  }
+
+  /**
    * The gained character levels that each get a screen, in ascending order. Every gained level
    * grants at least hit points, so the decisions across all arrays define the set; a choice
    * revealed later (a subclass feature, a feat's grant) carries the screen level it belongs to and

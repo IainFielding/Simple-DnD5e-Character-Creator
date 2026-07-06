@@ -4,7 +4,7 @@ import { SourceIndex } from "../data/source-index.mjs";
 import { SpellSource } from "../data/spell-source.mjs";
 import { applyLevelUpSpells, spellChanges } from "./steps/lvl-spells-step.mjs";
 
-const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 /**
  * The level-up window. Like the creator's shell it is deliberately thin — it owns navigation
@@ -98,7 +98,9 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
     return {
       loading: false,
       version: game.modules.get(MODULE_ID)?.version ?? "",
-      cancelLabel: t("nav.cancel"),
+      // Pre-commit the button really does cancel the level-up; once committed it only closes the
+      // window (the level is already applied), so it must not promise an undo it can't deliver.
+      cancelLabel: this.state.committed ? t("levelup.nav.close") : t("nav.cancel"),
       rail: this.#railContext(flags),
       step: {
         id: step.id,
@@ -259,7 +261,7 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#current = spellIndex;
       return this.render();
     }
-    await this.close();
+    await this.close({ force: true });
     this.state.actor?.sheet?.render(true);
   }
 
@@ -276,12 +278,42 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
       ui.notifications?.error(t("levelup.notify.spellsFailed"));
       return;
     }
-    await this.close();
+    await this.close({ force: true });
     actor?.sheet?.render(true);
   }
 
   static #onCancel() {
     this.close();
+  }
+
+  /**
+   * Confirm before a close that would lose the player's work. Every exit path funnels through
+   * here — the Cancel/Close button, the window frame's close, Escape, and programmatic closes.
+   * Two distinct situations warrant a prompt:
+   *  - **Pre-commit** with decisions made: closing discards the whole level-up (that's safe — the
+   *    real actor was never touched — but rolled HP and picked features silently vanish).
+   *  - **Post-commit** with staged spell picks: the level itself is already applied and kept, but
+   *    the spells chosen on the spell step would be lost.
+   * The internal completion paths pass `force` because their work is already saved; an untouched
+   * window (or a pre-seeded one the player never interacted with) closes without ceremony.
+   * @override
+   */
+  async close(options = {}) {
+    if ( !options.force ) {
+      let confirmKey = null;
+      if ( !this.state.committed && this.state.hasPlayerInput() ) confirmKey = "levelup.cancel";
+      else if ( this.state.committed && this.state.hasStagedSpells() ) confirmKey = "levelup.cancelSpells";
+      if ( confirmKey ) {
+        const proceed = await DialogV2.confirm({
+          window: { title: t(`${confirmKey}.title`), icon: "fa-solid fa-triangle-exclamation" },
+          content: `<p>${t(`${confirmKey}.body`)}</p>`,
+          modal: true,
+          rejectClose: false
+        });
+        if ( !proceed ) return this;
+      }
+    }
+    return super.close(options);
   }
 
   /**

@@ -50,6 +50,17 @@ export const lvlReviewStep = {
       .map(k => dnd5e.documents.Trait.keyLabel(`weapon:${k}`) || k)
       .sort((a, b) => a.localeCompare(b, game.i18n.lang));
 
+    // The subclass chosen this level-up — it also appears among the gained items, but it's the
+    // defining pick of the level, so call it out as its own line.
+    const subclasses = state.subclassSteps
+      .map(r => driver.subclassState(r))
+      .filter(s => s.chosen)
+      .map(s => s.name);
+
+    // Proficiency bonus change (character levels 5/9/13/17).
+    const profNow = clone.system?.attributes?.prof ?? 0;
+    const profWas = actor.system?.attributes?.prof ?? 0;
+
     return {
       title: t("levelup.step.review.gained", {
         class: state.classItem?.name ?? "",
@@ -57,8 +68,14 @@ export const lvlReviewStep = {
         to: state.toLevel
       }),
       hpLabel: t("levelup.step.review.hp", { gain: hpGain, max: hpMax }),
+      subclasses: subclasses.join(", "),
+      hasSubclasses: subclasses.length > 0,
       abilities,
       hasAbilities: abilities.length > 0,
+      profLabel: `+${profWas} → +${profNow}`,
+      profChanged: profNow !== profWas,
+      slots: slotChanges(clone, actor),
+      scales: scaleChanges(clone, actor, state),
       masteries: masteries.join(", "),
       hasMasteries: masteries.length > 0,
       gained,
@@ -66,3 +83,65 @@ export const lvlReviewStep = {
     };
   }
 };
+
+/**
+ * Spell-slot changes this level-up: each leveled slot rank whose maximum moved, plus Pact Magic,
+ * diffed between the clone's and the actor's derived spellcasting data.
+ * @returns {{label: string, change: string}[]}
+ */
+function slotChanges(clone, actor) {
+  const now = clone.system?.spells ?? {};
+  const was = actor.system?.spells ?? {};
+  const changes = [];
+  for ( let l = 1; l <= 9; l++ ) {
+    const to = now[`spell${l}`]?.max ?? 0;
+    const from = was[`spell${l}`]?.max ?? 0;
+    if ( to !== from ) changes.push({
+      label: CONFIG.DND5E?.spellLevels?.[l] ?? String(l),
+      change: `${from} → ${to}`
+    });
+  }
+  // Pact Magic moves on two axes — slot count and slot level — so report either changing.
+  const pactTo = now.pact ?? {};
+  const pactFrom = was.pact ?? {};
+  if ( ((pactTo.max ?? 0) !== (pactFrom.max ?? 0)) || ((pactTo.level ?? 0) !== (pactFrom.level ?? 0)) ) {
+    const levelLabel = CONFIG.DND5E?.spellLevels?.[pactTo.level] ?? "";
+    changes.push({
+      label: t("levelup.step.review.pactSlots"),
+      change: `${pactFrom.max ?? 0} → ${pactTo.max ?? 0}${levelLabel ? ` (${levelLabel})` : ""}`
+    });
+  }
+  return changes;
+}
+
+/**
+ * Scale-value bumps this level-up (Sneak Attack dice, Rage uses, Channel Divinity…): every
+ * ScaleValue advancement on the levelled class — and any subclass of it on the clone — whose
+ * display changes between the old and new class level. A subclass added *this* level-up has no
+ * "before", so only what it now grants is shown.
+ * @returns {{label: string, change: string}[]}
+ */
+function scaleChanges(clone, actor, state) {
+  if ( !state.classItem ) return [];
+  const cloneClass = clone.items.get(state.classItem.id);
+  if ( !cloneClass ) return [];
+  const oldLevel = actor.items.get(state.classItem.id)?.system?.levels ?? 0;
+  const newLevel = cloneClass.system?.levels ?? oldLevel;
+
+  // Subclass scale values are keyed by the base class's level, so both diff over the same range.
+  const items = [cloneClass, ...clone.items.filter(i =>
+    (i.type === "subclass") && (i.system?.classIdentifier === cloneClass.system?.identifier))];
+
+  const changes = [];
+  for ( const item of items ) {
+    const isNew = !actor.items.get(item.id);
+    for ( const adv of Object.values(item.advancement?.byId ?? {}) ) {
+      if ( adv.type !== "ScaleValue" ) continue;
+      const before = isNew ? null : (adv.valueForLevel(oldLevel)?.display ?? null);
+      const after = adv.valueForLevel(newLevel)?.display ?? null;
+      if ( !after || before === after ) continue;
+      changes.push({ label: adv.title, change: before ? `${before} → ${after}` : after });
+    }
+  }
+  return changes.sort((a, b) => a.label.localeCompare(b.label, game.i18n.lang));
+}

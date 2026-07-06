@@ -2276,6 +2276,16 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-hp-input { appearance: textfield; -moz-appearance: textfield; }
 .creator-hp-input::-webkit-outer-spin-button,
 .creator-hp-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+/* The GM's HP mode can make the box display-only; keep it legible, just not interactive. */
+.creator-hp-input[readonly] { pointer-events: none; border-color: var(--cc-line-2); }
+
+/* The "+2 Con = 9 HP" line under the die value, tying the row's numbers to the review's total. */
+.creator-hp-con {
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  text-align: center;
+  white-space: nowrap;
+}
 
 .sogrom-levelup-btn {
   display: inline-flex;
