@@ -81,6 +81,11 @@ function registerSettings() {
       "creation-levelup": t("settings.mode.creationLevelup")
     }
   });
+  game.settings.register(MODULE_ID, SETTINGS.levelUpButton, {
+    name: t("settings.levelUpButton.name"),
+    hint: t("settings.levelUpButton.hint"),
+    scope: "world", config: true, type: Boolean, default: DEFAULTS.levelUpButton
+  });
   game.settings.register(MODULE_ID, SETTINGS.levelUpHpMode, {
     name: t("settings.levelUpHpMode.name"),
     hint: t("settings.levelUpHpMode.hint"),

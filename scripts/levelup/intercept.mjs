@@ -1,16 +1,19 @@
-import { tpl, t, log, levelUpEnabled, heroMancerActive, launchWindowOptions } from "../config.mjs";
+import { MODULE_ID, SETTINGS, tpl, t, log, levelUpEnabled, heroMancerActive, launchWindowOptions } from "../config.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
 import { LevelUpShell } from "./levelup-shell.mjs";
 
 /**
- * Wires up the level-up takeover (§4). Two mutually-exclusive trigger paths:
+ * Wires up the level-up takeover (§4). Two trigger paths:
  *
  *  - **Primary** — `dnd5e.preAdvancementManagerRender` fires before the native manager draws.
  *    When the world leaves native advancements enabled (the default), every level-up funnels
  *    through here; we claim the ones we can drive and suppress the native UI by returning false.
- *  - **Fallback** — a sheet button, shown only when the world has *disabled* native advancements
- *    (so no manager is ever built). Without it there would be no entry point at all.
+ *  - **Sheet button** — a "Level Up" button in the character sheet's header, the flow's front
+ *    door (togglable via the `showLevelUpButton` setting). With native advancements enabled it
+ *    routes through the system's own AdvancementManager — so the primary hook claims it exactly
+ *    as if the sheet's level selector was used; with them disabled world-wide (no manager is
+ *    ever built) it constructs one by hand and drives it directly.
  *
  * Both paths self-gate on the `mode` setting and stand down entirely when Hero Mancer is active.
  * Call once, at `ready`.
@@ -123,43 +126,105 @@ async function launchLevelUp(manager) {
 }
 
 /* -------------------------------------------- */
-/*  Fallback path — sheet button                */
+/*  Sheet button                                */
 /* -------------------------------------------- */
 
 /**
- * When native advancements are disabled world-wide, the system never builds a manager, so the
- * primary hook can't fire — inject a launch button instead. Limited to single-class characters
- * for Phase 1 (multiclassing is Phase 5); a multiclass actor simply shows no button here.
+ * Inject the "Level Up" button into the character sheet — the flow's front door, so a player
+ * never has to know about the class-level selector buried in the sheet. It sits in the header's
+ * rest-button row as a gold icon button matching short/long rest (tooltip on hover); a sheet
+ * without that row (a legacy sheet) gets a labelled title-bar button instead. Hidden when the
+ * module mode leaves levelling to the system, when the world setting turns the button off, when
+ * Hero Mancer owns the space, and when there is nothing to level (no class yet, or already at
+ * the level cap).
  * @param {Application} app
  * @param {HTMLElement|jQuery} html
  */
 function onRenderActorSheet(app, html) {
   if ( !levelUpEnabled() || heroMancerActive() ) return;
-  if ( !game.settings.get("dnd5e", "disableAdvancements") ) return;   // primary hook covers the normal case
+  if ( !game.settings.get(MODULE_ID, SETTINGS.levelUpButton) ) return;
   const actor = app?.actor;
   if ( actor?.type !== "character" || !actor.isOwner ) return;
 
-  const classes = actor.items.filter(i => i.type === "class");
-  if ( classes.length !== 1 ) return;                                  // multiclass: defer to Phase 5
+  if ( !actor.items.some(i => i.type === "class") ) return;            // nothing to level yet
+  if ( (actor.system?.details?.level ?? 0) >= (CONFIG.DND5E?.maxLevel ?? 20) ) return;
 
   const root = html instanceof HTMLElement ? html : html?.[0];
-  const header = root?.querySelector(".window-header");
-  if ( !header || header.querySelector(".sogrom-levelup-btn") ) return;
+  if ( !root || root.querySelector(".sogrom-levelup-btn") ) return;
 
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "sogrom-levelup-btn";
-  button.innerHTML = `<i class="fa-solid fa-angles-up"></i> ${t("levelup.button")}`;
   button.addEventListener("click", ev => {
     ev.preventDefault();
-    launchFromButton(actor, classes[0]);
+    levelUpFromButton(actor);
   });
-  header.prepend(button);
+
+  const row = root.querySelector(".sheet-header-buttons");
+  if ( row ) {
+    // Match the rest buttons exactly: a .gold-button icon whose empty data-tooltip makes the
+    // tooltip system fall back to the aria-label, just like the system's own header buttons.
+    button.className = "sogrom-levelup-btn gold-button";
+    button.dataset.tooltip = "";
+    button.setAttribute("aria-label", t("levelup.button"));
+    button.innerHTML = "<i class=\"fa-solid fa-trophy-star\" inert></i>";
+    row.append(button);
+    // The row is absolutely positioned with no spare room; this class shifts it left one
+    // icon-width (see creator.css, which also handles the Action Tracker module's own shift).
+    row.classList.add("sogrom-has-levelup");
+  } else {
+    const header = root.querySelector(".window-header");
+    if ( !header ) return;
+    button.className = "sogrom-levelup-btn sogrom-levelup-btn--window";
+    button.innerHTML = `<i class="fa-solid fa-trophy-star"></i> ${t("levelup.button")}`;
+    header.prepend(button);
+  }
 }
 
 /**
- * Build a level-change manager by hand (the system would normally do this) and drive it, so the
- * fallback button reaches the same takeover as the primary path.
+ * Level one class up from the button. A multiclass character picks which class gains the level;
+ * the click then follows the same path as the sheet's own level selector (see dnd5e's
+ * `BaseActorSheet##changeLevel`): build the level-change manager and render it when it has steps
+ * — which fires the primary hook, claiming a drivable level-up for our wizard and leaving an
+ * unsupported one to the native UI — or apply the bare level directly when there is nothing to
+ * decide. Advancements disabled world-wide is the exception: no native flow exists at all, so
+ * the manager is driven by hand ({@link launchFromButton}).
+ * @param {Actor5e} actor
+ */
+async function levelUpFromButton(actor) {
+  const classes = actor.items.filter(i => i.type === "class");
+  const classItem = classes.length === 1 ? classes[0] : await pickClass(classes);
+  if ( !classItem ) return;
+
+  if ( game.settings.get("dnd5e", "disableAdvancements") ) return launchFromButton(actor, classItem);
+
+  const AdvancementManager = dnd5e.applications.advancement.AdvancementManager;
+  const manager = AdvancementManager.forLevelChange(actor, classItem.id, 1);
+  if ( manager.steps.length ) return manager.render({ force: true });
+  return classItem.update({ "system.levels": (classItem.system?.levels ?? 0) + 1 });
+}
+
+/**
+ * Ask which class gains the level — one button per class, showing its current level.
+ * @param {Item5e[]} classes
+ * @returns {Promise<Item5e|null>}  The chosen class, or null when the dialog was dismissed.
+ */
+async function pickClass(classes) {
+  const { DialogV2 } = foundry.applications.api;
+  const choice = await DialogV2.wait({
+    window: { title: t("levelup.chooseClass.title"), icon: "fa-solid fa-trophy-star" },
+    content: `<p>${t("levelup.chooseClass.body")}</p>`,
+    buttons: classes.map(c => ({
+      action: c.id,
+      label: `${c.name} ${c.system?.levels ?? ""}`.trim()
+    })),
+    rejectClose: false
+  }).catch(() => null);
+  return classes.find(c => c.id === choice) ?? null;
+}
+
+/**
+ * Build a level-change manager by hand (the system would normally do this) and drive it — the
+ * path for worlds that disabled native advancements, where no manager would otherwise exist.
  * @param {Actor5e} actor
  * @param {Item5e} classItem
  */

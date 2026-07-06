@@ -54,6 +54,10 @@
         "apply": "Apply Level-Up"
       },
       "button": "Level Up",
+      "chooseClass": {
+        "title": "Level Up Which Class?",
+        "body": "Choose the class that gains this level."
+      },
       "cancel": {
         "title": "Discard this level-up?",
         "body": "Nothing has been applied to your character yet. If you close now, everything you've chosen here — hit points, features, spells, and other picks — will be discarded."
@@ -429,9 +433,13 @@
       },
       "mode": {
         "name": "Module mode",
-        "hint": "Whether the module also takes over the level-up experience. Creation only leaves levelling to the system; Creation + Level-Up re-skins the system's level-up for a calmer, one-decision-per-screen flow.",
+        "hint": "Whether the module also takes over the level-up experience. Creation + Level-Up (the default) re-skins the system's level-up for a calmer, one-screen-per-level flow; Creation only leaves levelling to the system.",
         "creation": "Creation only",
         "creationLevelup": "Creation + Level-Up"
+      },
+      "levelUpButton": {
+        "name": "Show Level Up button",
+        "hint": "Adds a “Level Up” button to the character sheet's header for the character's owner. Levelling through the sheet's own class controls still works either way."
       },
       "levelUpHpMode": {
         "name": "Level-up hit points",

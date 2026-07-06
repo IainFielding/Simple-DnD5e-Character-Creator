@@ -38,6 +38,7 @@ export const SETTINGS = {
   rollFormula: "abilityRollFormula",
   displayMode: "displayMode",
   mode: "mode",
+  levelUpButton: "showLevelUpButton",
   levelUpHpMode: "levelUpHpMode",
   levelUpHpRollToChat: "levelUpHpRollToChat"
 };
@@ -48,7 +49,8 @@ export const DEFAULTS = {
   pointBuyBudget: 27,
   rollFormula: "4d6kh3",
   displayMode: "fullscreen",
-  mode: "creation",
+  mode: "creation-levelup",
+  levelUpButton: false,
   levelUpHpMode: "choice",
   levelUpHpRollToChat: false
 };
@@ -82,9 +84,9 @@ export function levelUpHpRollToChat() {
 
 /**
  * Whether the module owns the level-up experience as well as creation, per the `mode`
- * world setting. `"creation"` (default) leaves the actor sheet and the native advancement
- * flow untouched; `"creation-levelup"` opts the table into the level-up takeover (§5 of the
- * level-up plan). Both level-up trigger paths are gated on this.
+ * world setting. `"creation-levelup"` (the default) opts the table into the level-up takeover
+ * (§5 of the level-up plan); `"creation"` leaves the actor sheet and the native advancement
+ * flow untouched. Both level-up trigger paths are gated on this.
  * @returns {boolean}
  */
 export function levelUpEnabled() {

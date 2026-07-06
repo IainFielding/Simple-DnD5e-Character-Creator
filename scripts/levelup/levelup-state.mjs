@@ -78,6 +78,16 @@ export class LevelUpState {
   focusedSpellUuid = null;
 
   /**
+   * The spell list's client-side filters (name search, spell level, school). They filter the DOM
+   * directly, but every spell click re-renders the stage and rebuilds the controls — so the
+   * values live here and the shell restores them after each render rather than letting them
+   * reset. Cleared only with the window.
+   */
+  spellSearch = "";
+  spellLevelFilter = "";
+  spellSchoolFilter = "";
+
+  /**
    * Phase 4b spell swaps: an owned cantrip / leveled spell the player has marked to replace this
    * level-up (the 2024 "swap one spell" rule). Marking one frees a slot in that bucket to learn a
    * different spell; on Finish the marked item is deleted only if the freed slot was actually used.

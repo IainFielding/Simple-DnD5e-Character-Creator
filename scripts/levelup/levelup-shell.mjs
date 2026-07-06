@@ -185,13 +185,23 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
     for ( const el of this.element.querySelectorAll("[data-step-change]") ) {
       el.addEventListener("change", ev => this.#dispatch(el.dataset.stepChange, ev.currentTarget));
     }
-    // Client-side spell-list filters on the spell step — search box plus the level/school dropdowns.
-    // All filter in the DOM without a re-render, so the search field keeps focus while typing.
-    const search = this.element.querySelector("[data-creator-search]");
-    if ( search ) search.addEventListener("input", () => this.#applySpellFilters());
-    for ( const sel of this.element.querySelectorAll("[data-spell-filter-level], [data-spell-filter-school]") ) {
-      sel.addEventListener("change", () => this.#applySpellFilters());
+    // Client-side spell-list filters on the spell step — search box plus the level/school
+    // dropdowns. All filter in the DOM without a re-render, so the search field keeps focus
+    // while typing; their values live on the state so the re-render a spell click causes
+    // restores them (a rebuilt control would otherwise reset to "show everything").
+    const filters = [
+      [this.element.querySelector("[data-creator-search]"), "spellSearch", "input"],
+      [this.element.querySelector("[data-spell-filter-level]"), "spellLevelFilter", "change"],
+      [this.element.querySelector("[data-spell-filter-school]"), "spellSchoolFilter", "change"]
+    ].filter(([el]) => el);
+    for ( const [el, key, event] of filters ) {
+      el.value = this.state[key];
+      el.addEventListener(event, () => {
+        this.state[key] = el.value;
+        this.#applySpellFilters();
+      });
     }
+    if ( filters.length ) this.#applySpellFilters();
   }
 
   /**

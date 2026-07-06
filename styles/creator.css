@@ -2347,7 +2347,16 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   white-space: nowrap;
 }
 
-.sogrom-levelup-btn {
+/* "Level Up" in the dnd5e sheet header: a .gold-button icon sitting with the short/long rest
+   pair, so it needs no styling of its own — but the character sheet's button row is absolutely
+   positioned with no spare room, so shift it left one icon-width to fit. The Action Tracker
+   module shifts the same row by two icons (-76px, .sogrom-has-tracker); when both are present
+   the combined rule wins on specificity and adds the widths together. */
+.dnd5e2.character .sheet-header-buttons.sogrom-has-levelup { transform: translateX(-38px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-levelup { transform: translateX(-114px); }
+
+/* Fallback placement for sheets without the v2 header row: a labelled title-bar button. */
+.sogrom-levelup-btn--window {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
