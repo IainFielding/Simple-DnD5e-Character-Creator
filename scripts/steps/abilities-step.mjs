@@ -1,4 +1,4 @@
-import { ABILITIES, MODULE_ID, abilityRollFormula, pointBuyBudget, t } from "../config.mjs";
+import { ABILITIES, MODULE_ID, abilityRollFormula, formatMod, pointBuyBudget, t } from "../config.mjs";
 
 // D&D 5e offers three ways to set ability scores; this panel supports all three:
 //   point-buy       – spend a budget of points to raise scores from 8, each step costing more
@@ -10,12 +10,6 @@ import { ABILITIES, MODULE_ID, abilityRollFormula, pointBuyBudget, t } from "../
 const POINT_BUY_COST = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
 const PB_MIN = 8;   // lowest score point-buy allows
 const PB_MAX = 15;  // highest score point-buy allows
-
-// The D&D ability modifier: (score - 10) / 2, rounded down, shown with an explicit + or - sign.
-const formatMod = score => {
-  const mod = Math.floor((score - 10) / 2);
-  return mod >= 0 ? `+${mod}` : `${mod}`;
-};
 
 const abilityLabel = key => CONFIG.DND5E?.abilities?.[key]?.label ?? key.toUpperCase();
 const abilityAbbr = key => CONFIG.DND5E?.abilities?.[key]?.abbreviation ?? key.slice(0, 3).toUpperCase();

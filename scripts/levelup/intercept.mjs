@@ -1,4 +1,4 @@
-import { MODULE_ID, SETTINGS, tpl, t, log, levelUpEnabled, heroMancerActive } from "../config.mjs";
+import { tpl, t, log, levelUpEnabled, heroMancerActive, launchWindowOptions } from "../config.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
 import { LevelUpShell } from "./levelup-shell.mjs";
@@ -115,7 +115,7 @@ async function launchLevelUp(manager) {
     const driver = new LevelUpDriver(manager);
     await driver.prepare();
     const state = new LevelUpState(manager.actor, driver);
-    new LevelUpShell(state, windowOptions()).render(true);
+    new LevelUpShell(state, launchWindowOptions()).render(true);
   } catch ( err ) {
     log("level-up takeover failed; the native advancement flow was suppressed", err);
     ui.notifications?.error(t("levelup.notify.takeoverFailed"));
@@ -177,26 +177,3 @@ function launchFromButton(actor, classItem) {
 /* -------------------------------------------- */
 /*  Window options                              */
 /* -------------------------------------------- */
-
-/**
- * ApplicationV2 options for the level-up window, honouring the same display-mode setting as the
- * creator so both windows feel identical (fullscreen vs a centred, resizable frame).
- * @returns {object}
- */
-function windowOptions() {
-  const windowed = game.settings.get(MODULE_ID, SETTINGS.displayMode) === "windowed";
-  if ( !windowed ) return { classes: ["sogrom-creator", "sogrom-creator-fullscreen"] };
-
-  const w = Math.min(1800, Math.round(window.innerWidth * 0.9));
-  const h = Math.min(1100, Math.round(window.innerHeight * 0.9));
-  return {
-    classes: ["sogrom-creator", "sogrom-creator-windowed"],
-    window: { frame: true, positioned: true, resizable: true },
-    position: {
-      width: w,
-      height: h,
-      top: Math.max(4, Math.round((window.innerHeight - h) / 2)),
-      left: Math.max(4, Math.round((window.innerWidth - w) / 2))
-    }
-  };
-}

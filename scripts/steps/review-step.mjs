@@ -1,4 +1,4 @@
-import { ABILITIES, t } from "../config.mjs";
+import { ABILITIES, formatMod, t } from "../config.mjs";
 import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
 import { resolveChoices, advancementArray, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
 import { resolveFeatSpells, grantedSpellCards } from "./feat-spells-step.mjs";
@@ -19,11 +19,6 @@ const ORIGIN_META = [
   { key: "background", field: "backgroundUuid", labelKey: "step.background.label", emptyKey: "step.review.noBackground" },
   { key: "species", field: "speciesUuid", labelKey: "step.species.label", emptyKey: "step.review.noSpecies" }
 ];
-
-const formatMod = score => {
-  const mod = Math.floor((score - 10) / 2);
-  return mod >= 0 ? `+${mod}` : `${mod}`;
-};
 
 /**
  * The filled identity/biography rows for the summary — only fields the player
