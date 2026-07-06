@@ -17,6 +17,17 @@ export const MODULE_ID = "sogrom-dnd5e-character-creator";
 /** Ability keys in canonical display order. */
 export const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 
+/**
+ * The D&D ability modifier for a score: (score - 10) / 2, rounded down, rendered with an
+ * explicit + or - sign (e.g. 16 → "+3", 8 → "-1").
+ * @param {number} score
+ * @returns {string}
+ */
+export function formatMod(score) {
+  const mod = Math.floor((score - 10) / 2);
+  return mod >= 0 ? `+${mod}` : `${mod}`;
+}
+
 // The string keys for every world setting this module registers with Foundry.
 // Centralising them here means the code that *registers* a setting and the code that
 // *reads* it always use the exact same key — no risk of a typo silently reading `undefined`.
@@ -111,4 +122,30 @@ export function abilityRollFormula() {
 /** Console logger namespaced to the module. */
 export function log(...args) {
   console.log(`${MODULE_ID} |`, ...args);
+}
+
+/**
+ * Resolve the ApplicationV2 options for a launch, based on the configured display mode, so the
+ * creator and level-up windows feel identical. Fullscreen covers the viewport with no chrome;
+ * windowed opens a themed, draggable, resizable frame at ~90% of the screen, centred.
+ * @returns {object}
+ */
+export function launchWindowOptions() {
+  const windowed = game.settings.get(MODULE_ID, SETTINGS.displayMode) === "windowed";
+  // Carry the base class explicitly: ApplicationV2 may replace (rather than merge)
+  // the static DEFAULT_OPTIONS.classes with the array passed here.
+  if ( !windowed ) return { classes: ["sogrom-creator", "sogrom-creator-fullscreen"] };
+
+  const w = Math.min(1800, Math.round(window.innerWidth * 0.9));
+  const h = Math.min(1100, Math.round(window.innerHeight * 0.9));
+  return {
+    classes: ["sogrom-creator", "sogrom-creator-windowed"],
+    window: { frame: true, positioned: true, resizable: true },
+    position: {
+      width: w,
+      height: h,
+      top: Math.max(4, Math.round((window.innerHeight - h) / 2)),
+      left: Math.max(4, Math.round((window.innerWidth - w) / 2))
+    }
+  };
 }

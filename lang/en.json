@@ -24,6 +24,7 @@
       "back": "Back",
       "next": "Next",
       "create": "Create Character",
+      "building": "Building your character…",
       "cancel": "Cancel",
       "position": "Step {current} of {total}",
       "incomplete": "Finish this step to continue.",

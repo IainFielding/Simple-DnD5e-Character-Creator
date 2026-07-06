@@ -528,10 +528,25 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   // guard that every required step is done, create the actor if we don't already have one, then
   // hand off to assembleActor() to write class/species/spells/equipment onto it. On any failure we
   // roll #finished back so the window stays open and the player can retry.
-  static async #onFinish() {
+  static async #onFinish(event, target) {
+    // A build takes seconds (actor create + advancement manager + many embedded writes), so guard
+    // against a second click landing while the first is still running — without this, the second
+    // pass sees state.actor still null and builds a whole second actor. #finished is our latch.
+    if ( this.#finished ) return;
     if ( !REQUIRED_STEPS.every(s => s.isComplete(this.state)) ) return;
     this.#finished = true;
+    // Tell the player work is happening, and make the button un-clickable for real (the latch above
+    // already blocks re-entry; this is the visible half of the same guard).
+    if ( target ) {
+      target.disabled = true;
+      target.textContent = t("nav.building");
+    }
     let actor = this.state.actor;
+    // Track whether *this* build created the actor. If assembleActor throws after Actor.create
+    // succeeded, we delete the half-built actor below so a retry starts from a clean slate instead
+    // of re-running assembly on top of the partial one (which duplicates every already-written item).
+    // A resumed character's actor pre-exists in state, so this stays false and we never delete it.
+    let createdActor = false;
     try {
       // The draft actor is created only now, at Create — so a cancelled build never leaves an
       // orphan "New Character" in the directory. Resuming an existing character reuses its actor.
@@ -539,12 +554,29 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
         actor = await Actor.create({ name: this.state.details.name?.trim() || t("common.newCharacter"), type: "character" });
         if ( !actor ) throw new Error("actor creation returned nothing");
         this.state.actor = actor;
+        createdActor = true;
       }
       await assembleActor(this.state, this.source, this.equipment);
     } catch ( err ) {
       log("character build failed", err);
       ui.notifications?.error(t("notify.buildFailed"));
+      // Delete the orphaned actor this build created so the retry rebuilds from scratch rather than
+      // stacking assembly onto a partially-built actor. Clear state.actor so the next attempt takes
+      // the create path again.
+      if ( createdActor ) {
+        try {
+          await actor?.delete();
+        } catch ( cleanupErr ) {
+          log("failed to clean up half-built actor", cleanupErr);
+        }
+        this.state.actor = null;
+      }
       this.#finished = false;
+      // Re-enable the button so the player can retry without reopening the window.
+      if ( target ) {
+        target.disabled = false;
+        target.textContent = t("nav.create");
+      }
       return;
     }
     await this.close();

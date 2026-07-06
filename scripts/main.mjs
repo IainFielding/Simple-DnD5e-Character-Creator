@@ -1,4 +1,4 @@
-import { MODULE_ID, SETTINGS, DEFAULTS, tpl, t, log } from "./config.mjs";
+import { MODULE_ID, SETTINGS, DEFAULTS, launchWindowOptions, tpl, t, log } from "./config.mjs";
 import { STEPS } from "./steps/registry.mjs";
 import { CreatorShell } from "./app/creator-shell.mjs";
 import { warmSources } from "./data/source-cache.mjs";
@@ -83,32 +83,6 @@ function registerSettings() {
   });
 }
 
-/**
- * Resolve the ApplicationV2 options for a launch, based on the configured display mode.
- * Fullscreen covers the viewport with no chrome; windowed opens a themed, draggable,
- * resizable frame at ~90% of the screen, centred.
- * @returns {object}
- */
-function sheetOptions() {
-  const windowed = game.settings.get(MODULE_ID, SETTINGS.displayMode) === "windowed";
-  // Carry the base class explicitly: ApplicationV2 may replace (rather than merge)
-  // the static DEFAULT_OPTIONS.classes with the array passed here.
-  if ( !windowed ) return { classes: ["sogrom-creator", "sogrom-creator-fullscreen"] };
-
-  const w = Math.min(1800, Math.round(window.innerWidth * 0.9));
-  const h = Math.min(1100, Math.round(window.innerHeight * 0.9));
-  return {
-    classes: ["sogrom-creator", "sogrom-creator-windowed"],
-    window: { frame: true, positioned: true, resizable: true },
-    position: {
-      width: w,
-      height: h,
-      top: Math.max(4, Math.round((window.innerHeight - h) / 2)),
-      left: Math.max(4, Math.round((window.innerWidth - w) / 2))
-    }
-  };
-}
-
 /* -------------------------------------------- */
 /*  Ready: system guard                         */
 /* -------------------------------------------- */
@@ -150,7 +124,7 @@ Hooks.once("ready", () => {
 async function launchCreator(actor) {
   // Give the permission feedback up front rather than after the player has filled everything in.
   if ( !actor && !game.user?.can("ACTOR_CREATE") ) return ui.notifications?.warn(t("notify.noPermission"));
-  new CreatorShell(actor ?? null, sheetOptions()).render(true);
+  new CreatorShell(actor ?? null, launchWindowOptions()).render(true);
 }
 
 // Every time the Actors sidebar tab renders, add our "launch" button to its header — but only
