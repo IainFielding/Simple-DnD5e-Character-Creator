@@ -1,0 +1,10 @@
+# Dev tooling — not part of the shipped module archive.
+node_modules/
+
+# Test / tooling output
+coverage/
+.vitest/
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db

@@ -199,7 +199,7 @@ function blankAssignment() {
  * was already held by another ability the two trade places: that ability inherits the
  * value this one was holding (or becomes unassigned if it held none).
  */
-function assignSlot(state, ability, index) {
+export function assignSlot(state, ability, index) {
   if ( !ability ) return;
   const previous = state.assignment[ability];
   if ( index != null ) {

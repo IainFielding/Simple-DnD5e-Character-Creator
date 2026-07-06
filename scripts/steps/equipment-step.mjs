@@ -1,4 +1,3 @@
-import { t } from "../config.mjs";
 import { describeOption } from "../data/equipment-source.mjs";
 
 /**

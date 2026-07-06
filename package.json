@@ -1,0 +1,19 @@
+{
+  "name": "sogrom-dnd5e-character-creator",
+  "private": true,
+  "type": "module",
+  "description": "Dev tooling (lint + unit tests) for the Simple D&D Character Creator Foundry module. Not shipped in the module archive.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint scripts test",
+    "validate:json": "node tools/validate-json.mjs",
+    "check": "npm run validate:json && npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "eslint": "^9.14.0",
+    "globals": "^15.12.0",
+    "vitest": "^2.1.4"
+  }
+}
