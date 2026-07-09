@@ -68,7 +68,10 @@ export const choicesStep = {
   template: "levelup/choices",
 
   isCompleteAt(state, level) {
-    return atLevel(state.choiceSteps, level).every(r => state.driver.choiceState(r).full);
+    // `exhausted` is the escape hatch for a quota the pool can no longer fill ("pick 2" with only
+    // one option left because the rest are already owned): refreshed by sectionsAt each render —
+    // the shell builds the active screen before it reads these flags — it counts as settled.
+    return atLevel(state.choiceSteps, level).every(r => state.driver.choiceState(r).full || r.exhausted);
   },
 
   async sectionsAt({ state, driver }, level) {
@@ -79,13 +82,15 @@ export const choicesStep = {
     for ( const record of records ) {
       const st = driver.choiceState(record);
       const hasOwned = st.replaceable && st.priorEntries.length > 0;
+      const options = await buildOptions(record, st);
+      record.exhausted = !st.full && !options.some(o => !o.owned && !o.selected && !o.disabled);
       sections.push({
         index: state.choiceSteps.indexOf(record),
         title: record.advancement.title || t("levelup.step.choices.choose"),
         count: t("levelup.step.choices.count", { current: st.current, max: st.max }),
-        complete: st.full,
+        complete: st.full || record.exhausted,
         hint: hasOwned ? t("levelup.step.choices.replaceHint") : "",
-        options: await buildOptions(record, st),
+        options,
         // A lone section shows its title/count in the block header instead of repeating it inside.
         collapsed: single
       });

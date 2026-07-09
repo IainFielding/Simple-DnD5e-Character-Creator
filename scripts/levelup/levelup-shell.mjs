@@ -130,9 +130,12 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // keeping the active index in range.
     this.#steps = buildSteps(this.state);
     this.#current = Math.min(this.#current, this.#steps.length - 1);
-    const flags = this.#steps.map(s => s.isComplete(this.state));
     const step = this.#activeStep;
+    // Build the active screen BEFORE the completion flags: laying out its blocks refreshes the
+    // per-record caches the flags read (e.g. a choice quota whose pool is exhausted), so Next
+    // enables on the same render that shows the screen.
     const stepContext = await step.context(this.#ctx());
+    const flags = this.#steps.map(s => s.isComplete(this.state));
 
     return {
       loading: false,

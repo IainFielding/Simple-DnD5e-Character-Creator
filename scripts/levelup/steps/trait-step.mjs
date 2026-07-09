@@ -38,7 +38,10 @@ export const traitStep = {
   template: "levelup/trait",
 
   isCompleteAt(state, level) {
-    return atLevel(state.traitSteps, level).every(r => state.driver.traitState(r).full);
+    // `exhausted` is the escape hatch for a quota the pool can no longer fill ("pick 2 weapons"
+    // when the character already masters all but one): refreshed by sectionsAt each render — the
+    // shell builds the active screen before it reads these flags — it counts as settled.
+    return atLevel(state.traitSteps, level).every(r => state.driver.traitState(r).full || r.exhausted);
   },
 
   async sectionsAt({ state, driver }, level) {
@@ -48,12 +51,14 @@ export const traitStep = {
     const sections = [];
     for ( const record of records ) {
       const st = driver.traitState(record);
+      const options = await driver.traitOptions(record);
+      record.exhausted = !st.full && !options.some(o => !o.owned && !o.selected && !o.disabled);
       sections.push({
         index: state.traitSteps.indexOf(record),
         title: record.advancement.title || t("levelup.step.traits.choose"),
         count: t("levelup.step.traits.count", { current: st.current, max: st.max }),
-        complete: st.full,
-        groups: groupOptions(await driver.traitOptions(record)),
+        complete: st.full || record.exhausted,
+        groups: groupOptions(options),
         // A lone section shows its title/count in the block header instead of repeating it inside.
         collapsed: single
       });

@@ -1,0 +1,301 @@
+import { describe, expect, it } from "vitest";
+import { LevelUpDriver } from "../scripts/levelup/manager-driver.mjs";
+
+/**
+ * Synthesised sub-features — the driver-side mirror of the manager's mid-walk step synthesis.
+ * When a subclass (or feat) is chosen in the UI, the main walk has already finished, so the
+ * driver itself must cycle through everything the choice reveals: the subclass's advancement
+ * flows AND the advancements of any feature those flows grant. The shape under test is the
+ * Eberron Artificer's Artillerist (module `dnd-forge-artificer`): its level-3 "Subclass
+ * Features" ItemGrant hands out feature items that carry their own advancements —
+ *
+ *   Artillerist (subclass)
+ *   └─ ItemGrant lvl 3 ─ grants → Tools of the Trade   (Trait grant + Trait CHOICE: 1 artisan tool)
+ *                               → Artillerist Spells   (ItemGrant lvl 3: Shield, Thunderwave)
+ *                               → Eldritch Cannon      (no further advancements)
+ *
+ * Without recursion the granted features land inert: no ranged-weapon proficiencies, no tool
+ * choice surfaced, no subclass spells. These tests drive stubs shaped like that data.
+ */
+
+/** A Foundry-Collection-ish item store: get/set/delete plus the map/filter the driver uses. */
+function makeItems(initial = []) {
+  const m = new Map(initial.map(i => [i.id, i]));
+  return {
+    get: id => m.get(id),
+    set: item => m.set(item.id, item),
+    delete: id => m.delete(id),
+    map: fn => [...m.values()].map(fn),
+    filter: fn => [...m.values()].filter(fn),
+    has: id => m.has(id),
+    [Symbol.iterator]: () => m.values()
+  };
+}
+
+/**
+ * A manager stub whose class carries the static `flowsForLevel` the driver calls. Flows are
+ * registered per item id; each carries `{ advancement, level, getAutomaticApplicationValue }`.
+ */
+function makeManager({ steps, clone, flowsByItem }) {
+  class AdvancementManagerStub {
+    static flowsForLevel(item, level) {
+      return (flowsByItem.get(item.id) ?? []).filter(f => f.level === level);
+    }
+  }
+  const manager = new AdvancementManagerStub();
+  manager.actor = { system: { details: { level: 2 } }, items: makeItems() };
+  manager.clone = clone;
+  manager.steps = steps;
+  return manager;
+}
+
+/** One forward class step at a class level, as the native manager shapes them. */
+function classStep(level) {
+  return { type: "forward", class: { item: { id: "clsArtificer0000" }, level }, level };
+}
+
+/** An automatic (grant) flow: its advancement's apply runs `effect` against the clone. */
+function autoFlow(advType, level, item, effect = () => {}) {
+  const advancement = {
+    type: advType,
+    item,
+    configuration: {},
+    applied: [],
+    reversed: [],
+    async apply(lvl, data, options) { this.applied.push({ lvl, data, options }); await effect(); },
+    async reverse(lvl) { this.reversed.push(lvl); }
+  };
+  return { advancement, level, getAutomaticApplicationValue: async () => ({}) };
+}
+
+/** A choice flow (no automatic value): the driver must surface it as a decision. */
+function choiceFlow(advType, level, item, title = "") {
+  const advancement = {
+    type: advType,
+    title,
+    item,
+    configuration: { grants: [], choices: [{ count: 1, pool: ["tool:art:alchemist"] }] },
+    value: { chosen: [] },
+    reversed: [],
+    async apply() {},
+    async reverse(lvl) { this.reversed.push(lvl); }
+  };
+  return { advancement, level, getAutomaticApplicationValue: async () => false };
+}
+
+/**
+ * Build the Artillerist-shaped world: a clone holding the class, a subclass whose level-3 grant
+ * creates the three features, and the features' own flows (tool-choice Trait, spell grant).
+ * Returns everything a test needs to drive and assert.
+ */
+function makeArtilleristWorld({ maxClassLevel = 3 } = {}) {
+  const clone = { items: makeItems([{ id: "clsArtificer0000", type: "class" }]), reset: () => {} };
+
+  const subclassItem = { id: "subArtillerist00", name: "Artillerist", hasAdvancement: true };
+  const toolsFeature = { id: "featToolsTrade00", name: "Tools of the Trade", hasAdvancement: true };
+  const spellsFeature = { id: "featArtiSpells00", name: "Artillerist Spells", hasAdvancement: true };
+  const cannonFeature = { id: "featEldritchCan0", name: "Eldritch Cannon", hasAdvancement: false };
+
+  const flowsByItem = new Map();
+
+  // The subclass's level-3 "Subclass Features" grant creates the three feature items.
+  const featuresGrant = autoFlow("ItemGrant", 3, subclassItem, () => {
+    clone.items.set(toolsFeature);
+    clone.items.set(spellsFeature);
+    clone.items.set(cannonFeature);
+  });
+  flowsByItem.set(subclassItem.id, [featuresGrant]);
+
+  // Tools of the Trade: an automatic Trait grant (ranged weapons) plus a Trait CHOICE (1 tool).
+  const weaponsGrant = autoFlow("Trait", 3, toolsFeature);
+  const toolChoice = choiceFlow("Trait", 3, toolsFeature, "Tool Proficiency");
+  flowsByItem.set(toolsFeature.id, [weaponsGrant, toolChoice]);
+
+  // Artillerist Spells: an automatic spell grant that puts Shield + Thunderwave on the clone.
+  const spellsGrant = autoFlow("ItemGrant", 3, spellsFeature, () => {
+    clone.items.set({ id: "splShield0000000", name: "Shield" });
+    clone.items.set({ id: "splThunderwave00", name: "Thunderwave" });
+  });
+  flowsByItem.set(spellsFeature.id, [spellsGrant]);
+
+  const steps = [];
+  for ( let l = 3; l <= maxClassLevel; l++ ) steps.push(classStep(l));
+  const driver = new LevelUpDriver(makeManager({ steps, clone, flowsByItem }));
+
+  // The subclass decision as prepare() records it, with an advancement whose apply adds the item.
+  const subclassAdv = {
+    type: "Subclass",
+    value: {},
+    reversed: [],
+    async apply(lvl, { uuid }) { this.value = { document: subclassItem, uuid }; clone.items.set(subclassItem); },
+    async reverse(lvl) { this.reversed.push(lvl); this.value = {}; clone.items.delete(subclassItem.id); }
+  };
+  const record = { level: 3, screenLevel: 3, classLevel: 3, advancement: subclassAdv, item: null, featSynth: null };
+
+  return { driver, clone, record, flowsByItem, subclassItem,
+    featuresGrant, weaponsGrant, toolChoice, spellsGrant };
+}
+
+/* -------------------------------------------- */
+/*  Recursive synthesis on subclass selection    */
+/* -------------------------------------------- */
+
+describe("resolveSubclass — nested feature advancements", () => {
+  it("runs the advancements of features the subclass's grants created", async () => {
+    const w = makeArtilleristWorld();
+    await w.driver.resolveSubclass(w.record, "Compendium.efa.options.Item.artillerist");
+
+    // The grant itself applied, and both nested automatic advancements applied too.
+    expect(w.featuresGrant.advancement.applied).toHaveLength(1);
+    expect(w.weaponsGrant.advancement.applied).toHaveLength(1);
+    expect(w.spellsGrant.advancement.applied).toHaveLength(1);
+
+    // The nested spell grant's spells actually landed on the clone.
+    expect(w.clone.items.has("splShield0000000")).toBe(true);
+    expect(w.clone.items.has("splThunderwave00")).toBe(true);
+  });
+
+  it("surfaces a granted feature's choice as a decision on the subclass's screen", async () => {
+    const w = makeArtilleristWorld();
+    await w.driver.resolveSubclass(w.record, "Compendium.efa.options.Item.artillerist");
+
+    expect(w.driver.traitSteps).toHaveLength(1);
+    const decision = w.driver.traitSteps[0];
+    expect(decision.advancement).toBe(w.toolChoice.advancement);
+    expect(decision.screenLevel).toBe(3);
+  });
+
+  it("records every synthesised flow so the pick can be reversed", async () => {
+    const w = makeArtilleristWorld();
+    await w.driver.resolveSubclass(w.record, "Compendium.efa.options.Item.artillerist");
+
+    const flows = w.record.featSynth.flows;
+    expect(flows).toContain(w.featuresGrant);
+    expect(flows).toContain(w.weaponsGrant);
+    expect(flows).toContain(w.toolChoice);
+    expect(flows).toContain(w.spellsGrant);
+    // Depth-first: the grant that created a feature precedes the feature's own flows, so the
+    // reverse-order undo unwinds the feature's advancements before the grant removes it.
+    expect(flows.indexOf(w.featuresGrant)).toBeLessThan(flows.indexOf(w.toolChoice));
+  });
+
+  it("clearSubclass reverses the nested advancements and drops their decisions", async () => {
+    const w = makeArtilleristWorld();
+    await w.driver.resolveSubclass(w.record, "Compendium.efa.options.Item.artillerist");
+    await w.driver.clearSubclass(w.record);
+
+    expect(w.toolChoice.advancement.reversed).toHaveLength(1);
+    expect(w.spellsGrant.advancement.reversed).toHaveLength(1);
+    expect(w.featuresGrant.advancement.reversed).toHaveLength(1);
+    expect(w.record.advancement.reversed).toHaveLength(1);
+    expect(w.driver.traitSteps).toHaveLength(0);
+    expect(w.record.featSynth).toBeNull();
+    expect(w.clone.items.has(w.subclassItem.id)).toBe(false);
+  });
+});
+
+/* -------------------------------------------- */
+/*  Multi-level jumps                            */
+/* -------------------------------------------- */
+
+/* -------------------------------------------- */
+/*  Feature-choice picks (toggleChoice)          */
+/* -------------------------------------------- */
+
+/**
+ * A Ranger's level-2 "Fighting Style" ItemChoice whose "Druidic Warrior" pick carries its own
+ * ItemChoice ("Choose Cantrips") — the PHB shape that must surface as a further decision.
+ */
+function makeFightingStyleWorld() {
+  const clone = { items: makeItems([{ id: "clsRanger0000000", type: "class" }]), reset: () => {} };
+  const styleFeat = { id: "featDruidicWarr0", name: "Druidic Warrior", hasAdvancement: true };
+  const flowsByItem = new Map();
+  const cantripChoice = choiceFlow("ItemChoice", 0, styleFeat, "Choose Cantrips");
+  flowsByItem.set(styleFeat.id, [cantripChoice]);
+
+  const driver = new LevelUpDriver(makeManager({ steps: [classStep(2)], clone, flowsByItem }));
+
+  const uuid = "Compendium.phb.feats.Item.druidicWarrior";
+  const choiceAdv = {
+    type: "ItemChoice",
+    configuration: { choices: { 2: { count: 1, replacement: false } }, pool: [{ uuid }] },
+    value: { added: {}, replaced: {} },
+    getCounts(level) {
+      const current = Object.keys(this.value.added[level] ?? {}).length;
+      const max = this.configuration.choices[level]?.count ?? 0;
+      return { current, max, full: current >= max };
+    },
+    async apply(level, { selected }) {
+      for ( const u of selected ) {
+        if ( u !== uuid ) continue;
+        clone.items.set(styleFeat);
+        (this.value.added[level] ??= {})[styleFeat.id] = u;
+      }
+    },
+    async reverse(level, { uuid: u } = {}) {
+      const added = this.value.added[level] ?? {};
+      for ( const [id, su] of Object.entries(added) ) {
+        if ( u && su !== u ) continue;
+        clone.items.delete(id);
+        delete added[id];
+      }
+    }
+  };
+  const record = { level: 2, screenLevel: 2, advancement: choiceAdv, item: null };
+  driver.choiceSteps.push(record);
+  return { driver, clone, record, uuid, styleFeat, cantripChoice };
+}
+
+describe("toggleChoice — picked item with its own advancements", () => {
+  it("surfaces the pick's sub-choice as a decision on the pick's screen", async () => {
+    const w = makeFightingStyleWorld();
+    await w.driver.toggleChoice(w.record, w.uuid);
+
+    expect(w.clone.items.has(w.styleFeat.id)).toBe(true);
+    expect(w.driver.choiceSteps).toHaveLength(2);
+    const nested = w.driver.choiceSteps[1];
+    expect(nested.advancement).toBe(w.cantripChoice.advancement);
+    // The sub-choice comes off a level-0 flow but belongs on the fighting style's screen.
+    expect(nested.screenLevel).toBe(2);
+  });
+
+  it("unticking the pick reverses its sub-advancements and drops their decisions", async () => {
+    const w = makeFightingStyleWorld();
+    await w.driver.toggleChoice(w.record, w.uuid);
+    await w.driver.toggleChoice(w.record, w.uuid);
+
+    expect(w.cantripChoice.advancement.reversed).toHaveLength(1);
+    expect(w.driver.choiceSteps).toHaveLength(1);
+    expect(w.clone.items.has(w.styleFeat.id)).toBe(false);
+    expect(w.record.pickSynth?.[w.uuid]).toBeUndefined();
+  });
+});
+
+describe("resolveSubclass — multi-level jump", () => {
+  it("ingests subclass flows up to the level-up's final class level", async () => {
+    const w = makeArtilleristWorld({ maxClassLevel: 5 });
+    // Arcane Firearm: the Artillerist's level-5 grant, beyond the level the subclass is picked at.
+    const firearmGrant = autoFlow("ItemGrant", 5, w.subclassItem, () => {
+      w.clone.items.set({ id: "featArcaneFire00", name: "Arcane Firearm", hasAdvancement: false });
+    });
+    w.flowsByItem.get(w.subclassItem.id).push(firearmGrant);
+
+    await w.driver.resolveSubclass(w.record, "Compendium.efa.options.Item.artillerist");
+    expect(firearmGrant.advancement.applied).toHaveLength(1);
+    expect(w.clone.items.has("featArcaneFire00")).toBe(true);
+  });
+
+  it("keeps a later level's decision on its own screen but never below the subclass screen", async () => {
+    const w = makeArtilleristWorld({ maxClassLevel: 5 });
+    const lateChoice = choiceFlow("Trait", 5, w.subclassItem, "Level 5 Pick");
+    const earlyChoice = choiceFlow("Trait", 2, w.subclassItem, "Level 2 Pick");
+    w.flowsByItem.get(w.subclassItem.id).push(lateChoice, earlyChoice);
+
+    await w.driver.resolveSubclass(w.record, "Compendium.efa.options.Item.artillerist");
+    const screens = w.driver.traitSteps.map(r => [r.advancement.title, r.screenLevel]);
+    // The level-2 pick has no screen of its own (the jump starts at 3) — it folds onto the
+    // subclass's screen; the level-5 pick stays on the level-5 screen.
+    expect(screens).toContainEqual(["Level 2 Pick", 3]);
+    expect(screens).toContainEqual(["Level 5 Pick", 5]);
+  });
+});

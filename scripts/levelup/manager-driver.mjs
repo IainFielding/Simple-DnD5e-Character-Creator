@@ -398,15 +398,56 @@ export class LevelUpDriver {
   /**
    * Add or remove one item from a feature choice, applied straight to the clone via the
    * advancement's own apply/reverse (which create or delete the granted item). Selecting beyond
-   * the limit is ignored, matching the native flow.
+   * the limit is ignored, matching the native flow. A picked item that carries advancements of
+   * its own (a Paladin's "Blessed Warrior" fighting style brings a cantrip choice; a Warlock's
+   * "Lessons of the First Ones" invocation brings an origin-feat choice) is cycled through like
+   * a subclass pick: its automatic advancements apply and its choices surface as new decisions,
+   * all reversed again if the pick is unticked.
    * @param {object} record   One of {@link choiceSteps}.
    * @param {string} uuid     Source UUID of the pool item being toggled.
    */
   async toggleChoice(record, uuid) {
     const { selected, full } = this.choiceState(record);
-    if ( selected.has(uuid) ) await record.advancement.reverse(record.level, { uuid });
-    else if ( !full ) await record.advancement.apply(record.level, { selected: [uuid] });
+    if ( selected.has(uuid) ) {
+      await this.#reversePickSynth(record, uuid);
+      await record.advancement.reverse(record.level, { uuid });
+    } else if ( !full ) {
+      await record.advancement.apply(record.level, { selected: [uuid] });
+      await this.#synthesizePick(record, uuid);
+    }
     this.clone.reset();
+  }
+
+  /**
+   * Fold a just-picked choice item's own advancements into the clone (see {@link toggleChoice}),
+   * remembering what was synthesised per pick so unticking it can reverse cleanly.
+   * @param {object} record   One of {@link choiceSteps}.
+   * @param {string} uuid     Source UUID of the pick that was just applied.
+   */
+  async #synthesizePick(record, uuid) {
+    const adv = record.advancement;
+    const added = adv.value.added?.[record.level] ?? {};
+    const id = Object.entries(added).find(([, u]) => u === uuid)?.[0];
+    this.clone.reset();
+    const item = id ? this.clone.items.get(id) : null;
+    if ( !item?.hasAdvancement ) return;
+
+    const targetLevel = this.steps.reduce((max, s) => Math.max(max, s.class?.level ?? 0), record.level);
+    const synth = await this.#ingestItemFeatures(item, targetLevel);
+    // A pick's sub-decisions usually come off level-0 flows — surface them on the pick's screen.
+    const screen = record.screenLevel ?? record.level;
+    for ( const r of [...synth.choices, ...synth.asi, ...synth.traits, ...synth.grants] ) {
+      r.screenLevel = Math.max(r.screenLevel ?? r.level, screen);
+    }
+    (record.pickSynth ??= {})[uuid] = synth;
+  }
+
+  /** Reverse whatever {@link #synthesizePick} folded in for one pick, if anything. */
+  async #reversePickSynth(record, uuid) {
+    const synth = record.pickSynth?.[uuid];
+    if ( !synth ) return;
+    delete record.pickSynth[uuid];
+    await this.#reverseSynth(synth);
   }
 
   /**
@@ -427,6 +468,7 @@ export class LevelUpDriver {
       // both. The first `count` entries are the level's own grants; anything beyond is the swap-in.
       const baseCount = adv.configuration?.choices?.[level]?.count ?? 0;
       for ( const uuid of Object.values(adv.value.added?.[level] ?? {}).slice(baseCount) ) {
+        await this.#reversePickSynth(record, uuid);
         await adv.reverse(level, { uuid });
       }
       await adv.reverse(level, { clearReplacement: true });
@@ -756,8 +798,11 @@ export class LevelUpDriver {
 
   /**
    * Fold an item's own advancements into the clone: enumerate its flows up to `maxLevel` and ingest
-   * each (auto-apply the automatic ones, surface any renderable ones as new decisions). Returns the
-   * flows it ran and the decision records it added, so the caller can reverse them cleanly later.
+   * each (auto-apply the automatic ones, surface any renderable ones as new decisions) — then do
+   * the same for every feature those flows themselves granted. An Artillerist's level-3 grant hands
+   * out "Tools of the Trade", whose own Trait choice (an artisan tool) must surface too, and
+   * "Artillerist Spells", whose spell grants must land. Returns the flows it ran and the decision
+   * records it added, so the caller can reverse them cleanly later.
    * @param {Item5e} item
    * @param {number} maxLevel
    * @returns {Promise<{flows: object[], choices: object[], asi: object[], traits: object[]}>}
@@ -768,12 +813,7 @@ export class LevelUpDriver {
     const beforeTraits = this.traitSteps.length;
     const beforeGrants = this.grantSteps.length;
     const flows = [];
-    for ( let l = 0; l <= maxLevel; l++ ) {
-      for ( const flow of this.#AdvancementManager.flowsForLevel(item, l) ) {
-        flows.push(flow);
-        await this.#ingestFlow(flow);
-      }
-    }
+    await this.#ingestItemTree(item, maxLevel, flows, new Set([item.id]));
     return {
       flows,
       choices: this.choiceSteps.slice(beforeChoices),
@@ -784,12 +824,46 @@ export class LevelUpDriver {
   }
 
   /**
+   * Run one item's advancement flows against the clone, then recurse into any item those flows
+   * added that carries advancements of its own — the driver-side counterpart of the manager's
+   * mid-walk step synthesis, which only covers the main walk (a subclass or feat chosen in the UI
+   * lands after that walk has finished). `flows` accumulates depth-first, so the reverse-order undo
+   * in {@link #reverseSynth} unwinds a granted feature's advancements before the grant that created
+   * it. `seen` guards against a grant cycle re-ingesting the same item.
+   * @param {Item5e} item
+   * @param {number} maxLevel
+   * @param {object[]} flows     Accumulator for every flow run, in application order.
+   * @param {Set<string>} seen   Item ids already ingested (or being ingested).
+   */
+  async #ingestItemTree(item, maxLevel, flows, seen) {
+    const preIds = new Set(this.clone.items.map(i => i.id));
+    for ( let l = 0; l <= maxLevel; l++ ) {
+      for ( const flow of this.#AdvancementManager.flowsForLevel(item, l) ) {
+        flows.push(flow);
+        await this.#ingestFlow(flow);
+      }
+    }
+    // Reset so a freshly-granted feature is fully prepared (its advancement.byLevel ready)
+    // before its own flows are enumerated.
+    this.clone.reset();
+    for ( const added of this.clone.items.filter(i => !preIds.has(i.id) && !seen.has(i.id) && i.hasAdvancement) ) {
+      seen.add(added.id);
+      await this.#ingestItemTree(added, maxLevel, flows, seen);
+    }
+  }
+
+  /**
    * Reverse what {@link #ingestItemFeatures} applied: undo each synthesised advancement and drop the
    * decisions it added. Best-effort — reversing a flow the player never touched is a no-op.
    * @param {{flows: object[], choices: object[], asi: object[], traits: object[], grants: object[]}} synth
    */
   async #reverseSynth(synth) {
     if ( !synth ) return;
+    // A choice decision this synth surfaced may itself carry synthesised picks (a subclass reveals
+    // a feature choice, whose pick brought advancements of its own) — unwind those deepest-first.
+    for ( const c of synth.choices ?? [] ) {
+      for ( const uuid of Object.keys(c.pickSynth ?? {}) ) await this.#reversePickSynth(c, uuid);
+    }
     for ( const flow of [...(synth.flows ?? [])].reverse() ) {
       try { await flow.advancement.reverse(flow.level); } catch ( err ) { log("synth feature reverse failed", err); }
     }
@@ -856,7 +930,15 @@ export class LevelUpDriver {
     const subclassItem = this.#subclassDoc(record);
     if ( !subclassItem ) return;
 
-    record.featSynth = await this.#ingestItemFeatures(subclassItem, record.classLevel);
+    // Ingest up to the class level this level-up finishes at, not just the level the subclass is
+    // picked at: a multi-level jump (2→5) must also collect the subclass's level-4/5 features.
+    const targetLevel = this.steps.reduce((max, s) => Math.max(max, s.class?.level ?? 0), record.classLevel);
+    record.featSynth = await this.#ingestItemFeatures(subclassItem, targetLevel);
+    // A decision revealed at or below the subclass's own level belongs on the subclass's screen
+    // (there is no earlier screen to host it); later-level ones keep their own screens.
+    for ( const r of [...record.featSynth.choices, ...record.featSynth.asi, ...record.featSynth.traits, ...record.featSynth.grants] ) {
+      r.screenLevel = Math.max(r.screenLevel ?? r.level, record.screenLevel);
+    }
     this.clone.reset();
   }
 
