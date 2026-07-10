@@ -9,6 +9,7 @@
       <span class="creator-choice-count">{{count}}</span>
     </header>
     {{/unless}}
+    {{#if hint}}<div class="creator-choice-hint">{{{hint}}}</div>{{/if}}
 
     {{#each groups}}
     {{#if label}}<h3 class="creator-choice-group-head">{{label}}</h3>{{/if}}

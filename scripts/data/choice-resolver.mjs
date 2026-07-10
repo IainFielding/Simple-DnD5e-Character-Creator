@@ -439,9 +439,10 @@ async function parseAdvancementChoice(adv, ctx) {
  * A plain-language explainer for a block: what the choice is and how many to pick. Used as the
  * block's guidance when the advancement carries no `hint` of its own, so every decision reads
  * with a sentence telling the player what it is and what's expected (e.g. weapon mastery).
+ * Exported so the level-up trait/choices screens fall back to the same sentence.
  * @param {{type:string, mode?:string, poolType?:string, count:number}} descriptor
  */
-function choiceBlurb({ type, mode = "default", poolType = null, count = 1 }) {
+export function choiceBlurb({ type, mode = "default", poolType = null, count = 1 }) {
   // Blocks that are inherently a single pick read as complete sentences on their own.
   if ( type === "Size" ) return t("choice.blurb.size");
   if ( type === "SpellAbility" ) return t("choice.blurb.spellAbility");

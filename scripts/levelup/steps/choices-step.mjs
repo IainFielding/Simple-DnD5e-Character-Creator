@@ -1,6 +1,6 @@
 import { t } from "../../config.mjs";
-import { atLevel } from "../levelup-state.mjs";
-import { findRestrictedItems } from "../../data/choice-resolver.mjs";
+import { atLevel, advancementHint } from "../levelup-state.mjs";
+import { choiceBlurb, findRestrictedItems } from "../../data/choice-resolver.mjs";
 
 /**
  * Feature choices — the `ItemChoice` advancements a level grants (a Fighting Style, a Maneuver,
@@ -89,7 +89,10 @@ export const choicesStep = {
         title: record.advancement.title || t("levelup.step.choices.choose"),
         count: t("levelup.step.choices.count", { current: st.current, max: st.max }),
         complete: st.full || record.exhausted,
-        hint: hasOwned ? t("levelup.step.choices.replaceHint") : "",
+        // The authored description when there is one; otherwise the creator's generated blurb, so
+        // every decision reads with a sentence telling the player what the pick is.
+        hint: (await advancementHint(record)) || choiceBlurb({ type: "ItemChoice", count: st.max }),
+        replaceHint: hasOwned ? t("levelup.step.choices.replaceHint") : "",
         options,
         // A lone section shows its title/count in the block header instead of repeating it inside.
         collapsed: single

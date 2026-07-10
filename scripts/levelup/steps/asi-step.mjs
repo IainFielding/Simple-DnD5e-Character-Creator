@@ -1,5 +1,5 @@
 import { t } from "../../config.mjs";
-import { atLevel } from "../levelup-state.mjs";
+import { atLevel, advancementHint } from "../levelup-state.mjs";
 
 /**
  * Ability Score Improvement — at this level raise ability scores (spend the point budget, usually
@@ -64,6 +64,7 @@ export const asiStep = {
           isFeat: false,
           allowFeat: st.allowFeat,
           hasChoice: true,
+          hint: await advancementHint(record),
           improvementDesc: t("levelup.step.asi.improvementDesc", { points: st.total }),
           points: st.total,
           cap: displayCap(st),

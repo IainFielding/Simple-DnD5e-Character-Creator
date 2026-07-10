@@ -19,6 +19,20 @@ export function atLevel(records, level) {
   return records.filter(r => recordLevel(r) === level);
 }
 
+/**
+ * The description an advancement carries for its decision — the dnd5e `hint` field (e.g. the
+ * Wizard's Scholar: "While studying magic, you also specialized in another field of study…") —
+ * enriched so any `@UUID[…]` markup renders as real links. "" when the advancement has none, so
+ * templates can gate on it directly.
+ * @param {{advancement: object}} record
+ * @returns {Promise<string>}
+ */
+export async function advancementHint(record) {
+  const hint = record.advancement?.hint?.trim();
+  if ( !hint ) return "";
+  return foundry.applications.ux.TextEditor.implementation.enrichHTML(hint, { secrets: false });
+}
+
 import { computeSpellPlan } from "./steps/lvl-spells-step.mjs";
 
 /**

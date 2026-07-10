@@ -1,5 +1,5 @@
 import { t } from "../../config.mjs";
-import { atLevel } from "../levelup-state.mjs";
+import { atLevel, advancementHint } from "../levelup-state.mjs";
 
 /**
  * Spell grants with a choosable casting ability — the `ItemGrant` advancements a species lineage
@@ -29,11 +29,12 @@ export const grantStep = {
     // species/background lineage spell's casting ability with their class — mirroring how the
     // creation choices screen stars the class ability (see choice-resolver.mjs).
     const hint = spellAbilityHint(state);
-    const sections = records.map(record => {
+    const sections = await Promise.all(records.map(async record => {
       const st = driver.grantState(record);
       return {
         index: state.grantSteps.indexOf(record),
         title: record.advancement.title || record.item?.name || t("levelup.step.grant.label"),
+        hint: await advancementHint(record),
         prompt: t("levelup.step.grant.prompt"),
         spells: st.spells,
         abilities: st.abilities.map(key => {
@@ -51,7 +52,7 @@ export const grantStep = {
         // A lone block shows its title in the header rather than repeating it inside.
         collapsed: single
       };
-    });
+    }));
     return {
       blockLabel: single ? sections[0].title : null,
       sections
