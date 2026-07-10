@@ -132,8 +132,9 @@ async function launchLevelUp(manager) {
 /**
  * Inject the "Level Up" button into the character sheet — the flow's front door, so a player
  * never has to know about the class-level selector buried in the sheet. It sits in the header's
- * rest-button row as a gold icon button matching short/long rest (tooltip on hover); a sheet
- * without that row (a legacy sheet) gets a labelled title-bar button instead. Hidden when the
+ * rest-button row as a gold icon button matching short/long rest (tooltip on hover) — recreating
+ * that row when the system left it out (a player without rest permission), so only a sheet with no
+ * such structure at all (a legacy sheet) falls back to a labelled title-bar button. Hidden when the
  * module mode leaves levelling to the system, when the world setting turns the button off, when
  * Hero Mancer owns the space, and when there is nothing to level (no class yet, or already at
  * the level cap).
@@ -159,7 +160,12 @@ function onRenderActorSheet(app, html) {
     levelUpFromButton(actor);
   });
 
-  const row = root.querySelector(".sheet-header-buttons");
+  // Prefer the system's rest-button row. It only exists when dnd5e sets `showRests`
+  // (`game.user.isGM || (actor.isOwner && allowRests)`), so a plain player who owns the
+  // character but lacks the "allow rests" world setting has no row — synthesize one in the
+  // same spot so they get the same gold trophy, not the labelled fallback.
+  const existingRow = root.querySelector(".sheet-header-buttons");
+  const row = existingRow ?? buildHeaderButtonRow(root);
   if ( row ) {
     // Match the rest buttons exactly: a .gold-button icon whose empty data-tooltip makes the
     // tooltip system fall back to the aria-label, just like the system's own header buttons.
@@ -168,9 +174,10 @@ function onRenderActorSheet(app, html) {
     button.setAttribute("aria-label", t("levelup.button"));
     button.innerHTML = "<i class=\"fa-solid fa-trophy-star\" inert></i>";
     row.append(button);
-    // The row is absolutely positioned with no spare room; this class shifts it left one
-    // icon-width (see creator.css, which also handles the Action Tracker module's own shift).
-    row.classList.add("sogrom-has-levelup");
+    // The populated system row is absolutely positioned with no spare room, so this class shifts
+    // it left one icon-width (see creator.css, which also handles the Action Tracker module's own
+    // shift). A row we synthesized holds only our button, so it fits without shifting.
+    if ( existingRow ) row.classList.add("sogrom-has-levelup");
   } else {
     const header = root.querySelector(".window-header");
     if ( !header ) return;
@@ -178,6 +185,22 @@ function onRenderActorSheet(app, html) {
     button.innerHTML = `<i class="fa-solid fa-trophy-star"></i> ${t("levelup.button")}`;
     header.prepend(button);
   }
+}
+
+/**
+ * Recreate the dnd5e v2 character sheet's rest-button row when the system omitted it (a player
+ * without rest permission). It lives as the first child of the "XP & Buttons" wrapper — the last
+ * div in the header's `.right` column — where its `.sheet-header-buttons` styling positions it.
+ * @param {HTMLElement} root
+ * @returns {HTMLElement|null} the empty row, or null on a sheet without that structure
+ */
+function buildHeaderButtonRow(root) {
+  const wrapper = root.querySelector(".sheet-header .right > div:last-child");
+  if ( !wrapper ) return null;
+  const row = document.createElement("div");
+  row.className = "sheet-header-buttons";
+  wrapper.prepend(row);
+  return row;
 }
 
 /**

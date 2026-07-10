@@ -14,6 +14,7 @@
  *   human          origins24/species/human.yml              (_id phbspHuman000000)
  *   sage           origins24/backgrounds/sage.yml           (_id phbbgSage0000000-ish)
  *   magicInitiate  feats24/origin-feats/magic-initiate.yml  (_id phbftMagicInitia)
+ *   wizard         classes24/wizard/wizard.yml              (_id phbwzdWizard0000)
  *
  * Every item is shaped like `Item#toObject()` output: advancements live under
  * `system.advancement` as an array, which is the form {@link advancementArray}
@@ -27,6 +28,7 @@
 
 export const UUID = {
   fighter: "Compendium.dnd5e.classes24.Item.phbftrFighter000",
+  wizard: "Compendium.dnd5e.classes24.Item.phbwzdWizard0000",
   human: "Compendium.dnd5e.origins24.Item.phbspHuman000000",
   sage: "Compendium.dnd5e.origins24.Item.phbbgSage0000000",
   magicInitiate: "Compendium.dnd5e.feats24.Item.phbftMagicInitia",
@@ -139,6 +141,60 @@ export const fighter = {
         },
         value: { added: {}, replaced: {} }
       }
+    ]
+  }
+};
+
+/* -------------------------------------------- */
+/*  Wizard (class) — classes24/wizard            */
+/* -------------------------------------------- */
+
+/**
+ * Wizard, trimmed to its spellcasting shape and the two ScaleValues the level-up spell math
+ * reads: "Max Prepared Spells" (identifier `max-prepared`, backing `preparation.max` via the
+ * `@scale.wizard.max-prepared` formula) and "Cantrips Known" (blank identifier — matched by
+ * title). Scale tables are verbatim from the pack source, including the sparse levels (a
+ * ScaleValue only carries entries at the levels it changes).
+ *
+ * Note `spellcasting.preparation.max`/`.value` are *derived* fields on a live actor (from the
+ * formula and the actor's spells); tests set them directly on a clone to model a prepared state.
+ */
+export const wizard = {
+  _id: "phbwzdWizard0000",
+  name: "Wizard",
+  type: "class",
+  system: {
+    identifier: "wizard",
+    hd: { denomination: "d6", spent: 0 },
+    spellcasting: {
+      progression: "full",
+      ability: "int",
+      preparation: { formula: "@scale.wizard.max-prepared" }
+    },
+    advancement: [
+      { _id: "zcKhKDfR6l9mjjo0", type: "HitPoints", configuration: {}, value: {} },
+      {
+        _id: "EvuUhx2TrDAsAxgN", type: "ScaleValue", title: "Max Prepared Spells",
+        configuration: {
+          identifier: "max-prepared", type: "number", distance: { units: "" },
+          scale: {
+            1: { value: 4 }, 2: { value: 5 }, 3: { value: 6 }, 4: { value: 7 }, 5: { value: 9 },
+            6: { value: 10 }, 7: { value: 11 }, 8: { value: 12 }, 9: { value: 14 }, 10: { value: 15 },
+            11: { value: 16 }, 13: { value: 17 }, 14: { value: 18 }, 15: { value: 19 }, 16: { value: 21 },
+            17: { value: 22 }, 18: { value: 23 }, 19: { value: 24 }, 20: { value: 25 }
+          }
+        },
+        value: {}
+      },
+      {
+        _id: "ZTnATJgznTj4W6ZG", type: "ScaleValue", title: "Cantrips Known",
+        configuration: {
+          identifier: "", type: "number", distance: { units: "" },
+          scale: { 1: { value: 3 }, 4: { value: 4 }, 10: { value: 5 } }
+        },
+        value: {}
+      },
+      { _id: "KTYjh1MKLvOtrZ3u", type: "Subclass", level: 3, configuration: {}, value: { document: null, uuid: null } }
     ]
   }
 };
@@ -309,6 +365,7 @@ export const magicInitiate = {
 /** Every fixture item keyed by its real compendium UUID, for a `fromUuid` stub. */
 export const itemsByUuid = {
   [UUID.fighter]: fighter,
+  [UUID.wizard]: wizard,
   [UUID.human]: human,
   [UUID.sage]: sage,
   [UUID.magicInitiate]: magicInitiate
