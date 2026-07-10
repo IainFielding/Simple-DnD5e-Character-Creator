@@ -231,9 +231,13 @@ export const lvlReviewStep = {
     const sections = [];
 
     for ( const cls of classes ) {
-      const fromLevel = actor.items.get(cls.id)?.system?.levels ?? 0;
+      const existing = actor.items.get(cls.id);
+      const fromLevel = existing?.system?.levels ?? 0;
       const toLevel = cls.system?.levels ?? fromLevel;
       const leveled = toLevel !== fromLevel;
+      // A class with no "before" is this level-up's multiclass — badge it as new rather than
+      // showing a nonsensical "Level 0 → 1".
+      const isNewClass = !existing;
       const rows = [];
 
       const hd = cls.system?.hd?.denomination ?? cls.system?.hitDice;
@@ -289,9 +293,11 @@ export const lvlReviewStep = {
         name: cls.name,
         img: cls.img,
         leveled,
-        levelLabel: leveled
-          ? t("levelup.step.review.levelUp", { from: fromLevel, to: toLevel })
-          : t("levelup.step.review.level", { level: toLevel }),
+        levelLabel: isNewClass
+          ? t("levelup.step.review.levelNew", { level: toLevel })
+          : leveled
+            ? t("levelup.step.review.levelUp", { from: fromLevel, to: toLevel })
+            : t("levelup.step.review.level", { level: toLevel }),
         rows,
         features: (features.get(cls.id) ?? []).sort(byNewThenName),
         spells: sectionSpells.sort(byNewThenName)

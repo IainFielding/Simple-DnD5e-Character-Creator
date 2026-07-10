@@ -15,7 +15,10 @@ import { lvlSpellsStep } from "./steps/lvl-spells-step.mjs";
  * @returns {object[]}
  */
 export function buildSteps(state) {
-  const steps = state.gainedLevels().map(level => levelStep(level));
+  // On a multiclass character the screens are class levels, not character levels — name the
+  // class on each ("Wizard 3") so the labels can't be misread as the character's level.
+  const className = state.isMulticlassed ? (state.classItem?.name ?? "") : "";
+  const steps = state.gainedLevels().map(level => levelStep(level, className));
   if ( state.hasSpellStep() ) steps.push(lvlSpellsStep);
   steps.push(lvlReviewStep);
   return steps;

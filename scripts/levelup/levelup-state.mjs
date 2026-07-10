@@ -107,6 +107,25 @@ export class LevelUpState {
   }
 
   /**
+   * Whether the levelled class is brand-new to the character — a multiclass: until the commit,
+   * the class item exists only on the driver's clone, not the real actor.
+   * @returns {boolean}
+   */
+  get isNewClass() {
+    return !!this.classItem && !this.actor.items?.get(this.classItem.id);
+  }
+
+  /**
+   * Whether the wizard should name the class on its level labels. The decision records are keyed
+   * by *class* level, so for a character with more than one class (or gaining one) a bare
+   * "Level 3" is ambiguous between class and character level — "Wizard 3" isn't.
+   * @returns {boolean}
+   */
+  get isMulticlassed() {
+    return this.isNewClass || (this.actor.items?.filter(i => i.type === "class").length ?? 0) > 1;
+  }
+
+  /**
    * The spell capacity this level-up opens up, computed from the driver's clone (whose derived data
    * already reflects the new level). Used to decide whether the spell step exists and, once
    * committed, what the step offers. Sync — the spell *pool* is loaded separately by the step.

@@ -124,23 +124,30 @@ export class LevelUpDriver {
   /**
    * Synchronous test of whether this driver can fully own a manager — used by the intercept
    * to decide whether to suppress the native UI. Conservative by design: it claims only
-   * genuine level-*increases* of an existing class whose every renderable step is hit points.
-   * A step that might need a choice we don't yet re-skin (ASI, subclass, feature/trait choice)
-   * makes the whole level-up ineligible, so it falls through to the native manager untouched.
+   * genuine level-*increases* of a class the character has — or, when the world's multiclass
+   * setting opts in (`allowNewClass`), is gaining. A step that might need a choice we don't
+   * yet re-skin makes the whole level-up ineligible, so it falls through to the native
+   * manager untouched.
    * @param {AdvancementManager} manager
+   * @param {object} [options]
+   * @param {boolean} [options.allowNewClass=false]   Also claim a level-up whose class item is
+   *   new (a multiclass: `forNewItem` put it on the manager's clone, not the real actor).
    * @returns {boolean}
    */
-  static canDrive(manager) {
+  static canDrive(manager, { allowNewClass = false } = {}) {
     const steps = manager?.steps ?? [];
     if ( !steps.length ) return false;
 
     // Reversals mean a level-*down* or a choice-modify/delete flow — never our concern.
     if ( steps.some(s => s.type === "reverse" || s.type === "delete") ) return false;
 
-    // The level-up must raise an existing class (the class item is already on the real actor).
-    // A brand-new class drop (multiclassing) is Phase 5; leave it to the native flow.
+    // The level-up must raise a class of the character's. Usually that class is already on the
+    // real actor; a brand-new class (multiclassing) lives only on the manager's clone and is
+    // claimable only when the multiclass setting opts in.
     const classItem = steps.find(s => s.class)?.class?.item;
-    if ( !classItem || !manager.actor?.items?.get(classItem.id) ) return false;
+    if ( !classItem ) return false;
+    const onActor = !!manager.actor?.items?.get(classItem.id);
+    if ( !onActor && !(allowNewClass && manager.clone?.items?.get(classItem.id)) ) return false;
 
     const actorLevel = manager.actor.system?.details?.level ?? 0;
     const raisesLevel = steps.some(s => s.type === "forward" && s.class && (s.level ?? 0) > actorLevel);

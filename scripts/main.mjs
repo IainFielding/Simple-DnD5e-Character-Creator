@@ -86,6 +86,16 @@ function registerSettings() {
     hint: t("settings.levelUpButton.hint"),
     scope: "world", config: true, type: Boolean, default: DEFAULTS.levelUpButton
   });
+  game.settings.register(MODULE_ID, SETTINGS.multiclass, {
+    name: t("settings.allowMulticlass.name"),
+    hint: t("settings.allowMulticlass.hint"),
+    scope: "world", config: true, type: String, default: DEFAULTS.multiclass,
+    choices: {
+      "off": t("settings.allowMulticlass.off"),
+      "prereq": t("settings.allowMulticlass.prereq"),
+      "free": t("settings.allowMulticlass.free")
+    }
+  });
   game.settings.register(MODULE_ID, SETTINGS.levelUpHpMode, {
     name: t("settings.levelUpHpMode.name"),
     hint: t("settings.levelUpHpMode.hint"),

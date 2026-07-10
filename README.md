@@ -91,6 +91,7 @@ The creator works great out of the box, but a few settings let your GM tailor it
 - **Point-buy budget** — change how many points players get when building stats (the standard rules use 27).
 - **Ability roll formula** — set the dice rolled for each ability (the standard rules use 4d6, keeping the highest three).
 - **Launch button & menu entry** — show or hide the sidebar button and the right-click "Open in Character Creator" option.
+- **Multiclassing** — off by default; when enabled, players can add a whole new class from the Level Up flow. Choose whether the standard ability prerequisites (13+ in the primary ability of both classes) are enforced or waived.
 
 ---
 

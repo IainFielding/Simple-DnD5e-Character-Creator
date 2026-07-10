@@ -10,6 +10,7 @@
       "available": "Available",
       "noEntries": "No entries found in the enabled compendiums.",
       "reset": "Reset",
+      "cancel": "Cancel",
       "on": "On",
       "off": "Off",
       "selectHint": "Choose an option from the list to see its full description.",
@@ -56,7 +57,16 @@
       "button": "Level Up",
       "chooseClass": {
         "title": "Level Up Which Class?",
-        "body": "Choose the class that gains this level."
+        "body": "Choose the class that gains this level.",
+        "addClass": "Add a Class…"
+      },
+      "multiclass": {
+        "pickerTitle": "Choose a New Class",
+        "score": "{ability} {score}",
+        "requires": "{class} requires {abilities}",
+        "blocked": "Multiclassing requirements not met: {reasons}.",
+        "pick": "Multiclass",
+        "noneAvailable": "No new classes are available from the enabled sources."
       },
       "cancel": {
         "title": "Discard this level-up?",
@@ -70,7 +80,8 @@
       },
       "step": {
         "level": {
-          "label": "Level {level}"
+          "label": "Level {level}",
+          "classLabel": "{class} {level}"
         },
         "hp": {
           "label": "Hit Points",
@@ -137,6 +148,7 @@
           "kindBackground": "Background",
           "level": "Level {level}",
           "levelUp": "Level {from} → {to}",
+          "levelNew": "New Class — Level {level}",
           "abilityTip": "Increased by this level-up"
         },
         "spells": {
@@ -440,6 +452,13 @@
       "levelUpButton": {
         "name": "Show Level Up button",
         "hint": "Adds a “Level Up” button to the character sheet's header for the character's owner. Levelling through the sheet's own class controls still works either way."
+      },
+      "allowMulticlass": {
+        "name": "Allow multiclassing in the level-up wizard",
+        "hint": "Lets players add a new class when levelling up. With prerequisites shows only classes whose ability requirements (13+ in the primary ability of both the current and the new class) are met; Without prerequisites offers every class.",
+        "off": "Off",
+        "prereq": "On — with ability prerequisites",
+        "free": "On — without prerequisites"
       },
       "levelUpHpMode": {
         "name": "Level-up hit points",

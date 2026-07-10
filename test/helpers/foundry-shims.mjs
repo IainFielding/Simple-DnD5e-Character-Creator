@@ -35,7 +35,8 @@ export function installFoundryShims() {
     i18n: {
       lang: "en",
       localize: key => key,
-      format: (key, data) => `${key}:${JSON.stringify(data ?? {})}`
+      format: (key, data) => `${key}:${JSON.stringify(data ?? {})}`,
+      getListFormatter: ({ type = "conjunction" } = {}) => new Intl.ListFormat("en", { type })
     },
     packs: [],
     modules: { get: () => null },

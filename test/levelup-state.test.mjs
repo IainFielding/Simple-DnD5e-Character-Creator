@@ -32,13 +32,19 @@ function makeDriver({ steps, hp = [], asi = [], choices = [], traits = [], subcl
   };
 }
 
-/** An actor stub carrying only the character level the constructor reads. */
-function makeActor(level = 3) {
-  return { system: { details: { level } } };
+/**
+ * An actor stub: the character level the constructor reads, plus (optionally) owned class
+ * items behind a Collection-ish `items` (`get` by id + `filter`), which the multiclass
+ * getters consult.
+ */
+function makeActor(level = 3, classes = []) {
+  const items = new Map(classes.map(c => [c.id, c]));
+  items.filter = fn => [...items.values()].filter(fn);
+  return { system: { details: { level } }, items };
 }
 
-function makeState(driverOptions = {}, actorLevel = 3) {
-  return new LevelUpState(makeActor(actorLevel), makeDriver(driverOptions));
+function makeState(driverOptions = {}, actorLevel = 3, classes = []) {
+  return new LevelUpState(makeActor(actorLevel, classes), makeDriver(driverOptions));
 }
 
 /* -------------------------------------------- */
@@ -63,6 +69,29 @@ describe("LevelUpState construction", () => {
     });
     expect(state.fromLevel).toBe(3);
     expect(state.toLevel).toBe(5);
+  });
+});
+
+describe("multiclass flags", () => {
+  const OTHER_CLASS = { id: "clsWizard0000000", name: "Wizard", type: "class" };
+
+  it("levelling the character's only class is neither new nor multiclassed", () => {
+    const state = makeState({}, 3, [CLASS_ITEM]);
+    expect(state.isNewClass).toBe(false);
+    expect(state.isMulticlassed).toBe(false);
+  });
+
+  it("a class missing from the real actor is a new class (multiclass in progress)", () => {
+    // The forNewItem manager put the class on the clone only; the actor has a different class.
+    const state = makeState({}, 3, [OTHER_CLASS]);
+    expect(state.isNewClass).toBe(true);
+    expect(state.isMulticlassed).toBe(true);
+  });
+
+  it("an already-multiclassed character levelling one owned class is multiclassed but not new", () => {
+    const state = makeState({}, 5, [CLASS_ITEM, OTHER_CLASS]);
+    expect(state.isNewClass).toBe(false);
+    expect(state.isMulticlassed).toBe(true);
   });
 });
 
