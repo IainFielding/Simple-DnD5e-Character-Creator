@@ -433,9 +433,11 @@
       },
       "mode": {
         "name": "Module mode",
-        "hint": "Whether the module also takes over the level-up experience. Creation + Level-Up (the default) re-skins the system's level-up for a calmer, one-screen-per-level flow; Creation only leaves levelling to the system.",
+        "hint": "Which experiences the module owns. Creation + Level-Up (the default) does both; Creation only leaves levelling to the system; Level-Up only hides the creator and keeps just the calmer, one-screen-per-level level-up flow.",
+        "hintEmber": "The Ember module is active and provides its own character creation, so this module runs in Level-Up only mode: the creator is hidden and only the level-up experience is taken over.",
         "creation": "Creation only",
-        "creationLevelup": "Creation + Level-Up"
+        "creationLevelup": "Creation + Level-Up",
+        "levelupOnly": "Level-Up only"
       },
       "levelUpButton": {
         "name": "Show Level Up button",
