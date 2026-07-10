@@ -1,5 +1,6 @@
 import { t } from "../../config.mjs";
-import { atLevel } from "../levelup-state.mjs";
+import { atLevel, advancementHint } from "../levelup-state.mjs";
+import { choiceBlurb } from "../../data/choice-resolver.mjs";
 
 /**
  * Trait choices — the choice-bearing `Trait` advancements a level grants. Weapon Mastery is the
@@ -56,6 +57,14 @@ export const traitStep = {
       sections.push({
         index: state.traitSteps.indexOf(record),
         title: record.advancement.title || t("levelup.step.traits.choose"),
+        // The authored description when there is one; otherwise the creator's generated blurb, so
+        // every decision reads with a sentence (Weapon Mastery ships without a hint, for example).
+        hint: (await advancementHint(record)) || choiceBlurb({
+          type: "Trait",
+          mode: record.advancement.configuration?.mode || "default",
+          poolType: (options[0]?.key ?? "").split(":")[0],
+          count: st.max
+        }),
         count: t("levelup.step.traits.count", { current: st.current, max: st.max }),
         complete: st.full || record.exhausted,
         groups: groupOptions(options),

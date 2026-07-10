@@ -31,6 +31,7 @@
           <h2>{{localize "sogrom-dnd5e-character-creator.levelup.step.asi.improvementTitle"}}</h2>
         </header>
         <div class="creator-detail-body">
+          {{#if hint}}<div class="creator-choice-hint">{{{hint}}}</div>{{/if}}
           <p>{{{improvementDesc}}}</p>
         </div>
       </article>
