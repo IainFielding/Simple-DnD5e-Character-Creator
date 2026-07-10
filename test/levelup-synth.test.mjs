@@ -271,6 +271,115 @@ describe("toggleChoice — picked item with its own advancements", () => {
   });
 });
 
+/* -------------------------------------------- */
+/*  Half-feat ability increases                  */
+/* -------------------------------------------- */
+
+/**
+ * An AbilityScoreImprovement flow as a feat carries it. PHB 2024 models a single-stat half-feat
+ * (Actor's "+1 Cha") as 1 point with every other ability locked — not as a fixed bonus — so the
+ * ingest must recognise a forced allocation and apply it rather than surfacing an empty "choice".
+ */
+function asiFlow(item, { points = 0, cap, locked = [], fixed = {} } = {}) {
+  const advancement = {
+    type: "AbilityScoreImprovement",
+    item,
+    configuration: { points, cap, locked: new Set(locked), fixed },
+    value: {},
+    applied: [],
+    canImprove: () => true,
+    async apply(lvl, data) {
+      this.applied.push({ lvl, data });
+      this.value.type = data.type;
+      if ( data.assignments ) this.value.assignments = { ...data.assignments };
+    },
+    async reverse() {}
+  };
+  return { advancement, level: 0, getAutomaticApplicationValue: async () => false };
+}
+
+/** A feat granted through an ItemChoice pick, carrying one ASI flow of the given shape. */
+function makeHalfFeatWorld(asiOpts) {
+  const clone = {
+    items: makeItems([{ id: "clsBard000000000", type: "class" }]),
+    system: { abilities: {
+      str: { value: 10 }, dex: { value: 10 }, con: { value: 10 },
+      int: { value: 10 }, wis: { value: 10 }, cha: { value: 15 }
+    } },
+    reset: () => {}
+  };
+  const featItem = { id: "featActor0000000", name: "Actor", hasAdvancement: true };
+  const flowsByItem = new Map();
+  const asi = asiFlow(featItem, asiOpts);
+  flowsByItem.set(featItem.id, [asi]);
+
+  const driver = new LevelUpDriver(makeManager({ steps: [classStep(4)], clone, flowsByItem }));
+
+  const uuid = "Compendium.phb.feats.Item.actor";
+  const choiceAdv = {
+    type: "ItemChoice",
+    configuration: { choices: { 4: { count: 1, replacement: false } }, pool: [{ uuid }] },
+    value: { added: {}, replaced: {} },
+    getCounts(level) {
+      const current = Object.keys(this.value.added[level] ?? {}).length;
+      const max = this.configuration.choices[level]?.count ?? 0;
+      return { current, max, full: current >= max };
+    },
+    async apply(level, { selected }) {
+      for ( const u of selected ) {
+        if ( u !== uuid ) continue;
+        clone.items.set(featItem);
+        (this.value.added[level] ??= {})[featItem.id] = u;
+      }
+    },
+    async reverse() {}
+  };
+  const record = { level: 4, screenLevel: 4, advancement: choiceAdv, item: null };
+  driver.choiceSteps.push(record);
+  return { driver, record, uuid, asi };
+}
+
+describe("half-feat ability score improvement ingest", () => {
+  it("auto-applies the points when only one ability is open (Actor's +1 Cha)", async () => {
+    const w = makeHalfFeatWorld({ points: 1, cap: 1, locked: ["str", "dex", "con", "int", "wis"] });
+    await w.driver.toggleChoice(w.record, w.uuid);
+
+    expect(w.asi.advancement.applied).toHaveLength(1);
+    expect(w.asi.advancement.applied[0].data).toEqual({ type: "asi", assignments: { cha: 1 } });
+    // Forced allocation: nothing to decide, so no ASI decision surfaces.
+    expect(w.driver.asiSteps).toHaveLength(0);
+  });
+
+  it("still surfaces a decision when more than one ability is open (Resilient)", async () => {
+    const w = makeHalfFeatWorld({ points: 1, cap: 1, locked: [] });
+    await w.driver.toggleChoice(w.record, w.uuid);
+
+    expect(w.driver.asiSteps).toHaveLength(1);
+    expect(w.asi.advancement.applied[0].data).toEqual({ type: "asi" });
+  });
+
+  it("featAbilityRows shows the applied bonus and locks every other ability", async () => {
+    const w = makeHalfFeatWorld({ points: 1, cap: 1, locked: ["str", "dex", "con", "int", "wis"] });
+    await w.driver.toggleChoice(w.record, w.uuid);
+
+    const featRecord = { featSynth: { flows: [w.asi] } };
+    const rows = w.driver.featAbilityRows(featRecord);
+    expect(rows).toHaveLength(6);
+    const cha = rows.find(r => r.key === "cha");
+    expect(cha).toMatchObject({ bonusLabel: "+1", locked: false, canInc: false, canDec: false });
+    for ( const row of rows.filter(r => r.key !== "cha") ) {
+      expect(row).toMatchObject({ bonusLabel: "", locked: true });
+    }
+  });
+
+  it("featAbilityRows locks everything for a feat with no ability increase", () => {
+    const w = makeHalfFeatWorld({});
+    const rows = w.driver.featAbilityRows({ featSynth: { flows: [] } });
+    expect(rows).toHaveLength(6);
+    for ( const row of rows ) expect(row).toMatchObject({ bonusLabel: "", locked: true });
+  });
+});
+
 describe("resolveSubclass — multi-level jump", () => {
   it("ingests subclass flows up to the level-up's final class level", async () => {
     const w = makeArtilleristWorld({ maxClassLevel: 5 });
