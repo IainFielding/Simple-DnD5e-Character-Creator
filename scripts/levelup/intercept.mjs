@@ -145,10 +145,7 @@ function onRenderActorSheet(app, html) {
   if ( !levelUpEnabled() || heroMancerActive() ) return;
   if ( !game.settings.get(MODULE_ID, SETTINGS.levelUpButton) ) return;
   const actor = app?.actor;
-  if ( actor?.type !== "character" || !actor.isOwner ) return;
-
-  if ( !actor.items.some(i => i.type === "class") ) return;            // nothing to level yet
-  if ( (actor.system?.details?.level ?? 0) >= (CONFIG.DND5E?.maxLevel ?? 20) ) return;
+  if ( !canLevelUp(actor) ) return;
 
   const root = html instanceof HTMLElement ? html : html?.[0];
   if ( !root || root.querySelector(".sogrom-levelup-btn") ) return;
@@ -157,7 +154,7 @@ function onRenderActorSheet(app, html) {
   button.type = "button";
   button.addEventListener("click", ev => {
     ev.preventDefault();
-    levelUpFromButton(actor);
+    triggerLevelUp(actor);
   });
 
   // Prefer the system's rest-button row. It only exists when dnd5e sets `showRests`
@@ -204,16 +201,30 @@ function buildHeaderButtonRow(root) {
 }
 
 /**
- * Level one class up from the button. A multiclass character picks which class gains the level;
- * the click then follows the same path as the sheet's own level selector (see dnd5e's
- * `BaseActorSheet##changeLevel`): build the level-change manager and render it when it has steps
- * — which fires the primary hook, claiming a drivable level-up for our wizard and leaving an
- * unsupported one to the native UI — or apply the bare level directly when there is nothing to
- * decide. Advancements disabled world-wide is the exception: no native flow exists at all, so
- * the manager is driven by hand ({@link launchFromButton}).
+ * Whether an actor is currently eligible for the level-up flow: a character the user owns,
+ * with at least one class to level and room left below the system's level cap. Shared by the
+ * sheet button and the sidebar context menu so both entry points show under the same terms.
+ * @param {Actor5e} actor
+ * @returns {boolean}
+ */
+export function canLevelUp(actor) {
+  if ( actor?.type !== "character" || !actor.isOwner ) return false;
+  if ( !actor.items.some(i => i.type === "class") ) return false;       // nothing to level yet
+  return (actor.system?.details?.level ?? 0) < (CONFIG.DND5E?.maxLevel ?? 20);
+}
+
+/**
+ * Level one class up from a trigger (the sheet button or the sidebar context menu). A multiclass
+ * character picks which class gains the level; the click then follows the same path as the
+ * sheet's own level selector (see dnd5e's `BaseActorSheet##changeLevel`): build the level-change
+ * manager and render it when it has steps — which fires the primary hook, claiming a drivable
+ * level-up for our wizard and leaving an unsupported one to the native UI — or apply the bare
+ * level directly when there is nothing to decide. Advancements disabled world-wide is the
+ * exception: no native flow exists at all, so the manager is driven by hand
+ * ({@link launchFromButton}).
  * @param {Actor5e} actor
  */
-async function levelUpFromButton(actor) {
+export async function triggerLevelUp(actor) {
   const classes = actor.items.filter(i => i.type === "class");
   const classItem = classes.length === 1 ? classes[0] : await pickClass(classes);
   if ( !classItem ) return;

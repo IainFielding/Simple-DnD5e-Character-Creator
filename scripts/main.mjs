@@ -2,7 +2,7 @@ import { MODULE_ID, SETTINGS, DEFAULTS, launchWindowOptions, tpl, t, log, levelU
 import { STEPS } from "./steps/registry.mjs";
 import { CreatorShell } from "./app/creator-shell.mjs";
 import { warmSources } from "./data/source-cache.mjs";
-import { registerLevelUp } from "./levelup/intercept.mjs";
+import { registerLevelUp, triggerLevelUp, canLevelUp } from "./levelup/intercept.mjs";
 
 /*
  * This is the module's entry point — module.json points Foundry here via "esmodules".
@@ -11,7 +11,8 @@ import { registerLevelUp } from "./levelup/intercept.mjs";
  * event fires, `Hooks.on(event, fn)` runs it every time. The lifecycle order we use is:
  *   init   -> register settings and templates (before the game data is loaded)
  *   ready  -> everything is loaded; safe to touch actors, install our level-up takeover
- * We also listen for directory events to inject our "launch" button and context menu item.
+ * We also listen for directory events to inject our "launch" button and the sidebar's
+ * right-click "Level Up" entry.
  */
 
 /* -------------------------------------------- */
@@ -170,26 +171,26 @@ Hooks.on("renderActorDirectory", (_app, html) => {
   injectLaunchButton(rootElement(html));
 });
 
-// Add a right-click "Resume in creator" entry to character actors in the sidebar. Foundry passes
+// Add a right-click "Level Up" entry to character actors in the sidebar. Foundry passes
 // us the menu's option array and we push our own entry onto it; `condition` decides per-actor
-// whether the entry shows, `callback` runs when it's clicked.
+// whether the entry shows, `callback` runs when it's clicked. It rides the same trigger path
+// as the sheet's Level Up button, so both entry points behave identically.
 Hooks.on("getActorContextOptions", (_directory, options) => {
   if ( game.system?.id !== "dnd5e" ) return;
-  if ( !creationEnabled() ) return;
   if ( !game.settings.get(MODULE_ID, SETTINGS.contextMenu) ) return;
   options.push({
-    name: t("menu.resume"),
-    icon: "",
+    name: t("levelup.button"),
+    icon: "<i class=\"fa-solid fa-trophy-star\"></i>",
     condition: li => {
-      // Re-check the mode per-render: the Ember module may have been enabled since this
-      // entry was registered (a reload normally follows, but stay safe either way).
-      if ( !creationEnabled() ) return false;
+      // Re-check the gates per-render: the mode setting or a competing module may have
+      // changed since this entry was registered (a reload normally follows, but stay safe).
+      if ( !levelUpEnabled() || heroMancerActive() ) return false;
       const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
-      return actor?.type === "character" && (game.user.isGM || actor.isOwner);
+      return canLevelUp(actor);
     },
     callback: li => {
       const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
-      if ( actor ) launchCreator(actor);
+      if ( actor ) triggerLevelUp(actor);
     }
   });
 });
