@@ -1,28 +1,48 @@
 {{!--
-  The multiclass class picker (class-picker.mjs): the creation class step's list + description
-  layout in a small framed window. Rows fire data-action="pickClass"; a locked row (prereqs
-  unmet under the "prereq" multiclass mode) keeps its tooltip but ignores clicks. The footer's
-  Multiclass button confirms; Cancel (or closing the window) resolves null.
+  The level-up Class step (lvl-class-step.mjs): the creator's pick-list + detail layout. One
+  scrolling list with the actor's own classes first (tagged "Level 5 → 6") and, when the world
+  allows multiclassing, the takeable new classes beneath a group heading (prerequisite failures
+  locked, their tooltip naming the missing ability). Rows fire pick-levelup-class; picking one
+  builds the level-up pipeline and unlocks Next.
 --}}
-<section class="creator-pick creator-pick--solo sogrom-mcpick">
+<section class="creator-pick creator-pick--solo levelup-class-pick">
   <!-- Left column: the class list -->
   <div class="creator-pick-side">
     <ul class="creator-picklist">
-      {{#each cards}}
+      {{#if hasAddable}}
+      <li class="levelup-class-group">{{localize "sogrom-dnd5e-character-creator.levelup.step.class.yours"}}</li>
+      {{/if}}
+      {{#each existing}}
       <li>
-        <button type="button"
-                class="creator-pickrow {{#if selected}}is-selected{{/if}} {{#if disabled}}is-disabled{{/if}}"
-                data-action="pickClass" data-uuid="{{uuid}}" data-name="{{name}}"
-                {{#if disabled}}aria-disabled="true" data-tooltip="{{reason}}"{{/if}}>
+        <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="pick-levelup-class"
+                data-kind="existing" data-id="{{id}}" data-name="{{name}}">
           <img class="creator-pickrow-img" src="{{img}}" alt="">
           <span class="creator-pickrow-name">{{name}}</span>
-          {{#if disabled}}<i class="creator-pickrow-tick fa-solid fa-lock" inert></i>{{/if}}
+          <span class="creator-pickrow-tag">{{tag}}</span>
           {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check" inert></i>{{/if}}
         </button>
       </li>
-      {{else}}
-      <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.levelup.multiclass.noneAvailable"}}</p>
       {{/each}}
+
+      {{#if hasAddable}}
+      <li class="levelup-class-group">{{localize "sogrom-dnd5e-character-creator.levelup.step.class.multiclass"}}</li>
+      {{#each addable}}
+      <li>
+        <button type="button"
+                class="creator-pickrow {{#if selected}}is-selected{{/if}} {{#if disabled}}is-disabled{{/if}}"
+                data-action="stepAction" data-step-action="pick-levelup-class"
+                data-kind="new" data-uuid="{{uuid}}" data-name="{{name}}"
+                {{#if disabled}}aria-disabled="true" data-tooltip="{{reason}}"{{/if}}>
+          <img class="creator-pickrow-img" src="{{img}}" alt="">
+          <span class="creator-pickrow-name">{{name}}</span>
+          {{#if disabled}}<i class="creator-pickrow-tick fa-solid fa-lock" inert></i>
+          {{else}}<span class="creator-pickrow-tag">{{tag}}</span>{{/if}}
+          {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check" inert></i>{{/if}}
+        </button>
+      </li>
+      {{/each}}
+      {{/if}}
     </ul>
   </div>
 
@@ -68,20 +88,9 @@
     {{else}}
     <div class="creator-pick-empty">
       <i class="fa-solid fa-chess-rook"></i>
-      <h2>{{localize "sogrom-dnd5e-character-creator.levelup.multiclass.pickerTitle"}}</h2>
-      <p>{{localize "sogrom-dnd5e-character-creator.common.selectHint"}}</p>
+      <h2>{{localize "sogrom-dnd5e-character-creator.levelup.step.class.label"}}</h2>
+      <p>{{localize "sogrom-dnd5e-character-creator.levelup.step.class.hint"}}</p>
     </div>
     {{/if}}
   </div>
 </section>
-
-<footer class="sogrom-mcpick-foot">
-  <button type="button" class="creator-btn creator-btn-ghost" data-action="cancel">
-    {{localize "sogrom-dnd5e-character-creator.common.cancel"}}
-  </button>
-  <button type="button" class="creator-btn creator-btn-primary" data-action="confirm"
-          {{#unless hasSelection}}disabled{{/unless}}>
-    <i class="fa-solid fa-chess-rook" inert></i>
-    {{localize "sogrom-dnd5e-character-creator.levelup.multiclass.pick"}}
-  </button>
-</footer>

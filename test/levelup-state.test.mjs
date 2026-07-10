@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LevelUpState, atLevel, recordLevel } from "../scripts/levelup/levelup-state.mjs";
+import { buildSteps } from "../scripts/levelup/registry.mjs";
 
 /**
  * The level-up session state: which screens exist ({@link LevelUpState#gainedLevels} and the
@@ -69,6 +70,57 @@ describe("LevelUpState construction", () => {
     });
     expect(state.fromLevel).toBe(3);
     expect(state.toLevel).toBe(5);
+  });
+});
+
+describe("class-choice phase (chooseClass session, no driver yet)", () => {
+  it("opens targeting the next character level with empty decisions and no player input", () => {
+    const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
+    expect(state.needsClassChoice).toBe(true);
+    expect(state.driver).toBe(null);
+    expect(state.fromLevel).toBe(3);
+    expect(state.toLevel).toBe(4);
+    expect(state.gainedLevels()).toEqual([]);
+    expect(state.hasPlayerInput()).toBe(false);
+  });
+
+  it("adoptDriver installs the class and target level exactly like the constructor's driver path", () => {
+    const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
+    state.adoptDriver(makeDriver());
+    expect(state.classItem).toBe(CLASS_ITEM);
+    expect(state.toLevel).toBe(4);
+  });
+
+  it("clearDriver resets the session and drops everything staged against the old class", () => {
+    const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
+    state.adoptDriver(makeDriver());
+    state.selectedCantrips.push({ name: "Light" });
+    state.swapSpell = { id: "oldSpell00000000", name: "Jump" };
+    state.collapsedBlocks.add("4:hp");
+
+    state.clearDriver();
+    expect(state.driver).toBe(null);
+    expect(state.classItem).toBe(null);
+    expect(state.toLevel).toBe(4);                 // back to fromLevel + 1
+    expect(state.selectedCantrips).toEqual([]);
+    expect(state.swapSpell).toBe(null);
+    expect(state.collapsedBlocks.size).toBe(0);
+    expect(state.hasPlayerInput()).toBe(false);
+  });
+
+  it("buildSteps offers only the Class step until a driver is adopted, then the full rail", () => {
+    const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
+    expect(buildSteps(state).map(s => s.id)).toEqual(["class"]);
+
+    state.adoptDriver(makeDriver({ hp: [{ level: 4 }] }));
+    state.hasSpellStep = () => false;              // the driver stub has no clone to plan from
+    expect(buildSteps(state).map(s => s.id)).toEqual(["class", "level-4", "review"]);
+  });
+
+  it("a session claimed from a ready-built manager never grows a Class step", () => {
+    const state = makeState({ hp: [{ level: 4 }] }, 3, [CLASS_ITEM]);
+    state.hasSpellStep = () => false;
+    expect(buildSteps(state).map(s => s.id)).toEqual(["level-4", "review"]);
   });
 });
 

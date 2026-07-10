@@ -2717,38 +2717,26 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .creator-subclass-card img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; }
 
-/* ---------------------------------------------- Multiclass class picker
+/* ---------------------------------------------- Level-up Class step
 
-   The small framed window the level-up flow opens when a player adds a new class
-   (class-picker.mjs). Reuses the creation pick-list/detail layout inside a normal
-   Foundry window frame: the window content stacks the two-column pick area over a
-   confirm footer, and the pick list collapses to one column to fit the narrower
-   side rail. */
-.sogrom-mc-picker .window-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  background: var(--cc-bg);
+   The wizard's first screen when the class is still undecided (lvl-class-step.mjs). The
+   creation pick layout carries the look; these rules add the group headings that split the
+   list ("Your Classes" / "Multiclass") and quiet the locked rows. */
+.levelup-class-group {
+  grid-column: 1 / -1;
+  margin: 0.35rem 0 0;
+  padding: 0 0.15rem 0.3rem;
+  border-bottom: 1px solid var(--cc-line);
+  font-family: var(--cc-font-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cc-gold);
 }
-.sogrom-mc-picker .sogrom-mcpick {
-  flex: 1 1 auto;
-  min-height: 0;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 1rem;
-}
-.sogrom-mc-picker .creator-picklist { grid-template-columns: 1fr; }
-/* A locked row (multiclass prerequisites unmet) keeps its tooltip but must not
-   invite the click: suppress the hover lift the base pickrow applies. */
-.sogrom-mc-picker .creator-pickrow.is-disabled:hover {
+/* A locked row (multiclass prerequisites unmet) keeps its tooltip but must not invite the
+   click: suppress the hover lift the base pickrow applies. */
+.levelup-class-pick .creator-pickrow.is-disabled:hover {
   border-color: var(--cc-line);
   transform: none;
-}
-.sogrom-mcpick-foot {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.6rem;
-  padding-top: 0.65rem;
-  border-top: 1px solid var(--cc-line);
 }

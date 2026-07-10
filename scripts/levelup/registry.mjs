@@ -1,9 +1,11 @@
 import { levelStep } from "./steps/level-step.mjs";
+import { lvlClassStep } from "./steps/lvl-class-step.mjs";
 import { lvlReviewStep } from "./steps/lvl-review-step.mjs";
 import { lvlSpellsStep } from "./steps/lvl-spells-step.mjs";
 
 /**
- * The ordered steps the level-up shell walks through: one screen per gained character level — each
+ * The ordered steps the level-up shell walks through: the Class pick (when the session opened
+ * with it undecided), then one screen per gained character level — each
  * carrying *all* of that level's choices (hit points, subclass, ASI/feat, features, traits) — then,
  * for a caster who gained new cantrip/spell capacity, the spell picks, then a final review of
  * everything (spell choices included). A level-up is a pipeline whose later choices can be
@@ -15,10 +17,17 @@ import { lvlSpellsStep } from "./steps/lvl-spells-step.mjs";
  * @returns {object[]}
  */
 export function buildSteps(state) {
+  const steps = [];
+  // A session opened without a decided class (the button / context menu with more than one
+  // option) leads with the Class step; everything after it exists only once the pick has built
+  // and adopted a driver. Sessions claimed from an already-built manager skip it entirely.
+  if ( state.needsClassChoice ) steps.push(lvlClassStep);
+  if ( !state.driver ) return steps;
+
   // On a multiclass character the screens are class levels, not character levels — name the
   // class on each ("Wizard 3") so the labels can't be misread as the character's level.
   const className = state.isMulticlassed ? (state.classItem?.name ?? "") : "";
-  const steps = state.gainedLevels().map(level => levelStep(level, className));
+  steps.push(...state.gainedLevels().map(level => levelStep(level, className)));
   if ( state.hasSpellStep() ) steps.push(lvlSpellsStep);
   steps.push(lvlReviewStep);
   return steps;

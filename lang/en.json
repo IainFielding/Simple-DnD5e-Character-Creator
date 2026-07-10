@@ -54,18 +54,10 @@
         "apply": "Apply Level-Up"
       },
       "button": "Level Up",
-      "chooseClass": {
-        "title": "Level Up Which Class?",
-        "body": "Choose the class that gains this level.",
-        "addClass": "Add a Class…"
-      },
       "multiclass": {
-        "pickerTitle": "Choose a New Class",
         "score": "{ability} {score}",
         "requires": "{class} requires {abilities}",
-        "blocked": "Multiclassing requirements not met: {reasons}.",
-        "pick": "Multiclass",
-        "noneAvailable": "No new classes are available from the enabled sources."
+        "blocked": "Multiclassing requirements not met: {reasons}."
       },
       "cancel": {
         "title": "Discard this level-up?",
@@ -78,6 +70,16 @@
         "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow."
       },
       "step": {
+        "class": {
+          "label": "Class",
+          "yours": "Your Classes",
+          "multiclass": "Multiclass",
+          "levelTag": "Level {from} → {to}",
+          "newTag": "New Class",
+          "hint": "Choose which class gains this level — or begin a new one.",
+          "switchTitle": "Change class?",
+          "switchBody": "Switching class discards everything you've chosen for this level-up so far — hit points, features, spells, and other picks."
+        },
         "level": {
           "label": "Level {level}",
           "classLabel": "{class} {level}"

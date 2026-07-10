@@ -3,7 +3,6 @@ import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
 import { LevelUpShell } from "./levelup-shell.mjs";
 import { multiclassBlockers, formatBlockers } from "./multiclass.mjs";
-import { MulticlassPicker } from "./class-picker.mjs";
 
 /**
  * Wires up the level-up takeover (§4). Two trigger paths:
@@ -30,6 +29,7 @@ export function registerLevelUp() {
   // The level-up step partials are pulled in by the stage's dynamic Handlebars partial, so they
   // must be registered up front just like the creation steps.
   foundry.applications.handlebars.loadTemplates([
+    tpl("levelup/class.hbs"),
     tpl("levelup/level.hbs"),
     tpl("levelup/hp.hbs"),
     tpl("levelup/choices.hbs"),
@@ -219,9 +219,6 @@ function buildHeaderButtonRow(root) {
   return row;
 }
 
-/** Sentinel returned by {@link pickClass} when the player chose to add a new class instead. */
-const ADD_CLASS = Symbol("sogrom.addClass");
-
 /**
  * Whether an actor is currently eligible for the level-up flow: a character the user owns,
  * with at least one class to level and room left below the system's level cap. Shared by the
@@ -236,91 +233,39 @@ export function canLevelUp(actor) {
 }
 
 /**
- * Level one class up from a trigger (the sheet button or the sidebar context menu). A multiclass
- * character picks which class gains the level (and, when the world's multiclass setting opts in,
- * may add a brand-new class instead — see {@link addClassFromButton}); the click then follows
- * the same path as the sheet's own level selector (see dnd5e's `BaseActorSheet##changeLevel`):
- * build the level-change manager and render it when it has steps — which fires the primary hook,
- * claiming a drivable level-up for our wizard and leaving an unsupported one to the native UI —
- * or apply the bare level directly when there is nothing to decide. Advancements disabled
- * world-wide is the exception: no native flow exists at all, so the manager is driven by hand
+ * Level one class up from a trigger (the sheet button or the sidebar context menu).
+ *
+ * When the character has more than one levellable option — several classes, or a new class on
+ * offer under the world's multiclass setting — the wizard itself opens on its Class step and the
+ * pick happens there, fully in-brand (see {@link module:levelup/steps/lvl-class-step}); the
+ * driver is built after the pick, so the shell opens without one.
+ *
+ * A single-class character with no multiclass option skips the step: the click follows the same
+ * path as the sheet's own level selector (see dnd5e's `BaseActorSheet##changeLevel`) — build the
+ * level-change manager and render it when it has steps, which fires the primary hook, claiming a
+ * drivable level-up for our wizard and leaving an unsupported one to the native UI — or apply
+ * the bare level directly when there is nothing to decide. Advancements disabled world-wide is
+ * the exception: no native flow exists at all, so the manager is driven by hand
  * ({@link driveManager}).
  * @param {Actor5e} actor
  */
 export async function triggerLevelUp(actor) {
   const classes = actor.items.filter(i => i.type === "class");
-  // Offering a new class also forces the picker dialog on a single-class character, who would
-  // otherwise skip straight past the only place the option can live.
   const canMulticlass = multiclassMode() !== "off"
     && (actor.system?.details?.level ?? 0) < (CONFIG.DND5E?.maxLevel ?? 20);
-  const choice = (classes.length === 1 && !canMulticlass)
-    ? classes[0]
-    : await pickClass(classes, { canMulticlass });
-  if ( !choice ) return;
-  if ( choice === ADD_CLASS ) return addClassFromButton(actor);
-  const classItem = choice;
 
+  if ( classes.length > 1 || canMulticlass ) {
+    const state = new LevelUpState(actor, null, { chooseClass: true });
+    new LevelUpShell(state, launchWindowOptions()).render(true);
+    return;
+  }
+
+  const classItem = classes[0];
   const AdvancementManager = dnd5e.applications.advancement.AdvancementManager;
   const manager = AdvancementManager.forLevelChange(actor, classItem.id, 1);
   if ( game.settings.get("dnd5e", "disableAdvancements") ) return driveManager(manager);
   if ( manager.steps.length ) return manager.render({ force: true });
   return classItem.update({ "system.levels": (classItem.system?.levels ?? 0) + 1 });
-}
-
-/**
- * Ask which class gains the level — one button per class, showing its current level, plus an
- * "Add a Class…" option when multiclassing is enabled.
- * @param {Item5e[]} classes
- * @param {object} [options]
- * @param {boolean} [options.canMulticlass=false]  Offer the new-class option.
- * @returns {Promise<Item5e|typeof ADD_CLASS|null>}  The chosen class, the {@link ADD_CLASS}
- *   sentinel, or null when the dialog was dismissed.
- */
-async function pickClass(classes, { canMulticlass = false } = {}) {
-  const { DialogV2 } = foundry.applications.api;
-  const buttons = classes.map(c => ({
-    action: c.id,
-    label: `${c.name} ${c.system?.levels ?? ""}`.trim()
-  }));
-  if ( canMulticlass ) buttons.push({
-    action: "sogrom-add-class",
-    label: t("levelup.chooseClass.addClass"),
-    icon: "fa-solid fa-chess-rook"
-  });
-  const choice = await DialogV2.wait({
-    window: { title: t("levelup.chooseClass.title"), icon: "fa-solid fa-trophy-star" },
-    content: `<p>${t("levelup.chooseClass.body")}</p>`,
-    buttons,
-    rejectClose: false
-  }).catch(() => null);
-  if ( choice === "sogrom-add-class" ) return ADD_CLASS;
-  return classes.find(c => c.id === choice) ?? null;
-}
-
-/**
- * Add a new class (multiclass) from the button: pick the class, then hand the system's
- * `forNewItem` manager down the same two paths a same-class level-up takes — render it (the
- * primary hook claims a drivable one) or, when the world disabled native advancements, drive
- * it by hand. The picker already filtered to eligible classes, so a prerequisite failure can't
- * arrive here.
- * @param {Actor5e} actor
- */
-async function addClassFromButton(actor) {
-  const uuid = await MulticlassPicker.pick(actor);
-  if ( !uuid ) return;
-  const doc = await fromUuid(uuid).catch(() => null);
-  if ( !doc ) return;
-
-  // fromCompendium strips ids/folders and stamps _stats.compendiumSource, so review chips and
-  // future "same class?" identifier checks resolve back to the pack entry.
-  const itemData = game.items.fromCompendium(doc);
-  foundry.utils.setProperty(itemData, "system.levels", 1);
-
-  const AdvancementManager = dnd5e.applications.advancement.AdvancementManager;
-  const manager = AdvancementManager.forNewItem(actor, itemData);
-  if ( !manager.steps.length ) return actor.createEmbeddedDocuments("Item", [itemData]);
-  if ( game.settings.get("dnd5e", "disableAdvancements") ) return driveManager(manager);
-  return manager.render({ force: true });
 }
 
 /**
