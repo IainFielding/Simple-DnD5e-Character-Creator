@@ -58,6 +58,15 @@ export const DEFAULTS = {
 };
 
 /**
+ * The valid values of the module `mode` setting:
+ *  - `"creation"`         — the module only owns character creation; levelling stays native.
+ *  - `"creation-levelup"` — creation plus the level-up takeover (the default).
+ *  - `"levelup"`          — level-up only; every creation entry point (launch button,
+ *                           context menu) is hidden and the native creation flow is untouched.
+ */
+export const MODES = ["creation", "creation-levelup", "levelup"];
+
+/**
  * The valid values of the level-up hit-point mode setting, from most to least permissive:
  *  - `"choice"`       — average, roll, max, or a manually-typed value (the module's original behaviour).
  *  - `"average-roll"` — average or roll only (the 2024 rules as written); no max, no manual entry.
@@ -104,14 +113,47 @@ export function multiclassMode() {
 }
 
 /**
- * Whether the module owns the level-up experience as well as creation, per the `mode`
- * world setting. `"creation-levelup"` (the default) opts the table into the level-up takeover
- * (§5 of the level-up plan); `"creation"` leaves the actor sheet and the native advancement
- * flow untouched. Both level-up trigger paths are gated on this.
+ * The module's effective mode. Normally this is the `mode` world setting (guarded against an
+ * unknown stored value). When the Ember module is active it is always `"levelup"`: Ember ships
+ * its own character creation, so ours stands down and only the level-up takeover runs —
+ * regardless of what the setting stored before Ember was enabled.
+ * @returns {"creation"|"creation-levelup"|"levelup"}
+ */
+export function moduleMode() {
+  if ( emberActive() ) return "levelup";
+  const raw = game.settings.get(MODULE_ID, SETTINGS.mode);
+  return MODES.includes(raw) ? raw : DEFAULTS.mode;
+}
+
+/**
+ * Whether the module owns character creation (the launch button, the actor context menu and
+ * the creator window itself). Off in `"levelup"` mode — and therefore always off while Ember
+ * is active, since Ember owns creation.
+ * @returns {boolean}
+ */
+export function creationEnabled() {
+  return moduleMode() !== "levelup";
+}
+
+/**
+ * Whether the module owns the level-up experience, per the effective {@link moduleMode}.
+ * `"creation-levelup"` and `"levelup"` opt the table into the level-up takeover (§5 of the
+ * level-up plan); `"creation"` leaves the actor sheet and the native advancement flow
+ * untouched. Both level-up trigger paths are gated on this.
  * @returns {boolean}
  */
 export function levelUpEnabled() {
-  return game.settings.get(MODULE_ID, SETTINGS.mode) === "creation-levelup";
+  return moduleMode() !== "creation";
+}
+
+/**
+ * Whether the Ember module is active in this world. Ember brings its own character creator,
+ * so we cede creation to it ({@link moduleMode} pins to `"levelup"`) and re-skin our level-up
+ * window to match its look (the `sogrom-ember` class, see styles/ember-skin.css).
+ * @returns {boolean}
+ */
+export function emberActive() {
+  return !!game.modules.get("ember")?.active;
 }
 
 /**
@@ -188,12 +230,16 @@ export function launchWindowOptions() {
   const windowed = game.settings.get(MODULE_ID, SETTINGS.displayMode) === "windowed";
   // Carry the base class explicitly: ApplicationV2 may replace (rather than merge)
   // the static DEFAULT_OPTIONS.classes with the array passed here.
-  if ( !windowed ) return { classes: ["sogrom-creator", "sogrom-creator-fullscreen"] };
+  const classes = ["sogrom-creator", windowed ? "sogrom-creator-windowed" : "sogrom-creator-fullscreen"];
+  // With Ember active the window wears its skin (styles/ember-skin.css) so the level-up
+  // reads as part of Ember's creator rather than a foreign UI dropped on top of it.
+  if ( emberActive() ) classes.push("sogrom-ember");
+  if ( !windowed ) return { classes };
 
   const w = Math.min(1800, Math.round(window.innerWidth * 0.9));
   const h = Math.min(1100, Math.round(window.innerHeight * 0.9));
   return {
-    classes: ["sogrom-creator", "sogrom-creator-windowed"],
+    classes,
     window: { frame: true, positioned: true, resizable: true },
     position: {
       width: w,

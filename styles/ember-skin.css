@@ -1,0 +1,133 @@
+/* Ember skin — applied when the Ember module is active.
+
+   The creator/level-up window gets the `sogrom-ember` class from launchWindowOptions()
+   (config.mjs) whenever Ember is enabled in the world, and this sheet re-themes the
+   whole UI to Ember's look: the dark codex-paper background, the parchment-over-
+   midnight palette, warm ember-red accents, and Ember's own fonts (Pirate Scroll for
+   headings, Vollkorn for body text).
+
+   Two rules of the road:
+   1. Everything here is scoped under `.sogrom-ember`, so without Ember the module
+      renders its stock Arcane Midnight theme untouched.
+   2. Assets are referenced from the Ember module's own directory — `../../ember/…`
+      resolves to `modules/ember/…`. That is deliberate: we never ship copies of
+      Ember's art. The URLs are only ever fetched while the `sogrom-ember` class is
+      applied, i.e. while Ember is installed and active, so a world without Ember
+      never requests (or 404s on) these files. The fonts need no @font-face here at
+      all: Ember's stylesheet declares "Vollkorn" and "Pirate Scroll" globally
+      whenever it is active, which is exactly when this skin applies.
+
+   The theme itself works by re-pointing the `--cc-*` design tokens creator.css is
+   built on; the handful of extra rules below the token block cover the few places
+   creator.css hard-codes Arcane Midnight colours (ambience gradients, the top bar,
+   the primary button). */
+
+/* ---------------------------------------------- Design tokens
+
+   Ember's palette (see ember/styles/variables.less) mapped onto the creator's
+   tokens: near-black cool purples for surfaces, parchment lights for text, the
+   warm ember red as the interactive accent, and parchment gold — Ember's ridge
+   borders — for the "selected / you are here" state. */
+
+.sogrom-creator.sogrom-ember {
+  /* Surfaces — Ember cool-5 (#0b0a13) up through cool-4 (#302831). */
+  --cc-bg: #0b0a13;
+  --cc-panel: #17131e;
+  --cc-panel-2: #211b29;
+  --cc-line: #302831;
+  --cc-line-2: #453b50;
+
+  /* Text — Ember's parchment lights. */
+  --cc-text: #f5eadf;          /* light-2, Ember's primary text */
+  --cc-muted: #9f8475;         /* light-5, Ember's subtle text */
+  --cc-bright: #fffbf0;        /* light-1, Ember's emphatic text */
+
+  /* Accent — Ember's warm ember red replaces the violet. */
+  --cc-accent: #e04e4e;        /* warm-1 */
+  --cc-accent-soft: rgba(224, 78, 78, 0.18);
+  --cc-accent-glow: rgba(224, 78, 78, 0.38);
+
+  /* Selection — parchment gold, matching Ember's ridge-parchment borders. */
+  --cc-gold: #d0b8a3;          /* light-4 */
+  --cc-gold-bright: #f0dab9;   /* light-3 */
+  --cc-gold-glow: rgba(208, 184, 163, 0.32);
+  --cc-select: #d0b8a3;
+  --cc-select-soft: rgba(208, 184, 163, 0.16);
+
+  --cc-danger: #c93f4b;        /* warm-2 */
+
+  --cc-panel-grad: linear-gradient(180deg, #1d1826, #120e19);
+
+  /* Ember's type system. */
+  --cc-font-heading: "Pirate Scroll", "Vollkorn", serif;
+  --cc-font-body: "Vollkorn", "Palatino Linotype", Georgia, serif;
+
+  /* Ember's warm-bronze scrollbars (scrollbar-color inherits down the tree). */
+  scrollbar-color: #85715c transparent;
+}
+
+/* ---------------------------------------------- Background
+
+   Ember's fullscreen look (ember/styles/applications.less .ember-fullscreen):
+   the dark codex-paper texture, a faint warm glow rising from the bottom edge,
+   and the big cosmos watermark behind everything. */
+
+.sogrom-creator-fullscreen.sogrom-ember {
+  background: url("../../ember/ui/elements/codex-background-dark.webp") repeat center #0b0a13;
+}
+
+/* Replace the violet ambience with Ember's bottom ember-glow gradient. */
+.sogrom-creator-fullscreen.sogrom-ember::before {
+  background: linear-gradient(to bottom, transparent 75%, rgba(178, 50, 53, 0.15) 100%);
+}
+
+/* Ember's cosmos watermark. creator.css leaves ::after free on the fullscreen root;
+   it sits with the ambience behind the content (z-index -1 in the creator's own
+   stacking context) and never catches the pointer. */
+.sogrom-creator-fullscreen.sogrom-ember::after {
+  content: "";
+  position: absolute;
+  inset: 10% 0 0 0;
+  pointer-events: none;
+  z-index: -1;
+  background: url("../../ember/ui/elements/cosmos-design-weathered.webp") no-repeat center;
+  background-size: auto 100%;
+  opacity: 0.06;
+}
+
+/* Windowed mode wears the same texture inside Foundry's frame. */
+.sogrom-creator-windowed.sogrom-ember .window-content {
+  background: url("../../ember/ui/elements/codex-background-dark.webp") repeat center #0b0a13;
+}
+.sogrom-creator-windowed.sogrom-ember .window-content::before {
+  background: linear-gradient(to bottom, transparent 75%, rgba(178, 50, 53, 0.15) 100%);
+}
+.sogrom-creator-windowed.sogrom-ember .window-header {
+  background: linear-gradient(180deg, #17131e, #0b0a13);
+}
+
+/* ---------------------------------------------- Chrome over the texture
+
+   Ember lays translucent near-black panels over its paper texture (its options use
+   cool-5 at 50–75% alpha) rather than solid plates, so the texture reads through. */
+
+.sogrom-ember .creator-topbar {
+  background: rgba(11, 10, 19, 0.55);
+}
+.sogrom-ember .creator-stage-foot {
+  background: rgba(11, 10, 19, 0.55);
+}
+
+/* Primary action — Ember's warm red replaces the hard-coded violet gradient
+   (the glow/ring shadows already follow the accent tokens above). */
+.sogrom-ember .creator-btn-primary {
+  background: linear-gradient(180deg, #e04e4e, #c93f4b);
+  border-color: #5e1722; /* warm-3 */
+}
+
+/* Pirate Scroll is a display face with no bold weights — heavy tracking and the
+   engraved shadow fight its hand-drawn look, so relax them on headings. */
+.sogrom-ember :is(h1, h2, h3, h4) {
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}

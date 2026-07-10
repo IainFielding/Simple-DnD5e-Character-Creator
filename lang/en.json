@@ -44,8 +44,7 @@
       "failed": "Quick Build failed; your choices were left as they were."
     },
     "menu": {
-      "launch": "Simple Character Builder",
-      "resume": "Simple Character Builder"
+      "launch": "Simple Character Builder"
     },
     "levelup": {
       "window": {
@@ -426,8 +425,8 @@
         "hint": "Adds a “Simple Character Builder” button to the Actors sidebar for anyone allowed to create actors."
       },
       "contextMenu": {
-        "name": "Show actor right-click menu",
-        "hint": "Adds an “Simple Character Builder” button to a character's right-click menu."
+        "name": "Show Level Up in right-click menu",
+        "hint": "Adds a “Level Up” option to a character's right-click menu in the Actors sidebar, opening the same level-up flow as the sheet button."
       },
       "pointBuyBudget": {
         "name": "Point-buy budget",
@@ -445,9 +444,11 @@
       },
       "mode": {
         "name": "Module mode",
-        "hint": "Whether the module also takes over the level-up experience. Creation + Level-Up (the default) re-skins the system's level-up for a calmer, one-screen-per-level flow; Creation only leaves levelling to the system.",
+        "hint": "Which experiences the module owns. Creation + Level-Up (the default) does both; Creation only leaves levelling to the system; Level-Up only hides the creator and keeps just the calmer, one-screen-per-level level-up flow.",
+        "hintEmber": "The Ember module is active and provides its own character creation, so this module runs in Level-Up only mode: the creator is hidden and only the level-up experience is taken over.",
         "creation": "Creation only",
-        "creationLevelup": "Creation + Level-Up"
+        "creationLevelup": "Creation + Level-Up",
+        "levelupOnly": "Level-Up only"
       },
       "levelUpButton": {
         "name": "Show Level Up button",

@@ -1,4 +1,4 @@
-import { MODULE_ID, tpl, t, log, multiclassMode } from "../config.mjs";
+import { MODULE_ID, tpl, t, log, multiclassMode, emberActive } from "../config.mjs";
 import { getSources, isStale, invalidateSources } from "../data/source-cache.mjs";
 import { multiclassBlockers, formatBlockers } from "./multiclass.mjs";
 
@@ -95,7 +95,12 @@ export class MulticlassPicker extends HandlebarsApplicationMixin(ApplicationV2) 
       ui.notifications?.warn(t("levelup.multiclass.noneAvailable"));
       return null;
     }
-    return new Promise(resolve => new MulticlassPicker({ cards, source, resolve }).render(true));
+    // With Ember active the picker wears its skin like the level-up window does (see
+    // launchWindowOptions); ApplicationV2 replaces (not merges) classes, so pass the full list.
+    const options = emberActive()
+      ? { classes: ["sogrom-creator", "sogrom-mc-picker", "sogrom-ember"] }
+      : {};
+    return new Promise(resolve => new MulticlassPicker({ cards, source, resolve }, options).render(true));
   }
 
   async _prepareContext() {

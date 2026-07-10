@@ -259,8 +259,19 @@ export class LevelUpDriver {
         const hasFixed = Object.values(fixed).some(v => v);
         const data = hasFixed ? { type: "asi", assignments: { ...fixed } } : { type: "asi" };
         if ( (cfg.points ?? 0) > 0 ) {
-          // Real points to distribute — surface the decision (its fixed part is pre-applied).
-          this.asiSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+          // PHB-style single-stat half-feats (Actor's "+1 Cha") are data-modelled as 1 point with
+          // every other ability locked, not as a fixed bonus. When only one ability can take the
+          // whole budget the allocation is forced — apply it outright instead of surfacing a
+          // "choice" with nothing to choose.
+          const open = Object.keys(CONFIG.DND5E.abilities)
+            .filter(k => adv.canImprove(k) && !cfg.locked?.has?.(k));
+          if ( (open.length === 1) && ((cfg.cap ?? Infinity) >= cfg.points) ) {
+            data.assignments = { ...(data.assignments ?? {}) };
+            data.assignments[open[0]] = (data.assignments[open[0]] ?? 0) + cfg.points;
+          } else {
+            // Real points to distribute — surface the decision (its fixed part is pre-applied).
+            this.asiSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+          }
         }
         return adv.apply(flow.level, data);
       }
@@ -514,6 +525,11 @@ export class LevelUpDriver {
    * so the mode rules are the system's, not ours; we only scope it to this advancement's pool.
    * Each option also carries its category (`groupKey`/`groupLabel` — e.g. Simple vs Martial Weapons)
    * so the step can group them under headers.
+   *
+   * When the advancement allows replacements and a grant is already satisfied (Cult of the Dragon
+   * Initiate's Dragon's Tongue grants Draconic to a character who may already know it), the pool
+   * widens to the whole trait type — the granted key shows owned/locked and the player picks the
+   * replacement — matching the native flow's behaviour for `allowReplacements`.
    * @param {object} record   One of {@link traitSteps}.
    * @returns {Promise<{ key: string, label: string, img: string|null, selected: boolean, owned: boolean,
    *                     disabled: boolean, groupKey: string, groupLabel: string }[]>}
@@ -529,9 +545,27 @@ export class LevelUpDriver {
     const expanded = (await Trait.mixedChoices(poolKeys)).asSet();
 
     // `selected` = keys already taken on the clone (this advancement's picks plus any from earlier
-    // levels); `available` = eligible but not yet taken. Scope both to this advancement's pool.
+    // levels); `available` = eligible but not yet taken. Scope both to this advancement's pool —
+    // except this advancement's own picks, which always stay visible (and toggleable): a
+    // replacement pick lives outside the configured pool by definition.
     const { selected, available } = await adv.actorSelected();
-    const keys = new Set([...selected, ...available, ...chosen].filter(k => expanded.has(k)));
+    const keys = new Set([...selected, ...available, ...chosen].filter(k => expanded.has(k) || chosen.has(k)));
+
+    // A grant the character already satisfies leaves nothing pickable inside the pool; with
+    // `allowReplacements` the rules let them learn any trait of the same type instead. The
+    // system's own availableChoices() widens the pool in exactly that case, so fold its keys in
+    // (a no-op while the pool still has open picks, since it then stays pool-scoped). Chosen is
+    // passed empty so the widened pool stays visible once the replacement is picked — its options
+    // disable via `full` like any other filled pool instead of vanishing. The system's ":ALL"
+    // pseudo-entries ("All Languages") are skipped: SelectChoices.filter drops them itself when
+    // the trait tree is top-level, but on a real actor the widened tree nests under a per-type
+    // node it never recurses into, and "learn every language" is not a pickable replacement.
+    if ( adv.configuration.allowReplacements ) {
+      const widened = await adv.availableChoices(new Set()).catch(err => { log("availableChoices failed", err); return null; });
+      for ( const k of widened?.choices?.asSet() ?? [] ) {
+        if ( !k.endsWith(":ALL") ) keys.add(k);
+      }
+    }
 
     // Keys are prefixed (e.g. "weapon:mar:longsword"), so keyLabel/keyIcon derive the trait type,
     // and the prefix-minus-leaf ("weapon:mar") labels the category the option belongs to. For weapon
@@ -703,21 +737,37 @@ export class LevelUpDriver {
   }
 
   /**
-   * The six current ability scores as read-only rows (background-panel shape) — used to fill the
-   * ability aside beside a chosen feat that carries no ability choice of its own, so the feat screen
-   * still shows the stacked scores it doesn't change.
+   * The current ability scores as read-only rows (background-panel shape) — used to fill the
+   * ability aside beside a chosen feat that carries no ability *choice* of its own. A half-feat's
+   * automatic increase (a fixed +1, or a one-open-ability point auto-applied at ingest) is read
+   * back off what its synthesised ASI advancements actually assigned and shown as that ability's
+   * "+1" bonus; every other ability locks, so the panel reads as "this one applies, the rest are
+   * set" rather than a blank list of scores.
+   * @param {object} record   One of {@link asiSteps}.
    * @returns {{key: string, label: string, total: number, bonusLabel: string, locked: boolean, canInc: boolean, canDec: boolean}[]}
    */
-  currentAbilityRows() {
-    return Object.entries(CONFIG.DND5E.abilities).map(([key, data]) => ({
-      key,
-      label: data.label,
-      total: this.clone.system.abilities[key]?.value ?? 10,
-      bonusLabel: "",
-      locked: false,
-      canInc: false,
-      canDec: false
-    }));
+  featAbilityRows(record) {
+    const bonus = {};
+    for ( const flow of record?.featSynth?.flows ?? [] ) {
+      if ( flow.advancement?.type !== "AbilityScoreImprovement" ) continue;
+      for ( const [key, value] of Object.entries(flow.advancement.value?.assignments ?? {}) ) {
+        if ( value ) bonus[key] = (bonus[key] ?? 0) + value;
+      }
+    }
+    const rows = [];
+    for ( const [key, data] of Object.entries(CONFIG.DND5E.abilities) ) {
+      if ( data.improvement === false ) continue;
+      rows.push({
+        key,
+        label: data.label,
+        total: this.clone.system.abilities[key]?.value ?? 10,
+        bonusLabel: bonus[key] ? `+${bonus[key]}` : "",
+        locked: !bonus[key],
+        canInc: false,
+        canDec: false
+      });
+    }
+    return rows;
   }
 
   /**

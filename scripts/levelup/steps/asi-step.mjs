@@ -1,5 +1,5 @@
 import { t } from "../../config.mjs";
-import { atLevel } from "../levelup-state.mjs";
+import { atLevel, advancementHint } from "../levelup-state.mjs";
 
 /**
  * Ability Score Improvement — at this level raise ability scores (spend the point budget, usually
@@ -40,7 +40,8 @@ export const asiStep = {
 
       if ( st.type === "feat" ) {
         // Feat chosen: description on the left (like a background), stacked ability scores on the
-        // right. The scores are the feat's own increase where it has one, else the current scores.
+        // right. A feat with an ability *choice* gets live steppers on its child record; otherwise
+        // the panel locks every score, surfacing a half-feat's fixed "+1" on the ability it boosts.
         const child = record.featSynth?.asi?.[0] ?? null;
         const childSt = child ? driver.asiState(child) : null;
         sections.push({
@@ -55,7 +56,7 @@ export const asiStep = {
           cap: displayCap(childSt),
           remaining: childSt?.available ?? 0,
           allSpent: childSt ? childSt.available === 0 : true,
-          rows: childSt ? abilityRows(childSt) : driver.currentAbilityRows()
+          rows: childSt ? abilityRows(childSt) : driver.featAbilityRows(record)
         });
       } else {
         sections.push({
@@ -64,6 +65,7 @@ export const asiStep = {
           isFeat: false,
           allowFeat: st.allowFeat,
           hasChoice: true,
+          hint: await advancementHint(record),
           improvementDesc: t("levelup.step.asi.improvementDesc", { points: st.total }),
           points: st.total,
           cap: displayCap(st),

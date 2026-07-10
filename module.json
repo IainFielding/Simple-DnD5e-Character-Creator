@@ -31,7 +31,8 @@
   ],
   "styles": [
     "styles/fonts.css",
-    "styles/creator.css"
+    "styles/creator.css",
+    "styles/ember-skin.css"
   ],
   "languages": [
     {
