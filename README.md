@@ -91,6 +91,9 @@ The creator works great out of the box, but a few settings let your GM tailor it
 - **Point-buy budget** — change how many points players get when building stats (the standard rules use 27).
 - **Ability roll formula** — set the dice rolled for each ability (the standard rules use 4d6, keeping the highest three).
 - **Launch button & menu entry** — show or hide the sidebar button and the right-click "Open in Character Creator" option.
+- **Module mode** — choose what the module owns: **Creation only**, **Creation + Level-Up** (the default), or **Level-Up only**, which hides the creator and keeps just the guided level-up flow.
+
+> **Playing with Ember?** When the [Ember](https://foundryvtt.com/packages/ember) module is active, this module automatically switches to **Level-Up only** — Ember provides its own character creation — and the level-up window restyles itself to match Ember's look, so the two feel like one experience.
 
 ---
 
