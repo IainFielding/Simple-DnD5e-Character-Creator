@@ -518,6 +518,11 @@ export class LevelUpDriver {
    * so the mode rules are the system's, not ours; we only scope it to this advancement's pool.
    * Each option also carries its category (`groupKey`/`groupLabel` — e.g. Simple vs Martial Weapons)
    * so the step can group them under headers.
+   *
+   * When the advancement allows replacements and a grant is already satisfied (Cult of the Dragon
+   * Initiate's Dragon's Tongue grants Draconic to a character who may already know it), the pool
+   * widens to the whole trait type — the granted key shows owned/locked and the player picks the
+   * replacement — matching the native flow's behaviour for `allowReplacements`.
    * @param {object} record   One of {@link traitSteps}.
    * @returns {Promise<{ key: string, label: string, img: string|null, selected: boolean, owned: boolean,
    *                     disabled: boolean, groupKey: string, groupLabel: string }[]>}
@@ -533,9 +538,27 @@ export class LevelUpDriver {
     const expanded = (await Trait.mixedChoices(poolKeys)).asSet();
 
     // `selected` = keys already taken on the clone (this advancement's picks plus any from earlier
-    // levels); `available` = eligible but not yet taken. Scope both to this advancement's pool.
+    // levels); `available` = eligible but not yet taken. Scope both to this advancement's pool —
+    // except this advancement's own picks, which always stay visible (and toggleable): a
+    // replacement pick lives outside the configured pool by definition.
     const { selected, available } = await adv.actorSelected();
-    const keys = new Set([...selected, ...available, ...chosen].filter(k => expanded.has(k)));
+    const keys = new Set([...selected, ...available, ...chosen].filter(k => expanded.has(k) || chosen.has(k)));
+
+    // A grant the character already satisfies leaves nothing pickable inside the pool; with
+    // `allowReplacements` the rules let them learn any trait of the same type instead. The
+    // system's own availableChoices() widens the pool in exactly that case, so fold its keys in
+    // (a no-op while the pool still has open picks, since it then stays pool-scoped). Chosen is
+    // passed empty so the widened pool stays visible once the replacement is picked — its options
+    // disable via `full` like any other filled pool instead of vanishing. The system's ":ALL"
+    // pseudo-entries ("All Languages") are skipped: SelectChoices.filter drops them itself when
+    // the trait tree is top-level, but on a real actor the widened tree nests under a per-type
+    // node it never recurses into, and "learn every language" is not a pickable replacement.
+    if ( adv.configuration.allowReplacements ) {
+      const widened = await adv.availableChoices(new Set()).catch(err => { log("availableChoices failed", err); return null; });
+      for ( const k of widened?.choices?.asSet() ?? [] ) {
+        if ( !k.endsWith(":ALL") ) keys.add(k);
+      }
+    }
 
     // Keys are prefixed (e.g. "weapon:mar:longsword"), so keyLabel/keyIcon derive the trait type,
     // and the prefix-minus-leaf ("weapon:mar") labels the category the option belongs to. For weapon
