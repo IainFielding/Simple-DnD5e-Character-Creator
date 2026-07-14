@@ -2519,6 +2519,25 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-color: var(--cc-select);
   background: var(--cc-select-soft);
 }
+/* The sourcebook badge sits just before the status pill in the block header, naming where the
+   chosen option (e.g. a subclass) originates. Quieter than the status pill — it's provenance,
+   not state — and truncates rather than wrapping the header on a long book title. */
+.levelup-block-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.levelup-block-source i { flex: 0 0 auto; font-size: 0.7rem; opacity: 0.8; }
 
 .levelup-block-body { padding: 1.1rem; }
 /* The panel owns the heading and spacing now, so reset the partials' own outer margins. */
