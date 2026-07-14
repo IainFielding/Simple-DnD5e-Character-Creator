@@ -2713,6 +2713,11 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .creator-choice-card--owned:not(.is-selected) .creator-choice-card-name { text-decoration: line-through; }
 
+/* A pool option the character already holds from another source (e.g. the base Fighting Style when
+   a Champion picks its extra one): enumerated with a "Known" badge but disabled — it can't be taken
+   twice. A dashed border sets it apart from options merely greyed out because the limit is reached. */
+.creator-choice-card--taken { opacity: 0.6; border-style: dashed; }
+
 /* ---- Spell grant with a choosable casting ability (species lineage spells) ---- */
 /* The granted spell(s), shown as small read-only chips above the ability picker. */
 .creator-grant-spells {

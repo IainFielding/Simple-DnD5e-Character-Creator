@@ -25,6 +25,13 @@
           <span class="creator-choice-card-name">{{name}}</span>
           {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
         </button>
+        {{else if taken}}
+        <button type="button" class="creator-choice-card creator-choice-card--taken"
+                data-tooltip="{{ccItemTooltip uuid}}" disabled>
+          <span class="creator-choice-card-badge">{{localize "sogrom-dnd5e-character-creator.levelup.step.choices.known"}}</span>
+          <img class="creator-choice-card-img" src="{{img}}" alt="">
+          <span class="creator-choice-card-name">{{name}}</span>
+        </button>
         {{else}}
         <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}}"
                 data-action="stepAction" data-step-action="choiceToggle"
