@@ -10,6 +10,11 @@
             aria-expanded="{{#if open}}true{{else}}false{{/if}}">
       <span class="levelup-block-icon"><i class="{{icon}}"></i></span>
       <h2 class="levelup-block-title">{{label}}</h2>
+      {{#if blockSource}}
+      <span class="levelup-block-source" title="{{blockSource}}">
+        <i class="fa-solid fa-book" aria-hidden="true"></i>{{blockSource}}
+      </span>
+      {{/if}}
       {{#if showStatus}}
       <span class="levelup-block-status {{#if complete}}is-done{{/if}}">
         {{#if complete}}<i class="fa-solid fa-check"></i>{{/if}}
