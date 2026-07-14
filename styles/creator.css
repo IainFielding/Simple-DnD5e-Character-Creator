@@ -1972,6 +1972,41 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   font-size: 1.05rem;
   text-align: center;
 }
+
+/* A long iconned pick (Weapon Mastery's many weapons) would sprawl as full 72px cards, so once a
+   grid runs past nine options it drops to the same five-wide chip layout the level-up screen uses —
+   small icon then name. The `:nth-child(10)` probe fires only when a tenth option exists, matching
+   the level-up ">9" threshold; columns step down as the window narrows. */
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) .creator-choice-card {
+  min-height: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) .creator-choice-card-img {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) .creator-choice-card-name {
+  font-size: 0.82rem;
+  text-align: left;
+  line-height: 1.2;
+  min-width: 0;
+}
+@media (max-width: 1000px) {
+  .creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 .creator-choices .creator-choice-card.is-disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* A recommended option (e.g. the class's default spellcasting ability): a soft gold glow, a
@@ -2524,17 +2559,37 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 
 /* Density tiers — vary card + icon size by how many options a pick offers (set per block). */
+/* Large option lists (a long feature / spell / weapon-mastery pool, 9+ options): a fixed five-wide
+   grid of small horizontal chips — icon then name — so a 10-40 option pick stays scannable in a few
+   tidy rows instead of sprawling into tall cards. Columns step down as the window narrows. */
 .levelup-block[data-density="compact"] .creator-choice-grid {
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-  gap: 0.6rem;
-}
-.levelup-block[data-density="compact"] .creator-choice-card {
-  min-height: 96px;
-  padding: 0.8rem 0.6rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.5rem;
 }
-.levelup-block[data-density="compact"] .creator-choice-card-img { width: 40px; height: 40px; }
-.levelup-block[data-density="compact"] .creator-choice-card-name { font-size: 0.85rem; }
+.levelup-block[data-density="compact"] .creator-choice-card {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: 0;
+  padding: 0.5rem 0.65rem;
+  gap: 0.5rem;
+}
+.levelup-block[data-density="compact"] .creator-choice-card-img { width: 34px; height: 34px; flex: 0 0 auto; }
+.levelup-block[data-density="compact"] .creator-choice-card-name {
+  font-size: 0.82rem;
+  text-align: left;
+  line-height: 1.2;
+  min-width: 0;
+}
+/* The tick overlay is tuned for tall cards; pull it into the shorter chip's corner. */
+.levelup-block[data-density="compact"] .creator-choice-card-check { top: 0.3rem; right: 0.35rem; }
+
+@media (max-width: 1000px) {
+  .levelup-block[data-density="compact"] .creator-choice-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .levelup-block[data-density="compact"] .creator-choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
 .levelup-block[data-density="chip"] .creator-choice-grid {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -2548,6 +2603,19 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   gap: 0.55rem;
 }
 .levelup-block[data-density="chip"] .creator-choice-card-name { font-size: 0.9rem; text-align: left; }
+
+/* Guided flow: when the player finishes a decision, the next incomplete block (or, if the level is
+   done, the enabled Next button) gets a brief ring pulse to draw the eye onward — nothing collapses
+   or jumps, so it guides without the jar of a layout shift. Applied/removed by levelup-shell.mjs. */
+@keyframes cc-guide-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--cc-select-soft); }
+  25%  { box-shadow: 0 0 0 4px var(--cc-select); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
+.cc-guide-pulse { animation: cc-guide-pulse 1.1s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .cc-guide-pulse { animation: none; }
+}
 
 .creator-levelup-choices .creator-choice-section {
   margin-bottom: 1.75rem;
@@ -2644,6 +2712,11 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-style: dashed;
 }
 .creator-choice-card--owned:not(.is-selected) .creator-choice-card-name { text-decoration: line-through; }
+
+/* A pool option the character already holds from another source (e.g. the base Fighting Style when
+   a Champion picks its extra one): enumerated with a "Known" badge but disabled — it can't be taken
+   twice. A dashed border sets it apart from options merely greyed out because the limit is reached. */
+.creator-choice-card--taken { opacity: 0.6; border-style: dashed; }
 
 /* ---- Spell grant with a choosable casting ability (species lineage spells) ---- */
 /* The granted spell(s), shown as small read-only chips above the ability picker. */

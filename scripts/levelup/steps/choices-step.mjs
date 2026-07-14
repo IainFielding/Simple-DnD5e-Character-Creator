@@ -52,7 +52,10 @@ async function buildOptions(record, st) {
       options.push({ uuid, name: doc.name, img: doc.img, owned: true, originalId: prior.id, selected: st.replacing !== prior.id });
     } else {
       const selected = st.selected.has(uuid);
-      options.push({ uuid, name: doc.name, img: doc.img, owned: false, selected, disabled: !selected && st.full });
+      // Already held from another source (e.g. the base Fighting Style when picking a Champion's
+      // extra one): show it enumerated but as taken, not a fresh pick — it can't be chosen twice.
+      const taken = !selected && !!st.ownedElsewhere?.has(uuid);
+      options.push({ uuid, name: doc.name, img: doc.img, owned: false, selected, taken, disabled: taken || (!selected && st.full) });
     }
   });
   // A scanned pool has no meaningful authored order, so sort it alphabetically for scanability;
