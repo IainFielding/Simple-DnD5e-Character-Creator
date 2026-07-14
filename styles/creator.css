@@ -2623,6 +2623,34 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .levelup-block[data-density="chip"] .creator-choice-card-name { font-size: 0.9rem; text-align: left; }
 
+/* The "Current"/"Known" badge is a corner overlay tuned for the tall card's empty top padding.
+   In the short horizontal chip layouts there is no free corner, so it lands on top of the icon
+   and name. Float it inline at the end of the row instead, so it sits beside the text, not over it. */
+.levelup-block[data-density="compact"] .creator-choice-card-badge,
+.levelup-block[data-density="chip"] .creator-choice-card-badge {
+  position: static;
+  order: 3;
+  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: center;
+}
+.levelup-block[data-density="compact"] .creator-choice-card-name,
+.levelup-block[data-density="chip"] .creator-choice-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* With the badge sharing the row, a long name (e.g. "Two-Weapon Fighting") would wrap to three
+     lines. Cap it at two — the full name is still available via the card's item tooltip. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Trim the inline badge so the name keeps as much of the narrow chip's width as possible. */
+.levelup-block[data-density="compact"] .creator-choice-card-badge { font-size: 0.55rem; padding: 0.06rem 0.32rem; }
+/* When such a card is also ticked, keep the inline badge clear of the corner check overlay. */
+.levelup-block[data-density="compact"] .creator-choice-card.is-selected .creator-choice-card-badge,
+.levelup-block[data-density="chip"] .creator-choice-card.is-selected .creator-choice-card-badge { margin-right: 1rem; }
+
 /* Guided flow: when the player finishes a decision, the next incomplete block (or, if the level is
    done, the enabled Next button) gets a brief ring pulse to draw the eye onward — nothing collapses
    or jumps, so it guides without the jar of a layout shift. Applied/removed by levelup-shell.mjs. */
