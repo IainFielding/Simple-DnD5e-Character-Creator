@@ -57,6 +57,10 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   /** @type {object[]} The per-session step set (built from the driver's surfaced decisions). */
   #steps;
   #current = 0;
+  /** Keys of level-screen blocks complete at the previous render, plus the step they belong to, so
+   *  {@link #guideToNext} can tell a fresh completion from a block that was already done. */
+  #completeBlocks = null;
+  #completeStep = null;
   /** The shared compendium index (subclass picker, origin details) — see {@link getSources}. */
   #source;
   /** The shared spell source; the post-commit spell step's pool persists across windows. */
@@ -205,6 +209,58 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     }
     if ( filters.length ) this.#applySpellFilters();
+    this.#guideToNext();
+  }
+
+  /**
+   * Guided flow between a level's decision blocks: when the player has just finished a section, draw
+   * their eye to the next unfinished one. Every action re-renders the whole level screen, so we
+   * detect the moment of completion by diffing the set of complete blocks against the previous
+   * render — a block that flipped to complete means the last click settled it.
+   *
+   * Deliberately gentle (the "less jarring, still guided" brief): the finished block stays put, we
+   * only scroll the next incomplete block into view if it isn't already, and a short CSS ring pulse
+   * marks where to look. When the whole level is done we pulse the enabled Next button instead, so
+   * the invitation to move on is just as clear. A step change swaps the entire block set, so those
+   * renders only snapshot the new screen's state without moving anything.
+   */
+  #guideToNext() {
+    const stepId = this.#activeStep?.id;
+    const blocks = [...this.element.querySelectorAll(".levelup-block")];
+    const keyOf = b => b.querySelector(".levelup-block-head")?.dataset.block ?? "";
+    const complete = new Set(blocks.filter(b => b.classList.contains("is-complete")).map(keyOf));
+
+    // First render of this level screen (open, or arriving via nav): baseline only, no movement.
+    if ( stepId !== this.#completeStep ) {
+      this.#completeStep = stepId;
+      this.#completeBlocks = complete;
+      return;
+    }
+    const justDone = blocks.find(b => b.classList.contains("is-complete") && !this.#completeBlocks.has(keyOf(b)));
+    this.#completeBlocks = complete;
+    if ( !justDone ) return;
+
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const after = blocks.slice(blocks.indexOf(justDone) + 1);
+    const nextIncomplete = after.find(b => !b.classList.contains("is-complete"))
+      ?? blocks.find(b => !b.classList.contains("is-complete"));
+    if ( nextIncomplete ) {
+      // rAF so this runs after the framework has restored the pre-render scroll position.
+      requestAnimationFrame(() => nextIncomplete.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" }));
+      this.#pulse(nextIncomplete);
+    } else {
+      // Level fully decided — invite the player onward via the Next button.
+      this.#pulse(this.element.querySelector(".creator-btn--trail:not(:disabled)"));
+    }
+  }
+
+  /** Retrigger the guide ring on an element, restarting the animation if it's still mid-pulse. */
+  #pulse(el) {
+    if ( !el ) return;
+    el.classList.remove("cc-guide-pulse");
+    void el.offsetWidth; // Force reflow so re-adding the class restarts the keyframes.
+    el.classList.add("cc-guide-pulse");
+    el.addEventListener("animationend", () => el.classList.remove("cc-guide-pulse"), { once: true });
   }
 
   /**
