@@ -1,7 +1,8 @@
-import { MODULE_ID, SETTINGS, tpl, t, log, levelUpEnabled, heroMancerActive, launchWindowOptions } from "../config.mjs";
+import { MODULE_ID, SETTINGS, tpl, t, log, levelUpEnabled, heroMancerActive, launchWindowOptions, multiclassMode } from "../config.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
 import { LevelUpShell } from "./levelup-shell.mjs";
+import { multiclassBlockers, formatBlockers } from "./multiclass.mjs";
 
 /**
  * Wires up the level-up takeover (§4). Two trigger paths:
@@ -28,6 +29,7 @@ export function registerLevelUp() {
   // The level-up step partials are pulled in by the stage's dynamic Handlebars partial, so they
   // must be registered up front just like the creation steps.
   foundry.applications.handlebars.loadTemplates([
+    tpl("levelup/class.hbs"),
     tpl("levelup/level.hbs"),
     tpl("levelup/hp.hbs"),
     tpl("levelup/choices.hbs"),
@@ -75,9 +77,11 @@ function onPreAdvancementManagerRender(manager) {
     actorLevel,
     classItemId: classItem?.id ?? null,
     classOnActor: !!(classItem && manager.actor?.items?.get(classItem.id)),
+    classOnClone: !!(classItem && manager.clone?.items?.get(classItem.id)),
+    multiclassMode: multiclassMode(),
     hasReverseOrDelete: steps.some(s => s.type === "reverse" || s.type === "delete"),
     raisesLevel: steps.some(s => s.type === "forward" && s.class && (s.level ?? 0) > actorLevel),
-    canDrive: LevelUpDriver.canDrive(manager),
+    canDrive: LevelUpDriver.canDrive(manager, { allowNewClass: multiclassMode() !== "off" }),
     unsupportedSteps: steps
       .filter(s => !s.automatic && !LevelUpDriver.isStepSupported(s))
       .map(s => `${s.flow?.advancement?.type ?? "?"} — ${s.flow?.advancement?.title ?? s.flow?.item?.name ?? "?"}`)
@@ -97,14 +101,29 @@ function onPreAdvancementManagerRender(manager) {
 
 /**
  * Whether this manager is a level-up we can fully own: the user owns the actor, and the driver's
- * conservative gate accepts every step. Anything else (level-downs, choice edits, multiclass
- * drops, or levels carrying choices we don't yet re-skin) is left to the native flow.
+ * conservative gate accepts every step — including a new class (multiclass) when the world
+ * setting opts in. Anything else (level-downs, choice edits, or levels carrying choices we
+ * don't yet re-skin) is left to the native flow.
  * @param {AdvancementManager} manager
  * @returns {boolean}
  */
 function shouldTakeOver(manager) {
   if ( !manager?.actor?.isOwner ) return false;
-  return LevelUpDriver.canDrive(manager);
+  const mode = multiclassMode();
+  if ( !LevelUpDriver.canDrive(manager, { allowNewClass: mode !== "off" }) ) return false;
+
+  // A new-class claim under the "prereq" mode must meet the written multiclass prerequisites.
+  // The wizard's own picker never offers an ineligible class, but a class item dragged onto
+  // the sheet arrives here unchecked — warn and stand down, leaving the native flow to run.
+  const classItem = manager.steps.find(s => s.class)?.class?.item;
+  if ( (mode === "prereq") && classItem && !manager.actor.items.get(classItem.id) ) {
+    const blockers = multiclassBlockers(manager.actor, classItem);
+    if ( blockers.length ) {
+      ui.notifications?.warn(t("levelup.multiclass.blocked", { reasons: formatBlockers(blockers) }));
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -214,57 +233,47 @@ export function canLevelUp(actor) {
 }
 
 /**
- * Level one class up from a trigger (the sheet button or the sidebar context menu). A multiclass
- * character picks which class gains the level; the click then follows the same path as the
- * sheet's own level selector (see dnd5e's `BaseActorSheet##changeLevel`): build the level-change
- * manager and render it when it has steps — which fires the primary hook, claiming a drivable
- * level-up for our wizard and leaving an unsupported one to the native UI — or apply the bare
- * level directly when there is nothing to decide. Advancements disabled world-wide is the
- * exception: no native flow exists at all, so the manager is driven by hand
- * ({@link launchFromButton}).
+ * Level one class up from a trigger (the sheet button or the sidebar context menu).
+ *
+ * When the character has more than one levellable option — several classes, or a new class on
+ * offer under the world's multiclass setting — the wizard itself opens on its Class step and the
+ * pick happens there, fully in-brand (see {@link module:levelup/steps/lvl-class-step}); the
+ * driver is built after the pick, so the shell opens without one.
+ *
+ * A single-class character with no multiclass option skips the step: the click follows the same
+ * path as the sheet's own level selector (see dnd5e's `BaseActorSheet##changeLevel`) — build the
+ * level-change manager and render it when it has steps, which fires the primary hook, claiming a
+ * drivable level-up for our wizard and leaving an unsupported one to the native UI — or apply
+ * the bare level directly when there is nothing to decide. Advancements disabled world-wide is
+ * the exception: no native flow exists at all, so the manager is driven by hand
+ * ({@link driveManager}).
  * @param {Actor5e} actor
  */
 export async function triggerLevelUp(actor) {
   const classes = actor.items.filter(i => i.type === "class");
-  const classItem = classes.length === 1 ? classes[0] : await pickClass(classes);
-  if ( !classItem ) return;
+  const canMulticlass = multiclassMode() !== "off"
+    && (actor.system?.details?.level ?? 0) < (CONFIG.DND5E?.maxLevel ?? 20);
 
-  if ( game.settings.get("dnd5e", "disableAdvancements") ) return launchFromButton(actor, classItem);
+  if ( classes.length > 1 || canMulticlass ) {
+    const state = new LevelUpState(actor, null, { chooseClass: true });
+    new LevelUpShell(state, launchWindowOptions()).render(true);
+    return;
+  }
 
+  const classItem = classes[0];
   const AdvancementManager = dnd5e.applications.advancement.AdvancementManager;
   const manager = AdvancementManager.forLevelChange(actor, classItem.id, 1);
+  if ( game.settings.get("dnd5e", "disableAdvancements") ) return driveManager(manager);
   if ( manager.steps.length ) return manager.render({ force: true });
   return classItem.update({ "system.levels": (classItem.system?.levels ?? 0) + 1 });
 }
 
 /**
- * Ask which class gains the level — one button per class, showing its current level.
- * @param {Item5e[]} classes
- * @returns {Promise<Item5e|null>}  The chosen class, or null when the dialog was dismissed.
+ * Drive a hand-built manager directly — the path for worlds that disabled native advancements,
+ * where rendering would never fire the primary hook (no native flow exists at all).
+ * @param {AdvancementManager} manager
  */
-async function pickClass(classes) {
-  const { DialogV2 } = foundry.applications.api;
-  const choice = await DialogV2.wait({
-    window: { title: t("levelup.chooseClass.title"), icon: "fa-solid fa-trophy-star" },
-    content: `<p>${t("levelup.chooseClass.body")}</p>`,
-    buttons: classes.map(c => ({
-      action: c.id,
-      label: `${c.name} ${c.system?.levels ?? ""}`.trim()
-    })),
-    rejectClose: false
-  }).catch(() => null);
-  return classes.find(c => c.id === choice) ?? null;
-}
-
-/**
- * Build a level-change manager by hand (the system would normally do this) and drive it — the
- * path for worlds that disabled native advancements, where no manager would otherwise exist.
- * @param {Actor5e} actor
- * @param {Item5e} classItem
- */
-function launchFromButton(actor, classItem) {
-  const AdvancementManager = dnd5e.applications.advancement.AdvancementManager;
-  const manager = AdvancementManager.forLevelChange(actor, classItem.id, 1);
+function driveManager(manager) {
   if ( !shouldTakeOver(manager) ) {
     ui.notifications?.warn(t("levelup.notify.choicesUnsupported"));
     return;

@@ -84,11 +84,21 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   /**
+   * Called by the Class step the moment a driver is adopted mid-session: the class (and so the
+   * subclass list and spell pool worth warming) is only known now. The spell pool re-warms on the
+   * next render anyway ({@link #warmSpellPool}); the subclass warm is kicked here.
+   */
+  warmForDriver() {
+    this.#warmSubclasses();
+  }
+
+  /**
    * Start loading the subclass picker's data in the background while the player is still on the
    * earlier decisions: the world's subclass index, then the detail panel and feature groups of
    * this class's own subclasses. Fire-and-forget — everything lands in the shared source cache's
    * promise-memos, so the subclass block reads it back instantly (or joins the tail of this same
-   * work). A single card's failure only costs that card its warmth.
+   * work). A single card's failure only costs that card its warmth. A no-op until a driver
+   * exists (a chooseClass session's constructor runs before any class is picked).
    */
   async #warmSubclasses() {
     try {

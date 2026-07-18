@@ -10,6 +10,7 @@
       "available": "Available",
       "noEntries": "No entries found in the enabled compendiums.",
       "reset": "Reset",
+      "cancel": "Cancel",
       "on": "On",
       "off": "Off",
       "selectHint": "Choose an option from the list to see its full description.",
@@ -53,9 +54,10 @@
         "apply": "Apply Level-Up"
       },
       "button": "Level Up",
-      "chooseClass": {
-        "title": "Level Up Which Class?",
-        "body": "Choose the class that gains this level."
+      "multiclass": {
+        "score": "{ability} {score}",
+        "requires": "{class} requires {abilities}",
+        "blocked": "Multiclassing requirements not met: {reasons}."
       },
       "cancel": {
         "title": "Discard this level-up?",
@@ -68,8 +70,32 @@
         "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow."
       },
       "step": {
+        "class": {
+          "label": "Class",
+          "yours": "Your Classes",
+          "multiclass": "Multiclass",
+          "levelTag": "Level {from} → {to}",
+          "newTag": "New Class",
+          "hint": "Pick which class gains this level.",
+          "switchTitle": "Change class?",
+          "switchBody": "Switching class discards everything you've chosen for this level-up so far — hit points, features, spells, and other picks.",
+          "routeTitle": "Current Class",
+          "add": {
+            "first": "Take a First Class",
+            "second": "Multiclass into a Second Class",
+            "third": "Multiclass into a Third Class",
+            "more": "Take Another Class",
+            "hint": "Start a new class at level 1 instead of advancing one you already have.",
+            "off": "Multiclassing is disabled in this world.",
+            "none": "There are no other classes available to take.",
+            "back": "Back to level-up options",
+            "browseTitle": "Choose a New Class",
+            "browseHint": "Pick the class to begin at level 1. Locked classes list the ability score you are missing."
+          }
+        },
         "level": {
-          "label": "Level {level}"
+          "label": "Level {level}",
+          "classLabel": "{class} {level}"
         },
         "hp": {
           "label": "Hit Points",
@@ -137,6 +163,7 @@
           "kindBackground": "Background",
           "level": "Level {level}",
           "levelUp": "Level {from} → {to}",
+          "levelNew": "New Class — Level {level}",
           "abilityTip": "Increased by this level-up"
         },
         "spells": {
@@ -442,6 +469,13 @@
       "levelUpButton": {
         "name": "Show Level Up button",
         "hint": "Adds a “Level Up” button to the character sheet's header for the character's owner. Levelling through the sheet's own class controls still works either way."
+      },
+      "allowMulticlass": {
+        "name": "Allow multiclassing",
+        "hint": "Lets players add a new class when levelling up. With prerequisites shows only classes whose ability requirements (13+ in the primary ability of both the current and the new class) are met; Without prerequisites offers every class.",
+        "off": "Off",
+        "prereq": "On — with ability prerequisites",
+        "free": "On — without prerequisites"
       },
       "levelUpHpMode": {
         "name": "Level-up hit points",

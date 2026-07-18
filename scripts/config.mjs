@@ -40,7 +40,8 @@ export const SETTINGS = {
   mode: "mode",
   levelUpButton: "showLevelUpButton",
   levelUpHpMode: "levelUpHpMode",
-  levelUpHpRollToChat: "levelUpHpRollToChat"
+  levelUpHpRollToChat: "levelUpHpRollToChat",
+  multiclass: "allowMulticlass"
 };
 
 // The fallback value for each setting, used when the world hasn't overridden it (and as
@@ -50,9 +51,10 @@ export const DEFAULTS = {
   rollFormula: "4d6kh3",
   displayMode: "fullscreen",
   mode: "creation-levelup",
-  levelUpButton: false,
+  levelUpButton: true,
   levelUpHpMode: "choice",
-  levelUpHpRollToChat: false
+  levelUpHpRollToChat: false,
+  multiclass: "off"
 };
 
 /**
@@ -89,6 +91,25 @@ export function levelUpHpMode() {
  */
 export function levelUpHpRollToChat() {
   return !!game.settings.get(MODULE_ID, SETTINGS.levelUpHpRollToChat);
+}
+
+/**
+ * The valid values of the multiclass setting, from most to least restrictive:
+ *  - `"off"`    — the level-up wizard never adds a new class; multiclass drops go to the native UI.
+ *  - `"prereq"` — multiclassing allowed, enforcing the rules-as-written ability prerequisites
+ *                 (13+ in the primary ability of both the current and the new class).
+ *  - `"free"`   — multiclassing allowed with no prerequisite check (homebrew tables).
+ */
+export const MULTICLASS_MODES = ["off", "prereq", "free"];
+
+/**
+ * Whether (and how) players may add a new class during level-up, per the world setting.
+ * Guards against an unknown stored value by falling back to the default.
+ * @returns {"off"|"prereq"|"free"}
+ */
+export function multiclassMode() {
+  const raw = game.settings.get(MODULE_ID, SETTINGS.multiclass);
+  return MULTICLASS_MODES.includes(raw) ? raw : DEFAULTS.multiclass;
 }
 
 /**

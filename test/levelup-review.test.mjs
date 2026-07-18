@@ -123,6 +123,40 @@ describe("level-up review — spells granted by nested sub-items", () => {
     for ( const s of classSection.spells ) expect(s.isNew).toBe(true);
   });
 
+  it("labels a brand-new class (multiclass) as new instead of 'Level 0 → 1', leading the columns", () => {
+    // Fighter 5 multiclassing into Wizard: the clone carries the new class at level 1 that the
+    // actor lacks entirely.
+    const fighter = {
+      id: "clsFighter000000", type: "class", name: "Fighter", img: "fighter.webp",
+      system: { identifier: "fighter", levels: 5, hd: { denomination: "d10" } },
+      advancement: { byId: {} }
+    };
+    const wizard = {
+      id: "clsWizard0000000", type: "class", name: "Wizard", img: "wizard.webp",
+      system: { identifier: "wizard", levels: 1, hd: { denomination: "d6" } },
+      advancement: { byId: {} }
+    };
+    const actor = makeActor([fighter], { level: 5 });
+    const clone = makeActor([fighter, wizard], { level: 6, hpMax: 40, prof: 3 });
+    clone.reset = () => {};
+    const state = { ...makeState(actor, clone), classItem: clone.items.get(wizard.id) };
+
+    const ctx = lvlReviewStep.context({ state, driver: { clone } });
+
+    const wizSection = ctx.sections.find(s => s.name === "Wizard");
+    expect(wizSection.leveled).toBe(true);
+    // The shimmed t() echoes key + data: assert the new-class key fired with the class level.
+    expect(wizSection.levelLabel).toContain("levelup.step.review.levelNew");
+    expect(wizSection.levelLabel).toContain("\"level\":1");
+
+    const ftrSection = ctx.sections.find(s => s.name === "Fighter");
+    expect(ftrSection.leveled).toBe(false);
+    expect(ftrSection.levelLabel).toContain("levelup.step.review.level:");
+
+    // The levelled (new) class's column leads the review.
+    expect(ctx.sections[0].name).toBe("Wizard");
+  });
+
   it("also buckets the granting feature itself into the class column when gained this level-up", () => {
     // The subclass-pick level: actor Artificer 2, clone at 3 with subclass + feat + its spells all new.
     const actor = makeActor([baseItems(2)[0]], { level: 2 });

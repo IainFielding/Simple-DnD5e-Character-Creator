@@ -53,10 +53,39 @@ export class LevelUpState {
 
   /** @type {Actor5e} The real actor being levelled (untouched until the driver commits). */
   actor;
-  /** @type {import("./manager-driver.mjs").LevelUpDriver} */
-  driver;
-  /** @type {Item5e} The class item gaining levels. */
-  classItem;
+  /**
+   * The wrapped advancement manager, or null while the session is still on the Class step (a
+   * `chooseClass` session opens without one; {@link adoptDriver} installs it once a class is
+   * picked). Every decision getter below degrades to "nothing yet" while it is null.
+   * @type {import("./manager-driver.mjs").LevelUpDriver|null}
+   */
+  driver = null;
+  /** @type {Item5e} The class item gaining levels (null until a driver is adopted). */
+  classItem = null;
+
+  /**
+   * Whether this session leads with the in-wizard Class step (the button/context-menu flow on a
+   * character with more than one levellable option). Sessions claimed from an already-built
+   * manager — the sheet's level selector, a class drag-drop — arrive with the class decided and
+   * skip the step.
+   */
+  needsClassChoice = false;
+
+  /**
+   * The Class step's current pick: `{ kind: "existing", id }` for one of the actor's classes or
+   * `{ kind: "new", uuid }` for a multiclass, null while undecided. Kept even though the adopted
+   * driver implies it, so the step can mark the active card across re-renders.
+   * @type {{kind: "existing", id: string}|{kind: "new", uuid: string}|null}
+   */
+  classSelection = null;
+
+  /**
+   * Which face of the Class step is showing. The step opens on its route screen — the character's
+   * own classes as the obvious picks, with a muted card for starting a new one — and flips to the
+   * class browser (`true`) only when that muted card is clicked. Purely presentational: the pick
+   * itself lives in {@link classSelection}, so flipping back and forth changes nothing.
+   */
+  classBrowse = false;
   /** Character level before this level-up. */
   fromLevel;
   /** Character level after this level-up. */
@@ -111,13 +140,69 @@ export class LevelUpState {
   swapCantrip = null;
   swapSpell = null;
 
-  constructor(actor, driver) {
+  /**
+   * @param {Actor5e} actor
+   * @param {import("./manager-driver.mjs").LevelUpDriver|null} [driver]  Prepared driver, or null
+   *   to open on the Class step and adopt one later.
+   * @param {object} [options]
+   * @param {boolean} [options.chooseClass=false]  Lead with the in-wizard Class step.
+   */
+  constructor(actor, driver = null, { chooseClass = false } = {}) {
     this.actor = actor;
+    this.fromLevel = actor.system?.details?.level ?? 0;
+    this.toLevel = this.fromLevel + 1;
+    this.needsClassChoice = chooseClass;
+    if ( driver ) this.adoptDriver(driver);
+  }
+
+  /**
+   * Install a prepared driver: the moment the session's class is decided. Derives the class item
+   * and target level exactly as the constructor's driver path always has.
+   * @param {import("./manager-driver.mjs").LevelUpDriver} driver
+   */
+  adoptDriver(driver) {
     this.driver = driver;
     this.classItem = driver.steps.find(s => s.class)?.class?.item ?? null;
-    this.fromLevel = actor.system?.details?.level ?? 0;
     // The trailing marker step carries the final character level the manager is targeting.
     this.toLevel = driver.steps.reduce((max, s) => Math.max(max, s.level ?? 0), this.fromLevel);
+  }
+
+  /**
+   * Discard the adopted driver (the player changed their mind on the Class step). The driver's
+   * clone dies with it — nothing was written to the actor — but everything staged against the old
+   * class (spell picks, swaps, collapsed blocks, spell-step UI) must go too, or it would leak
+   * into the next class's session.
+   */
+  clearDriver() {
+    this.driver = null;
+    this.classItem = null;
+    this.toLevel = this.fromLevel + 1;
+    this.selectedCantrips = [];
+    this.selectedSpells = [];
+    this.swapCantrip = null;
+    this.swapSpell = null;
+    this.spellTab = "cantrips";
+    this.focusedSpellUuid = null;
+    this.collapsedBlocks.clear();
+  }
+
+  /**
+   * Whether the levelled class is brand-new to the character — a multiclass: until the commit,
+   * the class item exists only on the driver's clone, not the real actor.
+   * @returns {boolean}
+   */
+  get isNewClass() {
+    return !!this.classItem && !this.actor.items?.get(this.classItem.id);
+  }
+
+  /**
+   * Whether the wizard should name the class on its level labels. The decision records are keyed
+   * by *class* level, so for a character with more than one class (or gaining one) a bare
+   * "Level 3" is ambiguous between class and character level — "Wizard 3" isn't.
+   * @returns {boolean}
+   */
+  get isMulticlassed() {
+    return this.isNewClass || (this.actor.items?.filter(i => i.type === "class").length ?? 0) > 1;
   }
 
   /**
@@ -127,6 +212,8 @@ export class LevelUpState {
    * @returns {import("./steps/lvl-spells-step.mjs").SpellPlan}
    */
   spellPlan() {
+    // No driver yet (the Class step): nothing has changed, so there is nothing to offer.
+    if ( !this.driver && !this.committed ) return computeSpellPlan(this.actor, null);
     const source = this.committed ? this.actor : this.driver.clone;
     const classItem = this.classItem ? source.items.get(this.classItem.id) : null;
     return computeSpellPlan(source, classItem);
@@ -143,32 +230,32 @@ export class LevelUpState {
 
   /** The hit-point decisions surfaced for this level-up (one per gained level). */
   get hpSteps() {
-    return this.driver.hpSteps;
+    return this.driver?.hpSteps ?? [];
   }
 
   /** The feature-choice decisions surfaced for this level-up. */
   get choiceSteps() {
-    return this.driver.choiceSteps;
+    return this.driver?.choiceSteps ?? [];
   }
 
   /** The ability-score-improvement decisions surfaced for this level-up. */
   get asiSteps() {
-    return this.driver.asiSteps;
+    return this.driver?.asiSteps ?? [];
   }
 
   /** The trait decisions (Weapon Mastery, language picks…) surfaced for this level-up. */
   get traitSteps() {
-    return this.driver.traitSteps;
+    return this.driver?.traitSteps ?? [];
   }
 
   /** The subclass decisions surfaced for this level-up. */
   get subclassSteps() {
-    return this.driver.subclassSteps;
+    return this.driver?.subclassSteps ?? [];
   }
 
   /** The spell-grant ability decisions (a species lineage spell at a class level). */
   get grantSteps() {
-    return this.driver.grantSteps;
+    return this.driver?.grantSteps ?? [];
   }
 
   /**
@@ -180,6 +267,8 @@ export class LevelUpState {
    */
   hasPlayerInput() {
     const d = this.driver;
+    // On the Class step nothing exists to lose: a bare class pick costs one click to redo.
+    if ( !d ) return false;
     return this.hasStagedSpells()
       || this.hpSteps.some(r => r.mode !== "avg")
       || this.subclassSteps.some(r => d.subclassState(r).chosen)

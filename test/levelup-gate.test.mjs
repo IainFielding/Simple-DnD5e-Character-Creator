@@ -28,11 +28,20 @@ function marker(level = 4) {
   return { type: "forward", automatic: true, level, class: { item: { id: CLASS_ID }, level } };
 }
 
-/** A manager-shaped stub: steps, plus the real actor the gate checks the class against. */
+/**
+ * A manager-shaped stub: steps, the real actor the gate checks the class against, and the
+ * working clone — which always carries the class (the native manager put it there, whether
+ * the class came from the actor or a `forNewItem` multiclass drop).
+ */
 function makeManager(steps, { actorLevel = 3, classOnActor = true } = {}) {
   const items = new Map();
   if ( classOnActor ) items.set(CLASS_ID, { id: CLASS_ID, type: "class" });
-  return { steps, actor: { system: { details: { level: actorLevel } }, items } };
+  const cloneItems = new Map([[CLASS_ID, { id: CLASS_ID, type: "class" }]]);
+  return {
+    steps,
+    actor: { system: { details: { level: actorLevel } }, items },
+    clone: { items: cloneItems }
+  };
 }
 
 /* -------------------------------------------- */
@@ -122,9 +131,37 @@ describe("LevelUpDriver.canDrive", () => {
     expect(LevelUpDriver.canDrive(manager)).toBe(false);
   });
 
-  it("rejects a brand-new class drop (class item not on the real actor)", () => {
+  it("rejects a brand-new class drop (class item not on the real actor) by default", () => {
     const manager = makeManager([step("HitPoints"), marker()], { classOnActor: false });
     expect(LevelUpDriver.canDrive(manager)).toBe(false);
+  });
+
+  it("claims a brand-new class drop when allowNewClass opts in (multiclass setting)", () => {
+    // A forNewItem multiclass manager: the class lives on the clone, not the actor, and the
+    // steps raise the character level exactly like a same-class level-up.
+    const manager = makeManager([step("HitPoints"), step("Trait"), marker()], { classOnActor: false });
+    expect(LevelUpDriver.canDrive(manager, { allowNewClass: true })).toBe(true);
+  });
+
+  it("still requires the new class to be on the clone even with allowNewClass", () => {
+    const manager = makeManager([step("HitPoints"), marker()], { classOnActor: false });
+    manager.clone.items.clear();
+    expect(LevelUpDriver.canDrive(manager, { allowNewClass: true })).toBe(false);
+  });
+
+  it("still rejects unsupported steps and level-downs with allowNewClass", () => {
+    const unsupported = makeManager([
+      step("HitPoints"),
+      step("SomeFutureAdvancement"),
+      marker()
+    ], { classOnActor: false });
+    expect(LevelUpDriver.canDrive(unsupported, { allowNewClass: true })).toBe(false);
+
+    const levelDown = makeManager([
+      { ...step("HitPoints"), type: "reverse" },
+      marker()
+    ], { classOnActor: false });
+    expect(LevelUpDriver.canDrive(levelDown, { allowNewClass: true })).toBe(false);
   });
 
   it("rejects a manager that never raises the character level", () => {

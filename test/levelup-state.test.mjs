@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LevelUpState, atLevel, recordLevel } from "../scripts/levelup/levelup-state.mjs";
+import { buildSteps } from "../scripts/levelup/registry.mjs";
 
 /**
  * The level-up session state: which screens exist ({@link LevelUpState#gainedLevels} and the
@@ -32,13 +33,19 @@ function makeDriver({ steps, hp = [], asi = [], choices = [], traits = [], subcl
   };
 }
 
-/** An actor stub carrying only the character level the constructor reads. */
-function makeActor(level = 3) {
-  return { system: { details: { level } } };
+/**
+ * An actor stub: the character level the constructor reads, plus (optionally) owned class
+ * items behind a Collection-ish `items` (`get` by id + `filter`), which the multiclass
+ * getters consult.
+ */
+function makeActor(level = 3, classes = []) {
+  const items = new Map(classes.map(c => [c.id, c]));
+  items.filter = fn => [...items.values()].filter(fn);
+  return { system: { details: { level } }, items };
 }
 
-function makeState(driverOptions = {}, actorLevel = 3) {
-  return new LevelUpState(makeActor(actorLevel), makeDriver(driverOptions));
+function makeState(driverOptions = {}, actorLevel = 3, classes = []) {
+  return new LevelUpState(makeActor(actorLevel, classes), makeDriver(driverOptions));
 }
 
 /* -------------------------------------------- */
@@ -63,6 +70,80 @@ describe("LevelUpState construction", () => {
     });
     expect(state.fromLevel).toBe(3);
     expect(state.toLevel).toBe(5);
+  });
+});
+
+describe("class-choice phase (chooseClass session, no driver yet)", () => {
+  it("opens targeting the next character level with empty decisions and no player input", () => {
+    const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
+    expect(state.needsClassChoice).toBe(true);
+    expect(state.driver).toBe(null);
+    expect(state.fromLevel).toBe(3);
+    expect(state.toLevel).toBe(4);
+    expect(state.gainedLevels()).toEqual([]);
+    expect(state.hasPlayerInput()).toBe(false);
+  });
+
+  it("adoptDriver installs the class and target level exactly like the constructor's driver path", () => {
+    const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
+    state.adoptDriver(makeDriver());
+    expect(state.classItem).toBe(CLASS_ITEM);
+    expect(state.toLevel).toBe(4);
+  });
+
+  it("clearDriver resets the session and drops everything staged against the old class", () => {
+    const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
+    state.adoptDriver(makeDriver());
+    state.selectedCantrips.push({ name: "Light" });
+    state.swapSpell = { id: "oldSpell00000000", name: "Jump" };
+    state.collapsedBlocks.add("4:hp");
+
+    state.clearDriver();
+    expect(state.driver).toBe(null);
+    expect(state.classItem).toBe(null);
+    expect(state.toLevel).toBe(4);                 // back to fromLevel + 1
+    expect(state.selectedCantrips).toEqual([]);
+    expect(state.swapSpell).toBe(null);
+    expect(state.collapsedBlocks.size).toBe(0);
+    expect(state.hasPlayerInput()).toBe(false);
+  });
+
+  it("buildSteps offers only the Class step until a driver is adopted, then the full rail", () => {
+    const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
+    expect(buildSteps(state).map(s => s.id)).toEqual(["class"]);
+
+    state.adoptDriver(makeDriver({ hp: [{ level: 4 }] }));
+    state.hasSpellStep = () => false;              // the driver stub has no clone to plan from
+    expect(buildSteps(state).map(s => s.id)).toEqual(["class", "level-4", "review"]);
+  });
+
+  it("a session claimed from a ready-built manager never grows a Class step", () => {
+    const state = makeState({ hp: [{ level: 4 }] }, 3, [CLASS_ITEM]);
+    state.hasSpellStep = () => false;
+    expect(buildSteps(state).map(s => s.id)).toEqual(["level-4", "review"]);
+  });
+});
+
+describe("multiclass flags", () => {
+  const OTHER_CLASS = { id: "clsWizard0000000", name: "Wizard", type: "class" };
+
+  it("levelling the character's only class is neither new nor multiclassed", () => {
+    const state = makeState({}, 3, [CLASS_ITEM]);
+    expect(state.isNewClass).toBe(false);
+    expect(state.isMulticlassed).toBe(false);
+  });
+
+  it("a class missing from the real actor is a new class (multiclass in progress)", () => {
+    // The forNewItem manager put the class on the clone only; the actor has a different class.
+    const state = makeState({}, 3, [OTHER_CLASS]);
+    expect(state.isNewClass).toBe(true);
+    expect(state.isMulticlassed).toBe(true);
+  });
+
+  it("an already-multiclassed character levelling one owned class is multiclassed but not new", () => {
+    const state = makeState({}, 5, [CLASS_ITEM, OTHER_CLASS]);
+    expect(state.isNewClass).toBe(false);
+    expect(state.isMulticlassed).toBe(true);
   });
 });
 

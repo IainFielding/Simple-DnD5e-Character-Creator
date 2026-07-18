@@ -45,14 +45,18 @@ function routeFor(action) {
  * subclass (or a feat) can reveal further choices — so the screen is rebuilt each render and any
  * revealed block simply appears in place. Multi-level jumps produce one of these per level, in
  * order; the registry assembles them from {@link LevelUpState#gainedLevels}.
- * @param {number} level
+ * @param {number} level        The class level this screen covers.
+ * @param {string} [className]  Names the class on the label ("Wizard 3") — passed for a
+ *   multiclass character, where a bare "Level 3" would read as the *character* level.
  * @returns {object}
  */
-export function levelStep(level) {
+export function levelStep(level, className = "") {
   return {
     id: `level-${level}`,
     icon: "fa-solid fa-trophy-star",
-    label: t("levelup.step.level.label", { level }),
+    label: className
+      ? t("levelup.step.level.classLabel", { class: className, level })
+      : t("levelup.step.level.label", { level }),
     template: "levelup/level",
     level,
 
