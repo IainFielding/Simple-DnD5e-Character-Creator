@@ -78,6 +78,14 @@ export class LevelUpState {
    * @type {{kind: "existing", id: string}|{kind: "new", uuid: string}|null}
    */
   classSelection = null;
+
+  /**
+   * Which face of the Class step is showing. The step opens on its route screen — the character's
+   * own classes as the obvious picks, with a muted card for starting a new one — and flips to the
+   * class browser (`true`) only when that muted card is clicked. Purely presentational: the pick
+   * itself lives in {@link classSelection}, so flipping back and forth changes nothing.
+   */
+  classBrowse = false;
   /** Character level before this level-up. */
   fromLevel;
   /** Character level after this level-up. */

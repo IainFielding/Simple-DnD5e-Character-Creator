@@ -2860,3 +2860,176 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-color: var(--cc-line);
   transform: none;
 }
+
+/* Name over badge instead of beside it. Sharing one row with a pill left a class name a sliver of
+   an already-narrow column, and `overflow-wrap: anywhere` spent the difference vertically — a
+   two-word name could stack five lines tall. Stacked, the name gets the row's full width and the
+   badge sits under it, so the row height is the same for every class. */
+.creator-pickrow-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.creator-pickrow-text .creator-pickrow-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: normal;
+}
+.creator-pickrow-text .creator-pickrow-tag { margin-left: 0; }
+
+/* The Back link above the browse list. */
+.levelup-class-back {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+  margin: 0 0 0.6rem;
+  padding: 0.2rem 0.1rem;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--cc-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.levelup-class-back:hover { color: var(--cc-select); }
+
+/* ---------------------------------------------- Level-up Class step: the route screen
+
+   The step's default face: what the character already is, then the handful of things this
+   level-up could be. Deliberately not the pick-list — with one class there is one real answer,
+   and it should read as one card rather than as row one of a compendium scroll. */
+.levelup-class-route {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  min-height: 0;
+  padding: 0.5rem 0.25rem;
+  overflow-y: auto;
+}
+.levelup-route-head { display: flex; flex-direction: column; gap: 0.6rem; }
+.levelup-route-title {
+  margin: 0;
+  font-family: var(--cc-font-heading);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cc-gold);
+  border: 0;
+}
+.levelup-route-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.levelup-route-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.7rem 0.25rem 0.25rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+}
+.levelup-route-chip img {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #0a0910;
+  padding: 2px;
+}
+.levelup-route-chip-name { font-size: 0.85rem; white-space: nowrap; }
+.levelup-route-hint { margin: 0; color: var(--cc-muted); font-size: 0.9rem; line-height: 1.4; }
+
+.levelup-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One option per card: art, a stacked title/sub-line that owns the full width, and a chevron that
+   becomes a tick once the card is the live pick. */
+.levelup-routecard {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0.85rem 1rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 11px;
+  color: var(--cc-text);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    transform 0.25s var(--cc-ease);
+}
+.levelup-routecard:hover { border-color: var(--cc-select); transform: translateX(2px); }
+.levelup-routecard:active { transform: scale(0.995); }
+.levelup-routecard.is-selected {
+  border-color: var(--cc-select);
+  background: var(--cc-select-soft);
+  box-shadow: inset 0 0 0 1px var(--cc-select), 0 0 12px var(--cc-gold-glow);
+}
+.levelup-routecard-img {
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #0a0910;
+  border: 1px solid var(--cc-line);
+  padding: 4px;
+}
+.levelup-routecard.is-selected .levelup-routecard-img { border-color: var(--cc-select); }
+.levelup-routecard-img--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  color: var(--cc-muted);
+  background: transparent;
+}
+.levelup-routecard-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.levelup-routecard-title {
+  font-family: var(--cc-font-heading);
+  font-size: 1rem;
+  line-height: 1.2;
+  overflow-wrap: normal;
+}
+.levelup-routecard-sub { color: var(--cc-muted); font-size: 0.82rem; line-height: 1.3; }
+.levelup-routecard-tick { flex: 0 0 auto; color: var(--cc-muted); font-size: 0.85rem; }
+.levelup-routecard.is-selected .levelup-routecard-tick { color: var(--cc-select); }
+
+/* The new-class card is the quieter of the two: dashed and dimmed until hovered, so the obvious
+   answer (advance what you already play) stays the loud one. */
+.levelup-routecard--new { border-style: dashed; opacity: 0.75; }
+.levelup-routecard--new:hover { opacity: 1; }
+.levelup-routecard--new .levelup-routecard-title { color: var(--cc-muted); }
+.levelup-routecard--new:hover .levelup-routecard-title { color: var(--cc-text); }
+.levelup-routecard.is-disabled { opacity: 0.4; cursor: not-allowed; }
+.levelup-routecard.is-disabled:hover { border-color: var(--cc-line); transform: none; opacity: 0.4; }

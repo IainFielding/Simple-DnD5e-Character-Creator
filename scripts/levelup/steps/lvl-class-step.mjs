@@ -4,11 +4,20 @@ import { multiclassBlockers, formatBlockers } from "../multiclass.mjs";
 
 /**
  * The Class step — the level-up wizard's first screen when the session opens with the class
- * undecided (the Level Up button / context menu on a character with more than one option). It
- * reuses the creator's pick-list + detail layout: the actor's own classes lead the list (each
- * tagged with its level jump), and, when the world's multiclass setting opts in, the classes the
- * character could newly take follow (prerequisite failures locked with the reason as tooltip,
- * under the `"prereq"` mode).
+ * undecided (the Level Up button / context menu on a character with more than one option).
+ *
+ * It has two faces, switched by {@link LevelUpState#classBrowse}:
+ *
+ *   - the **route** screen (default): what the player almost always wants, stated plainly. The
+ *     character's current classes head the screen, then one big card per owned class ("advance
+ *     this one"), then a single muted card for taking a class the character doesn't have yet —
+ *     worded for how many they already carry ("a second class", "a third class"). Mixing the whole
+ *     compendium of classes into that decision was the old screen's mistake: the common case (one
+ *     class, one obvious card) drowned in a scroll list.
+ *   - the **browse** screen: the creator's pick-list + detail layout over the *addable* classes
+ *     only, reached from the muted card and backed out of with its Back link. Under the `"prereq"`
+ *     multiclass mode a candidate whose written requirements aren't met is locked, the failing
+ *     ability named in its tooltip.
  *
  * Picking a card is the moment the advancement pipeline starts: the step builds the system's
  * AdvancementManager for that class (a level change for an owned class, `forNewItem` for a
@@ -36,9 +45,10 @@ export const lvlClassStep = {
   async context({ state, source }) {
     const actor = state.actor;
     const selection = state.classSelection;
+    const owned = actor.items.filter(i => i.type === "class");
 
     // The actor's own classes: always offered, tagged with the level jump they would take.
-    const existing = actor.items.filter(i => i.type === "class").map(item => {
+    const existing = owned.map(item => {
       const level = item.system?.levels ?? 0;
       return {
         kind: "existing",
@@ -55,14 +65,17 @@ export const lvlClassStep = {
 
     // The classes the character could newly take, when multiclassing is enabled. Owned classes
     // are dropped by identifier; under "prereq" each candidate is resolved (all pre-warmed) and
-    // locked with the failing requirement when the written prerequisites aren't met.
+    // locked with the failing requirement when the written prerequisites aren't met. Only the
+    // browse screen renders them, but the route screen needs to know whether any exist before it
+    // offers the card that leads there — so the cheap owned-filter runs either way and the costly
+    // prerequisite resolution only when browsing.
     const mode = multiclassMode();
+    const ownedIds = new Set(owned.map(i => i.system?.identifier).filter(Boolean));
+    const candidates = mode === "off" ? []
+      : source.classes().filter(card => !ownedIds.has(card.identifier));
     const addable = [];
-    if ( mode !== "off" ) {
-      const owned = new Set(actor.items.filter(i => i.type === "class")
-        .map(i => i.system?.identifier).filter(Boolean));
-      for ( const card of source.classes() ) {
-        if ( owned.has(card.identifier) ) continue;
+    if ( state.classBrowse ) {
+      for ( const card of candidates ) {
         let reason = "";
         if ( mode === "prereq" ) {
           const doc = await fromUuid(card.uuid).catch(err => { log("class resolve failed", card.uuid, err); return null; });
@@ -82,35 +95,64 @@ export const lvlClassStep = {
       }
     }
 
-    // The detail pane for the selected card — the same resolved description + advancement groups
-    // the creator shows. An owned class prefers its compendium source (fuller text, memoised
-    // across sessions) and falls back to the embedded item itself.
-    const cards = [...existing, ...addable];
-    const sel = cards.find(c => c.selected);
+    // A new class already picked (the player browsed, chose, then came back) shows on the route
+    // screen as a card of its own, so the route never contradicts the live selection.
+    let pending = null;
+    if ( selection?.kind === "new" ) {
+      const card = candidates.find(c => c.uuid === selection.uuid);
+      if ( card ) pending = { kind: "new", uuid: card.uuid, name: card.name, img: card.img,
+        tag: t("levelup.step.class.newTag"), selected: true, disabled: false, reason: "" };
+    }
+
+    // The muted "take a class you don't have" card. Its wording counts the classes the character
+    // already carries, so a single-class character is invited to multiclass and a multiclassed one
+    // is offered the next class along.
+    const newCard = {
+      title: t(`levelup.step.class.add.${["first", "second", "third"][owned.length] ?? "more"}`),
+      hint: t("levelup.step.class.add.hint"),
+      disabled: mode === "off" || candidates.length === 0,
+      reason: mode === "off" ? t("levelup.step.class.add.off") : t("levelup.step.class.add.none")
+    };
+
+    // The detail pane for the browse screen's selected card — the same resolved description +
+    // advancement groups the creator shows.
+    const sel = addable.find(c => c.selected);
     let detail = null;
     let groups = null;
     if ( sel ) {
-      let uuid = sel.uuid;
-      let doc;
-      if ( sel.kind === "existing" ) {
-        doc = actor.items.get(sel.id);
-        uuid = doc?._stats?.compendiumSource ?? sel.uuid;
-        if ( uuid !== sel.uuid ) doc = undefined;   // resolvable from the pack; let fromUuid fetch it
-      }
       [detail, groups] = await Promise.all([
-        source.detail(uuid, doc).catch(() => null),
-        source.advancementGroups(uuid, doc).catch(() => null)
+        source.detail(sel.uuid).catch(() => null),
+        source.advancementGroups(sel.uuid).catch(() => null)
       ]);
     }
 
-    return { existing, addable, hasAddable: addable.length > 0, hasSelection: !!sel, detail, groups };
+    return {
+      browse: state.classBrowse,
+      current: existing,
+      existing: pending ? [...existing, pending] : existing,
+      addable,
+      newCard,
+      hasSelection: !!sel,
+      detail,
+      groups
+    };
   },
 
   async handle(action, el, ctx) {
+    const { state } = ctx;
+    // The route ⇄ browse flip is pure presentation: neither face touches the pick or the driver.
+    if ( action === "levelup-class-browse" ) {
+      if ( el.getAttribute("aria-disabled") === "true" ) return false;
+      state.classBrowse = true;
+      return;
+    }
+    if ( action === "levelup-class-route" ) {
+      state.classBrowse = false;
+      return;
+    }
     if ( action !== "pick-levelup-class" ) return;
     // A locked card (multiclass prerequisites unmet) only shows its tooltip.
     if ( el.getAttribute("aria-disabled") === "true" ) return false;
-    const { state } = ctx;
     const { kind, id, uuid } = el.dataset;
 
     const same = state.classSelection

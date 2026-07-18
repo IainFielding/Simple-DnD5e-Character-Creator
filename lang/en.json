@@ -76,9 +76,22 @@
           "multiclass": "Multiclass",
           "levelTag": "Level {from} → {to}",
           "newTag": "New Class",
-          "hint": "Choose which class gains this level — or begin a new one.",
+          "hint": "Pick which class gains this level.",
           "switchTitle": "Change class?",
-          "switchBody": "Switching class discards everything you've chosen for this level-up so far — hit points, features, spells, and other picks."
+          "switchBody": "Switching class discards everything you've chosen for this level-up so far — hit points, features, spells, and other picks.",
+          "routeTitle": "Current Class",
+          "add": {
+            "first": "Take a First Class",
+            "second": "Multiclass into a Second Class",
+            "third": "Multiclass into a Third Class",
+            "more": "Take Another Class",
+            "hint": "Start a new class at level 1 instead of advancing one you already have.",
+            "off": "Multiclassing is disabled in this world.",
+            "none": "There are no other classes available to take.",
+            "back": "Back to level-up options",
+            "browseTitle": "Choose a New Class",
+            "browseHint": "Pick the class to begin at level 1. Locked classes list the ability score you are missing."
+          }
         },
         "level": {
           "label": "Level {level}",

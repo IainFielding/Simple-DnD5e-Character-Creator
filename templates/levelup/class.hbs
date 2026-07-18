@@ -1,31 +1,26 @@
 {{!--
-  The level-up Class step (lvl-class-step.mjs): the creator's pick-list + detail layout. One
-  scrolling list with the actor's own classes first (tagged "Level 5 → 6") and, when the world
-  allows multiclassing, the takeable new classes beneath a group heading (prerequisite failures
-  locked, their tooltip naming the missing ability). Rows fire pick-levelup-class; picking one
-  builds the level-up pipeline and unlocks Next.
---}}
-<section class="creator-pick creator-pick--solo levelup-class-pick">
-  <!-- Left column: the class list -->
-  <div class="creator-pick-side">
-    <ul class="creator-picklist">
-      {{#if hasAddable}}
-      <li class="levelup-class-group">{{localize "sogrom-dnd5e-character-creator.levelup.step.class.yours"}}</li>
-      {{/if}}
-      {{#each existing}}
-      <li>
-        <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}}"
-                data-action="stepAction" data-step-action="pick-levelup-class"
-                data-kind="existing" data-id="{{id}}" data-name="{{name}}">
-          <img class="creator-pickrow-img" src="{{img}}" alt="">
-          <span class="creator-pickrow-name">{{name}}</span>
-          <span class="creator-pickrow-tag">{{tag}}</span>
-          {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check" inert></i>{{/if}}
-        </button>
-      </li>
-      {{/each}}
+  The level-up Class step (lvl-class-step.mjs), in two faces.
 
-      {{#if hasAddable}}
+  Route (default): the character's current classes stated across the top, then one wide card per
+  owned class ("advance this one" — the answer nearly every level-up wants), then a single muted
+  card that leads to the browser for a class they don't have yet. Card text stacks title over
+  sub-line, so a long class name never has to share its row with a badge.
+
+  Browse: the creator's pick-list + detail layout over the addable classes only, with a Back link
+  to the route. Locked rows (multiclass prerequisites unmet) name the missing ability in a tooltip.
+
+  Rows fire pick-levelup-class; picking one builds the level-up pipeline and unlocks Next.
+--}}
+{{#if browse}}
+<section class="creator-pick creator-pick--solo levelup-class-pick">
+  <!-- Left column: the addable classes -->
+  <div class="creator-pick-side">
+    <button type="button" class="levelup-class-back"
+            data-action="stepAction" data-step-action="levelup-class-route">
+      <i class="fa-solid fa-chevron-left" inert></i>
+      <span>{{localize "sogrom-dnd5e-character-creator.levelup.step.class.add.back"}}</span>
+    </button>
+    <ul class="creator-picklist">
       <li class="levelup-class-group">{{localize "sogrom-dnd5e-character-creator.levelup.step.class.multiclass"}}</li>
       {{#each addable}}
       <li>
@@ -35,14 +30,15 @@
                 data-kind="new" data-uuid="{{uuid}}" data-name="{{name}}"
                 {{#if disabled}}aria-disabled="true" data-tooltip="{{reason}}"{{/if}}>
           <img class="creator-pickrow-img" src="{{img}}" alt="">
-          <span class="creator-pickrow-name">{{name}}</span>
-          {{#if disabled}}<i class="creator-pickrow-tick fa-solid fa-lock" inert></i>
-          {{else}}<span class="creator-pickrow-tag">{{tag}}</span>{{/if}}
+          <span class="creator-pickrow-text">
+            <span class="creator-pickrow-name">{{name}}</span>
+            {{#unless disabled}}<span class="creator-pickrow-tag">{{tag}}</span>{{/unless}}
+          </span>
+          {{#if disabled}}<i class="creator-pickrow-tick fa-solid fa-lock" inert></i>{{/if}}
           {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check" inert></i>{{/if}}
         </button>
       </li>
       {{/each}}
-      {{/if}}
     </ul>
   </div>
 
@@ -88,9 +84,55 @@
     {{else}}
     <div class="creator-pick-empty">
       <i class="fa-solid fa-chess-rook"></i>
-      <h2>{{localize "sogrom-dnd5e-character-creator.levelup.step.class.label"}}</h2>
-      <p>{{localize "sogrom-dnd5e-character-creator.levelup.step.class.hint"}}</p>
+      <h2>{{localize "sogrom-dnd5e-character-creator.levelup.step.class.add.browseTitle"}}</h2>
+      <p>{{localize "sogrom-dnd5e-character-creator.levelup.step.class.add.browseHint"}}</p>
     </div>
     {{/if}}
   </div>
 </section>
+{{else}}
+<section class="levelup-class-route">
+  <header class="levelup-route-head">
+    <h2 class="levelup-route-title">{{localize "sogrom-dnd5e-character-creator.levelup.step.class.routeTitle"}}</h2>
+    <ul class="levelup-route-current">
+      {{#each current}}
+      <li class="levelup-route-chip">
+        <img src="{{img}}" alt="">
+        <span class="levelup-route-chip-name">{{name}}</span>
+      </li>
+      {{/each}}
+    </ul>
+    <p class="levelup-route-hint">{{localize "sogrom-dnd5e-character-creator.levelup.step.class.hint"}}</p>
+  </header>
+
+  <ul class="levelup-route-list">
+    {{#each existing}}
+    <li>
+      <button type="button" class="levelup-routecard {{#if selected}}is-selected{{/if}}"
+              data-action="stepAction" data-step-action="pick-levelup-class"
+              data-kind="{{kind}}" data-id="{{id}}" data-uuid="{{uuid}}" data-name="{{name}}">
+        <img class="levelup-routecard-img" src="{{img}}" alt="">
+        <span class="levelup-routecard-text">
+          <span class="levelup-routecard-title">{{name}}</span>
+          <span class="levelup-routecard-sub">{{tag}}</span>
+        </span>
+        <i class="levelup-routecard-tick fa-solid {{#if selected}}fa-circle-check{{else}}fa-chevron-right{{/if}}" inert></i>
+      </button>
+    </li>
+    {{/each}}
+
+    <li>
+      <button type="button" class="levelup-routecard levelup-routecard--new {{#if newCard.disabled}}is-disabled{{/if}}"
+              data-action="stepAction" data-step-action="levelup-class-browse"
+              {{#if newCard.disabled}}aria-disabled="true" data-tooltip="{{newCard.reason}}"{{/if}}>
+        <span class="levelup-routecard-img levelup-routecard-img--icon"><i class="fa-solid fa-plus" inert></i></span>
+        <span class="levelup-routecard-text">
+          <span class="levelup-routecard-title">{{newCard.title}}</span>
+          <span class="levelup-routecard-sub">{{newCard.hint}}</span>
+        </span>
+        <i class="levelup-routecard-tick fa-solid {{#if newCard.disabled}}fa-lock{{else}}fa-chevron-right{{/if}}" inert></i>
+      </button>
+    </li>
+  </ul>
+</section>
+{{/if}}
