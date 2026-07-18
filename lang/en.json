@@ -103,6 +103,7 @@
           "choose": "Choose a Feature",
           "count": "{current} / {max} chosen",
           "current": "Current",
+          "known": "Known",
           "replaceHint": "Your current choice is ticked. Untick it to swap, then pick another."
         },
         "traits": {

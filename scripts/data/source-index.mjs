@@ -204,7 +204,7 @@ export class SourceIndex {
    * the detail panel. Memoised so repeated expand/collapse is cheap.
    * @param {string} uuid
    * @param {object} [doc]  Pre-resolved document, to skip a redundant `fromUuid` during warm-up.
-   * @returns {Promise<{name: string, img: string, enriched: string}|null>}
+   * @returns {Promise<{name: string, img: string, enriched: string, source: string}|null>}
    */
   async detail(uuid, doc) {
     if ( !uuid ) return null;
@@ -223,7 +223,11 @@ export class SourceIndex {
     const enriched = await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, {
       relativeTo: doc, secrets: false
     });
-    return { name: doc.name, img: doc.img, enriched };
+    // The originating sourcebook (e.g. "Player's Handbook 2024"), for a source badge in the UI.
+    // dnd5e prepares `system.source.value` to the book name (falling back to the package title);
+    // empty when the item declares no source.
+    const source = doc.system?.source?.value ?? "";
+    return { name: doc.name, img: doc.img, enriched, source };
   }
 
   /**

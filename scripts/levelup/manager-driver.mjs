@@ -404,12 +404,30 @@ export class LevelUpDriver {
       }
     }
 
+    // Pool items the character already owns from ANOTHER source — the classic case is a Champion's
+    // level-7 "Additional Fighting Style" whose pool still lists the style already granted by the
+    // base Fighting Style. A non-repeatable feature can't be taken twice, so those must show as
+    // already-taken rather than pickable. We mirror dnd5e's own prerequisite check (sourcedItems
+    // keyed by compendium source), excluding this advancement's own grants (handled as priors).
+    const ownAdvIds = new Set();
+    for ( const map of Object.values(adv.value.added ?? {}) ) for ( const id of Object.keys(map ?? {}) ) ownAdvIds.add(id);
+    const ownedElsewhere = new Set();
+    const sourced = adv.actor?.sourcedItems;
+    if ( sourced ) {
+      for ( const p of adv.configuration?.pool ?? [] ) {
+        const uuid = p.uuid ?? p;
+        const owners = sourced.get(uuid);
+        if ( owners?.size && [...owners].some(it => !ownAdvIds.has(it.id)) ) ownedElsewhere.add(uuid);
+      }
+    }
+
     return {
       current, max, full,
       selected: new Set(Object.values(added)),
       replaceable: !!adv.configuration?.choices?.[level]?.replacement,
       replacing: adv.value.replaced?.[level]?.original ?? null,
-      priorEntries
+      priorEntries,
+      ownedElsewhere
     };
   }
 

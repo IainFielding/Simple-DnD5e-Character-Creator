@@ -35,7 +35,10 @@ export const subclassStep = {
       cards, count: cards.length, hasSelection: !!sub.uuid, detail, groups,
       // A defining, one-of pick — the largest tier; the header echoes the chosen subclass.
       density: "hero",
-      blockStatus: sub.chosen ? sub.name : null
+      blockStatus: sub.chosen ? sub.name : null,
+      // A second header pill naming the sourcebook the chosen subclass comes from (e.g. "Tasha's
+      // Cauldron of Everything"), sitting beside the subclass-name pill. Empty when unknown.
+      blockSource: sub.chosen ? (detail?.source || null) : null
     };
   },
 
