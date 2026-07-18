@@ -206,6 +206,12 @@
         "features": "Class Features",
         "spells": "Spells",
         "levelTag": "Lvl {level}",
+        "targetLevel": {
+          "label": "Starting Level",
+          "custom": "Other",
+          "hintOne": "Your character will begin at 1st level.",
+          "hintAbove": "You'll build level 1 here, then choose everything up to level {level} in the level-up wizard."
+        },
         "trait": {
           "primary": "Primary Ability",
           "hitDie": "Hit Point Die",

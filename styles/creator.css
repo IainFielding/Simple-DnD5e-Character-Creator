@@ -949,6 +949,59 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   line-height: 1.35;
   opacity: 0.75;
 }
+/* Target-level picker — sits between Quick Build and the ability panel in the class aside.
+   The chips reuse the .creator-tab pill look so the two pickers in this column read as one family;
+   the custom field is a chip-shaped number input that lights up when the level isn't a preset. */
+.creator-target-level {
+  margin: 0 0 1.1rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--cc-line);
+}
+.creator-level-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.creator-level-chip {
+  min-width: 2.8rem;
+  padding: 0.45rem 0.7rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  color: var(--cc-muted);
+  cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
+}
+.creator-level-chip:hover:not(.is-active) { border-color: var(--cc-select); color: var(--cc-text); }
+.creator-level-chip:active { transform: scale(0.97); }
+.creator-level-chip.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
+/* "Other" carries no pill of its own — the chips are the pills, and wrapping the label + field in a
+   second ring made it read as a fourth (permanently-active) chip. It's a plain label beside an
+   empty field; the field alone highlights when the level isn't one of the presets. */
+.creator-level-custom {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--cc-muted);
+  font-size: 0.82rem;
+}
+.creator-level-custom.is-active { color: var(--cc-text); }
+.creator-level-custom input {
+  width: 3.2rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  color: var(--cc-text);
+  text-align: center;
+  transition: border-color 0.25s var(--cc-ease);
+}
+.creator-level-custom.is-active input { border-color: var(--cc-select); }
+.creator-level-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  opacity: 0.75;
+}
+
 /* Inside the narrow aside the ability rows should fill the column, not cap at 520px. */
 .creator-class-aside .creator-ability-list { max-width: none; }
 /* The 340px aside can't afford the wide-panel spacing: tighten the row's gaps and the stepper so

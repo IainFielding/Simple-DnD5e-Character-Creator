@@ -5,7 +5,7 @@ import {
 import { spellInfoFor } from "./spells-step.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { applyQuickBuild } from "../data/quick-build.mjs";
-import { t, log } from "../config.mjs";
+import { t, log, levelUpEnabled, heroMancerActive } from "../config.mjs";
 
 /**
  * The Class step. Class selection and ability scores share one step: the class
@@ -87,6 +87,14 @@ export const classStep = {
       }
       return;
     }
+    if ( action === "target-level" ) {
+      state.targetLevel = clampLevel(el.dataset.level);
+      return;
+    }
+    if ( action === "target-level-custom" ) {
+      state.targetLevel = clampLevel(el.value);
+      return;
+    }
     if ( action === "pick-class" ) {
       const uuid = el.dataset.uuid;
       // Re-clicking the active card clears it, so a player can back out of a choice.
@@ -112,10 +120,50 @@ export const classStep = {
       hasSelection: !!selected,
       detail,
       groups,
-      abilities: abilitiesContext(state)
+      abilities: abilitiesContext(state),
+      targetLevel: targetLevelContext(state)
     };
   }
 };
+
+/* -------------------------------------------- */
+/*  Target level                                */
+/* -------------------------------------------- */
+
+/** The levels offered as one-click presets, alongside the custom entry. */
+const LEVEL_PRESETS = [1, 3, 5];
+
+/** Coerce any user-supplied level to a whole number within 1…the system's cap. */
+function clampLevel(value) {
+  const max = CONFIG.DND5E?.maxLevel ?? 20;
+  const level = Math.floor(Number(value));
+  if ( !Number.isFinite(level) ) return 1;
+  return Math.min(Math.max(level, 1), max);
+}
+
+/**
+ * View-model for the target-level picker: the preset chips plus a custom field that only shows a
+ * value when the pick isn't one of the presets (so the field reads as "or something else" rather
+ * than duplicating the active chip).
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ */
+function targetLevelContext(state) {
+  // Everything above level 1 is delivered by the level-up wizard, so the picker only exists where
+  // that wizard does: a world that left the module on creation-only (or handed level-ups to Hero
+  // Mancer) has no way to reach level 5 from here, and shouldn't be offered it.
+  if ( !levelUpEnabled() || heroMancerActive() ) return null;
+  const value = clampLevel(state.targetLevel);
+  const isPreset = LEVEL_PRESETS.includes(value);
+  return {
+    value,
+    max: CONFIG.DND5E?.maxLevel ?? 20,
+    presets: LEVEL_PRESETS.map(level => ({ level, active: level === value })),
+    custom: !isPreset,
+    customValue: isPreset ? "" : value,
+    // The picker's "you'll finish in the level-up wizard" note only applies above level 1.
+    aboveOne: value > 1
+  };
+}
 
 /**
  * Whether the player has made picks beyond this step that Quick Build would overwrite —

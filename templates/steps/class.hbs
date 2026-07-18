@@ -95,6 +95,37 @@
     </div>
     {{/if}}
 
+    {{#with ../targetLevel}}
+    {{!--
+      Target level: the creator always builds a level-1 character; anything above 1 hands off to the
+      level-up wizard after Create (see class-step.mjs targetLevelContext / creator-shell #onFinish).
+      Presets cover the common picks; the custom field carries everything else up to the system cap.
+    --}}
+    <div class="creator-target-level">
+      <h2 class="creator-aside-title">{{localize "sogrom-dnd5e-character-creator.step.class.targetLevel.label"}}</h2>
+      <div class="creator-level-chips">
+        {{#each presets}}
+        <button type="button" class="creator-level-chip {{#if active}}is-active{{/if}}"
+                data-action="stepAction" data-step-action="target-level" data-level="{{level}}"
+                aria-pressed="{{#if active}}true{{else}}false{{/if}}">{{level}}</button>
+        {{/each}}
+        <label class="creator-level-custom {{#if custom}}is-active{{/if}}">
+          <span>{{localize "sogrom-dnd5e-character-creator.step.class.targetLevel.custom"}}</span>
+          <input type="number" min="1" max="{{max}}" step="1" value="{{customValue}}"
+                 data-step-change="target-level-custom"
+                 aria-label="{{localize 'sogrom-dnd5e-character-creator.step.class.targetLevel.custom'}}">
+        </label>
+      </div>
+      <p class="creator-level-hint">
+        {{#if aboveOne}}
+        {{localize "sogrom-dnd5e-character-creator.step.class.targetLevel.hintAbove" level=value}}
+        {{else}}
+        {{localize "sogrom-dnd5e-character-creator.step.class.targetLevel.hintOne"}}
+        {{/if}}
+      </p>
+    </div>
+    {{/with}}
+
     <h2 class="creator-aside-title">{{localize "sogrom-dnd5e-character-creator.step.abilities.label"}}</h2>
 
     <div class="creator-method-tabs">

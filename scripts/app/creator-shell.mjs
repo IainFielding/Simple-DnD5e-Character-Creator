@@ -3,6 +3,7 @@ import { CreatorState } from "../state/creator-state.mjs";
 import { STEPS, REQUIRED_STEPS } from "../steps/registry.mjs";
 import { getSources, warmSources, onWarmProgress, isStale, invalidateSources } from "../data/source-cache.mjs";
 import { assembleActor } from "../build/actor-assembler.mjs";
+import { launchLevelUpTo } from "../levelup/intercept.mjs";
 
 // Foundry's UI base classes. ApplicationV2 is the modern window/app framework; the
 // HandlebarsApplicationMixin adds Handlebars-template rendering on top of it; DialogV2 is
@@ -598,6 +599,12 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     await this.close();
     actor?.sheet?.render(true);
+    // The build above always produces a level-1 character. When the player asked for more on the
+    // Class step, hand the rest to the level-up wizard: one manager for the whole 1→target jump, so
+    // they get a screen per gained level and a single commit. It opens over the sheet we just
+    // rendered — so if they close it, they still have the (valid) level-1 character they built.
+    const targetLevel = this.state.targetLevel ?? 1;
+    if ( actor && targetLevel > 1 ) await launchLevelUpTo(actor, targetLevel);
   }
 
   static #onCancel() {
