@@ -20,6 +20,16 @@ import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
  * "Advancement" is a dnd5e term: the rules an item applies as you gain it/level up (grant a feature,
  * a proficiency, an ability increase, etc.). Much of this module is about reading those.
  */
+/**
+ * Class identifiers that belong to Tasha's Cauldron sidekick classes. Sidekicks are DM-run
+ * companion statblocks, not player options — they're published as real `class` items (in
+ * `dnd-tashas-cauldron`'s `tcoe-character-options` pack, alongside the genuinely playable
+ * Artificer), so nothing in the data distinguishes them and they'd otherwise show up in the
+ * class grid. Matched on `system.identifier`, so any module republishing the same sidekicks
+ * is caught too.
+ */
+const SIDEKICK_IDENTIFIERS = new Set(["expert", "warrior", "healer", "mage", "prodigy"]);
+
 export class SourceIndex {
 
   /** type id -> card[]. Note dnd5e's item type for "species" is historically "race". */
@@ -170,7 +180,8 @@ export class SourceIndex {
       }
     }
     if ( !entries.length ) entries = await this.#scanPacks(type);
-    return entries.map(e => this.#toCard(e));
+    const cards = entries.map(e => this.#toCard(e));
+    return type === "class" ? cards.filter(c => !SIDEKICK_IDENTIFIERS.has(c.identifier)) : cards;
   }
 
   /** Direct fallback scan when the Compendium Browser is unavailable. */

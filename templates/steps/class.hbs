@@ -41,6 +41,20 @@
       <header class="creator-detail-head">
         <img class="creator-detail-img" src="{{detail.img}}" alt="">
         <h2>{{detail.name}}</h2>
+        {{!-- Provenance badge, mirroring the level-up subclass block's source pill. Omitted
+              when the class declares no sourcebook. --}}
+        {{#if detail.source}}
+        <span class="creator-detail-source" title="{{detail.source}}">
+          <i class="fa-solid fa-book" aria-hidden="true"></i>{{detail.source}}
+        </span>
+        {{/if}}
+        {{!-- Quick Build rides the header rather than the aside: it acts on the class shown here,
+              and this is the first thing a player sees after picking one. --}}
+        <button type="button" class="creator-btn creator-quick-build-btn"
+                data-action="stepAction" data-step-action="quick-build">
+          <i class="fa-solid fa-bolt"></i>
+          {{localize "sogrom-dnd5e-character-creator.quickBuild.button"}}
+        </button>
       </header>
       <div class="creator-detail-body">{{{detail.enriched}}}</div>
 
@@ -84,17 +98,6 @@
 
   {{#with abilities}}
   <aside class="creator-class-aside">
-    {{#if ../hasSelection}}
-    <div class="creator-quick-build">
-      <button type="button" class="creator-btn creator-quick-build-btn"
-              data-action="stepAction" data-step-action="quick-build">
-        <i class="fa-solid fa-bolt"></i>
-        {{localize "sogrom-dnd5e-character-creator.quickBuild.button"}}
-      </button>
-      <p class="creator-quick-build-hint">{{localize "sogrom-dnd5e-character-creator.quickBuild.hint"}}</p>
-    </div>
-    {{/if}}
-
     {{#with ../targetLevel}}
     {{!--
       Target level: the creator always builds a level-1 character; anything above 1 hands off to the

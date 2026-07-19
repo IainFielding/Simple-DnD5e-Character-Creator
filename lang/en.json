@@ -37,7 +37,6 @@
     },
     "quickBuild": {
       "button": "Quick Build",
-      "hint": "Fill everything with the recommended build for this class — a suggested background, a random species, skills, and spells. You can adjust any step afterwards.",
       "confirmTitle": "Overwrite current choices?",
       "confirmBody": "Quick Build replaces your background, species, name, ability scores, spells, and other choices with the recommended set. Continue?",
       "partial": "Quick Build finished with some gaps — check the remaining steps.",

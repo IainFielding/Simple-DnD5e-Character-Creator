@@ -681,9 +681,28 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-radius: 12px;
   box-shadow: var(--cc-bezel), 0 0 18px -12px var(--cc-accent-glow);
 }
-.creator-detail-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
+.creator-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.75rem; }
 .creator-detail-head h2 { margin: 0; border: none; font-size: 1.35rem; letter-spacing: 0.04em; }
 .creator-detail-img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; border: 1px solid var(--cc-line-2); }
+/* Sourcebook badge beside the detail title, naming where the selected item originates — the same
+   recipe as .levelup-block-source, so the creator and the level-up wizard read as one family.
+   Quiet by design (it's provenance, not state) and truncates rather than wrapping a long title. */
+.creator-detail-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.creator-detail-source i { flex: 0 0 auto; font-size: 0.7rem; opacity: 0.8; }
 .creator-detail-body { line-height: 1.65; color: var(--cc-text); }
 .creator-detail-body :is(h1, h2, h3, h4) { color: var(--cc-gold); }
 
@@ -932,24 +951,15 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   letter-spacing: 0.06em;
   color: var(--cc-gold);
 }
-/* Quick Build: one-click recommended fill, shown atop the class aside once a class is picked. */
-.creator-quick-build {
-  margin: 0 0 1.1rem;
-  padding-bottom: 1.1rem;
-  border-bottom: 1px solid var(--cc-line);
-}
+/* Quick Build: one-click recommended fill, sitting in the class detail header beside the source
+   badge. Sized to its label (not the full column) since it shares a row with the class name. */
 .creator-quick-build-btn {
-  width: 100%;
-  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
 }
 .creator-quick-build-btn.is-busy { opacity: 0.6; pointer-events: none; }
-.creator-quick-build-hint {
-  margin: 0.4rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  opacity: 0.75;
-}
-/* Target-level picker — sits between Quick Build and the ability panel in the class aside.
+/* Target-level picker — sits above the ability panel in the class aside.
    The chips reuse the .creator-tab pill look so the two pickers in this column read as one family;
    the custom field is a chip-shaped number input that lights up when the level isn't a preset. */
 .creator-target-level {
