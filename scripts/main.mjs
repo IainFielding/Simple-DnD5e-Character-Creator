@@ -45,35 +45,6 @@ Hooks.once("init", () => {
 // (GM-controlled); `config: true` means it appears in the settings UI. Names/hints are pulled
 // from lang/en.json through t() so they can be translated.
 function registerSettings() {
-  game.settings.register(MODULE_ID, SETTINGS.launchButton, {
-    name: t("settings.launchButton.name"),
-    hint: t("settings.launchButton.hint"),
-    scope: "world", config: true, type: Boolean, default: true
-  });
-  game.settings.register(MODULE_ID, SETTINGS.contextMenu, {
-    name: t("settings.contextMenu.name"),
-    hint: t("settings.contextMenu.hint"),
-    scope: "world", config: true, type: Boolean, default: true
-  });
-  game.settings.register(MODULE_ID, SETTINGS.pointBuyBudget, {
-    name: t("settings.pointBuyBudget.name"),
-    hint: t("settings.pointBuyBudget.hint"),
-    scope: "world", config: true, type: Number, default: DEFAULTS.pointBuyBudget
-  });
-  game.settings.register(MODULE_ID, SETTINGS.rollFormula, {
-    name: t("settings.rollFormula.name"),
-    hint: t("settings.rollFormula.hint"),
-    scope: "world", config: true, type: String, default: DEFAULTS.rollFormula
-  });
-  game.settings.register(MODULE_ID, SETTINGS.displayMode, {
-    name: t("settings.displayMode.name"),
-    hint: t("settings.displayMode.hint"),
-    scope: "world", config: true, type: String, default: DEFAULTS.displayMode,
-    choices: {
-      fullscreen: t("settings.displayMode.fullscreen"),
-      windowed: t("settings.displayMode.windowed")
-    }
-  });
   // With Ember active the module cedes character creation to Ember's own creator, so the
   // only mode on offer is Level-Up only (and config.mjs's moduleMode() pins the effective
   // mode there even if an older value is still stored). Without Ember, all three modes show.
@@ -91,10 +62,39 @@ function registerSettings() {
           "levelup": t("settings.mode.levelupOnly")
         }
   });
+  game.settings.register(MODULE_ID, SETTINGS.displayMode, {
+    name: t("settings.displayMode.name"),
+    hint: t("settings.displayMode.hint"),
+    scope: "world", config: true, type: String, default: DEFAULTS.displayMode,
+    choices: {
+      fullscreen: t("settings.displayMode.fullscreen"),
+      windowed: t("settings.displayMode.windowed")
+    }
+  });
+  game.settings.register(MODULE_ID, SETTINGS.launchButton, {
+    name: t("settings.launchButton.name"),
+    hint: t("settings.launchButton.hint"),
+    scope: "world", config: true, type: Boolean, default: true
+  });
   game.settings.register(MODULE_ID, SETTINGS.levelUpButton, {
     name: t("settings.levelUpButton.name"),
     hint: t("settings.levelUpButton.hint"),
     scope: "world", config: true, type: Boolean, default: DEFAULTS.levelUpButton
+  });
+  game.settings.register(MODULE_ID, SETTINGS.contextMenu, {
+    name: t("settings.contextMenu.name"),
+    hint: t("settings.contextMenu.hint"),
+    scope: "world", config: true, type: Boolean, default: true
+  });
+  game.settings.register(MODULE_ID, SETTINGS.pointBuyBudget, {
+    name: t("settings.pointBuyBudget.name"),
+    hint: t("settings.pointBuyBudget.hint"),
+    scope: "world", config: true, type: Number, default: DEFAULTS.pointBuyBudget
+  });
+  game.settings.register(MODULE_ID, SETTINGS.rollFormula, {
+    name: t("settings.rollFormula.name"),
+    hint: t("settings.rollFormula.hint"),
+    scope: "world", config: true, type: String, default: DEFAULTS.rollFormula
   });
   game.settings.register(MODULE_ID, SETTINGS.multiclass, {
     name: t("settings.allowMulticlass.name"),
@@ -121,12 +121,12 @@ function registerSettings() {
     hint: t("settings.levelUpHpRollToChat.hint"),
     scope: "world", config: true, type: Boolean, default: DEFAULTS.levelUpHpRollToChat
   });
-  // The starting-gold store: a visible master toggle, a hidden object holding the GM's stock
-  // configuration, and a menu button opening the small config form that edits that object.
+  // The starting-gold store: the enabled flag and the GM's stock configuration are both
+  // hidden objects, edited only through the config form; a single menu button opens it.
+  // The enabled flag lives as its own setting (not inside storeConfig) because it doubles
+  // as the store's master toggle, saved alongside the config when the form is submitted.
   game.settings.register(MODULE_ID, SETTINGS.storeEnabled, {
-    name: t("settings.storeEnabled.name"),
-    hint: t("settings.storeEnabled.hint"),
-    scope: "world", config: true, type: Boolean, default: DEFAULTS.storeEnabled
+    scope: "world", config: false, type: Boolean, default: DEFAULTS.storeEnabled
   });
   game.settings.register(MODULE_ID, SETTINGS.storeConfig, {
     scope: "world", config: false, type: Object, default: DEFAULTS.storeConfig

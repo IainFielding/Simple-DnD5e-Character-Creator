@@ -32,8 +32,8 @@ import {
 export async function assembleActor(state, source, equipment) {
   const actor = state.actor;
 
-  // 1. Resolve the chosen origin documents and stage their item data (each keeps its
-  //    compendium id so the manager and the manual apply can address it consistently).
+  // Resolve the chosen origin documents and stage their item data (each keeps its
+  // compendium id so the manager and the manual apply can address it consistently).
   const docs = {
     class: state.classUuid ? await fromUuid(state.classUuid) : null,
     background: state.backgroundUuid ? await fromUuid(state.backgroundUuid) : null,
@@ -58,17 +58,17 @@ export async function assembleActor(state, source, equipment) {
   stage("background", "system.details.background");
   stage("class", "system.details.originalClass", data => { data.system.levels = 0; });
 
-  // 2. Actor-level update: identity/visuals, base scores with the background increase
-  //    baked in, and the detail→item links. (The background ASI advancement step is then
-  //    skipped, its value recorded after the items exist.)
+  // Write the actor-level update: identity/visuals, base scores with the background increase
+  // baked in, and the detail→item links. (The background ASI advancement step is then
+  // skipped, its value recorded after the items exist.)
   const scores = state.resolvedScores();
   const deltas = state.backgroundDeltas();
   const update = { ...detailsUpdate(state), ...detailLinks };
   for ( const key of ABILITIES ) update[`system.abilities.${key}.value`] = scores[key] + (deltas[key] ?? 0);
   await actor.update(update);
 
-  // 3. Resolve the advancement choices once, plan what to skip, run the manager, then
-  //    apply the wizard's picks to the created items.
+  // Resolve the advancement choices once, plan what to skip, run the manager, then
+  // apply the wizard's picks to the created items.
   const resolved = state.choiceCache ?? await resolveChoices(state, source);
   const plan = buildChoicePlan(resolved, docs);
 
@@ -83,14 +83,14 @@ export async function assembleActor(state, source, equipment) {
     await applyChoicePlan(actor, plan, resolved, state.advChoices, originItemIds);
   }
 
-  // 4. Spells chosen on the Spells step, as prepared class spells.
+  // Add the spells chosen on the Spells step, as prepared class spells.
   await addSpells(actor, state);
 
-  // 4b. Spells chosen on the Feat-Spells step (Magic Initiate), created directly on the actor —
-  //     the PHB feat carries no advancement to grant them, so we add them by hand.
+  // Add the spells chosen on the Feat-Spells step (Magic Initiate), created directly on the actor —
+  // the PHB feat carries no advancement to grant them, so we add them by hand.
   await applyFeatSpells(actor, state, source);
 
-  // 5. Starting equipment and currency chosen on the Choices step.
+  // Grant the starting equipment and currency chosen on the Choices step.
   if ( equipment ) await grantEquipment(actor, state, source, equipment);
 
   return actor;

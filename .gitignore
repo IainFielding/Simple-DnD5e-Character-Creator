@@ -8,3 +8,6 @@ coverage/
 # Editor / OS cruft
 .DS_Store
 Thumbs.db
+
+# Local governance / architecture docs — not part of the shipped module.
+governance/
