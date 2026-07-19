@@ -61,9 +61,9 @@ export const DEFAULTS = {
   mode: "creation-levelup",
   levelUpButton: true,
   levelUpHpMode: "choice",
-  levelUpHpRollToChat: false,
+  levelUpHpRollToChat: true,
   multiclass: "off",
-  storeEnabled: false,
+  storeEnabled: true,
   storeConfig: {
     priceMultiplier: 1.0,
     inventory: null            // null = the factory default list; [] = deliberately emptied
