@@ -1,6 +1,7 @@
-import { ABILITIES, MODULE_ID, log } from "../config.mjs";
+import { ABILITIES, MODULE_ID, log, storeConfig } from "../config.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { collectEquipment } from "../data/equipment-source.mjs";
+import { cartTotalCp, purchasedItems, remainingCurrency } from "../data/store-source.mjs";
 import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
 import {
   buildChoicePlan, runAdvancementManager, recordBackgroundAsiValue, applyChoicePlan
@@ -149,17 +150,33 @@ async function buildFeatSpell(uuid, { ability, cantrip, feat, sourceTag }) {
 
 /**
  * Grant the chosen starting equipment (items, equipped by default) and add any currency
- * — both the lettered "gold" option and currency embedded in an equipment package.
+ * — both the lettered "gold" option and currency embedded in an equipment package. Store
+ * purchases ride the same grant: their items are appended and the cart total is deducted
+ * from the currency before it is written, so a failed create still cleans everything up
+ * via the existing delete-on-failure path.
  */
 async function grantEquipment(actor, state, source, equipment) {
   const loaded = await equipment.load(state, source);
   if ( !loaded.class && !loaded.background ) return;
 
   const { items, currency } = await collectEquipment(loaded, state);
+
+  // The cart only applies while it fits inside the currency the equipment choice yields —
+  // the step's gates enforce that, so an overspent cart here means stale state; skip it
+  // rather than write negative gold.
+  let cartCp = storeConfig().enabled ? cartTotalCp(state.store?.purchases) : 0;
+  const { spendable, remainder } = remainingCurrency(currency, cartCp);
+  if ( cartCp > 0 && !spendable ) {
+    log("store cart exceeds the starting currency; purchases skipped");
+    cartCp = 0;
+  }
+  if ( cartCp > 0 ) items.push(...await purchasedItems(state.store.purchases));
+
   if ( items.length ) await actor.createEmbeddedDocuments("Item", items, { keepId: true, render: false });
 
+  const grantedCurrency = cartCp > 0 ? remainder : currency;
   const update = {};
-  for ( const [denom, amount] of Object.entries(currency) ) {
+  for ( const [denom, amount] of Object.entries(grantedCurrency) ) {
     if ( amount > 0 ) update[`system.currency.${denom}`] = (actor.system?.currency?.[denom] ?? 0) + amount;
   }
   if ( Object.keys(update).length ) await actor.update(update, { render: false });

@@ -12,6 +12,12 @@
 // The module's unique id. Must match the "id" field in module.json. Foundry uses it
 // to namespace our settings, templates, and localisation keys so they never collide
 // with another module's.
+// The factory default store stock (a list of UUID strings, no UI imports, so this file
+// stays safe for every layer to import), kept in its own data file so the list can grow
+// without cluttering this grab bag. `defaultInventoryUuids()` serves the ids from the
+// Player's Handbook module's pack when that is active, else the system's free-rules pack.
+import { defaultInventoryUuids } from "./data/store-defaults.mjs";
+
 export const MODULE_ID = "sogrom-dnd5e-character-creator";
 
 /** Ability keys in canonical display order. */
@@ -41,7 +47,9 @@ export const SETTINGS = {
   levelUpButton: "showLevelUpButton",
   levelUpHpMode: "levelUpHpMode",
   levelUpHpRollToChat: "levelUpHpRollToChat",
-  multiclass: "allowMulticlass"
+  multiclass: "allowMulticlass",
+  storeEnabled: "storeEnabled",
+  storeConfig: "storeConfig"
 };
 
 // The fallback value for each setting, used when the world hasn't overridden it (and as
@@ -54,7 +62,12 @@ export const DEFAULTS = {
   levelUpButton: true,
   levelUpHpMode: "choice",
   levelUpHpRollToChat: false,
-  multiclass: "off"
+  multiclass: "off",
+  storeEnabled: false,
+  storeConfig: {
+    priceMultiplier: 1.0,
+    inventory: null            // null = the factory default list; [] = deliberately emptied
+  }
 };
 
 /**
@@ -110,6 +123,39 @@ export const MULTICLASS_MODES = ["off", "prereq", "free"];
 export function multiclassMode() {
   const raw = game.settings.get(MODULE_ID, SETTINGS.multiclass);
   return MULTICLASS_MODES.includes(raw) ? raw : DEFAULTS.multiclass;
+}
+
+/**
+ * The GM's starting-gold store configuration, guarded field by field so a malformed stored
+ * object (an older shape, a hand-edited value) can never break the store step. `enabled`
+ * mirrors the plain visible checkbox setting; the rest lives in the hidden object setting
+ * managed by the {@link module:app/store-config} menu.
+ *
+ * `inventory` is the curated shelf list — entries of `{uuid, name, img, type, baseCp,
+ * overrideCp, hidden}` (see store-source's `sanitizeEntry` for the per-entry guarding).
+ * When the stored value is not an array (a fresh world, or the pre-release shape), the
+ * factory default UUID list stands in as bare `{uuid}` skeletons that hydrate on first use;
+ * an empty array is a real choice (the GM cleared the shelves) and is left alone.
+ * @returns {{enabled: boolean, priceMultiplier: number, inventory: object[]}}
+ */
+export function storeConfig() {
+  const defaults = DEFAULTS.storeConfig;
+  let raw;
+  try {
+    raw = game.settings.get(MODULE_ID, SETTINGS.storeConfig);
+  } catch {
+    raw = null;
+  }
+  if ( !raw || typeof raw !== "object" ) raw = {};
+  const mult = Number(raw.priceMultiplier);
+  const inventory = Array.isArray(raw.inventory)
+    ? raw.inventory.filter(e => e && typeof e === "object" && typeof e.uuid === "string" && e.uuid)
+    : defaultInventoryUuids().map(uuid => ({ uuid }));
+  return {
+    enabled: !!game.settings.get(MODULE_ID, SETTINGS.storeEnabled),
+    priceMultiplier: Number.isFinite(mult) && mult > 0 ? mult : defaults.priceMultiplier,
+    inventory
+  };
 }
 
 /**

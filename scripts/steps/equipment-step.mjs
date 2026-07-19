@@ -1,4 +1,5 @@
 import { describeOption } from "../data/equipment-source.mjs";
+import { equipmentBudgetCp } from "../data/store-source.mjs";
 
 /**
  * The Equipment step: choose the starting gear each origin (class, background) grants —
@@ -42,6 +43,10 @@ export const equipmentStep = {
 
   async context({ state, source, equipment }) {
     const loaded = await equipment.load(state, source);
+    // Cache the currency this selection yields so the (synchronous) Store-step gates can
+    // tell whether there's gold to spend — the store appears in the rail as soon as the
+    // player picks an option that grants any.
+    state.storeBudgetCp = await equipmentBudgetCp(loaded, state);
     const sources = [];
     for ( const key of ["class", "background"] ) {
       if ( loaded[key] ) sources.push({ key, name: loaded[key].name, img: loaded[key].img, ...describeOption(loaded[key], state.equipment[key]) });

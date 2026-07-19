@@ -1,4 +1,5 @@
 import { ABILITIES, log } from "../config.mjs";
+import { equipmentBudgetCp } from "./store-source.mjs";
 import { QUICK_BUILD, MI_SPELL_SUGGESTIONS, FEATURE_PREFERENCES } from "./quick-build-data.mjs";
 import { resolveChoices } from "./choice-resolver.mjs";
 import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
@@ -58,6 +59,8 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
   state.speciesUuid = null;
   state.featSpellCache = [];
   state.equipmentVisited = false;
+  state.store.purchases = {};
+  state.storeVisited = false;
 
   // Ability scores: the standard array laid out in the class's priority order.
   assignStandardArray(state, profile.abilities);
@@ -100,9 +103,14 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
   await attempt("featSpells", () => fillFeatSpells(state, source, spells, profile, classDoc));
 
   // Equipment: seed the default option's sub-choices, exactly as visiting the step would.
+  // The store budget is refreshed alongside it (the Store step's gates read the cache) and
+  // the empty cart is marked visited — Quick Build doesn't shop, but the optional step must
+  // not block the jump to Review.
   await attempt("equipment", async () => {
-    await equipment.load(state, source);
+    const loaded = await equipment.load(state, source);
     state.equipmentVisited = true;
+    state.storeBudgetCp = await equipmentBudgetCp(loaded, state);
+    state.storeVisited = true;
   });
 
   // Refresh the caches every synchronous completion gate reads, so the review jump (and the

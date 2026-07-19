@@ -3,6 +3,7 @@ import { STEPS } from "./steps/registry.mjs";
 import { CreatorShell } from "./app/creator-shell.mjs";
 import { warmSources } from "./data/source-cache.mjs";
 import { registerLevelUp, triggerLevelUp, canLevelUp } from "./levelup/intercept.mjs";
+import { StoreConfigApp } from "./app/store-config.mjs";
 
 /*
  * This is the module's entry point — module.json points Foundry here via "esmodules".
@@ -119,6 +120,24 @@ function registerSettings() {
     name: t("settings.levelUpHpRollToChat.name"),
     hint: t("settings.levelUpHpRollToChat.hint"),
     scope: "world", config: true, type: Boolean, default: DEFAULTS.levelUpHpRollToChat
+  });
+  // The starting-gold store: a visible master toggle, a hidden object holding the GM's stock
+  // configuration, and a menu button opening the small config form that edits that object.
+  game.settings.register(MODULE_ID, SETTINGS.storeEnabled, {
+    name: t("settings.storeEnabled.name"),
+    hint: t("settings.storeEnabled.hint"),
+    scope: "world", config: true, type: Boolean, default: DEFAULTS.storeEnabled
+  });
+  game.settings.register(MODULE_ID, SETTINGS.storeConfig, {
+    scope: "world", config: false, type: Object, default: DEFAULTS.storeConfig
+  });
+  game.settings.registerMenu(MODULE_ID, "storeConfigMenu", {
+    name: t("settings.storeConfigMenu.name"),
+    label: t("settings.storeConfigMenu.label"),
+    hint: t("settings.storeConfigMenu.hint"),
+    icon: "fa-solid fa-shop",
+    type: StoreConfigApp,
+    restricted: true
   });
 }
 

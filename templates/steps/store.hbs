@@ -1,0 +1,174 @@
+{{!--
+  The Store step: spend leftover starting gold on gear from the GM-curated shop. A searchable,
+  category-filterable row list on the left — each row's name is a content-link (rich dnd5e
+  tooltip on hover, click opens the full item sheet) with the price and +/− controls beside
+  it — and the cart with its running budget on the right. Optional and never blocking (unless
+  the cart exceeds the budget). Data from store-step.mjs context(); +/− fire store-add /
+  store-remove, the category select re-renders via data-step-change, and the search box
+  filters rows client-side via data-creator-search. `hasBudget` is false when the equipment
+  choice left no gold — the step still appears in the rail (numbered), so it explains the
+  empty wallet here.
+--}}
+<section class="creator-store">
+  {{#if hasBudget}}
+  <!-- Left column: the shelf -->
+  <div class="creator-store-main">
+    <p class="creator-store-intro">{{intro}}</p>
+
+    <div class="creator-toolbar creator-toolbar--stacked">
+      <div class="creator-store-filter-row">
+        <label class="creator-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" data-creator-search autocomplete="off"
+                 aria-label="{{localize 'sogrom-dnd5e-character-creator.common.search'}}"
+                 placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
+        </label>
+        {{#if hasCategories}}
+        <label class="creator-spell-filter">
+          <i class="fa-solid fa-filter"></i>
+          <select data-step-change="store-category"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.filterCategoryAria'}}">
+            <option value="">{{localize "sogrom-dnd5e-character-creator.step.store.allCategories"}}</option>
+            {{#each categories}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        {{/if}}
+        {{#if hasSubtypes}}
+        <label class="creator-spell-filter">
+          <i class="fa-solid fa-filter"></i>
+          <select data-step-change="store-subtype"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.filterSubtypeAria'}}">
+            <option value="">{{localize "sogrom-dnd5e-character-creator.step.store.allSubtypes"}}</option>
+            {{#each subtypes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        {{/if}}
+      </div>
+      <span class="creator-count">{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
+    </div>
+
+    {{!-- One shelf row, shared by the packs section and the general goods list. --}}
+    {{#*inline "storeRow"}}
+    <li class="creator-store-row {{#if inCart}}is-in-cart{{/if}} {{#unless canAfford}}is-unaffordable{{/unless}}"
+        data-name="{{name}}">
+      <img class="creator-store-row-img" src="{{img}}" alt="" data-tooltip="{{ccItemTooltip uuid}}">
+      <div class="creator-store-row-main">
+        <a class="content-link" data-uuid="{{uuid}}" data-link
+           data-tooltip="{{ccItemTooltip uuid}}">{{name}}</a>
+        <span class="creator-store-row-type">{{typeLabel}}</span>
+      </div>
+      <span class="creator-store-row-price"><i class="fa-solid fa-coins"></i> {{price}}</span>
+      <div class="creator-store-qty">
+        <button type="button" class="creator-store-qty-btn" data-action="stepAction"
+                data-step-action="store-remove" data-uuid="{{uuid}}"
+                {{#unless inCart}}disabled{{/unless}}
+                aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.removeOne'}}">
+          <i class="fa-solid fa-minus"></i>
+        </button>
+        <span class="creator-store-qty-count">{{qty}}</span>
+        <button type="button" class="creator-store-qty-btn" data-action="stepAction"
+                data-step-action="store-add" data-uuid="{{uuid}}" data-cp="{{cp}}"
+                data-name="{{name}}" data-img="{{img}}"
+                {{#unless canAfford}}disabled{{/unless}}
+                aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.addOne'}}">
+          <i class="fa-solid fa-plus"></i>
+        </button>
+      </div>
+    </li>
+    {{/inline}}
+
+    <div class="creator-store-shelf">
+      {{#if hasPacks}}
+      <h3 class="creator-store-section">
+        <i class="fa-solid fa-suitcase"></i>
+        {{localize "sogrom-dnd5e-character-creator.step.store.packsHeading"}}
+      </h3>
+      <ul class="creator-store-list creator-store-packlist">
+        {{#each packCards}}{{> storeRow}}{{/each}}
+      </ul>
+      {{#if hasGoods}}
+      <h3 class="creator-store-section">
+        <i class="fa-solid fa-boxes-stacked"></i>
+        {{localize "sogrom-dnd5e-character-creator.step.store.goodsHeading"}}
+      </h3>
+      {{/if}}
+      {{/if}}
+      {{#if hasGoods}}
+      <ul class="creator-store-list">
+        {{#each cards}}{{> storeRow}}{{/each}}
+      </ul>
+      {{else}}{{#unless hasPacks}}
+      <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.step.store.empty"}}</p>
+      {{/unless}}{{/if}}
+    </div>
+  </div>
+
+  <!-- Right column: the cart, with the running budget pinned at the bottom -->
+  <aside class="creator-store-cart">
+    <h2 class="creator-store-cart-head">
+      <i class="fa-solid fa-basket-shopping"></i>
+      {{localize "sogrom-dnd5e-character-creator.step.store.cart"}}
+    </h2>
+
+    <div class="creator-store-cart-list">
+      {{#if hasGranted}}
+      {{!-- Gear the class/background choice already grants: visible for the full picture,
+            greyed and button-less because it is the Equipment step's decision, not the cart's. --}}
+      <h3 class="creator-store-granted-head">{{localize "sogrom-dnd5e-character-creator.step.store.grantedHeading"}}</h3>
+      <ul class="creator-store-cart-rows creator-store-granted-rows">
+        {{#each granted}}
+        <li class="creator-store-cart-row is-granted">
+          <img src="{{img}}" alt="" {{#if uuid}}data-tooltip="{{ccItemTooltip uuid}}"{{/if}}>
+          <span class="creator-store-cart-name">{{#if uuid}}<a class="content-link" data-uuid="{{uuid}}" data-link
+                data-tooltip="{{ccItemTooltip uuid}}">{{name}}</a>{{else}}{{name}}{{/if}}{{#if qty}} ×{{qty}}{{/if}}</span>
+          <span class="creator-store-cart-line"><i class="fa-solid fa-lock"></i></span>
+        </li>
+        {{/each}}
+      </ul>
+      {{/if}}
+      {{#if hasCart}}
+      <ul class="creator-store-cart-rows">
+        {{#each cart}}
+        <li class="creator-store-cart-row">
+          <img src="{{img}}" alt="" data-tooltip="{{ccItemTooltip uuid}}">
+          <span class="creator-store-cart-name"><a class="content-link" data-uuid="{{uuid}}" data-link
+                data-tooltip="{{ccItemTooltip uuid}}">{{name}}</a>{{#if qty}} ×{{qty}}{{/if}}</span>
+          <span class="creator-store-cart-line">{{line}}</span>
+          <button type="button" class="creator-store-qty-btn" data-action="stepAction"
+                  data-step-action="store-remove" data-uuid="{{uuid}}"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.removeOne'}}">
+            <i class="fa-solid fa-minus"></i>
+          </button>
+        </li>
+        {{/each}}
+      </ul>
+      <button type="button" class="creator-btn creator-store-clear" data-action="stepAction" data-step-action="store-clear">
+        <i class="fa-solid fa-trash-can"></i> {{localize "sogrom-dnd5e-character-creator.step.store.clear"}}
+      </button>
+      {{else}}
+      <p class="creator-store-cart-empty">{{localize "sogrom-dnd5e-character-creator.step.store.cartEmpty"}}</p>
+      {{/if}}
+    </div>
+
+    {{#if overBudget}}
+    <p class="creator-store-warning">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      {{localize "sogrom-dnd5e-character-creator.step.store.overBudgetBy" amount=overBudgetBy}}
+    </p>
+    {{/if}}
+
+    <dl class="creator-store-totals {{#if overBudget}}is-over{{/if}}">
+      <div><dt>{{localize "sogrom-dnd5e-character-creator.step.store.budget"}}</dt><dd>{{budget}}</dd></div>
+      <div><dt>{{localize "sogrom-dnd5e-character-creator.step.store.cartTotal"}}</dt><dd>{{cartTotal}}</dd></div>
+      <div class="creator-store-remaining"><dt>{{localize "sogrom-dnd5e-character-creator.step.store.remaining"}}</dt><dd><i class="fa-solid fa-coins"></i> {{remaining}}</dd></div>
+    </dl>
+  </aside>
+
+  {{else}}
+  <div class="creator-pick-empty">
+    <i class="fa-solid fa-shop"></i>
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.store.label"}}</h2>
+    <p>{{hint}}</p>
+  </div>
+  {{/if}}
+</section>
