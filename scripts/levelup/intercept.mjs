@@ -268,6 +268,58 @@ export async function triggerLevelUp(actor) {
   return classItem.update({ "system.levels": (classItem.system?.levels ?? 0) + 1 });
 }
 
+/* -------------------------------------------- */
+/*  Higher-level creation hand-off              */
+/* -------------------------------------------- */
+
+/**
+ * Open the level-up wizard on a freshly-created character to carry it from level 1 up to the
+ * level the player asked for on the creator's Class step.
+ *
+ * The creator always builds a level-1 character (see {@link module:build/actor-assembler}); this is
+ * what turns that into a level-5 one. It is a *single* level-up of `target - 1` levels, not one per
+ * level: the driver already walks a multi-level jump — collecting a subclass's later-level features
+ * ({@link LevelUpDriver#resolveSubclass}), giving each gained level its own screen
+ * ({@link LevelUpState#gainedLevels}), and asking for the cumulative spell delta once — and it
+ * commits to the real actor exactly once, so the whole jump stays discardable until Apply.
+ *
+ * Failure here is deliberately soft: the character already exists and is a valid level-1 one, so a
+ * class we can't drive leaves the player with a warning and the sheet's Level Up button rather than
+ * a half-built actor.
+ * @param {Actor5e} actor   The just-created character, at level 1.
+ * @param {number} target   The character level to reach (> 1; clamped to the system's cap).
+ * @returns {Promise<boolean>}  Whether the wizard opened.
+ */
+export async function launchLevelUpTo(actor, target) {
+  const classItem = actor.items.find(i => i.type === "class");
+  if ( !classItem ) { log("no class to level after creation"); return false; }
+
+  // Measure the jump against the *class* item, since that is what `forLevelChange` raises. On a
+  // freshly-created single-class character this equals the character level, but reading it from
+  // the class keeps the delta correct by construction rather than by coincidence.
+  const max = CONFIG.DND5E?.maxLevel ?? 20;
+  const levels = Math.min(target, max) - (classItem.system?.levels ?? 1);
+  if ( levels < 1 ) return false;
+
+  try {
+    const AdvancementManager = dnd5e.applications.advancement.AdvancementManager;
+    const manager = AdvancementManager.forLevelChange(actor, classItem.id, levels);
+    // Driven directly and never rendered; flag it so the takeover hook can't re-claim it if some
+    // other module forces a render (same guard as the Class step's hand-built manager).
+    manager._sogromLevelUp = true;
+    if ( !LevelUpDriver.canDrive(manager) ) {
+      ui.notifications?.warn(t("levelup.notify.choicesUnsupported"));
+      return false;
+    }
+    await launchLevelUp(manager);
+    return true;
+  } catch ( err ) {
+    log("post-creation level-up failed", err);
+    ui.notifications?.error(t("levelup.notify.takeoverFailed"));
+    return false;
+  }
+}
+
 /**
  * Drive a hand-built manager directly — the path for worlds that disabled native advancements,
  * where rendering would never fire the primary hook (no native flow exists at all).

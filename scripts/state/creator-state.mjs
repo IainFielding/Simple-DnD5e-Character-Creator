@@ -28,6 +28,15 @@ export class CreatorState {
   backgroundUuid = null;
 
   /**
+   * The character level the player wants to end up at. The wizard itself always builds a level-1
+   * character — anything above 1 is handed to the level-up wizard after Create, which drives the
+   * whole 1→target jump on one advancement manager (see {@link module:levelup/intercept}). Kept out
+   * of {@link resetClassDependent} on purpose: "I want a level 5 character" survives changing which
+   * class they are.
+   */
+  targetLevel = 1;
+
+  /**
    * Identity & biography fields. `name` mirrors the actor name (the only mandatory
    * field); the rest are optional and written to `actor.system.details` on build.
    */
