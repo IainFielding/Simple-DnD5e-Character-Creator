@@ -6,6 +6,7 @@ import { spellsStep } from "./spells-step.mjs";
 import { choicesStep } from "./choices-step.mjs";
 import { featSpellsStep } from "./feat-spells-step.mjs";
 import { equipmentStep } from "./equipment-step.mjs";
+import { storeStep } from "./store-step.mjs";
 import { reviewStep } from "./review-step.mjs";
 
 /**
@@ -30,6 +31,9 @@ export const STEPS = [
   choicesStep,
   featSpellsStep,
   equipmentStep,
+  // The Store must follow Equipment: its budget is the currency the finished equipment
+  // choice yields. Hidden (like Feat-Spells) until the GM enables it and gold exists.
+  storeStep,
   reviewStep
 ];
 

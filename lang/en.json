@@ -37,7 +37,6 @@
     },
     "quickBuild": {
       "button": "Quick Build",
-      "hint": "Fill everything with the recommended build for this class — a suggested background, a random species, skills, and spells. You can adjust any step afterwards.",
       "confirmTitle": "Overwrite current choices?",
       "confirmBody": "Quick Build replaces your background, species, name, ability scores, spells, and other choices with the recommended set. Continue?",
       "partial": "Quick Build finished with some gaps — check the remaining steps.",
@@ -350,6 +349,31 @@
         "hint": "Choose the starting gear granted by your class and background.",
         "none": "Your chosen class and background grant no starting-equipment choices."
       },
+      "store": {
+        "label": "Store",
+        "intro": "Spend your starting gold on extra gear. Anything you don't spend stays in your coin pouch.",
+        "none": "Your current equipment choice yields no gold to spend.",
+        "empty": "The store has nothing in stock — ask your GM to add items to its shelves.",
+        "cart": "Your Cart",
+        "cartEmpty": "Nothing in your cart yet — browse the shelves and add what you need.",
+        "clear": "Empty Cart",
+        "addOne": "Add one",
+        "removeOne": "Remove one",
+        "budget": "Starting gold",
+        "cartTotal": "Cart",
+        "remaining": "Remaining",
+        "overBudget": "Your cart costs more than your starting gold — remove some items.",
+        "overBudgetBy": "Over budget by {amount} — remove some items.",
+        "summary": "{count} item(s) — {total}",
+        "purchasesHeading": "Purchases",
+        "allCategories": "All categories",
+        "filterCategoryAria": "Filter by category",
+        "allSubtypes": "All kinds",
+        "filterSubtypeAria": "Filter by kind",
+        "packsHeading": "Adventuring Packs",
+        "goodsHeading": "Goods",
+        "grantedHeading": "From your class & background"
+      },
       "review": {
         "label": "Review",
         "labelNamed": "Review {name}",
@@ -493,7 +517,44 @@
       "levelUpHpRollToChat": {
         "name": "Post hit-die rolls to chat",
         "hint": "When a player rolls hit points during a level-up, also post the roll to chat so the whole table can see the result."
+      },
+      "storeEnabled": {
+        "name": "Enable the starting-gold store",
+        "hint": "Adds an optional Store step to the creator where players spend the starting gold from their equipment choice on extra gear. Configure the stock via the Starting-Gold Store menu below."
+      },
+      "storeConfigMenu": {
+        "name": "Starting-Gold Store",
+        "label": "Configure Store",
+        "hint": "Curate the store's shelves: drag items in from any compendium, set per-item prices, and hide or remove stock."
       }
+    },
+    "storeConfig": {
+      "title": "Starting-Gold Store",
+      "multiplierLabel": "Price multiplier",
+      "multiplierHint": "Scales every price without its own override. 1 = book prices, 1.5 = a 50% markup, 0.5 = half price.",
+      "searchPlaceholder": "Search inventory…",
+      "countLabel": "{count} item(s)",
+      "colName": "Item",
+      "colBase": "Book price",
+      "colOverride": "Override",
+      "colPrice": "Sells at",
+      "colHidden": "Hide",
+      "overridePlaceholder": "—",
+      "worldSource": "World item",
+      "brokenHint": "This item can no longer be found (its source module may be disabled). It is skipped in the store — remove the row or restore the source.",
+      "removeEntry": "Remove from the store",
+      "dropHint": "Drag items from any compendium or the Items sidebar anywhere onto this window to stock them.",
+      "dropNotItem": "Only items can be stocked in the store.",
+      "dropNotPhysical": "{name} isn't physical gear — only priced equipment, weapons, consumables, tools, containers, and loot can be stocked.",
+      "dropDuplicate": "{name} is already stocked.",
+      "dropUnpriced": "{name} has no price — set an override or it won't appear on the shelves.",
+      "reset": {
+        "label": "Reset",
+        "hint": "Replace the inventory with the factory default stock (nothing is saved until you Save Changes).",
+        "title": "Reset store inventory?",
+        "body": "This replaces the current inventory — including your price overrides — with the factory default stock. Nothing is written until you press Save Changes."
+      },
+      "save": "Save Changes"
     }
   }
 }

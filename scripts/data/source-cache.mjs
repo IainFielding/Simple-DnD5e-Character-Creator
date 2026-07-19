@@ -2,6 +2,7 @@ import { log } from "../config.mjs";
 import { SourceIndex } from "./source-index.mjs";
 import { SpellSource, MAGIC_INITIATE_LISTS } from "./spell-source.mjs";
 import { EquipmentSource } from "./equipment-source.mjs";
+import { StoreSource } from "./store-source.mjs";
 import { warmChoices } from "./choice-resolver.mjs";
 import { getEnabledPacks } from "./compendium-util.mjs";
 
@@ -26,7 +27,7 @@ import { getEnabledPacks } from "./compendium-util.mjs";
  * so the cache no longer matches the world and must be rebuilt.
  */
 
-/** @type {{source: SourceIndex, spells: SpellSource, equipment: EquipmentSource}|null} */
+/** @type {{source: SourceIndex, spells: SpellSource, equipment: EquipmentSource, store: StoreSource}|null} */
 let cache = null;
 /** @type {Promise<object>|null} The in-flight (or settled) warm, shared by concurrent callers. */
 let warming = null;
@@ -45,7 +46,7 @@ function packSignature() {
 
 /** The shared data sources, created (but not necessarily warmed) on first access. */
 export function getSources() {
-  if ( !cache ) cache = { source: new SourceIndex(), spells: new SpellSource(), equipment: new EquipmentSource() };
+  if ( !cache ) cache = { source: new SourceIndex(), spells: new SpellSource(), equipment: new EquipmentSource(), store: new StoreSource() };
   return cache;
 }
 

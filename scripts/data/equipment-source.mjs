@@ -320,9 +320,13 @@ function focusGroup(node, orSelections, promptName) {
 
 /**
  * Collect the chosen gear and currency for the build across both sources.
+ *
+ * `currencyOnly` runs the exact same selection walk but skips resolving/creating item data,
+ * so callers that only need the money side of the choice (the store step's spendable budget)
+ * share this one implementation without paying the compendium reads.
  * @returns {Promise<{items: object[], currency: Record<string, number>}>}
  */
-export async function collectEquipment(loaded, state) {
+export async function collectEquipment(loaded, state, { currencyOnly = false } = {}) {
   const items = [];
   const currency = {};
   for ( const key of ["class", "background"] ) {
@@ -334,7 +338,7 @@ export async function collectEquipment(loaded, state) {
     if ( opt.type === "gold" ) {
       currency.gp = (currency.gp ?? 0) + (parseInt(opt.wealth ?? "0") || 0);
     } else if ( opt.type === "equipment" ) {
-      const collected = await collectTree(opt.tree, eq.orSelections);
+      const collected = await collectTree(opt.tree, eq.orSelections, currencyOnly);
       for ( const entry of collected ) {
         if ( entry._currencyDenomination ) {
           currency[entry._currencyDenomination] = (currency[entry._currencyDenomination] ?? 0) + entry._currencyAmount;
@@ -348,23 +352,28 @@ export async function collectEquipment(loaded, state) {
   return { items, currency };
 }
 
-/** Resolve a tree into item data (equipped by default) and currency markers. */
-async function collectTree(node, orSelections = {}) {
+/**
+ * Resolve a tree into item data (equipped by default) and currency markers. With
+ * `currencyOnly` the walk is identical but item leaves yield nothing, so no compendium
+ * document is ever resolved.
+ */
+async function collectTree(node, orSelections = {}, currencyOnly = false) {
   if ( !node ) return [];
   if ( node.type === "AND" ) {
     const out = [];
-    for ( const child of node.children ) out.push(...await collectTree(child, orSelections));
+    for ( const child of node.children ) out.push(...await collectTree(child, orSelections, currencyOnly));
     return out;
   }
   if ( node.type === "OR" ) {
     const selected = orSelections[node._id] ?? node.children[0]?._id;
     const chosen = node.children.find(c => c._id === selected) ?? node.children[0];
-    return chosen ? collectTree(chosen, orSelections) : [];
+    return chosen ? collectTree(chosen, orSelections, currencyOnly) : [];
   }
   if ( node.type === "currency" ) {
     const amount = parseInt(node.count ?? 0) || 0;
     return amount > 0 ? [{ _currencyDenomination: node.key ?? "gp", _currencyAmount: amount }] : [];
   }
+  if ( currencyOnly ) return [];
   if ( node.type === "tool" ) {
     if ( !node.isToolChoice || !node.choices?.length ) return [];
     const uuid = node.choices.length === 1 ? node.choices[0].uuid : (orSelections[node._id] ?? node.choices[0].uuid);

@@ -1,4 +1,5 @@
-import { ABILITIES, formatMod, t } from "../config.mjs";
+import { ABILITIES, formatMod, storeConfig, t } from "../config.mjs";
+import { cartTotalCp, formatCp } from "../data/store-source.mjs";
 import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
 import { resolveChoices, advancementArray, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
 import { resolveFeatSpells, grantedSpellCards } from "./feat-spells-step.mjs";
@@ -96,6 +97,22 @@ async function reviewEquipment(state, source, equipment) {
     out[key] = { items, gold, hasAny: true };
   }
   return out;
+}
+
+/**
+ * The Store-step cart for the summary: each purchased item with its quantity, plus the
+ * total deducted from starting gold. Null when the store is off or nothing was bought.
+ * @returns {{items: object[], total: string}|null}
+ */
+function reviewPurchases(state) {
+  if ( !storeConfig().enabled ) return null;
+  const purchases = state.store?.purchases ?? {};
+  const items = Object.entries(purchases)
+    .filter(([, p]) => (Number(p?.qty) || 0) > 0)
+    .map(([uuid, p]) => ({ uuid, name: p.name, img: p.img, count: p.qty > 1 ? p.qty : null }))
+    .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
+  if ( !items.length ) return null;
+  return { items, total: formatCp(cartTotalCp(purchases)) };
 }
 
 /* -------------------------------------------- */
@@ -268,6 +285,7 @@ export const reviewStep = {
         };
       }),
       details: reviewDetails(state),
+      purchases: reviewPurchases(state),
       sections: await reviewSections(state, source, equipBySource, spells, featSpellsBySource)
     };
   }

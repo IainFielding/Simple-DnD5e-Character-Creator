@@ -123,6 +123,35 @@ export class CreatorState {
    */
   equipmentVisited = false;
 
+  /**
+   * Starting-gold store cart (the optional Store step): uuid -> `{qty, cp, name, img}`.
+   * `cp` caches the multiplied unit price the item was added at, so the synchronous
+   * completion gate and the rail summary can total the cart without compendium reads.
+   * The assembler creates these items and deducts the total from starting currency.
+   */
+  store = { purchases: {} };
+
+  /** Transient: set once the player has opened the (optional) Store step. Not persisted. */
+  storeVisited = false;
+
+  /** Transient Store-step UI: the active category filter ("" = all). Not persisted. */
+  storeCategory = "";
+
+  /**
+   * Transient Store-step UI: the active subtype filter within the chosen category
+   * ("" = all). Cleared whenever the category changes — subtype keys only mean anything
+   * inside their category (tool "art" is artisan's tools; loot "art" is an art object).
+   * Not persisted.
+   */
+  storeSubtype = "";
+
+  /**
+   * The spendable store budget in copper — the currency the current equipment-step selection
+   * yields — cached so the Store step's synchronous `applicable`/`isComplete` gates can read
+   * it. Refreshed by the Equipment and Store steps' contexts (both know the live selection).
+   */
+  storeBudgetCp = 0;
+
   /** Transient Spells-step UI: which tab is shown and which spell is focused. Not persisted. */
   spellTab = "cantrips";
   focusedSpellUuid = null;

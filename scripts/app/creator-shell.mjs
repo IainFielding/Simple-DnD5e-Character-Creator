@@ -58,7 +58,8 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
       // columns, and the choices list (otherwise picking an option snaps them to the top).
       scrollable: [
         ".creator-stage-body", ".creator-picklist", ".creator-pick-desc",
-        ".creator-details-form", ".creator-details-media", ".creator-choices"
+        ".creator-details-form", ".creator-details-media", ".creator-choices",
+        ".creator-store-shelf", ".creator-store-cart-list"
       ]
     }
   };
@@ -71,6 +72,8 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   spells;
   /** @type {import("../data/equipment-source.mjs").EquipmentSource} */
   equipment;
+  /** @type {import("../data/store-source.mjs").StoreSource} */
+  store;
 
   // Instance state that drives rendering but isn't the character data itself:
   #current = 0;          // index into STEPS of the step currently on screen
@@ -88,10 +91,11 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     this.state = new CreatorState(actor);
     // Reuse the shared, warm-once compendium index (warmed in the background at `ready`).
     // `#loadStage` re-grabs these after any staleness check, in case the cache was rebuilt.
-    const { source, spells, equipment } = getSources();
+    const { source, spells, equipment, store } = getSources();
     this.source = source;
     this.spells = spells;
     this.equipment = equipment;
+    this.store = store;
   }
 
   get title() {
@@ -128,10 +132,11 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // A changed enabled-source set means the cached index no longer reflects the world; rebuild.
     if ( isStale() ) {
       invalidateSources();
-      const { source, spells, equipment } = getSources();
+      const { source, spells, equipment, store } = getSources();
       this.source = source;
       this.spells = spells;
       this.equipment = equipment;
+      this.store = store;
     }
     const off = onWarmProgress(pct => {
       this.#loadingLabel = t("loading.preparing", { percent: pct });
@@ -456,9 +461,10 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #filterCards(query) {
     const needle = query.trim().toLowerCase();
-    // Card grid (background/species) and the class pick-list share the same filter;
-    // for a pick-row the <li> wrapper is hidden so the list gap collapses with it.
-    for ( const card of this.element.querySelectorAll(".creator-card, .creator-pickrow") ) {
+    // Card grid (background/species), the class pick-list, and the store's shelf rows all
+    // share the same filter; for a pick-row the <li> wrapper is hidden so the list gap
+    // collapses with it.
+    for ( const card of this.element.querySelectorAll(".creator-card, .creator-pickrow, .creator-store-row") ) {
       const name = (card.dataset.name ?? "").toLowerCase();
       const target = card.closest("li") ?? card;
       target.classList.toggle("is-hidden", !!needle && !name.includes(needle));
@@ -476,7 +482,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
    * callback), since the dispatch's own render fires immediately.
    */
   #ctx() {
-    return { state: this.state, source: this.source, spells: this.spells, equipment: this.equipment, app: this };
+    return { state: this.state, source: this.source, spells: this.spells, equipment: this.equipment, store: this.store, app: this };
   }
 
   // The single funnel every UI interaction flows through. Given an action name and the element

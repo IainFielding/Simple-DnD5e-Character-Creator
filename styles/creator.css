@@ -681,9 +681,28 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-radius: 12px;
   box-shadow: var(--cc-bezel), 0 0 18px -12px var(--cc-accent-glow);
 }
-.creator-detail-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
+.creator-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.75rem; }
 .creator-detail-head h2 { margin: 0; border: none; font-size: 1.35rem; letter-spacing: 0.04em; }
 .creator-detail-img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; border: 1px solid var(--cc-line-2); }
+/* Sourcebook badge beside the detail title, naming where the selected item originates — the same
+   recipe as .levelup-block-source, so the creator and the level-up wizard read as one family.
+   Quiet by design (it's provenance, not state) and truncates rather than wrapping a long title. */
+.creator-detail-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.creator-detail-source i { flex: 0 0 auto; font-size: 0.7rem; opacity: 0.8; }
 .creator-detail-body { line-height: 1.65; color: var(--cc-text); }
 .creator-detail-body :is(h1, h2, h3, h4) { color: var(--cc-gold); }
 
@@ -932,24 +951,15 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   letter-spacing: 0.06em;
   color: var(--cc-gold);
 }
-/* Quick Build: one-click recommended fill, shown atop the class aside once a class is picked. */
-.creator-quick-build {
-  margin: 0 0 1.1rem;
-  padding-bottom: 1.1rem;
-  border-bottom: 1px solid var(--cc-line);
-}
+/* Quick Build: one-click recommended fill, sitting in the class detail header beside the source
+   badge. Sized to its label (not the full column) since it shares a row with the class name. */
 .creator-quick-build-btn {
-  width: 100%;
-  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
 }
 .creator-quick-build-btn.is-busy { opacity: 0.6; pointer-events: none; }
-.creator-quick-build-hint {
-  margin: 0.4rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  opacity: 0.75;
-}
-/* Target-level picker — sits between Quick Build and the ability panel in the class aside.
+/* Target-level picker — sits above the ability panel in the class aside.
    The chips reuse the .creator-tab pill look so the two pickers in this column read as one family;
    the custom field is a chip-shaped number input that lights up when the level isn't a preset. */
 .creator-target-level {
@@ -3086,3 +3096,274 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .levelup-routecard--new:hover .levelup-routecard-title { color: var(--cc-text); }
 .levelup-routecard.is-disabled { opacity: 0.4; cursor: not-allowed; }
 .levelup-routecard.is-disabled:hover { border-color: var(--cc-line); transform: none; opacity: 0.4; }
+
+
+/* ---------------------------------------------- Store step
+
+   The starting-gold store: a searchable shelf of priced item cards on the left and a
+   sticky cart panel with the running budget on the right. Follows the pick-step layout
+   (fill the stage, each column owns its scroll region). */
+
+.creator-store {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 1.5rem;
+  align-items: start;
+  height: 100%;
+  min-height: 0;
+}
+.creator-store-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+.creator-store-intro { margin: 0; color: var(--cc-muted); }
+.creator-store-filter-row { display: flex; gap: 0.5rem; align-items: stretch; }
+.creator-store-filter-row .creator-search { flex: 1 1 auto; width: auto; }
+.creator-store-filter-row .creator-spell-filter { flex: 0 1 220px; }
+
+.creator-store-shelf { flex: 1; min-height: 0; overflow-y: auto; padding-right: 0.25rem; }
+
+/* The shelf is a compact row list: icon, name (a content-link — hover for the rich item
+   tooltip, click to open the full sheet), muted type, right-aligned price, qty controls.
+   Containers (the adventuring packs) sit in their own headed section above the goods. */
+.creator-store-section {
+  margin: 0.4rem 0 0.2rem;
+  padding-bottom: 0.2rem;
+  border: none;
+  border-bottom: 1px solid var(--cc-line);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.creator-store-packlist { margin-bottom: 0.35rem; }
+.creator-store-packlist .creator-store-row { background: var(--cc-panel-2); }
+.creator-store-packlist .creator-store-row:hover { background: var(--cc-select-soft); }
+.creator-store-packlist .creator-store-row.is-in-cart { background: var(--cc-select-soft); }
+.creator-store-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.creator-store-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--cc-line);
+  transition: background 0.15s var(--cc-ease);
+}
+.creator-store-row:hover { background: var(--cc-panel-2); }
+.creator-store-row.is-in-cart { background: var(--cc-select-soft); }
+.creator-store-row.is-hidden { display: none; }
+.creator-store-row-img {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #0a0910;
+  border: 1px solid var(--cc-line);
+}
+.creator-store-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.05rem; }
+.creator-store-row .content-link {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--cc-text);
+  text-decoration: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.creator-store-row .content-link i { display: none; }
+.creator-store-row .content-link:hover { color: var(--cc-gold); }
+.creator-store-row-type { color: var(--cc-muted); font-size: 0.72rem; }
+.creator-store-row-price {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  text-align: right;
+  font-size: 0.82rem;
+  color: var(--cc-gold);
+}
+.creator-store-row.is-unaffordable .creator-store-row-price { color: var(--cc-muted); }
+.creator-store-qty {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+.creator-store-qty-btn {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--cc-line);
+  border-radius: 50%;
+  background: var(--cc-panel);
+  color: var(--cc-text);
+  cursor: pointer;
+  font-size: 0.7rem;
+  transition: border-color 0.2s var(--cc-ease), background 0.2s var(--cc-ease);
+}
+.creator-store-qty-btn:hover:not(:disabled) { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-store-qty-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.creator-store-qty-count { min-width: 1.4rem; text-align: center; font-weight: 600; }
+
+/* Cart panel: rows scroll, totals pinned at the bottom. */
+.creator-store-cart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  height: 100%;
+  min-height: 0;
+  padding: 1rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: 12px;
+}
+.creator-store-cart-head { margin: 0; font-size: 1rem; border: none; display: flex; align-items: center; gap: 0.5rem; }
+.creator-store-cart-list { flex: 1; min-height: 0; overflow-y: auto; }
+.creator-store-cart-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.creator-store-cart-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+.creator-store-cart-row img { width: 24px; height: 24px; border-radius: 4px; object-fit: cover; flex: 0 0 auto; }
+.creator-store-cart-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.creator-store-cart-line { flex: 0 0 auto; color: var(--cc-muted); font-size: 0.8rem; }
+.creator-store-cart-empty { color: var(--cc-muted); font-size: 0.85rem; margin: 0; }
+.creator-store-clear { margin-top: 0.6rem; width: 100%; }
+
+/* Gear the class/background equipment choice already grants: listed above the purchases,
+   greyed and locked — it belongs to the Equipment step, the cart can't change it. */
+.creator-store-granted-head {
+  margin: 0 0 0.3rem;
+  border: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+.creator-store-granted-rows {
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--cc-line);
+}
+.creator-store-cart-row.is-granted { opacity: 0.55; }
+.creator-store-cart-row.is-granted .creator-store-cart-line { font-size: 0.7rem; }
+
+/* Cart names (granted and purchased alike) are content-links: rich tooltip on hover,
+   click opens the item sheet. Stripped of Foundry's pill styling to read as plain rows. */
+.creator-store-cart-row .content-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--cc-text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.creator-store-cart-row .content-link i { display: none; }
+.creator-store-cart-row .content-link:hover { color: var(--cc-gold); }
+
+.creator-store-warning {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #a33;
+  border-radius: 8px;
+  background: rgba(170, 51, 51, 0.15);
+  color: #e88;
+  font-size: 0.82rem;
+}
+.creator-store-totals {
+  margin: 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--cc-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+.creator-store-totals div { display: flex; justify-content: space-between; gap: 0.5rem; }
+.creator-store-totals dt { color: var(--cc-muted); }
+.creator-store-totals dd { margin: 0; }
+.creator-store-remaining dd { color: var(--cc-gold); font-weight: 600; }
+.creator-store-totals.is-over .creator-store-remaining dd { color: #e88; }
+
+/* The GM's store window (a normal framed settings window, not the fullscreen shell).
+   The fields live inside one wrapper element because an ApplicationV2 template part must
+   render a single root. The whole form is a drop target: dragging an item over it lights
+   the dashed ring; the inventory table scrolls inside its own region so the toggle,
+   multiplier, and Save stay put. Deliberately plain colors — this window renders in
+   Foundry's default app chrome, not the creator theme. */
+.sogrom-store-config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+}
+.sogrom-store-config.is-dragover .sogrom-store-config-fields {
+  outline: 2px dashed var(--color-border-highlight, #ff6400);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+.sogrom-store-inv-toolbar { display: flex; align-items: center; gap: 0.5rem; }
+.sogrom-store-inv-search { flex: 1 1 auto; display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.sogrom-store-inv-search input { flex: 1 1 auto; min-width: 0; }
+.sogrom-store-inv-count { flex: 0 0 auto; font-size: 0.8rem; opacity: 0.75; }
+.sogrom-store-inv-toolbar button { flex: 0 0 auto; width: auto; line-height: normal; }
+
+.sogrom-store-inv-scroll { flex: 1 1 auto; min-height: 8rem; overflow-y: auto; }
+.sogrom-store-inv { margin: 0; width: 100%; border-collapse: collapse; }
+.sogrom-store-inv th { text-align: left; font-size: 0.75rem; opacity: 0.8; padding: 0.2rem 0.3rem; }
+.sogrom-store-inv td { padding: 0.15rem 0.3rem; vertical-align: middle; }
+.sogrom-store-inv tbody tr { border-top: 1px solid var(--color-border-light-2, rgba(120, 120, 120, 0.3)); }
+.sogrom-store-inv tbody tr.is-off { opacity: 0.5; }
+.sogrom-store-inv tbody tr.is-hidden { display: none; }
+.sogrom-store-inv tbody tr.is-broken .sogrom-store-inv-name { opacity: 0.6; text-decoration: line-through; }
+.sogrom-store-inv tbody tr.is-broken .fa-link-slash { color: var(--color-level-error, #ce0707); margin-left: 0.3rem; }
+.sogrom-store-inv-col-img { width: 32px; }
+.sogrom-store-inv-col-img img { width: 28px; height: 28px; border-radius: 4px; object-fit: cover; display: block; }
+.sogrom-store-inv-col-price { width: 5.5rem; text-align: right; white-space: nowrap; }
+.sogrom-store-inv-eff { font-weight: 600; }
+.sogrom-store-inv-col-override { width: 8.5rem; white-space: nowrap; }
+.sogrom-store-inv-col-override input[type="number"] { width: 4.2em; text-align: right; }
+.sogrom-store-inv-col-override select { width: 3.6em; }
+.sogrom-store-inv-col-check { width: 2rem; text-align: center; }
+.sogrom-store-inv-source { display: block; font-size: 0.7rem; opacity: 0.6; }
+.sogrom-store-inv-remove { width: auto; padding: 0.15rem 0.4rem; line-height: normal; background: none; border: none; cursor: pointer; }
+.sogrom-store-inv-remove:hover { color: var(--color-level-error, #ce0707); }
+
+.sogrom-store-inv-empty {
+  height: 100%;
+  min-height: 8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  opacity: 0.7;
+  text-align: center;
+  border: 2px dashed var(--color-border-light-2, rgba(120, 120, 120, 0.4));
+  border-radius: 8px;
+  padding: 1rem;
+}
+.sogrom-store-inv-empty i { font-size: 1.6rem; }
+.sogrom-store-inv-empty p { margin: 0; }
+.sogrom-store-inv-drophint { margin: 0; }

@@ -128,6 +128,16 @@
   {{/each}}
   </div>
 
+  {{#if purchases}}
+  <div class="creator-review-block">
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.store.purchasesHeading"}}</h2>
+    <ul class="creator-review-spells">
+      {{#each purchases.items}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{#if count}} ×{{count}}{{/if}}</li>{{/each}}
+      <li class="creator-review-gold"><i class="fa-solid fa-coins"></i> −{{purchases.total}}</li>
+    </ul>
+  </div>
+  {{/if}}
+
   {{#if details.hasAny}}
   <div class="creator-review-block">
     <h2>{{localize "sogrom-dnd5e-character-creator.step.details.label"}}</h2>

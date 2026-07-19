@@ -1,0 +1,106 @@
+{{!--
+  The GM's store window (opened from the module settings menu): the master toggle and price
+  multiplier up top, then the curated inventory table. Items are added by dragging them from
+  any compendium or the Items sidebar onto the window; each row shows the item's book price
+  and offers a per-item override, a hidden toggle, and removal. Reset restores the factory
+  list. Data, drop handling, and submit live in scripts/app/store-config.mjs; the Save button
+  comes from Foundry's generic form-footer part. The row inputs carry no `name` on purpose —
+  row identity is a UUID (dots would break form serialisation), so the app reads them back by
+  data-attribute. Everything below sits inside ONE root element — an ApplicationV2 template
+  part that renders more than one fails to render at all.
+--}}
+<div class="sogrom-store-config-fields">
+<div class="form-group">
+  <label>{{localize "sogrom-dnd5e-character-creator.settings.storeEnabled.name"}}</label>
+  <div class="form-fields">
+    <input type="checkbox" name="enabled" {{#if enabled}}checked{{/if}}>
+  </div>
+  <p class="hint">{{localize "sogrom-dnd5e-character-creator.settings.storeEnabled.hint"}}</p>
+</div>
+
+<div class="form-group">
+  <label>{{localize "sogrom-dnd5e-character-creator.storeConfig.multiplierLabel"}}</label>
+  <div class="form-fields">
+    <input type="number" name="priceMultiplier" value="{{priceMultiplier}}" min="0.05" step="0.05">
+  </div>
+  <p class="hint">{{localize "sogrom-dnd5e-character-creator.storeConfig.multiplierHint"}}</p>
+</div>
+
+<div class="sogrom-store-inv-toolbar">
+  <label class="sogrom-store-inv-search">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <input type="search" data-inv-search autocomplete="off" value="{{search}}"
+           placeholder="{{localize 'sogrom-dnd5e-character-creator.storeConfig.searchPlaceholder'}}"
+           aria-label="{{localize 'sogrom-dnd5e-character-creator.storeConfig.searchPlaceholder'}}">
+  </label>
+  <span class="sogrom-store-inv-count">{{localize "sogrom-dnd5e-character-creator.storeConfig.countLabel" count=count}}</span>
+  <button type="button" data-action="resetDefaults"
+          data-tooltip="{{localize 'sogrom-dnd5e-character-creator.storeConfig.reset.hint'}}">
+    <i class="fa-solid fa-rotate-left"></i>
+    {{localize "sogrom-dnd5e-character-creator.storeConfig.reset.label"}}
+  </button>
+</div>
+
+<div class="sogrom-store-inv-scroll">
+  {{#if hasRows}}
+  <table class="sogrom-store-inv">
+    <thead>
+      <tr>
+        <th class="sogrom-store-inv-col-img"></th>
+        <th>{{localize "sogrom-dnd5e-character-creator.storeConfig.colName"}}</th>
+        <th class="sogrom-store-inv-col-price">{{localize "sogrom-dnd5e-character-creator.storeConfig.colBase"}}</th>
+        <th class="sogrom-store-inv-col-override">{{localize "sogrom-dnd5e-character-creator.storeConfig.colOverride"}}</th>
+        <th class="sogrom-store-inv-col-price">{{localize "sogrom-dnd5e-character-creator.storeConfig.colPrice"}}</th>
+        <th class="sogrom-store-inv-col-check">{{localize "sogrom-dnd5e-character-creator.storeConfig.colHidden"}}</th>
+        <th class="sogrom-store-inv-col-check"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each rows}}
+      <tr data-uuid="{{uuid}}" data-name="{{name}}" class="{{#if broken}}is-broken{{/if}} {{#if hidden}}is-off{{/if}}">
+        <td class="sogrom-store-inv-col-img"><img src="{{img}}" alt="" data-tooltip="{{ccItemTooltip uuid}}"></td>
+        <td>
+          <span class="sogrom-store-inv-name" data-tooltip="{{ccItemTooltip uuid}}">{{name}}</span>
+          {{#if broken}}<i class="fa-solid fa-link-slash"
+             data-tooltip="{{localize 'sogrom-dnd5e-character-creator.storeConfig.brokenHint'}}"></i>{{/if}}
+          <span class="sogrom-store-inv-source">{{sourceLabel}}</span>
+        </td>
+        <td class="sogrom-store-inv-col-price">{{basePrice}}</td>
+        <td class="sogrom-store-inv-col-override">
+          <input type="number" data-override-value value="{{overrideValue}}" min="0" step="any"
+                 placeholder="{{localize 'sogrom-dnd5e-character-creator.storeConfig.overridePlaceholder'}}">
+          <select data-override-denom>
+            {{#each denominations}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </td>
+        <td class="sogrom-store-inv-col-price sogrom-store-inv-eff">{{effective}}</td>
+        <td class="sogrom-store-inv-col-check">
+          <input type="checkbox" data-entry-hidden {{#if hidden}}checked{{/if}}
+                 aria-label="{{localize 'sogrom-dnd5e-character-creator.storeConfig.colHidden'}}">
+        </td>
+        <td class="sogrom-store-inv-col-check">
+          <button type="button" class="sogrom-store-inv-remove" data-action="removeEntry"
+                  data-tooltip="{{localize 'sogrom-dnd5e-character-creator.storeConfig.removeEntry'}}"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.storeConfig.removeEntry'}}">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+  {{else}}
+  <div class="sogrom-store-inv-empty">
+    <i class="fa-solid fa-cart-arrow-down"></i>
+    <p>{{localize "sogrom-dnd5e-character-creator.storeConfig.dropHint"}}</p>
+  </div>
+  {{/if}}
+</div>
+
+{{#if hasRows}}
+<p class="hint sogrom-store-inv-drophint">
+  <i class="fa-solid fa-hand-pointer"></i>
+  {{localize "sogrom-dnd5e-character-creator.storeConfig.dropHint"}}
+</p>
+{{/if}}
+</div>

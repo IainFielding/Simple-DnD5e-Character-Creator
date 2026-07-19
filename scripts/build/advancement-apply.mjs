@@ -146,7 +146,7 @@ export async function recordBackgroundAsiValue(actor, backgroundItemId, asi, bon
  * @param {{class:?string, background:?string, species:?string}} originItemIds
  */
 export async function applyChoicePlan(actor, plan, resolved, advChoices, originItemIds) {
-  // Phase A — recreate taken-over ItemGrants (granted features + their sub-advancements).
+  // Recreate the taken-over ItemGrants (granted features + their sub-advancements).
   for ( const t of plan.takeovers ) {
     const originItem = actor.items.get(originItemIds[t.source]);
     const grantAdv = originItem?.advancement?.byId?.[t.grantAdvId];
@@ -154,7 +154,7 @@ export async function applyChoicePlan(actor, plan, resolved, advChoices, originI
     await manuallyApplyItemGrant(actor, originItem, grantAdv, t.source, advChoices, 0);
   }
 
-  // Phase B — the origin item's own Trait / Size / ItemChoice choices.
+  // Apply the origin item's own Trait / Size / ItemChoice choices.
   for ( const src of resolved?.sources ?? [] ) {
     const originItem = actor.items.get(originItemIds[src.key]);
     if ( !originItem ) continue;
