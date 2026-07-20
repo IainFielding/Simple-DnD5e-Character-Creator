@@ -10,6 +10,8 @@ import { cantripsKnownAtLevel, buildSpellFromEntry } from "../../data/spell-sour
  * @property {string}  [listType]      Registry type of that list — "class" or "subclass".
  * @property {string}  [sourceTag]     The `sourceItem` tag to stamp on added spells so they count
  *                                     toward this caster (`class:<id>` or `subclass:<id>`).
+ * @property {string}  [method]        Casting method for added spells — "pact" for a Warlock (Pact
+ *                                     Magic slots), "spell" otherwise.
  * @property {string}  [castUuid]      Compendium source UUID of the casting item, for the spell pool.
  * @property {number}  [classLevel]    The class's current level (subclass scales key off it too).
  * @property {number}  [cantripTarget] Total cantrips known at this level.
@@ -64,6 +66,10 @@ export function computeSpellPlan(actorLike, classItem) {
   const sc = castItem.system.spellcasting;
   const listId = castItem.system?.identifier ?? castItem.name?.toLowerCase() ?? "";
   const sourceTag = `${listType}:${listId}`;
+  // Casting method → which slot pool the added spells use: a pact caster (Warlock) casts from
+  // Pact Magic slots ("pact"), everyone else from ordinary spell slots ("spell"). Matches the
+  // creation flow's `spellMethodFor`.
+  const method = CONFIG.DND5E?.spellProgression?.[sc?.progression]?.type || "spell";
   const castUuid = castItem._stats?.compendiumSource ?? castItem.uuid;
   // Subclass scales are keyed by the *class* level, so always measure from the base class item.
   const classLevel = classItem.system?.levels ?? actorLike.system?.details?.level ?? 1;
@@ -92,7 +98,7 @@ export function computeSpellPlan(actorLike, classItem) {
   const addSpells = maxSpellLevel > 0 ? Math.max(0, spellTarget - spellHave) : 0;
 
   return {
-    isSpellcaster: true, listId, listType, sourceTag, castUuid, classLevel,
+    isSpellcaster: true, listId, listType, sourceTag, castUuid, classLevel, method,
     cantripTarget, cantripHave, spellTarget, spellHave, maxSpellLevel,
     addCantrips, addSpells, hasDelta: (addCantrips > 0) || (addSpells > 0)
   };
@@ -306,7 +312,7 @@ function ownedSpells(actor, sourceTag, isCantrips) {
  * bucket holds more picks than the base add budget), so marking without picking a replacement is a
  * harmless no-op.
  * @param {import("../levelup-state.mjs").LevelUpState} state
- * @returns {{sourceTag:string, create:{uuid:string}[], deleteIds:string[]}}
+ * @returns {{sourceTag:string, method:string, create:{uuid:string}[], deleteIds:string[]}}
  */
 export function spellChanges(state) {
   const plan = state.spellPlan();
@@ -314,7 +320,7 @@ export function spellChanges(state) {
   const deleteIds = [];
   if ( state.swapCantrip && state.selectedCantrips.length > plan.addCantrips ) deleteIds.push(state.swapCantrip.id);
   if ( state.swapSpell && state.selectedSpells.length > plan.addSpells ) deleteIds.push(state.swapSpell.id);
-  return { sourceTag: plan.sourceTag, create, deleteIds };
+  return { sourceTag: plan.sourceTag, method: plan.method ?? "spell", create, deleteIds };
 }
 
 /** Sort spells by level then name — the leveled tab and tally read top-down through the levels. */
@@ -325,13 +331,15 @@ function byLevelThenName(a, b) {
 /**
  * Write the staged spell picks onto the real actor as prepared spells — the level-up counterpart of
  * the creation flow's `addSpells` ([actor-assembler.mjs]): each compendium spell is cloned with
- * `prepared:1`, `method:"spell"`, and a `sourceItem` link back to the caster so it counts toward
- * that class's (or subclass's) preparation and uses its casting ability.
+ * `prepared:1`, the caster's `method` (so a Warlock's spells use Pact Magic slots), and a
+ * `sourceItem` link back to the caster so it counts toward that class's (or subclass's)
+ * preparation and uses its casting ability.
  * @param {Actor5e} actor
  * @param {string} sourceTag  The caster's `sourceItem` tag (`class:<id>` or `subclass:<id>`).
  * @param {{uuid:string}[]} picks
+ * @param {string} [method="spell"]  Casting method — "pact" for a Warlock, "spell" otherwise.
  */
-export async function applyLevelUpSpells(actor, sourceTag, picks) {
+export async function applyLevelUpSpells(actor, sourceTag, picks, method = "spell") {
   if ( !picks.length ) return;
   // Load the picked spells' source documents in parallel — sequential fromUuid awaits made
   // Finish scale with the number of picks when any doc wasn't already in the pack cache.
@@ -342,7 +350,7 @@ export async function applyLevelUpSpells(actor, sourceTag, picks) {
     const obj = doc.toObject();
     if ( obj._stats ) obj._stats.compendiumSource = picks[i].uuid;
     foundry.utils.setProperty(obj, "system.prepared", 1);
-    foundry.utils.setProperty(obj, "system.method", "spell");
+    foundry.utils.setProperty(obj, "system.method", method);
     if ( sourceTag ) foundry.utils.setProperty(obj, "system.sourceItem", sourceTag);
     data.push(obj);
   });

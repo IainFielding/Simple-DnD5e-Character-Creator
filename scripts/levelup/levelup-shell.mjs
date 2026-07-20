@@ -387,12 +387,12 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // The sourceTag guard covers a rare edge: picks staged while the class was briefly a caster
     // (an Eldritch Knight pick later undone) must not be created against a non-caster.
     const { actor } = this.state;
-    const { sourceTag, create, deleteIds } = spellChanges(this.state);
+    const { sourceTag, method, create, deleteIds } = spellChanges(this.state);
     if ( sourceTag && (create.length || deleteIds.length) ) {
       try {
         // Create the replacements before deleting the swapped-out spell, so a failure part-way
         // can only ever leave an extra spell to tidy up — never a destroyed one.
-        await applyLevelUpSpells(actor, sourceTag, create);
+        await applyLevelUpSpells(actor, sourceTag, create, method);
         if ( deleteIds.length ) await actor.deleteEmbeddedDocuments("Item", deleteIds, { render: false });
       } catch ( err ) {
         log("level-up spell grant failed", err);
