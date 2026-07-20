@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { advancementArray, choicesComplete, traitChoiceTitle } from "../scripts/data/choice-resolver.mjs";
+import {
+  advancementArray, choicesComplete, traitChoiceTitle, evalItemPrereq, groupRecommended
+} from "../scripts/data/choice-resolver.mjs";
 import { fighter, sage } from "./fixtures/dnd5e-5.3.3.mjs";
 
 /**
@@ -76,5 +78,63 @@ describe("traitChoiceTitle", () => {
   it("falls back for an unrecognised namespace", () => {
     expect(traitChoiceTitle(["mystery:thing"])).toContain("choice.fallback");
     expect(traitChoiceTitle([])).toContain("choice.fallback");
+  });
+});
+
+/**
+ * `evalItemPrereq` decides whether a feat/invocation's item prerequisites are satisfied by the
+ * identifiers a build owns — the gate that hides ineligible feats and promotes build-unlocked ones
+ * to the "recommended" panel. Matching is on the bare identifier slug, tolerating `type:identifier`.
+ */
+describe("evalItemPrereq", () => {
+  it("reports no requirement (and is met) when the option carries no item prerequisite", () => {
+    expect(evalItemPrereq(undefined, new Set())).toEqual({ hasReq: false, met: true });
+    expect(evalItemPrereq([], new Set(["pact-of-the-blade"]))).toEqual({ hasReq: false, met: true });
+  });
+
+  it("is met when the build owns one of the required identifiers", () => {
+    const owned = new Set(["pact-of-the-blade", "warlock"]);
+    expect(evalItemPrereq(["thirsting-blade"], owned)).toEqual({ hasReq: true, met: false });
+    expect(evalItemPrereq(["pact-of-the-blade"], owned)).toEqual({ hasReq: true, met: true });
+  });
+
+  it("is met when any one of several alternatives is owned", () => {
+    const owned = new Set(["pact-of-the-tome"]);
+    expect(evalItemPrereq(["pact-of-the-blade", "pact-of-the-tome"], owned)).toEqual({ hasReq: true, met: true });
+  });
+
+  it("strips a `type:identifier` prefix before matching the bare slug", () => {
+    const owned = new Set(["pact-of-the-blade"]);
+    expect(evalItemPrereq(["feat:pact-of-the-blade"], owned)).toEqual({ hasReq: true, met: true });
+  });
+
+  it("accepts a Set of requirements and a missing owned set", () => {
+    expect(evalItemPrereq(new Set(["thirsting-blade"]), undefined)).toEqual({ hasReq: true, met: false });
+  });
+});
+
+/**
+ * `groupRecommended` splits options into a leading "Recommended" panel and an "Other" panel, and
+ * returns null (a single flat grid) when nothing is recommended.
+ */
+describe("groupRecommended", () => {
+  it("returns null when no option is recommended", () => {
+    expect(groupRecommended([{ key: "a" }, { key: "b" }])).toBeNull();
+  });
+
+  it("splits recommended options into their own leading panel", () => {
+    const opts = [{ key: "a" }, { key: "b", recommended: true }, { key: "c" }];
+    const groups = groupRecommended(opts);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].label).toContain("choice.recommended");
+    expect(groups[0].options.map(o => o.key)).toEqual(["b"]);
+    expect(groups[1].label).toContain("choice.other");
+    expect(groups[1].options.map(o => o.key)).toEqual(["a", "c"]);
+  });
+
+  it("omits the 'Other' panel when every option is recommended", () => {
+    const groups = groupRecommended([{ key: "a", recommended: true }]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].options.map(o => o.key)).toEqual(["a"]);
   });
 });

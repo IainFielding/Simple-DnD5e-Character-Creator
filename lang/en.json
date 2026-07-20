@@ -408,6 +408,7 @@
       "chooseOne": "Choose one",
       "chooseCount": "Choose {count}",
       "recommendedAbility": "Matches your {class}'s spellcasting ability",
+      "recommended": "Recommended",
       "alreadyGained": "Already gained elsewhere",
       "emptyNoteSkills": "Pick skill proficiencies first to choose Expertise.",
       "simpleWeapons": "Simple Weapons",

@@ -2075,14 +2075,16 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 /* A recommended option (e.g. the class's default spellcasting ability): a soft gold glow, a
    corner star, and a slow shine sweep so the suggested pick stands out tastefully. */
 .creator-choices .creator-choice-card.is-recommended,
-.creator-levelup-grant .creator-choice-card.is-recommended {
+.creator-levelup-grant .creator-choice-card.is-recommended,
+.creator-levelup-choices .creator-choice-card.is-recommended {
   overflow: hidden;
   border-color: var(--cc-gold);
   box-shadow: 0 0 8px -2px var(--cc-gold);
 }
 .creator-choice-card-star { flex-shrink: 0; color: var(--cc-gold); font-size: 0.75rem; }
 .creator-choices .creator-choice-card.is-recommended::after,
-.creator-levelup-grant .creator-choice-card.is-recommended::after {
+.creator-levelup-grant .creator-choice-card.is-recommended::after,
+.creator-levelup-choices .creator-choice-card.is-recommended::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -2099,7 +2101,8 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 @media (prefers-reduced-motion: reduce) {
   .creator-choices .creator-choice-card.is-recommended::after,
-  .creator-levelup-grant .creator-choice-card.is-recommended::after { animation: none; }
+  .creator-levelup-grant .creator-choice-card.is-recommended::after,
+  .creator-levelup-choices .creator-choice-card.is-recommended::after { animation: none; }
 }
 
 /* ---------------------------------------------- Equipment step
