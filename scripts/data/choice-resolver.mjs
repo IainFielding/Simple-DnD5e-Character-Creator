@@ -402,6 +402,14 @@ async function parseAdvancementChoice(adv, ctx) {
     const count = Number(levelChoices?.count ?? levelChoices ?? 0);
     if ( !count ) return;
 
+    // Prerequisite-level gate: an option whose `system.prerequisites.level` exceeds the character's
+    // level can't legitimately be picked — e.g. a Warlock's level-5 Eldritch Invocation offered at
+    // creation. Creation always builds a level-1 character (a class-linked ItemChoice may key at
+    // level 0, so floor at 1), mirroring the level-up flow's feature-level gate. The native
+    // ItemChoice flow skips this for its static pool, which is why higher-level options leak in.
+    const maxPrereqLevel = choiceLevel || 1;
+    const meetsPrereq = doc => Number(doc?.system?.prerequisites?.level ?? 0) <= maxPrereqLevel;
+
     const options = [];
     const seen = new Set();
     // Also track option names: `allowDrops` scans every enabled pack, so an item the pool
@@ -413,13 +421,13 @@ async function parseAdvancementChoice(adv, ctx) {
       const uuid = typeof p === "string" ? p : p?.uuid;
       if ( !uuid || seen.has(uuid) ) continue;
       const doc = await fromUuid(uuid).catch(() => null);
-      if ( !doc ) continue;
+      if ( !doc || !meetsPrereq(doc) ) continue;
       seen.add(uuid);
       seenNames.add(nameKey(doc.name));
       options.push({ key: uuid, uuid, label: doc.name, img: doc.img });
     }
     if ( cfg.allowDrops && cfg.restriction?.subtype ) {
-      for ( const opt of await findRestrictedItems(cfg) ) {
+      for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel) ) {
         if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
         seen.add(opt.key);
         seenNames.add(nameKey(opt.label));

@@ -186,17 +186,25 @@ async function grantEquipment(actor, state, source, equipment) {
 
 /**
  * Create the player's chosen cantrips and level-1 spells on the actor as prepared
- * class spells. dnd5e 6.x marks a known class spell with `prepared:1`, `method:"spell"`,
+ * class spells. dnd5e 6.x marks a known class spell with `prepared:1`, a casting `method`,
  * and a `sourceItem` link back to the class identifier.
+ *
+ * The `method` selects which slot pool (and spellbook section) the spell uses: a pact caster
+ * (Warlock) casts from Pact Magic slots, everyone else from ordinary spell slots. It's derived
+ * from the class's spellcasting progression ("pact" → "pact"; "full"/"half"/"artificer"/… →
+ * "spell"), so a Warlock's level-1 spells land in the pact section instead of leaking into the
+ * standard slots. Cantrips still resolve to the shared "Cantrips" section regardless of method.
  */
 async function addSpells(actor, state) {
   const picks = [...state.selectedCantrips, ...state.selectedSpells];
   if ( !picks.length ) return;
 
   let classId = "";
+  let method = "spell";
   if ( state.classUuid ) {
     const classDoc = await fromUuid(state.classUuid).catch(() => null);
     classId = classDoc?.system?.identifier ?? "";
+    method = spellMethodFor(classDoc);
   }
 
   const data = [];
@@ -206,11 +214,23 @@ async function addSpells(actor, state) {
     const obj = doc.toObject();
     if ( obj._stats ) obj._stats.compendiumSource = pick.uuid;
     foundry.utils.setProperty(obj, "system.prepared", 1);
-    foundry.utils.setProperty(obj, "system.method", "spell");
+    foundry.utils.setProperty(obj, "system.method", method);
     if ( classId ) foundry.utils.setProperty(obj, "system.sourceItem", `class:${classId}`);
     data.push(obj);
   }
   if ( data.length ) await actor.createEmbeddedDocuments("Item", data, { render: false });
+}
+
+/**
+ * The spell casting `method` a class's spells should use, from its spellcasting progression:
+ * "pact" for a Warlock (Pact Magic slots), "spell" for full/half/third-caster classes. Falls back
+ * to "spell" for anything unrecognised. Shared shape with the level-up spell grant.
+ * @param {Item5e|null} classDoc
+ * @returns {string}
+ */
+export function spellMethodFor(classDoc) {
+  const progression = classDoc?.system?.spellcasting?.progression;
+  return CONFIG.DND5E?.spellProgression?.[progression]?.type || "spell";
 }
 
 /**

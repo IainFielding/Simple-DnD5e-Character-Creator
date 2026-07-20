@@ -24,17 +24,18 @@ async function buildOptions(record, st) {
   const priorByUuid = new Map(st.priorEntries.map(e => [e.uuid, e]));
   const extraPriors = st.priorEntries.filter(e => !pool.includes(e.uuid)).map(e => e.uuid);
 
+  // Feature level for the prerequisite gate below: the advancement's own level, falling back to the
+  // character's total level for a class-linked granted feature whose ItemChoice keys at level 0
+  // (otherwise the gate would filter out every option).
+  const featureLevel = record.level || record.advancement.actor?.system?.details?.level || null;
+
   // Drop-restricted choices (e.g. the Artificer's "Replicate Magic Item") carry an empty static
   // pool; their options come from a compendium scan matching the restriction, gated to items the
   // character qualifies for by prerequisite level — mirroring the native ItemChoice flow. We carry
   // the scanned name/img so those items don't each need a separate `fromUuid` load.
   const meta = new Map();
   if ( cfg.allowDrops && (cfg.restriction?.subtype || cfg.restriction?.type) ) {
-    // Mirror the native flow's `featureLevel`: the advancement's own level, falling back to the
-    // character's total level for a class-linked granted feature whose ItemChoice keys at level 0
-    // (otherwise the prerequisite gate would filter out every option).
-    const featureLevel = record.level || record.advancement.actor?.system?.details?.level;
-    for ( const opt of await findRestrictedItems(cfg, featureLevel ?? null) ) {
+    for ( const opt of await findRestrictedItems(cfg, featureLevel) ) {
       meta.set(opt.uuid, { name: opt.label, img: opt.img });
     }
   }
@@ -51,6 +52,12 @@ async function buildOptions(record, st) {
       // it is how the player frees the slot to swap.
       options.push({ uuid, name: doc.name, img: doc.img, owned: true, originalId: prior.id, selected: st.replacing !== prior.id });
     } else {
+      // Prerequisite-level gate for a static-pool option the character doesn't yet qualify for by
+      // level (e.g. a Warlock's level-5 Eldritch Invocation offered at level 2). Owned picks are
+      // folded in above and never gated; scanned (meta) options are already gated by the scan, so
+      // this only touches fresh pool entries loaded via fromUuid.
+      if ( !meta.has(uuid) && featureLevel != null
+        && Number(doc.system?.prerequisites?.level ?? 0) > featureLevel ) return;
       const selected = st.selected.has(uuid);
       // Already held from another source (e.g. the base Fighting Style when picking a Champion's
       // extra one): show it enumerated but as taken, not a fresh pick — it can't be chosen twice.
