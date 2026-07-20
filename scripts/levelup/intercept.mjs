@@ -153,21 +153,28 @@ async function launchLevelUp(manager) {
  * never has to know about the class-level selector buried in the sheet. It sits in the header's
  * rest-button row as a gold icon button matching short/long rest (tooltip on hover) — recreating
  * that row when the system left it out (a player without rest permission), so only a sheet with no
- * such structure at all (a legacy sheet) falls back to a labelled title-bar button. Hidden when the
- * module mode leaves levelling to the system, when the world setting turns the button off, when
- * Hero Mancer owns the space, and when there is nothing to level (no class yet, or already at
- * the level cap).
+ * such structure at all (a legacy sheet) falls back to a labelled title-bar button. Tidy 5e Sheets
+ * lay their header out differently, so they get the same treatment against their own markup (see
+ * {@link tidyActionRow}). Hidden when the module mode leaves levelling to the system, when the
+ * world setting turns the button off, when Hero Mancer owns the space, and when there is nothing
+ * to level (no class yet, or already at the level cap).
  * @param {Application} app
  * @param {HTMLElement|jQuery} html
  */
 function onRenderActorSheet(app, html) {
-  if ( !levelUpEnabled() || heroMancerActive() ) return;
-  if ( !game.settings.get(MODULE_ID, SETTINGS.levelUpButton) ) return;
-  const actor = app?.actor;
-  if ( !canLevelUp(actor) ) return;
-
   const root = html instanceof HTMLElement ? html : html?.[0];
-  if ( !root || root.querySelector(".sogrom-levelup-btn") ) return;
+  if ( !root ) return;
+  const actor = app?.actor;
+  const show = levelUpEnabled() && !heroMancerActive()
+    && game.settings.get(MODULE_ID, SETTINGS.levelUpButton) && canLevelUp(actor);
+
+  // Tidy's sheets are Svelte-mounted once and then updated in place, so the header we injected
+  // into survives every later render — including the one right after the level that used it up.
+  // Clear a stale button rather than leaving a dead trophy behind (a re-rendered dnd5e sheet
+  // brings fresh HTML, so this is a no-op there).
+  const existing = root.querySelector(".sogrom-levelup-btn");
+  if ( !show ) { existing?.remove(); return; }
+  if ( existing ) return;
 
   const button = document.createElement("button");
   button.type = "button";
@@ -175,6 +182,18 @@ function onRenderActorSheet(app, html) {
     ev.preventDefault();
     triggerLevelUp(actor);
   });
+
+  const tidyRow = tidyActionRow(root);
+  if ( tidyRow ) {
+    // Match Tidy's own short/long rest buttons: an icon-only gold button whose empty data-tooltip
+    // makes the tooltip system fall back to the aria-label.
+    button.className = "sogrom-levelup-btn button button-icon-only button-gold";
+    button.dataset.tooltip = "";
+    button.setAttribute("aria-label", t("levelup.button"));
+    button.innerHTML = "<i class=\"fa-solid fa-trophy-star\" inert></i>";
+    tidyRow.append(button);
+    return;
+  }
 
   // Prefer the system's rest-button row. It only exists when dnd5e sets `showRests`
   // (`game.user.isGM || (actor.isOwner && allowRests)`), so a plain player who owns the
@@ -216,6 +235,25 @@ function buildHeaderButtonRow(root) {
   const row = document.createElement("div");
   row.className = "sheet-header-buttons";
   wrapper.prepend(row);
+  return row;
+}
+
+/**
+ * The Tidy 5e Sheets header action row — the strip beside the character's name holding its
+ * short/long rest buttons — or null on any other sheet.
+ *
+ * Tidy's Quadrone sheets extend `ActorSheetV2` and mount their Svelte content synchronously, so
+ * the standard `renderActorSheetV2` hook already fires with this markup in place; only the layout
+ * differs from the system sheet's. The container div is always in the template, but Tidy adds its
+ * layout classes with the rest buttons, so a player without rest permission gets an unclassed
+ * (and undisplayed) shell — style it ourselves so our button lands in the same spot regardless.
+ * @param {HTMLElement} root
+ * @returns {HTMLElement|null}
+ */
+function tidyActionRow(root) {
+  const row = root.querySelector("[data-tidy-sheet-part=\"sheet-header-actions-container\"]");
+  if ( !row ) return null;
+  if ( !row.classList.contains("sheet-header-actions") ) row.classList.add("sheet-header-actions", "flexrow");
   return row;
 }
 
