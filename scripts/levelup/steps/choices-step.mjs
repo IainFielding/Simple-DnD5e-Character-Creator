@@ -1,6 +1,6 @@
 import { t } from "../../config.mjs";
 import { atLevel, advancementHint } from "../levelup-state.mjs";
-import { choiceBlurb, findRestrictedItems } from "../../data/choice-resolver.mjs";
+import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended } from "../../data/choice-resolver.mjs";
 
 /**
  * Feature choices — the `ItemChoice` advancements a level grants (a Fighting Style, a Maneuver,
@@ -29,14 +29,20 @@ async function buildOptions(record, st) {
   // (otherwise the gate would filter out every option).
   const featureLevel = record.level || record.advancement.actor?.system?.details?.level || null;
 
+  // Feat/feature identifiers the clone already holds, matched against a feat's item prerequisites
+  // (a Warlock's Improved Pact Weapon needing Pact of the Blade). The map is keyed by identifier
+  // slug, exactly what `evalItemPrereq` compares against.
+  const owned = new Set(record.advancement.actor?.identifiedItems?.keys() ?? []);
+
   // Drop-restricted choices (e.g. the Artificer's "Replicate Magic Item") carry an empty static
   // pool; their options come from a compendium scan matching the restriction, gated to items the
   // character qualifies for by prerequisite level — mirroring the native ItemChoice flow. We carry
-  // the scanned name/img so those items don't each need a separate `fromUuid` load.
+  // the scanned name/img (and item prerequisites) so those items don't each need a separate
+  // `fromUuid` load.
   const meta = new Map();
   if ( cfg.allowDrops && (cfg.restriction?.subtype || cfg.restriction?.type) ) {
     for ( const opt of await findRestrictedItems(cfg, featureLevel) ) {
-      meta.set(opt.uuid, { name: opt.label, img: opt.img });
+      meta.set(opt.uuid, { name: opt.label, img: opt.img, prereqItems: opt.prereqItems });
     }
   }
 
@@ -52,17 +58,23 @@ async function buildOptions(record, st) {
       // it is how the player frees the slot to swap.
       options.push({ uuid, name: doc.name, img: doc.img, owned: true, originalId: prior.id, selected: st.replacing !== prior.id });
     } else {
-      // Prerequisite-level gate for a static-pool option the character doesn't yet qualify for by
-      // level (e.g. a Warlock's level-5 Eldritch Invocation offered at level 2). Owned picks are
-      // folded in above and never gated; scanned (meta) options are already gated by the scan, so
-      // this only touches fresh pool entries loaded via fromUuid.
-      if ( !meta.has(uuid) && featureLevel != null
-        && Number(doc.system?.prerequisites?.level ?? 0) > featureLevel ) return;
+      // Prerequisite gate for a fresh (non-owned) option. Owned picks are folded in above and never
+      // gated. A static-pool option is gated by both its level and its item prerequisites; a scanned
+      // (meta) option is already level-gated by the scan, so only its item prerequisites remain. An
+      // option whose item prerequisite the build satisfies is flagged `recommended` — the build
+      // unlocked it, so it earns the "recommended" panel.
+      const prereq = meta.has(uuid)
+        ? { items: doc.prereqItems }
+        : (doc.system?.prerequisites ?? {});
+      if ( !meta.has(uuid) && featureLevel != null && Number(prereq.level ?? 0) > featureLevel ) return;
+      const { hasReq, met } = evalItemPrereq(prereq.items, owned);
+      if ( hasReq && !met ) return;
       const selected = st.selected.has(uuid);
       // Already held from another source (e.g. the base Fighting Style when picking a Champion's
       // extra one): show it enumerated but as taken, not a fresh pick — it can't be chosen twice.
       const taken = !selected && !!st.ownedElsewhere?.has(uuid);
-      options.push({ uuid, name: doc.name, img: doc.img, owned: false, selected, taken, disabled: taken || (!selected && st.full) });
+      options.push({ uuid, name: doc.name, img: doc.img, owned: false, selected, taken,
+        disabled: taken || (!selected && st.full), recommended: hasReq && met });
     }
   });
   // A scanned pool has no meaningful authored order, so sort it alphabetically for scanability;
@@ -104,6 +116,9 @@ export const choicesStep = {
         hint: (await advancementHint(record)) || choiceBlurb({ type: "ItemChoice", count: st.max }),
         replaceHint: hasOwned ? t("levelup.step.choices.replaceHint") : "",
         options,
+        // A "Recommended" + "Other" split when the build unlocked any option (an item prerequisite
+        // it satisfies, e.g. an invocation needing Pact of the Blade); null leaves the flat grid.
+        groups: groupRecommended(options),
         // A lone section shows its title/count in the block header instead of repeating it inside.
         collapsed: single
       });

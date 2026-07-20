@@ -64,6 +64,11 @@ export async function resolveChoices(state, source) {
   // or language already granted/chosen elsewhere. Computed before the per-source loop.
   const crossTaken = await collectTakenTraitKeys(defs, state.advChoices);
 
+  // Feat/feature identifiers the whole build grants. A feat or invocation whose selection is
+  // gated behind an item prerequisite (a Warlock invocation needing Pact of the Blade, say) is
+  // hidden when the build doesn't satisfy it, and promoted to a "recommended" panel when it does.
+  const ownedIds = await collectOwnedIdentifiers(defs, state.advChoices);
+
   // The chosen class's spellcasting ability (and its display name). When a *granted* spell
   // from any origin (species/background) lets the player pick which ability casts it, the
   // class's ability is the recommended pick — so they can align innate casting with the
@@ -79,7 +84,7 @@ export async function resolveChoices(state, source) {
     if ( !d.doc ) continue;
     let requirements = [];
     try {
-      requirements = await prepareRequirements(d.doc, d.key, state.advChoices, crossTaken, spellAbilityHint);
+      requirements = await prepareRequirements(d.doc, d.key, state.advChoices, crossTaken, spellAbilityHint, ownedIds);
     } catch ( err ) {
       log(`failed to resolve choices for ${d.key}`, err);
     }
@@ -179,6 +184,23 @@ function itemChoicePicks(adv, sel) {
 }
 
 /**
+ * Every feat/feature identifier the level-≤1 build grants across all origins — the origin items
+ * themselves plus their granted/chosen features (via {@link levelOneOwners}). These are the slugs
+ * a feat's `system.prerequisites.items` is matched against, so an option requiring a feature the
+ * build hasn't taken (a Warlock invocation needing Pact of the Blade) can be gated out.
+ */
+async function collectOwnedIdentifiers(defs, advChoices) {
+  const ids = new Set();
+  for ( const d of defs ) {
+    if ( !d.doc ) continue;
+    for ( const { item } of await levelOneOwners(d.doc, advChoices[d.key] ?? {}) ) {
+      if ( item?.identifier ) ids.add(item.identifier);
+    }
+  }
+  return ids;
+}
+
+/**
  * Gather every trait proficiency/language already acquired across all sources so a key
  * taken once can be greyed out elsewhere. Keys are namespaced `mode|key` so distinct
  * mechanics that reuse keys (weapon mastery vs proficiency) stay independent. Returns the
@@ -209,7 +231,7 @@ async function collectTakenTraitKeys(defs, advChoices) {
 }
 
 /** Parse one origin item's advancements (and its granted features') into requirements. */
-async function prepareRequirements(item, source, advChoices, crossTaken, spellAbilityHint) {
+async function prepareRequirements(item, source, advChoices, crossTaken, spellAbilityHint, ownedIds) {
   const sel = advChoices[source] ?? (advChoices[source] = {});
   const reqs = [];
   const owners = await levelOneOwners(item, sel);
@@ -219,7 +241,7 @@ async function prepareRequirements(item, source, advChoices, crossTaken, spellAb
 
   for ( const { item: owner, ownerUuid } of owners ) {
     for ( const adv of advancementArray(owner) ) {
-      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint });
+      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds });
     }
   }
 
@@ -402,13 +424,24 @@ async function parseAdvancementChoice(adv, ctx) {
     const count = Number(levelChoices?.count ?? levelChoices ?? 0);
     if ( !count ) return;
 
-    // Prerequisite-level gate: an option whose `system.prerequisites.level` exceeds the character's
-    // level can't legitimately be picked — e.g. a Warlock's level-5 Eldritch Invocation offered at
-    // creation. Creation always builds a level-1 character (a class-linked ItemChoice may key at
-    // level 0, so floor at 1), mirroring the level-up flow's feature-level gate. The native
-    // ItemChoice flow skips this for its static pool, which is why higher-level options leak in.
+    // Prerequisite gate: an option the character can't legitimately pick is dropped, whether the
+    // bar is a `system.prerequisites.level` above the character's level (a Warlock's level-5
+    // Eldritch Invocation offered at creation) or a `system.prerequisites.items` feature the build
+    // hasn't taken (Improved Pact Weapon needing Pact of the Blade). Creation always builds a
+    // level-1 character (a class-linked ItemChoice may key at level 0, so floor at 1). An option
+    // whose *item* prerequisite the build satisfies is flagged `recommended` — the build unlocked
+    // it, so it earns the "recommended" panel. The native ItemChoice flow skips all of this for its
+    // static pool, which is why ineligible options otherwise leak in.
     const maxPrereqLevel = choiceLevel || 1;
-    const meetsPrereq = doc => Number(doc?.system?.prerequisites?.level ?? 0) <= maxPrereqLevel;
+    const owned = ctx.owned ?? new Set();
+    // Returns null when the option is gated out; otherwise `{ recommended }` — true when the build
+    // satisfies an item prerequisite the option carries.
+    const gate = (prereq = {}) => {
+      if ( Number(prereq.level ?? 0) > maxPrereqLevel ) return null;
+      const { hasReq, met } = evalItemPrereq(prereq.items, owned);
+      if ( hasReq && !met ) return null;
+      return { recommended: hasReq && met };
+    };
 
     const options = [];
     const seen = new Set();
@@ -421,25 +454,33 @@ async function parseAdvancementChoice(adv, ctx) {
       const uuid = typeof p === "string" ? p : p?.uuid;
       if ( !uuid || seen.has(uuid) ) continue;
       const doc = await fromUuid(uuid).catch(() => null);
-      if ( !doc || !meetsPrereq(doc) ) continue;
+      if ( !doc ) continue;
+      const g = gate(doc.system?.prerequisites);
+      if ( !g ) continue;
       seen.add(uuid);
       seenNames.add(nameKey(doc.name));
-      options.push({ key: uuid, uuid, label: doc.name, img: doc.img });
+      options.push({ key: uuid, uuid, label: doc.name, img: doc.img, recommended: g.recommended });
     }
     if ( cfg.allowDrops && cfg.restriction?.subtype ) {
       for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel) ) {
         if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
+        const g = gate({ items: opt.prereqItems });   // level already filtered by the scan
+        if ( !g ) continue;
         seen.add(opt.key);
         seenNames.add(nameKey(opt.label));
-        options.push(opt);
+        options.push({ key: opt.key, uuid: opt.uuid, label: opt.label, img: opt.img, recommended: g.recommended });
       }
     }
     if ( !options.length ) return;
     options.sort((a, b) => a.label.localeCompare(b.label, game.i18n.lang));
-    reqs.push(buildChoiceReq({
+    const req = buildChoiceReq({
       advId: adv._id, source, ownerUuid, type: "ItemChoice", level,
       title: adv.title || t("advancement.chooseItems"), hint: adv.hint, count, options, sel, crossTaken
-    }));
+    });
+    // Split into a "Recommended" + "Other" panel when the build unlocked any option (an item
+    // prerequisite it satisfies); otherwise leaves the single ungrouped grid untouched.
+    req.groups = groupRecommended(req.options) ?? req.groups;
+    reqs.push(req);
   }
 }
 
@@ -512,6 +553,39 @@ function buildChoiceReq({
 /* -------------------------------------------- */
 /*  Option helpers                              */
 /* -------------------------------------------- */
+
+/**
+ * Evaluate a feat/invocation's item prerequisites against the identifiers a build already owns.
+ * dnd5e stores `system.prerequisites.items` as a set of identifiers, each optionally `type:identifier`;
+ * the feature qualifies when the character holds at least one of them — mirroring the item check in
+ * Item5e#validatePrerequisites. Shared by the creation resolver and the level-up choices step.
+ * @param {{items?: Iterable<string>}} prereqItems  Source of the required identifiers (a doc's
+ *   `system.prerequisites.items`, or a bare list passed through by the compendium scan).
+ * @param {Set<string>} owned  Identifier slugs the build grants.
+ * @returns {{hasReq: boolean, met: boolean}}  `hasReq` — an item prerequisite exists at all;
+ *   `met` — the build satisfies it (always true when there's no item prerequisite).
+ */
+export function evalItemPrereq(prereqItems, owned) {
+  const reqs = prereqItems ? Array.from(prereqItems) : [];
+  if ( !reqs.length ) return { hasReq: false, met: true };
+  // A prerequisite entry may be namespaced `type:identifier`; the actor map keys (and our owned
+  // set) hold bare identifier slugs, so match on the portion after any single ":".
+  const bare = id => { const s = String(id); const i = s.indexOf(":"); return i < 0 ? s : s.slice(i + 1); };
+  return { hasReq: true, met: reqs.some(id => owned?.has(bare(id))) };
+}
+
+/**
+ * Split feat/invocation options into a leading "Recommended" panel (those the build specifically
+ * unlocks — an item prerequisite it satisfies) and an "Other" panel for the rest. Returns null when
+ * nothing is recommended, so the choice renders as a single ungrouped grid as before.
+ */
+export function groupRecommended(opts) {
+  if ( !opts.some(o => o.recommended) ) return null;
+  const groups = [{ label: t("choice.recommended"), options: opts.filter(o => o.recommended) }];
+  const rest = opts.filter(o => !o.recommended);
+  if ( rest.length ) groups.push({ label: t("choice.other"), options: rest });
+  return groups;
+}
 
 /** Split weapon-choice options into Simple vs Martial sections; null when not weapons. */
 function groupOptions(opts) {
@@ -641,6 +715,8 @@ function toolPoolCategory(entry) {
  * When `maxLevel` is given, items are filtered to those the character qualifies for by
  * `system.prerequisites.level` (matching the native ItemChoice flow's feature-level gate — used at
  * level-up so, e.g., a level-2 Artificer's "Replicate Magic Item" only lists level-2 infusions).
+ * Each result also carries its `prereqItems` (the item prerequisites) so a caller can gate on or
+ * recommend them against a specific build — a check too build-dependent to bake into this memo.
  * @param {object} cfg              The ItemChoice advancement configuration.
  * @param {number|null} [maxLevel]  Highest prerequisite level to include; null disables the gate.
  */
@@ -656,7 +732,8 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
     if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) continue;
     try {
       const index = await pack.getIndex({
-        fields: ["type", "system.type.value", "system.type.subtype", "system.prerequisites.level"]
+        fields: ["type", "system.type.value", "system.type.subtype",
+          "system.prerequisites.level", "system.prerequisites.items"]
       });
       for ( const e of index ) {
         if ( docType && e.type !== docType ) continue;
@@ -664,7 +741,11 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
         if ( r.type && ty.value !== r.type ) continue;
         if ( r.subtype && ty.subtype !== r.subtype ) continue;
         if ( (maxLevel != null) && (Number(e.system?.prerequisites?.level ?? 0) > maxLevel) ) continue;
-        results.push({ key: e.uuid, uuid: e.uuid, label: e.name, img: e.img });
+        // Carried through (not filtered here) so the caller can gate on / recommend by item
+        // prerequisites against the specific build — that check is build-dependent, unlike this
+        // memoised scan.
+        const prereqItems = Array.from(e.system?.prerequisites?.items ?? []);
+        results.push({ key: e.uuid, uuid: e.uuid, label: e.name, img: e.img, prereqItems });
       }
     } catch ( err ) {
       log(`restricted-item scan failed for ${pack.collection}`, err);
