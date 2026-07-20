@@ -1,4 +1,4 @@
-import { MODULE_ID, SETTINGS, DEFAULTS, launchWindowOptions, tpl, t, log, levelUpEnabled, creationEnabled, emberActive, heroMancerActive } from "./config.mjs";
+import { MODULE_ID, SETTINGS, DEFAULTS, launchWindowOptions, tpl, t, log, levelUpEnabled, creationEnabled, emberActive } from "./config.mjs";
 import { STEPS } from "./steps/registry.mjs";
 import { CreatorShell } from "./app/creator-shell.mjs";
 import { warmSources } from "./data/source-cache.mjs";
@@ -163,7 +163,7 @@ Hooks.once("ready", () => {
   // level-up takeover is on, players who own a character (the level-up flow) — to avoid taxing
   // clients that will never open either. Deferred to idle so it never competes with the rest of
   // world startup. A window opened before this finishes simply awaits the same in-flight work.
-  const levelUpAudience = levelUpEnabled() && !heroMancerActive()
+  const levelUpAudience = levelUpEnabled()
     && game.actors?.some(a => (a.type === "character") && a.isOwner);
   if ( (creationEnabled() && game.user?.can("ACTOR_CREATE")) || levelUpAudience ) {
     const warm = () => warmSources().catch(() => {});
@@ -211,9 +211,9 @@ Hooks.on("getActorContextOptions", (_directory, options) => {
     name: t("levelup.button"),
     icon: "<i class=\"fa-solid fa-trophy-star\"></i>",
     condition: li => {
-      // Re-check the gates per-render: the mode setting or a competing module may have
-      // changed since this entry was registered (a reload normally follows, but stay safe).
-      if ( !levelUpEnabled() || heroMancerActive() ) return false;
+      // Re-check the gate per-render: the mode setting may have changed since this entry
+      // was registered (a reload normally follows, but stay safe).
+      if ( !levelUpEnabled() ) return false;
       const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
       return canLevelUp(actor);
     },

@@ -5,7 +5,7 @@ import {
 import { spellInfoFor } from "./spells-step.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { applyQuickBuild } from "../data/quick-build.mjs";
-import { t, log, levelUpEnabled, heroMancerActive } from "../config.mjs";
+import { t, log, levelUpEnabled } from "../config.mjs";
 
 /**
  * The Class step. Class selection and ability scores share one step: the class
@@ -149,9 +149,9 @@ function clampLevel(value) {
  */
 function targetLevelContext(state) {
   // Everything above level 1 is delivered by the level-up wizard, so the picker only exists where
-  // that wizard does: a world that left the module on creation-only (or handed level-ups to Hero
-  // Mancer) has no way to reach level 5 from here, and shouldn't be offered it.
-  if ( !levelUpEnabled() || heroMancerActive() ) return null;
+  // that wizard does: a world that left the module on creation-only has no way to reach level 5
+  // from here, and shouldn't be offered it.
+  if ( !levelUpEnabled() ) return null;
   const value = clampLevel(state.targetLevel);
   const isPreset = LEVEL_PRESETS.includes(value);
   return {
