@@ -1,4 +1,4 @@
-import { MODULE_ID, SETTINGS, tpl, t, log, levelUpEnabled, heroMancerActive, launchWindowOptions, multiclassMode } from "../config.mjs";
+import { MODULE_ID, SETTINGS, tpl, t, log, levelUpEnabled, launchWindowOptions, multiclassMode } from "../config.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
 import { LevelUpShell } from "./levelup-shell.mjs";
@@ -72,7 +72,6 @@ function onPreAdvancementManagerRender(manager) {
   })));
   log("preAdvancementManagerRender gates", {
     levelUpEnabled: levelUpEnabled(),
-    heroMancerActive: heroMancerActive(),
     isOwner: !!manager?.actor?.isOwner,
     actorLevel,
     classItemId: classItem?.id ?? null,
@@ -87,7 +86,7 @@ function onPreAdvancementManagerRender(manager) {
       .map(s => `${s.flow?.advancement?.type ?? "?"} — ${s.flow?.advancement?.title ?? s.flow?.item?.name ?? "?"}`)
   });
 
-  if ( !levelUpEnabled() || heroMancerActive() ) return;
+  if ( !levelUpEnabled() ) return;
   // The hook fires on every (re-)render; once we have claimed a manager, never re-enter.
   if ( manager._sogromLevelUp ) return;
   if ( !shouldTakeOver(manager) ) return;
@@ -156,8 +155,8 @@ async function launchLevelUp(manager) {
  * such structure at all (a legacy sheet) falls back to a labelled title-bar button. Tidy 5e Sheets
  * lay their header out differently, so they get the same treatment against their own markup (see
  * {@link tidyActionRow}). Hidden when the module mode leaves levelling to the system, when the
- * world setting turns the button off, when Hero Mancer owns the space, and when there is nothing
- * to level (no class yet, or already at the level cap).
+ * world setting turns the button off, and when there is nothing to level (no class yet, or
+ * already at the level cap).
  * @param {Application} app
  * @param {HTMLElement|jQuery} html
  */
@@ -165,7 +164,7 @@ function onRenderActorSheet(app, html) {
   const root = html instanceof HTMLElement ? html : html?.[0];
   if ( !root ) return;
   const actor = app?.actor;
-  const show = levelUpEnabled() && !heroMancerActive()
+  const show = levelUpEnabled()
     && game.settings.get(MODULE_ID, SETTINGS.levelUpButton) && canLevelUp(actor);
 
   // Tidy's sheets are Svelte-mounted once and then updated in place, so the header we injected

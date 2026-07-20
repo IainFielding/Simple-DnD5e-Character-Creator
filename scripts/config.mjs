@@ -203,16 +203,6 @@ export function emberActive() {
 }
 
 /**
- * Whether the Hero Mancer module is active. It occupies the same level-up/multiclass space
- * but replaces dnd5e's advancement engine rather than wrapping it, so we stand down entirely
- * when it is present (§6) to avoid duplicate buttons and a disabled native engine.
- * @returns {boolean}
- */
-export function heroMancerActive() {
-  return !!game.modules.get("hero-mancer")?.active;
-}
-
-/**
  * Fallback counts of cantrips / level-1 spells known at level 1, keyed by class
  * identifier. Consulted only when a class carries no matching ScaleValue advancement
  * to read the figure from — see {@link module:data/spell-source}.

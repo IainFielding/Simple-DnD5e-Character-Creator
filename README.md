@@ -94,7 +94,30 @@ The creator works great out of the box, but a few settings let your GM tailor it
 - **Module mode** — choose what the module owns: **Creation only**, **Creation + Level-Up** (the default), or **Level-Up only**, which hides the creator and keeps just the guided level-up flow.
 - **Multiclassing** — off by default; when enabled, players can add a whole new class from the Level Up flow. Choose whether the standard ability prerequisites (13+ in the primary ability of both classes) are enforced or waived.
 
-> **Playing with Ember?** When the [Ember](https://foundryvtt.com/packages/ember) module is active, this module automatically switches to **Level-Up only** — Ember provides its own character creation — and the level-up window restyles itself to match Ember's look, so the two feel like one experience.
+---
+
+## Module compatibility
+
+This module is designed to sit quietly alongside the rest of your world. Where another module covers
+the same ground, this one steps aside automatically — you don't need to change any settings.
+
+| Module | Works together? | What happens |
+|---|---|---|
+| [Ember](https://foundryvtt.com/packages/ember) | ✅ Yes — automatic | Ember owns character creation, so this module switches itself to **Level-Up only** and restyles its level-up window to match Ember's look. The two feel like one experience. |
+| [Hero Mancer](https://foundryvtt.com/packages/hero-mancer) | ❌ No — incompatible | Hero Mancer replaces the 5e advancement engine rather than building on it, so the two modules cannot share the creation and level-up space. This is declared as a conflict in the manifest and Foundry will warn you if both are enabled — run one or the other. |
+| [D&D Player's Handbook (2024)](https://foundryvtt.com/packages/dnd-players-handbook) | ✅ Yes — enhanced | Fully supported as a content source, and its official artwork is used as the backdrop on the class, species, and background screens. |
+| Other official content modules (Artificer, Ravenloft, Forgotten Realms, and similar) | ✅ Yes | Their classes, species, backgrounds, spells, and equipment appear in the wizard like any other compendium content. |
+| Homebrew compendiums and content modules | ✅ Yes | Anything that follows the standard 5e item and advancement format is picked up automatically. |
+| Alternative character sheets (Tidy 5e Sheet and similar) | ✅ Yes | This module builds the character; your sheet module displays it. They don't overlap. |
+| Automation modules (Midi-QOL, DAE, and similar) | ✅ Yes | They act on characters during play, after this module has finished creating them. |
+
+> **The short version:** the only module that changes what this one does is **Ember** (it takes over
+> creation), and the only one you can't run alongside it is **Hero Mancer**. Everything else is free
+> to run alongside.
+>
+> Modules not listed here haven't been specifically tested, but nothing in this one hooks into the
+> parts of Foundry that most modules touch. If you do hit a clash, please
+> [open an issue](https://github.com/IainFielding/Simple-DnD5e-Character-Creator/issues).
 
 ---
 

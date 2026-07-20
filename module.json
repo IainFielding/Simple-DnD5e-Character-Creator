@@ -15,6 +15,13 @@
     }
   ],
   "relationships": {
+    "conflicts": [
+      {
+        "id": "hero-mancer",
+        "type": "module",
+        "reason": "Hero Mancer replaces the dnd5e advancement engine rather than wrapping it, so the two modules cannot share the character creation and level-up space."
+      }
+    ],
     "systems": [
       {
         "id": "dnd5e",
