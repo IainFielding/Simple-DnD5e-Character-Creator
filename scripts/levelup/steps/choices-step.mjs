@@ -49,11 +49,18 @@ async function buildOptions(record, st) {
   const uuids = [...new Set([...pool, ...extraPriors, ...meta.keys()])];
   const docs = await Promise.all(uuids.map(u => meta.has(u) ? meta.get(u) : fromUuid(u).catch(() => null)));
   const options = [];
+  // Collapse the same feature carried under different UUIDs (an invocation shared across edition
+  // packs) to one card. Owned/prior picks always show and reserve their name; a fresh option whose
+  // name is already taken is dropped. `findRestrictedItems` already name-dedupes the scanned pool,
+  // so this guards the authored pool vs. scan overlap.
+  const seenNames = new Set();
+  const nameKey = n => (n ?? "").trim().toLowerCase();
   docs.forEach((doc, i) => {
     if ( !doc ) return;
     const uuid = uuids[i];
     const prior = priorByUuid.get(uuid);
     if ( prior ) {
+      seenNames.add(nameKey(doc.name));
       // Owned: selected unless it's currently marked for replacement. Never disabled — unticking
       // it is how the player frees the slot to swap.
       options.push({ uuid, name: doc.name, img: doc.img, owned: true, originalId: prior.id, selected: st.replacing !== prior.id });
@@ -69,6 +76,9 @@ async function buildOptions(record, st) {
       if ( !meta.has(uuid) && featureLevel != null && Number(prereq.level ?? 0) > featureLevel ) return;
       const { hasReq, met } = evalItemPrereq(prereq.items, owned);
       if ( hasReq && !met ) return;
+      const nk = nameKey(doc.name);
+      if ( seenNames.has(nk) ) return;   // a same-named copy already listed (another edition pack)
+      seenNames.add(nk);
       const selected = st.selected.has(uuid);
       // Already held from another source (e.g. the base Fighting Style when picking a Champion's
       // extra one): show it enumerated but as taken, not a fresh pick — it can't be chosen twice.

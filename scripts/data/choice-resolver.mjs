@@ -711,12 +711,37 @@ function toolPoolCategory(entry) {
 }
 
 /**
+ * The compendium collections the player's Compendium Browser source configuration leaves enabled.
+ * dnd5e stores per-pack toggles under the `packSourceConfiguration` setting (a pack is on unless
+ * explicitly set to `false`); its own browser and every `allowDrops` ItemChoice honour it via
+ * `CompendiumBrowserSettingsConfig.collateSources()`. We mirror that so our scan never surfaces
+ * content from a pack the player switched off. Returns null when the setting isn't available
+ * (an older dnd5e), meaning "don't restrict".
+ * @returns {Set<string>|null}
+ */
+function enabledPackSources() {
+  try {
+    const cfg = game.settings.get("dnd5e", "packSourceConfiguration") ?? {};
+    const on = new Set();
+    for ( const pack of game.packs ) if ( cfg[pack.collection] !== false ) on.add(pack.collection);
+    return on;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Scan enabled compendiums for items matching an `allowDrops` restriction, memoised.
  * When `maxLevel` is given, items are filtered to those the character qualifies for by
  * `system.prerequisites.level` (matching the native ItemChoice flow's feature-level gate — used at
  * level-up so, e.g., a level-2 Artificer's "Replicate Magic Item" only lists level-2 infusions).
- * Each result also carries its `prereqItems` (the item prerequisites) so a caller can gate on or
- * recommend them against a specific build — a check too build-dependent to bake into this memo.
+ * Only packs the player's Compendium Browser source configuration leaves enabled (and that are
+ * visible to them) are scanned — matching dnd5e's own browser/ItemChoice flow — so content from a
+ * switched-off pack (the 2014 SRD's level-0 "Devil's Sight" reaching a 2024 warlock, say) never
+ * leaks in. Results are de-duplicated by name, collapsing the same feature carried across several
+ * edition packs into one option. Each result also carries its `prereqItems` (the item prerequisites)
+ * so a caller can gate on or recommend them against a specific build — a check too build-dependent to
+ * bake into this memo.
  * @param {object} cfg              The ItemChoice advancement configuration.
  * @param {number|null} [maxLevel]  Highest prerequisite level to include; null disables the gate.
  */
@@ -726,10 +751,14 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
   const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}`;
   if ( restrictedCache.has(sig) ) return restrictedCache.get(sig);
 
+  const sources = enabledPackSources();
   const results = [];
+  const seenNames = new Set();
+  const nameKey = n => (n ?? "").trim().toLowerCase();
   for ( const pack of game.packs ) {
     if ( pack.metadata.type !== "Item" ) continue;
     if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) continue;
+    if ( !pack.visible || (sources && !sources.has(pack.collection)) ) continue;
     try {
       const index = await pack.getIndex({
         fields: ["type", "system.type.value", "system.type.subtype",
@@ -741,6 +770,9 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
         if ( r.type && ty.value !== r.type ) continue;
         if ( r.subtype && ty.subtype !== r.subtype ) continue;
         if ( (maxLevel != null) && (Number(e.system?.prerequisites?.level ?? 0) > maxLevel) ) continue;
+        const nk = nameKey(e.name);
+        if ( seenNames.has(nk) ) continue;   // same feature shared across edition packs — keep one
+        seenNames.add(nk);
         // Carried through (not filtered here) so the caller can gate on / recommend by item
         // prerequisites against the specific build — that check is build-dependent, unlike this
         // memoised scan.
