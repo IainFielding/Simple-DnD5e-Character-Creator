@@ -6,6 +6,19 @@ import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
  *  feat-spells step opens instantly. Kept in sync with feat-spells-step's CLASS_LISTS. */
 export const MAGIC_INITIATE_LISTS = ["cleric", "druid", "wizard"];
 
+/**
+ * Class spell lists a spellcasting *subclass* borrows when dnd5e registers no list of its own,
+ * keyed `<classIdentifier>:<subclassIdentifier>`. Most subclass casters (the domains, the Circles,
+ * the Oaths) ship a `subclass:` spell list, but the third-casters don't: the Eldritch Knight and
+ * the Arcane Trickster prepare from the Wizard list, and that fact lives only in the prose of their
+ * Spellcasting feature. Without this their pool resolves to nothing at all.
+ */
+export const SUBCLASS_SPELL_LISTS = {
+  "fighter:eldritch-knight": "wizard",
+  "rogue:trickster": "wizard",       // the PHB Arcane Trickster's identifier is "trickster"
+  "rogue:arcane-trickster": "wizard" // …but older/third-party data spells it out
+};
+
 /** Index fields fetched for spells, so cards can show components/range without the full doc. */
 const SPELL_INDEX_FIELDS = new Set([
   "system.level", "system.school", "system.identifier", "system.properties",
@@ -164,13 +177,15 @@ export class SpellSource {
     if ( !doc || !progression || progression === "none" ) return { isSpellcaster: false };
 
     const classId = doc.system?.identifier ?? doc.name?.toLowerCase() ?? "";
+    const list = spellListFor(doc, classId, listType);
     const all = deduplicateSpells(
-      await loadSpellsForClass(classId, maxSpellLevel, listType, this.#fetchSpellPool(maxSpellLevel)));
+      await loadSpellsForClass(list.id, maxSpellLevel, list.type, this.#fetchSpellPool(maxSpellLevel)));
     const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
     const byLevel = {};
     for ( let l = 0; l <= maxSpellLevel; l++ ) byLevel[l] = all.filter(s => s.level === l).sort(byName);
 
-    log(`level-up spells for "${classId}" (≤ lvl ${maxSpellLevel}): ${all.length} total`);
+    const borrowed = list.id === classId ? "" : ` from the ${list.type} "${list.id}" list`;
+    log(`level-up spells for "${classId}"${borrowed} (≤ lvl ${maxSpellLevel}): ${all.length} total`);
     return { isSpellcaster: true, byLevel, classId, maxSpellLevel };
   }
 
@@ -298,6 +313,43 @@ export function cantripsKnownAtLevel(classDoc, level) {
 /* -------------------------------------------- */
 /*  Spell-list loading                          */
 /* -------------------------------------------- */
+
+/**
+ * Whether dnd5e's registry holds a non-empty spell list of this type and identifier.
+ * @param {"class"|"subclass"} type
+ * @param {string} identifier
+ * @returns {boolean}
+ */
+function registeredList(type, identifier) {
+  try {
+    return !!dnd5e.registry?.spellLists?.forType?.(type, identifier)?.uuids?.size;
+  } catch ( err ) {
+    log("spell list registry lookup failed", err);
+    return false;
+  }
+}
+
+/**
+ * The spell list a caster actually draws from. A subclass caster usually has a list registered
+ * under its own identifier, but one that doesn't borrows a class list instead ({@link
+ * SUBCLASS_SPELL_LISTS}, else its parent class's own list — right for a homebrew subclass of a
+ * casting class). Falls back to the caster's own key when neither is registered, so the pack-scan
+ * fallbacks in {@link loadSpellsForClass} still get their turn.
+ * @param {Item5e} doc                   The casting class or subclass document.
+ * @param {string} identifier            That document's own identifier.
+ * @param {"class"|"subclass"} listType  Registry type of the caster itself.
+ * @returns {{ id: string, type: "class"|"subclass" }}
+ */
+export function spellListFor(doc, identifier, listType) {
+  if ( (listType !== "subclass") || registeredList("subclass", identifier) ) {
+    return { id: identifier, type: listType };
+  }
+  const classIdentifier = doc.system?.classIdentifier ?? "";
+  for ( const id of [SUBCLASS_SPELL_LISTS[`${classIdentifier}:${identifier}`], classIdentifier] ) {
+    if ( id && registeredList("class", id) ) return { id, type: "class" };
+  }
+  return { id: identifier, type: listType };
+}
 
 /**
  * Cantrips and level-1 spells available to a class identifier. Prefers dnd5e's
