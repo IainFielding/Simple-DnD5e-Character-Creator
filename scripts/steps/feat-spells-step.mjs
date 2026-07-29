@@ -30,6 +30,10 @@ const MI_NAME = /magic initiate/i;
 const MI_DEFAULTS = { cantripCount: 2, spellCount: 1, spellLevel: 1, abilityKeys: ["int", "wis", "cha"] };
 const CLASS_LISTS = MAGIC_INITIATE_LISTS;
 
+/** The spellcasting ability each Magic Initiate class casts with — used to lock the casting ability
+ *  when the class is fixed (a Wizard Magic Initiate always casts off Intelligence, not a choice). */
+const MI_CLASS_ABILITY = { cleric: "wis", druid: "wis", wizard: "int" };
+
 export const featSpellsStep = {
   id: "featSpells",
   icon: "fa-solid fa-hand-sparkles",
@@ -242,36 +246,81 @@ function magicInitiateGrant(featDoc, originDoc, sourceKey, featUuid) {
       for ( const c of Array.from(cfg.restriction?.list ?? []) ) classList.add(String(c).replace(/^class:/, ""));
       for ( const a of Array.from(cfg.spell?.ability ?? []) ) abilityKeys.add(a);
     }
+    // The 2024 generic Magic Initiate feat allows cleric/druid/wizard, but a background grants a
+    // *specific* variant (Sage → Wizard), naming the class in its prose. Honour that so the player
+    // isn't asked to re-pick a list the background already fixed.
+    const specified = originSpecifiedClasses(originDoc);
+    const narrowed = specified.length ? [...classList].filter(c => specified.includes(c)) : [...classList];
+    const finalList = narrowed.length ? narrowed : [...classList];
+    const allowed = abilityKeys.size ? [...abilityKeys] : [...MI_DEFAULTS.abilityKeys];
+    const locked = lockedAbility(finalList, allowed);
     return {
       ...base, mode: "advancement",
-      classList: [...classList], abilityKeys: abilityKeys.size ? [...abilityKeys] : [...MI_DEFAULTS.abilityKeys],
+      classList: finalList,
+      abilityKeys: locked ? [locked] : allowed,
       cantripCount, spellCount, spellLevel
     };
   }
 
   // Advancement-less (PHB) feat — fixed Magic Initiate shape, class list from the descriptions.
+  const classList = parseClassList(originDoc, featDoc);
+  const locked = lockedAbility(classList, MI_DEFAULTS.abilityKeys);
   return {
     ...base, mode: "manual",
-    classList: parseClassList(originDoc, featDoc),
-    abilityKeys: [...MI_DEFAULTS.abilityKeys],
+    classList,
+    abilityKeys: locked ? [locked] : [...MI_DEFAULTS.abilityKeys],
     cantripCount: MI_DEFAULTS.cantripCount, spellCount: MI_DEFAULTS.spellCount, spellLevel: MI_DEFAULTS.spellLevel
   };
 }
 
-/** The class list a Magic Initiate feat draws from: the origin's "(Cleric)" parenthetical, then the
- *  feat's named lists, defaulting to all three. */
+/**
+ * The casting ability to lock a Magic Initiate to when its class is fixed to a single one — the
+ * class's own spellcasting ability (Wizard → Int, Cleric/Druid → Wis), provided the feat permits
+ * it. Returns null when the class list is still open (leave the player the ability picker) or the
+ * class isn't one we map.
+ * @param {string[]} classList   The (possibly narrowed) class list.
+ * @param {string[]} allowed     The abilities the feat allows.
+ * @returns {string|null}
+ */
+export function lockedAbility(classList, allowed) {
+  if ( classList.length !== 1 ) return null;
+  const ability = MI_CLASS_ABILITY[classList[0]];
+  if ( !ability ) return null;
+  return (!allowed?.length || allowed.includes(ability)) ? ability : null;
+}
+
+/** The class list a Magic Initiate feat draws from: the class the origin names (in its description
+ *  parenthetical or a granting advancement's hint), then the feat's named lists, defaulting to all
+ *  three. */
 function parseClassList(originDoc, featDoc) {
-  const inParens = classInParens(originDoc?.system?.description?.value ?? "");
-  if ( inParens.length ) return inParens;
+  const specified = originSpecifiedClasses(originDoc);
+  if ( specified.length ) return specified;
   const named = classesNamed(featDoc?.system?.description?.value ?? "");
   return named.length ? named : [...CLASS_LISTS];
 }
 
 const stripHtml = h => String(h).replace(/<[^>]+>/g, " ").replace(/[{}]/g, " ");
-/** A single class named in a "Magic Initiate (Cleric)"-style parenthetical, or []. */
-function classInParens(html) {
-  const m = stripHtml(html).match(/magic initiate\s*\((cleric|druid|wizard)\)/i);
-  return m ? [m[1].toLowerCase()] : [];
+
+/**
+ * The class(es) an origin explicitly ties its Magic Initiate to. The 2024 backgrounds each grant a
+ * specific variant (Sage → Wizard) but reference the *generic* Magic Initiate feat, stating the
+ * class only in prose — its description parenthetical ("Magic Initiate (Wizard)") and/or the
+ * granting advancement's hint. We scan both. Returns the named classes (a de-duplicated subset of
+ * cleric/druid/wizard), or [] when the origin doesn't pin one down.
+ */
+export function originSpecifiedClasses(originDoc) {
+  const texts = [originDoc?.system?.description?.value ?? ""];
+  for ( const adv of advancementArray(originDoc) ) {
+    if ( adv.hint ) texts.push(adv.hint);
+    if ( adv.title ) texts.push(adv.title);
+  }
+  const found = new Set();
+  for ( const text of texts ) {
+    for ( const m of stripHtml(text).matchAll(/magic initiate\s*\((cleric|druid|wizard)\)/ig) ) {
+      found.add(m[1].toLowerCase());
+    }
+  }
+  return [...found];
 }
 /** Every class list the text names (base Magic Initiate names all three). */
 function classesNamed(html) {

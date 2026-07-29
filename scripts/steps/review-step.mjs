@@ -163,7 +163,9 @@ async function reviewSections(state, source, equipBySource, spells, featSpellsBy
 function summaryPicks(resolved, key) {
   const src = (resolved?.sources ?? []).find(s => s.key === key);
   if ( !src ) return [];
-  return src.requirements.map(req => {
+  // Spell-choice requirements (Magic Initiate & variants) carry no `options` pool — they're
+  // surfaced under the section's feat-spells block, not here — so skip them.
+  return src.requirements.filter(req => !req.spellStep && Array.isArray(req.options)).map(req => {
     const values = req.options.filter(o => o.isSelected)
       .map(o => o.uuid ? { name: o.label, uuid: o.uuid, img: o.img } : { name: o.label });
     return { title: req.title, values, empty: values.length === 0 };

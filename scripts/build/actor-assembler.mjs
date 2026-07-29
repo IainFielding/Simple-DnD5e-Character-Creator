@@ -3,19 +3,18 @@ import { resolveChoices } from "../data/choice-resolver.mjs";
 import { collectEquipment } from "../data/equipment-source.mjs";
 import { cartTotalCp, purchasedItems, remainingCurrency } from "../data/store-source.mjs";
 import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
-import {
-  buildChoicePlan, runAdvancementManager, recordBackgroundAsiValue, applyChoicePlan
-} from "./advancement-apply.mjs";
+import { LevelUpDriver } from "../levelup/manager-driver.mjs";
+import { buildCreationManager, CreationChoiceProvider } from "./creation-advancement.mjs";
 
 /**
  * Turns a finished {@link CreatorState} into a real character.
  *
  * Everything the player chose is baked in directly, so they're never asked to confirm
- * anything again. The order is: write the base ability scores (with the background's
- * increase layered on) and the Details-step fields, then add the origin items (class,
- * background, species) by running them through a single AdvancementManager that never
- * shows a prompt — any advancement the player already resolved in the wizard is skipped
- * here and applied by hand afterwards (see {@link module:build/advancement-apply}).
+ * anything again. The order is: write the base ability scores and the Details-step fields,
+ * then add the origin items (class, background, species) by driving them through the shared
+ * level-up advancement driver, which applies every advancement on a clone and answers each
+ * choice from the picks the wizard already collected (see {@link module:build/creation-advancement}).
+ * The background ability increase is applied by its own advancement in that pass, not pre-baked.
  * Finally the chosen spells, then the starting equipment, are granted.
  *
  * For a junior dev: this is the ONLY place that writes to the world — every step before this just
@@ -41,7 +40,6 @@ export async function assembleActor(state, source, equipment) {
   };
 
   const items = [];
-  const originItemIds = { class: null, background: null, species: null };
   const detailLinks = {};
   const stage = (key, link, mutate) => {
     const doc = docs[key];
@@ -50,7 +48,6 @@ export async function assembleActor(state, source, equipment) {
     if ( data._stats ) data._stats.compendiumSource = doc.uuid;
     mutate?.(data);
     items.push(data);
-    originItemIds[key] = data._id;
     detailLinks[link] = data._id;
   };
   // Species → background → class, matching the order the manager expects to process.
@@ -58,29 +55,26 @@ export async function assembleActor(state, source, equipment) {
   stage("background", "system.details.background");
   stage("class", "system.details.originalClass", data => { data.system.levels = 0; });
 
-  // Write the actor-level update: identity/visuals, base scores with the background increase
-  // baked in, and the detail→item links. (The background ASI advancement step is then
-  // skipped, its value recorded after the items exist.)
+  // Write the actor-level update: identity/visuals, the base ability scores, and the detail→item
+  // links. The background ability increase is NOT layered in here — its ASI advancement applies it
+  // in the driver pass below, so it lands exactly once, the native way.
   const scores = state.resolvedScores();
-  const deltas = state.backgroundDeltas();
   const update = { ...detailsUpdate(state), ...detailLinks };
-  for ( const key of ABILITIES ) update[`system.abilities.${key}.value`] = scores[key] + (deltas[key] ?? 0);
+  for ( const key of ABILITIES ) update[`system.abilities.${key}.value`] = scores[key];
   await actor.update(update);
 
-  // Resolve the advancement choices once, plan what to skip, run the manager, then
-  // apply the wizard's picks to the created items.
+  // Drive the origin advancements through the shared level-up driver on a clone, answering every
+  // choice from the wizard's recorded picks, then commit once. This is the same engine a level-up
+  // uses; the CreationChoiceProvider stands in for the interactive UI.
   const resolved = state.choiceCache ?? await resolveChoices(state, source);
-  const plan = buildChoicePlan(resolved, docs);
 
   if ( items.length ) {
-    const result = await runAdvancementManager(actor, items, plan.skipAdvIds);
-    if ( !result ) throw new Error("advancement flow was cancelled");
-    foundry.utils.setProperty(result.updates, `flags.${MODULE_ID}.created`, true);
-    await actor.update(result.updates, { render: false });
-    await actor.createEmbeddedDocuments("Item", result.items, { render: false, keepId: true });
-
-    await recordBackgroundAsiValue(actor, originItemIds.background, state.backgroundAsi, state.backgroundAbilities);
-    await applyChoicePlan(actor, plan, resolved, state.advChoices, originItemIds);
+    const manager = buildCreationManager(actor, items);
+    const driver = new LevelUpDriver(manager);
+    await driver.prepare();
+    await driver.autoResolve(new CreationChoiceProvider(resolved, state));
+    await driver.commit();
+    await actor.setFlag(MODULE_ID, "created", true);
   }
 
   // Add the spells chosen on the Spells step, as prepared class spells.

@@ -97,6 +97,15 @@ export class LevelUpDriver {
    */
   grantSteps = [];
 
+  /**
+   * The size decisions, one per choice-bearing `Size` advancement (a species offering e.g. Small
+   * *or* Medium): `{ level, screenLevel, advancement, item }`. A single fixed size applies
+   * automatically and never appears here. The interactive level-up flow never surfaces these — the
+   * claim gate rejects a multi-size level-up — but the headless {@link autoResolve} path
+   * (character creation) drives them from the wizard's recorded pick.
+   */
+  sizeSteps = [];
+
   /** Snapshot of the clone's items before a step, used to detect synthesised additions. */
   #preItems = null;
 
@@ -303,6 +312,14 @@ export class LevelUpDriver {
         }
         // An optional grant we don't re-skin; canDrive() would have rejected the level-up.
         log("skipping unsupported optional ItemGrant", adv?.id);
+        return;
+      }
+      case "Size": {
+        // A single fixed size applies automatically; a size *choice* (Small or Medium) is surfaced.
+        // Only the headless creation path resolves it — the level-up claim gate rejects multi-size.
+        const auto = await flow.getAutomaticApplicationValue();
+        if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
+        this.sizeSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
       default: {
@@ -1122,5 +1139,88 @@ export class LevelUpDriver {
     // The one render the four suppressed ops deferred to: surface the new level on the sheet.
     if ( this.actor.sheet?.rendered ) this.actor.sheet.render();
     return this.actor;
+  }
+
+  /* -------------------------------------------- */
+  /*  Headless resolution (character creation)    */
+  /* -------------------------------------------- */
+
+  /**
+   * Answer every decision this driver surfaced from a {@link CreationChoiceProvider} instead of
+   * from the wizard UI — the character-creation path, where the player already made every choice in
+   * the creator's own steps. It walks the same decision arrays {@link prepare} populated and applies
+   * each through the *same* apply methods the level-up UI calls, so creation and level-up can never
+   * drift. Resolving a choice (a picked feature, a subclass) can synthesise fresh decisions
+   * mid-drain, so this loops to a fixed point rather than a single forward pass, tracking resolved
+   * records in `done`.
+   *
+   * Types with no creation-time decision (`subclass` — subclasses come later, still interactive) or
+   * that the provider defers (spell-type `ItemChoice`, owned by the feat-spells step and applied
+   * after commit) are marked resolved and skipped.
+   * @param {import("../build/creation-advancement.mjs").CreationChoiceProvider} provider
+   */
+  async autoResolve(provider) {
+    const done = new Set();
+    const drain = async (steps, resolve) => {
+      for ( const rec of [...steps] ) {
+        if ( done.has(rec) ) continue;
+        done.add(rec);
+        try { await resolve(rec); } catch ( err ) { log("headless resolve failed", err); }
+      }
+    };
+
+    // Loop until a full pass adds nothing new — a synthesised feature/subclass can append decisions
+    // to any array after we have already walked it.
+    let seen = -1;
+    while ( done.size !== seen ) {
+      seen = done.size;
+      await drain(this.hpSteps,       rec => this.applyHitPoints(rec, provider.hp(rec)));
+      await drain(this.sizeSteps,     rec => { const k = provider.size(rec); return k ? this.applySize(rec, k) : null; });
+      await drain(this.grantSteps,    rec => { const a = provider.grantAbility(rec); return a ? this.applyGrantAbility(rec, a) : null; });
+      await drain(this.subclassSteps, rec => { const u = provider.subclass(rec); return u ? this.selectSubclass(rec, u) : null; });
+      await drain(this.asiSteps,      rec => { const a = provider.asi(rec); return a ? this.setAsi(rec, a) : null; });
+      await drain(this.traitSteps,    rec => { const keys = provider.traitKeys(rec); return keys.length ? this.applyTraitKeys(rec, keys) : null; });
+      await drain(this.choiceSteps,   async rec => {
+        if ( provider.defer(rec) ) return;
+        for ( const uuid of provider.choiceUuids(rec) ) await this.toggleChoice(rec, uuid);
+      });
+    }
+  }
+
+  /**
+   * Set a size decision's chosen size on the clone (headless). Mirrors the native SizeFlow's apply.
+   * @param {object} record   One of {@link sizeSteps}.
+   * @param {string} key       The size key (e.g. "sm", "med").
+   */
+  async applySize(record, key) {
+    await record.advancement.apply(record.level, { size: key });
+    this.clone.reset();
+  }
+
+  /**
+   * Apply a full ability-score-improvement assignment in one shot (headless) — the reverse→apply
+   * pattern of {@link adjustAsi}, but taking the whole map (fixed + the player's allocation) the
+   * creator recorded, rather than a single +/- step. Used for a background's ability increase.
+   * @param {object} record          One of {@link asiSteps}.
+   * @param {Record<string, number>} assignments   Per-ability point totals.
+   */
+  async setAsi(record, assignments) {
+    const adv = record.advancement;
+    if ( adv.value.type ) await adv.reverse(record.level);
+    await adv.apply(record.level, { type: "asi", assignments });
+    this.clone.reset();
+  }
+
+  /**
+   * Apply a trait decision's full key set in one shot (headless): the player's picks already merged
+   * with the advancement's automatic grants (see {@link CreationChoiceProvider#traitKeys}). The
+   * choice-bearing Trait was surfaced without applying its grants, so a single `apply({ chosen })`
+   * sets the complete set — matching the native flow's committed value.
+   * @param {object} record        One of {@link traitSteps}.
+   * @param {string[]} keys        The full chosen key set (grants ∪ picks).
+   */
+  async applyTraitKeys(record, keys) {
+    await record.advancement.apply(record.level, { chosen: keys });
+    this.clone.reset();
   }
 }
