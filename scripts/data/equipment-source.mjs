@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { getEnabledPacks } from "./compendium-util.mjs";
+import { createItemData } from "./item-factory.mjs";
 import { TOOL_IMG, toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
@@ -377,35 +378,15 @@ async function collectTree(node, orSelections = {}, currencyOnly = false) {
   if ( node.type === "tool" ) {
     if ( !node.isToolChoice || !node.choices?.length ) return [];
     const uuid = node.choices.length === 1 ? node.choices[0].uuid : (orSelections[node._id] ?? node.choices[0].uuid);
-    return createItems(uuid);
+    return createItemData(uuid, { context: "equipment item" });
   }
   if ( node.type === "linked" && (node.key || node.isFocusChoice) ) {
     const uuid = node.isFocusChoice && node.choices?.length
       ? (node.choices.length === 1 ? node.choices[0].uuid : (orSelections[node._id] ?? node.choices[0].uuid))
       : node.key;
-    return createItems(uuid, node.count ?? 1);
+    return createItemData(uuid, { qty: node.count ?? 1, context: "equipment item" });
   }
   return [];
-}
-
-/** Resolve a UUID into ready-to-create item data (with contents), counted and equipped. */
-async function createItems(uuid, qty = 1) {
-  if ( !uuid ) return [];
-  try {
-    const doc = await fromUuid(uuid);
-    if ( !doc ) return [];
-    const ItemClass = CONFIG.Item.documentClass;
-    const result = await ItemClass.createWithContents([doc], { keepId: false });
-    if ( !result?.length ) return [];
-    if ( qty > 1 && result[0].system?.quantity !== undefined ) result[0].system.quantity = qty;
-    for ( const item of result ) {
-      if ( (item.type === "weapon" || item.type === "equipment") && item.system ) item.system.equipped = true;
-    }
-    return result;
-  } catch ( err ) {
-    log(`equipment item create failed: ${uuid}`, err);
-    return [];
-  }
 }
 
 /* -------------------------------------------- */

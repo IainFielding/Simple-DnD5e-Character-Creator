@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { advancementArray } from "./advancement-util.mjs";
+import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { phbWeaponIcon } from "./weapon-source.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
@@ -739,26 +740,6 @@ function toolPoolCategory(entry) {
 }
 
 /**
- * The compendium collections the player's Compendium Browser source configuration leaves enabled.
- * dnd5e stores per-pack toggles under the `packSourceConfiguration` setting (a pack is on unless
- * explicitly set to `false`); its own browser and every `allowDrops` ItemChoice honour it via
- * `CompendiumBrowserSettingsConfig.collateSources()`. We mirror that so our scan never surfaces
- * content from a pack the player switched off. Returns null when the setting isn't available
- * (an older dnd5e), meaning "don't restrict".
- * @returns {Set<string>|null}
- */
-function enabledPackSources() {
-  try {
-    const cfg = game.settings.get("dnd5e", "packSourceConfiguration") ?? {};
-    const on = new Set();
-    for ( const pack of game.packs ) if ( cfg[pack.collection] !== false ) on.add(pack.collection);
-    return on;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Scan enabled compendiums for items matching an `allowDrops` restriction, memoised.
  * When `maxLevel` is given, items are filtered to those the character qualifies for by
  * `system.prerequisites.level` (matching the native ItemChoice flow's feature-level gate — used at
@@ -779,14 +760,14 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
   const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}`;
   if ( restrictedCache.has(sig) ) return restrictedCache.get(sig);
 
-  const sources = enabledPackSources();
+  const enabled = getEnabledPacks();
   const results = [];
   const seenNames = new Set();
   const nameKey = n => (n ?? "").trim().toLowerCase();
   for ( const pack of game.packs ) {
-    if ( pack.metadata.type !== "Item" ) continue;
-    if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) continue;
-    if ( !pack.visible || (sources && !sources.has(pack.collection)) ) continue;
+    // `visible` is this scan's own extra bar: an `allowDrops` pool must never offer the player
+    // something out of a pack their permissions hide from them.
+    if ( !pack.visible || !isUsableItemPack(pack, enabled) ) continue;
     try {
       const index = await pack.getIndex({
         fields: ["type", "system.type.value", "system.type.subtype",
