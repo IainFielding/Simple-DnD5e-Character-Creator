@@ -1,68 +1,40 @@
 import { MODULE_ID, tpl, t, log } from "../config.mjs";
+import { CreatorShellBase, shellOptions, railStageParts } from "./shell-base.mjs";
 import { CreatorState } from "../state/creator-state.mjs";
 import { STEPS, REQUIRED_STEPS } from "../steps/registry.mjs";
 import { getSources, warmSources, onWarmProgress, isStale, invalidateSources } from "../data/source-cache.mjs";
 import { assembleActor } from "../build/actor-assembler.mjs";
 import { launchLevelUpTo } from "../levelup/intercept.mjs";
 
-// Foundry's UI base classes. ApplicationV2 is the modern window/app framework; the
-// HandlebarsApplicationMixin adds Handlebars-template rendering on top of it; DialogV2 is
-// the standard confirm/prompt popup. Destructuring them here keeps the references short.
-const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
-
 /**
- * The creator window. Deliberately thin: it owns navigation (which step is active,
- * what is reachable) and a single event dispatcher, then delegates all per-step
- * data and behaviour to the step modules. It contains no class/ability/species
- * preparation logic of its own — that lives in scripts/steps/*.
+ * The creator window. Deliberately thin: it owns which step is active and what is reachable, then
+ * delegates all per-step data and behaviour to the step modules. It contains no
+ * class/ability/species preparation logic of its own — that lives in scripts/steps/*.
  *
- * For a junior dev: this is a Foundry ApplicationV2 subclass — i.e. a window. The three
- * things that make it tick are the static config blocks just below:
+ * The window chrome, the click dispatcher, Back/Next and the discard prompt are all inherited from
+ * {@link CreatorShellBase}, shared with the level-up window; what's left here is the creator's own
+ * step model (a fixed registry whose entries can be hidden or greyed) and the Create button.
+ *
+ * For a junior dev: this is a Foundry ApplicationV2 subclass — i.e. a window. The three things that
+ * make it tick are the static config blocks just below plus `_prepareContext`:
  *   DEFAULT_OPTIONS – window behaviour + the "actions" map (clickable [data-action] names -> methods)
  *   PARTS           – the named Handlebars templates that make up the window's HTML
  *   _prepareContext – builds the plain-object data those templates render with
  * The mental model: state changes -> we call this.render() -> Foundry re-runs _prepareContext
  * and re-paints the PARTS. We rarely touch the DOM by hand.
  */
-export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
+export class CreatorShell extends CreatorShellBase {
 
-  // Static config Foundry reads when constructing the window. `actions` is the key one: it maps
-  // the string in a template's `data-action="goto"` to the static method run on click. Foundry
-  // calls those methods with `this` bound to the app instance.
-  static DEFAULT_OPTIONS = {
-    id: "sogrom-creator",
-    classes: ["sogrom-creator"],
-    tag: "div",
-    window: { frame: false, positioned: false },
-    actions: {
-      goto: CreatorShell.#onGoto,
-      navNext: CreatorShell.#onNext,
-      navBack: CreatorShell.#onBack,
-      stepAction: CreatorShell.#onStepAction,
-      finish: CreatorShell.#onFinish,
-      cancel: CreatorShell.#onCancel
-    }
-  };
+  static DEFAULT_OPTIONS = shellOptions("sogrom-creator");
 
-  // The window is built from named "parts", each its own template. `rail` is the left-hand
-  // step list; `stage` is the main panel showing the current step. Splitting them lets us
-  // re-render just one — e.g. render({ parts: ["rail"] }) refreshes the rail without redrawing
-  // the (image-heavy) stage.
-  static PARTS = {
-    rail: { id: "rail", template: `modules/${MODULE_ID}/templates/rail.hbs` },
-    stage: {
-      id: "stage",
-      template: `modules/${MODULE_ID}/templates/stage.hbs`,
-      // Preserve scroll across re-renders: the stage body, plus the pick steps'
-      // independently-scrolling pick-list and description columns, the details form/media
-      // columns, and the choices list (otherwise picking an option snaps them to the top).
-      scrollable: [
-        ".creator-stage-body", ".creator-picklist", ".creator-pick-desc",
-        ".creator-details-form", ".creator-details-media", ".creator-choices",
-        ".creator-store-shelf", ".creator-store-cart-list"
-      ]
-    }
-  };
+  // Beyond the shared stage body: the pick steps' independently-scrolling pick-list and description
+  // columns, the details form/media columns, the choices list, and the store's shelf/cart
+  // (otherwise picking an option snaps them all back to the top).
+  static PARTS = railStageParts([
+    ".creator-picklist", ".creator-pick-desc",
+    ".creator-details-form", ".creator-details-media", ".creator-choices",
+    ".creator-store-shelf", ".creator-store-cart-list"
+  ]);
 
   /** @type {CreatorState} */
   state;
@@ -75,8 +47,8 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   /** @type {import("../data/store-source.mjs").StoreSource} */
   store;
 
-  // Instance state that drives rendering but isn't the character data itself:
-  #current = 0;          // index into STEPS of the step currently on screen
+  // Instance state that drives rendering but isn't the character data itself
+  // (`_stepIndex`, the index into STEPS of the step on screen, lives on the base):
   #loading = true;       // true while the compendium index warms; shows the spinner
   #finished = false;     // set once Create succeeds, so close() won't warn about a discard
   /** Set once the player has made any choice, so closing early can warn before discarding it. */
@@ -102,8 +74,14 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     return t("window.title", { name: this.state.actor?.name ?? t("common.newCharacter") });
   }
 
-  get #activeStep() {
-    return STEPS[this.#current];
+  /** @override The creator walks the fixed step registry. */
+  get _activeStep() {
+    return STEPS[this._stepIndex];
+  }
+
+  /** @override */
+  get _stepCount() {
+    return STEPS.length;
   }
 
   /* -------------------------------------------- */
@@ -153,7 +131,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     this.#loading = false;
     // Resuming an in-progress actor: jump to the first step still needing input.
-    this.#current = this.#firstIncompleteIndex();
+    this._stepIndex = this.#firstIncompleteIndex();
     if ( this.rendered ) this.render();
   }
 
@@ -168,11 +146,15 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // Let the active step record that it's been shown (e.g. the optional Equipment step's
     // "visited" flag) before completion is read, so its rail tick and the Next button reflect
     // the arrival on this very render rather than one render late.
-    if ( !this.#loading ) this.#activeStep.onEnter?.(this.state);
-    const flags = this.#completeFlags();
-    const step = this.#activeStep;
-    const stepContext = this.#loading ? {} : await step.context(this.#ctx());
-    const canFinish = REQUIRED_STEPS.every(s => s.isComplete(this.state));
+    if ( !this.#loading ) this._activeStep.onEnter?.(this.state);
+    const step = this._activeStep;
+    // Build the active screen BEFORE reading the completion flags: laying it out can refresh the
+    // caches those flags read (the Choices step resolves its requirements into `state.choiceCache`),
+    // so the rail tick and the Next button reflect this very render rather than the previous one.
+    const stepContext = this.#loading ? {} : await step.context(this._ctx());
+    const flags = this._completeFlags();
+    // Both derived from `flags`, rather than re-running every step's isComplete() twice more.
+    const missing = REQUIRED_STEPS.filter(s => !flags[STEPS.indexOf(s)]);
 
     return {
       loading: this.#loading,
@@ -191,26 +173,26 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
         // Position and Back/Next are measured over the *visible* steps, so a hidden step neither
         // occupies a number nor is landed on when paging through.
         const visible = this.#visibleIndices();
-        const hasNext = this.#nextVisible(this.#current) >= 0;
+        const hasNext = this._nextIndex() >= 0;
         return {
-          index: this.#current,
+          index: this._stepIndex,
           total: visible.length,
-          position: t("nav.position", { current: visible.indexOf(this.#current) + 1, total: visible.length }),
-          canBack: this.#prevVisible(this.#current) >= 0,
-          canNext: hasNext && flags[this.#current],
+          position: t("nav.position", { current: visible.indexOf(this._stepIndex) + 1, total: visible.length }),
+          canBack: this._prevIndex() >= 0,
+          canNext: hasNext && flags[this._stepIndex],
           backLabel: t("nav.back"),
           nextLabel: t("nav.next"),
           // When Next is greyed because this step isn't finished, say what's still needed
           // instead of leaving the player guessing at a dead button.
-          hint: (hasNext && !flags[this.#current])
+          hint: (hasNext && !flags[this._stepIndex])
             ? (step.incompleteHint?.(this.state, this.source) ?? t("nav.incomplete"))
             : null
         };
       })(),
-      canFinish,
+      canFinish: missing.length === 0,
       // On the review step, spell out which required steps are still blocking Create.
-      finishHint: (step.id === "review" && !canFinish)
-        ? t("nav.missing", { steps: REQUIRED_STEPS.filter(s => !s.isComplete(this.state)).map(s => t(s.labelKey)).join(", ") })
+      finishHint: (step.id === "review" && missing.length)
+        ? t("nav.missing", { steps: missing.map(s => t(s.labelKey)).join(", ") })
         : null,
       finishLabel: t("nav.create")
     };
@@ -227,9 +209,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     const root = this.element;
     this.#applySourceArt(root);
     // Selects/inputs don't fire click "actions"; wire their change events to the dispatcher.
-    for ( const el of root.querySelectorAll("[data-step-change]") ) {
-      el.addEventListener("change", ev => this.#dispatch(el.dataset.stepChange, ev.currentTarget));
-    }
+    this._wireStepChanges(root);
     this.#wireDragDrop(root);
     // Client-side filtering — no re-render, so the field keeps focus while typing. The spell steps
     // add level/school dropdowns; when present, search + dropdowns drive the combined spell filter,
@@ -238,7 +218,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     const spellFilters = root.querySelectorAll("[data-spell-filter-level], [data-spell-filter-school]");
     const bgFilter = root.querySelector("[data-bg-filter-ability]");
     if ( spellFilters.length ) {
-      const apply = () => this.#applySpellFilters();
+      const apply = () => this._applySpellFilters();
       if ( search ) search.addEventListener("input", apply);
       for ( const sel of spellFilters ) sel.addEventListener("change", apply);
     } else if ( bgFilter ) {
@@ -252,22 +232,11 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   /**
-   * Hide pick-rows that don't match the active spell filters — name search, spell level, and spell
-   * school — combined (a row must satisfy all three). Each control reads its value straight from the
-   * DOM so any of them can drive the pass. Mirrors {@link LevelUpShell}'s spell-list filter.
+   * @override Explain an emptied list after any client-side filter pass — the shared spell filter
+   * and the background filter below both land here.
    */
-  #applySpellFilters() {
-    const root = this.element;
-    const needle = (root.querySelector("[data-creator-search]")?.value ?? "").trim().toLowerCase();
-    const level = root.querySelector("[data-spell-filter-level]")?.value ?? "";
-    const school = root.querySelector("[data-spell-filter-school]")?.value ?? "";
-    for ( const row of root.querySelectorAll(".creator-pickrow") ) {
-      const matchesName = !needle || (row.dataset.name ?? "").toLowerCase().includes(needle);
-      const matchesLevel = !level || (row.dataset.level ?? "") === level;
-      const matchesSchool = !school || (row.dataset.school ?? "") === school;
-      (row.closest("li") ?? row).classList.toggle("is-hidden", !(matchesName && matchesLevel && matchesSchool));
-    }
-    this.#updateNoResults(needle, !!(level || school));
+  _afterFilter(needle, filtered) {
+    this.#updateNoResults(needle, filtered);
   }
 
   /**
@@ -362,7 +331,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
         ev.preventDefault();
         el.classList.remove("is-dragover");
         el.dataset.dropPayload = ev.dataTransfer.getData("text/plain");
-        this.#dispatch(el.dataset.stepDrop, el);
+        this._dispatch(el.dataset.stepDrop, el);
       });
     }
   }
@@ -374,13 +343,7 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // (Cancel, the frame's close, a programmatic close) funnels through here. A finished build, or
     // an explicit `force`, skips the prompt.
     if ( !this.#finished && !options.force && this.#dirty ) {
-      const proceed = await DialogV2.confirm({
-        window: { title: t("cancel.title"), icon: "fa-solid fa-triangle-exclamation" },
-        content: `<p>${t("cancel.body")}</p>`,
-        modal: true,
-        rejectClose: false
-      });
-      if ( !proceed ) return this;
+      if ( !await this._confirmDiscard("cancel.title", "cancel.body") ) return this;
     }
     return super.close(options);
   }
@@ -394,8 +357,8 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   // ahead past an unfinished requirement. "Visible" and "reachable" are separate ideas: a step
   // can be shown-but-locked (greyed), or dropped from the flow entirely (see #hidden).
 
-  /** One boolean per step, in STEPS order: is it complete right now? Recomputed each render. */
-  #completeFlags() {
+  /** @override One boolean per step, in STEPS order: is it complete right now? */
+  _completeFlags() {
     return STEPS.map(s => s.isComplete(this.state));
   }
 
@@ -403,11 +366,6 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   #firstIncompleteIndex() {
     const idx = REQUIRED_STEPS.findIndex(s => !s.isComplete(this.state));
     return idx === -1 ? STEPS.length - 1 : STEPS.indexOf(REQUIRED_STEPS[idx]);
-  }
-
-  /** A step is reachable once every step before it is complete. */
-  #reachable(index, flags = this.#completeFlags()) {
-    return index === 0 || flags.slice(0, index).every(Boolean);
   }
 
   /**
@@ -424,13 +382,18 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     return STEPS.map((_s, i) => i).filter(i => !this.#hidden(STEPS[i]));
   }
 
-  /** The next / previous visible step index from `from`, or -1 if none. */
-  #nextVisible(from) {
-    for ( let i = from + 1; i < STEPS.length; i++ ) if ( !this.#hidden(STEPS[i]) ) return i;
+  /**
+   * @override The next / previous *visible* step index, or -1 if none — so paging through the flow
+   * skips a step that doesn't currently apply instead of landing on it.
+   */
+  _nextIndex() {
+    for ( let i = this._stepIndex + 1; i < STEPS.length; i++ ) if ( !this.#hidden(STEPS[i]) ) return i;
     return -1;
   }
-  #prevVisible(from) {
-    for ( let i = from - 1; i >= 0; i-- ) if ( !this.#hidden(STEPS[i]) ) return i;
+
+  /** @override */
+  _prevIndex() {
+    for ( let i = this._stepIndex - 1; i >= 0; i-- ) if ( !this.#hidden(STEPS[i]) ) return i;
     return -1;
   }
 
@@ -449,10 +412,10 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
         label: t(s.labelKey),
         icon: s.icon,
         ordinal,
-        active: i === this.#current,
+        active: i === this._stepIndex,
         applicable,
         complete: flags[i] && s.id !== "review" && applicable,
-        reachable: this.#reachable(i, flags),
+        reachable: this._reachable(i, flags),
         summary: s.summary?.(this.state, this.source) ?? ""
       });
     });
@@ -461,10 +424,9 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #filterCards(query) {
     const needle = query.trim().toLowerCase();
-    // Card grid (background/species), the class pick-list, and the store's shelf rows all
-    // share the same filter; for a pick-row the <li> wrapper is hidden so the list gap
-    // collapses with it.
-    for ( const card of this.element.querySelectorAll(".creator-card, .creator-pickrow, .creator-store-row") ) {
+    // The pick-lists (class/species/background) and the store's shelf rows share this filter; for a
+    // pick-row the <li> wrapper is hidden so the list gap collapses with it.
+    for ( const card of this.element.querySelectorAll(".creator-pickrow, .creator-store-row") ) {
       const name = (card.dataset.name ?? "").toLowerCase();
       const target = card.closest("li") ?? card;
       target.classList.toggle("is-hidden", !!needle && !name.includes(needle));
@@ -477,27 +439,18 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   /* -------------------------------------------- */
 
   /**
+   * @override
    * The shared context handed to every step's `context()` and `handle()`. `app` lets a
    * step request a re-render after an async flow that resolves later (e.g. a FilePicker
    * callback), since the dispatch's own render fires immediately.
    */
-  #ctx() {
+  _ctx() {
     return { state: this.state, source: this.source, spells: this.spells, equipment: this.equipment, store: this.store, app: this };
   }
 
-  // The single funnel every UI interaction flows through. Given an action name and the element
-  // that triggered it, hand off to the active step's handle(), then re-render — unless the handler
-  // returned false to say "I already updated the DOM, don't re-render" (see the note below).
-  async #dispatch(action, el) {
-    // Any step interaction counts as progress worth confirming before a discard.
+  /** @override Any step interaction counts as progress worth confirming before a discard. */
+  _onDispatch() {
     this.#dirty = true;
-    const step = this.#activeStep;
-    // A handler may return false to signal it has updated the DOM itself and a full re-render
-    // should be skipped — used by the Details name roller, whose stage re-render would otherwise
-    // rebuild (and visibly flicker) the portrait/token images in the left-hand media column.
-    const handled = step?.handle ? await step.handle(action, el, this.#ctx()) : undefined;
-    if ( handled === false ) return;
-    this.render();
   }
 
   /**
@@ -511,48 +464,20 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
   gotoStep(id) {
     const index = STEPS.findIndex(s => s.id === id);
     if ( index < 0 ) return false;
-    const reached = this.#reachable(index);
-    this.#current = reached ? index : this.#firstIncompleteIndex();
+    const reached = this._reachable(index);
+    this._stepIndex = reached ? index : this.#firstIncompleteIndex();
     this.render();
     return reached;
   }
 
-  // The methods below are the targets of the `actions` map in DEFAULT_OPTIONS. Foundry calls them
-  // on click with (event, target) and `this` bound to the app. Most just move #current and re-render.
-
-  static #onStepAction(event, target) {
-    return this.#dispatch(target.dataset.stepAction, target);
-  }
-
-  static #onGoto(event, target) {
-    const index = Number(target.dataset.index);
-    if ( Number.isInteger(index) && this.#reachable(index) ) {
-      this.#current = index;
-      this.render();
-    }
-  }
-
-  static #onNext() {
-    const next = this.#nextVisible(this.#current);
-    if ( next >= 0 && this.#activeStep.isComplete(this.state) ) {
-      this.#current = next;
-      this.render();
-    }
-  }
-
-  static #onBack() {
-    const prev = this.#prevVisible(this.#current);
-    if ( prev >= 0 ) {
-      this.#current = prev;
-      this.render();
-    }
-  }
-
-  // The "Create" button. This is where the draft finally becomes a real actor in the world:
-  // guard that every required step is done, create the actor if we don't already have one, then
-  // hand off to assembleActor() to write class/species/spells/equipment onto it. On any failure we
-  // roll #finished back so the window stays open and the player can retry.
-  static async #onFinish(event, target) {
+  /**
+   * @override
+   * The "Create" button. This is where the draft finally becomes a real actor in the world:
+   * guard that every required step is done, create the actor if we don't already have one, then
+   * hand off to assembleActor() to write class/species/spells/equipment onto it. On any failure we
+   * roll #finished back so the window stays open and the player can retry.
+   */
+  async _finish(target) {
     // A build takes seconds (actor create + advancement manager + many embedded writes), so guard
     // against a second click landing while the first is still running — without this, the second
     // pass sees state.actor still null and builds a whole second actor. #finished is our latch.
@@ -611,9 +536,5 @@ export class CreatorShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // rendered — so if they close it, they still have the (valid) level-1 character they built.
     const targetLevel = this.state.targetLevel ?? 1;
     if ( actor && targetLevel > 1 ) await launchLevelUpTo(actor, targetLevel);
-  }
-
-  static #onCancel() {
-    this.close();
   }
 }

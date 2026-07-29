@@ -10,7 +10,6 @@
       "available": "Available",
       "noEntries": "No entries found in the enabled compendiums.",
       "reset": "Reset",
-      "cancel": "Cancel",
       "on": "On",
       "off": "Off",
       "selectHint": "Choose an option from the list to see its full description.",
@@ -71,7 +70,6 @@
       "step": {
         "class": {
           "label": "Class",
-          "yours": "Your Classes",
           "multiclass": "Multiclass",
           "levelTag": "Level {from} → {to}",
           "newTag": "New Class",
@@ -100,18 +98,14 @@
           "label": "Hit Points",
           "intro": "Increase your {class}'s hit points — take the reliable average, or roll the hit die and take your chances.",
           "summary": "+{hp} HP",
-          "levelLabel": "Level {level}",
           "average": "Average HP",
           "max": "Max HP",
           "roll": "Roll {die}",
-          "custom": "Enter Manually",
           "gained": "Hit Points Gained",
-          "thisLevel": "This level:",
           "conBreakdown": "{con} Con = {total} HP"
         },
         "choices": {
           "label": "Features",
-          "summary": "{done}/{total} chosen",
           "choose": "Choose a Feature",
           "count": "{current} / {max} chosen",
           "current": "Current",
@@ -120,18 +114,15 @@
         },
         "traits": {
           "label": "Weapon Mastery",
-          "summary": "{done}/{total} chosen",
           "choose": "Choose Weapon Masteries",
           "count": "{current} / {max} chosen",
           "known": "Known"
         },
         "asi": {
           "label": "Ability Scores",
-          "remaining": "{points} points to spend",
           "hint": "Raise your ability scores by {points} points, up to +{cap} in any one.",
           "improvementTitle": "Ability Score Improvement",
           "improvementDesc": "You gain the following benefits:<br>{points} ability score increases",
-          "feat": "Feat",
           "takeFeat": "Take a feat instead",
           "changeFeat": "Choose a different feat",
           "useAbilities": "Improve abilities instead",
@@ -139,9 +130,7 @@
         },
         "subclass": {
           "label": "Subclass",
-          "intro": "Your class branches here — choose the subclass that shapes the rest of your journey.",
-          "choose": "Choose a Subclass",
-          "change": "Choose a different subclass"
+          "intro": "Your class branches here — choose the subclass that shapes the rest of your journey."
         },
         "grant": {
           "label": "Spell",
@@ -246,7 +235,6 @@
         "portrait": "Portrait",
         "token": "Token",
         "ringSubject": "Ring Subject",
-        "changeImage": "Change image…",
         "changePortrait": "Change Portrait",
         "changeToken": "Change Token",
         "changeRingSubject": "Change Ring Subject",

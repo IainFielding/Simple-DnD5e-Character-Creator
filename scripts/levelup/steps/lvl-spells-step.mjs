@@ -1,5 +1,5 @@
 import { t } from "../../config.mjs";
-import { cantripsKnownAtLevel, buildSpellFromEntry } from "../../data/spell-source.mjs";
+import { cantripsKnownAtLevel, buildSpellFromEntry, spellMethodFor } from "../../data/spell-source.mjs";
 
 /**
  * @typedef {object} SpellPlan
@@ -67,9 +67,9 @@ export function computeSpellPlan(actorLike, classItem) {
   const listId = castItem.system?.identifier ?? castItem.name?.toLowerCase() ?? "";
   const sourceTag = `${listType}:${listId}`;
   // Casting method → which slot pool the added spells use: a pact caster (Warlock) casts from
-  // Pact Magic slots ("pact"), everyone else from ordinary spell slots ("spell"). Matches the
-  // creation flow's `spellMethodFor`.
-  const method = CONFIG.DND5E?.spellProgression?.[sc?.progression]?.type || "spell";
+  // Pact Magic slots ("pact"), everyone else from ordinary spell slots ("spell"). The shared helper
+  // is the same one the creation spell grant uses, so the two paths can't drift.
+  const method = spellMethodFor(castItem);
   const castUuid = castItem._stats?.compendiumSource ?? castItem.uuid;
   // Subclass scales are keyed by the *class* level, so always measure from the base class item.
   const classLevel = classItem.system?.levels ?? actorLike.system?.details?.level ?? 1;
@@ -213,7 +213,7 @@ export const lvlSpellsStep = {
     // Filter options drawn from the spells actually in the list, so the dropdowns only ever offer
     // values that can match. Level filtering is meaningful only on the leveled tab (cantrips are all
     // level 0); the school filter applies to both. The <select> values mirror the row data-attributes
-    // the client-side filter compares against ({@link LevelUpShell##applySpellFilters}).
+    // the client-side filter compares against ({@link CreatorShellBase#_applySpellFilters}).
     const levelOptions = [...new Set(list.filter(s => s.level > 0).map(s => s.level))]
       .sort((a, b) => a - b)
       .map(level => ({ value: level, label: t("levelup.step.spells.levelTag", { level }) }));

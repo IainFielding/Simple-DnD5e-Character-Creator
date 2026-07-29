@@ -527,7 +527,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 @media (prefers-reduced-motion: reduce) {
   .creator-btn,
   .creator-btn-icon,
-  .creator-card,
   .creator-pickrow,
   .creator-pool-chip,
   .creator-rail-link,
@@ -537,8 +536,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   .creator-btn:active:not(:disabled),
   .creator-btn--trail:hover:not(:disabled) .creator-btn-icon,
   .creator-btn--lead:hover:not(:disabled) .creator-btn-icon,
-  .creator-card:hover,
-  .creator-card:active,
   .creator-pickrow:hover,
   .creator-pickrow:active,
   .creator-pool-chip:hover,
@@ -593,80 +590,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   outline: none;
 }
 .creator-count { color: var(--cc-muted); font-size: 0.85rem; }
-
-.creator-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 140px));
-  gap: 1rem;
-  justify-content: center;
-}
-.creator-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  /* Fill the grid track. The square comes from the image below — a <button>
-     ignores aspect-ratio on itself, so we let the (replaced) <img> drive it.
-     height:auto overrides Foundry's default fixed button height so the button
-     grows to fit the square image + name instead of clipping them. */
-  width: 100%;
-  height: auto;
-  min-height: 0;
-  align-self: start;
-  padding: 0;
-  overflow: hidden;
-  background: var(--cc-panel);
-  border: 1px solid var(--cc-line);
-  border-radius: 12px;
-  color: var(--cc-text);
-  cursor: pointer;
-  box-shadow: var(--cc-sheen);
-  transition: transform 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
-    background 0.25s var(--cc-ease), box-shadow 0.25s var(--cc-ease);
-}
-.creator-card:hover { transform: translateY(-3px); border-color: var(--cc-select); box-shadow: var(--cc-sheen), 0 8px 18px rgba(0, 0, 0, 0.5); }
-.creator-card:active { transform: translateY(-1px) scale(0.985); }
-.creator-card.is-selected {
-  border-color: var(--cc-select);
-  background: var(--cc-select-soft);
-  box-shadow: 0 0 0 1px var(--cc-select), 0 0 14px var(--cc-gold-glow);
-}
-.creator-card.is-hidden { display: none; }
-/* Image band: sits entirely above the name box; whole icon shown, not cropped. */
-.creator-card-img {
-  display: block;
-  flex: 0 0 auto;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  height: auto;
-  min-height: 0;
-  object-fit: contain;
-  object-position: center;
-  padding: 0.7rem;
-  background: #0a0910;
-  border-bottom: 1px solid var(--cc-line);
-}
-.creator-card-name {
-  padding: 0.5rem 0.4rem;
-  font-size: 0.82rem;
-  text-align: center;
-  line-height: 1.3;
-  background: var(--cc-panel-2);
-}
-.creator-card.is-selected .creator-card-name { background: var(--cc-select-soft); }
-.creator-card-tick {
-  position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--cc-select);
-  color: #1a1206;
-  font-size: 0.7rem;
-}
 
 /* The detail panel for a chosen option: a violet-edged card holding the option's
    image, name, description, and its advancement blocks (traits/features/spells). */
@@ -1229,30 +1152,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 /* Portrait above the ability scores — matched to the Details step's frame size. */
 .creator-review-portrait { display: flex; justify-content: center; margin-bottom: 1.5rem; }
 .creator-review-portrait .creator-portrait-frame { width: 260px; max-width: 100%; }
-.creator-summary-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-.creator-summary-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 1.25rem;
-  background: var(--cc-panel-grad);
-  border: 1px solid var(--cc-line);
-  border-radius: 12px;
-  box-shadow: var(--cc-bezel);
-  text-align: center;
-}
-/* An unfilled slot stays a flat dashed placeholder — no machined tray around nothing. */
-.creator-summary-card.is-empty { border-style: dashed; background: var(--cc-panel); box-shadow: none; }
-.creator-summary-kind { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cc-accent); }
-.creator-summary-img { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; }
-.creator-summary-name { font-weight: 600; }
-.creator-summary-name.is-muted { color: var(--cc-muted); font-style: italic; font-weight: 400; }
 
 .creator-review-abilities { text-align: center; }
 .creator-review-abilities h2 { border: none; font-size: 1.2rem; }
@@ -1982,10 +1881,7 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-radius: 12px;
   padding: 1rem 1.25rem;
 }
-.creator-choice-source-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
-.creator-choice-source-head h2 { margin: 0; font-size: 1.1rem; border: none; }
 .creator-choice-source-img { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; }
-.creator-choice-source-icon { color: var(--cc-accent); font-size: 1.1rem; width: 32px; text-align: center; }
 .creator-choice { padding: 0.75rem 0; border-top: 1px solid var(--cc-line); }
 .creator-choice:first-of-type { border-top: none; }
 .creator-choice-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
@@ -2871,37 +2767,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
    plain "spend your points" case, and the pick layout (description + ability aside) for a chosen
    feat. Only the multi-record separator is bespoke here. */
 .creator-asi-section + .creator-asi-section { margin-top: 1.5rem; }
-
-/* ---- Subclass ---- */
-.creator-subclass-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
-.creator-subclass-choose {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1rem 1.5rem;
-  font-size: 1.05rem;
-  background: var(--cc-select-soft);
-  border: 1px solid var(--cc-select);
-  border-radius: 12px;
-  color: var(--cc-gold-bright);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.creator-subclass-choose:hover { border-color: var(--cc-gold-bright); }
-
-.creator-subclass-chosen { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
-.creator-subclass-card {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 1rem 1.4rem;
-  background: var(--cc-select-soft);
-  border: 1px solid var(--cc-select);
-  border-radius: 12px;
-  color: var(--cc-text);
-  font-size: 1.2rem;
-}
-.creator-subclass-card img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; }
 
 /* ---------------------------------------------- Level-up Class step
 

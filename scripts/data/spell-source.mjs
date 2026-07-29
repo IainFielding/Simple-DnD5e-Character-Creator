@@ -1,4 +1,5 @@
 import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, log } from "../config.mjs";
+import { advancementArray } from "./advancement-util.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
@@ -276,7 +277,7 @@ export class SpellSource {
  * scale that is neither a cantrip nor a slot scale).
  */
 function scaleCount(doc, classId, kind, fallback, level = 1) {
-  for ( const adv of advancementEntries(doc) ) {
+  for ( const adv of advancementArray(doc) ) {
     if ( (adv.type ?? adv.constructor?.typeName) !== "ScaleValue" ) continue;
     const title = (adv.title ?? adv.configuration?.identifier ?? "").toLowerCase();
     const isCantrip = title.includes("cantrip");
@@ -512,13 +513,15 @@ export function buildSpellFromEntry(entry) {
   };
 }
 
-/** A document's advancements as a flat array, tolerating dnd5e's various shapes. */
-function advancementEntries(doc) {
-  const byId = doc.advancement?.byId;
-  if ( byId ) return typeof byId.values === "function" ? [...byId.values()] : Object.values(byId);
-  const raw = doc.system?.advancement;
-  if ( !raw ) return [];
-  if ( Array.isArray(raw) ) return raw;
-  if ( typeof raw.values === "function" ) return [...raw.values()];
-  return Object.values(raw);
+/**
+ * The spell casting `method` a class's spells should use, from its spellcasting progression:
+ * "pact" for a Warlock (Pact Magic slots), "spell" for full/half/third-caster classes. Falls back
+ * to "spell" for anything unrecognised. Shared by the creation spell grant and the level-up one, so
+ * a Warlock's spells land in the pact section either way.
+ * @param {Item5e|object|null} classDoc
+ * @returns {string}
+ */
+export function spellMethodFor(classDoc) {
+  const progression = classDoc?.system?.spellcasting?.progression;
+  return CONFIG.DND5E?.spellProgression?.[progression]?.type || "spell";
 }

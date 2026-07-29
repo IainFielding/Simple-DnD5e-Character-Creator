@@ -1,4 +1,5 @@
 import { log } from "../config.mjs";
+import { advancementArray } from "./advancement-util.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /**
@@ -305,7 +306,7 @@ export class SourceIndex {
     if ( primary.length ) traits.tags.push({ label: head("step.class.trait.primary"), value: primary.join(", ") });
     if ( sys.hd?.denomination ) traits.tags.push({ label: head("step.class.trait.hitDie"), value: sys.hd.denomination });
 
-    for ( const adv of advancementEntries(doc) ) {
+    for ( const adv of advancementArray(doc) ) {
       const type = adv.type ?? adv.constructor?.typeName;
       const level = Number(adv.level ?? adv._source?.level ?? 0);
 
@@ -363,24 +364,6 @@ export class SourceIndex {
     }
     return this.#meta.get(uuid);
   }
-}
-
-/**
- * Return a document's advancements as a flat array, tolerating every shape dnd5e
- * may hand back. The prepared `doc.advancement` collection is preferred because it
- * is always populated; the raw `system.advancement` is a fallback that may be a
- * plain object, an array, or a Map-like Collection.
- * @param {object} doc
- * @returns {object[]}
- */
-function advancementEntries(doc) {
-  const byId = doc.advancement?.byId;
-  if ( byId ) return typeof byId.values === "function" ? [...byId.values()] : Object.values(byId);
-  const raw = doc.system?.advancement;
-  if ( !raw ) return [];
-  if ( Array.isArray(raw) ) return raw;
-  if ( typeof raw.values === "function" ) return [...raw.values()];
-  return Object.values(raw);
 }
 
 /** Trait categories surfaced in the class "Traits" block, mapped to their i18n keys. */

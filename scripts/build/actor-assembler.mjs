@@ -2,6 +2,7 @@ import { ABILITIES, MODULE_ID, log, storeConfig } from "../config.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { collectEquipment } from "../data/equipment-source.mjs";
 import { cartTotalCp, purchasedItems, remainingCurrency } from "../data/store-source.mjs";
+import { spellMethodFor } from "../data/spell-source.mjs";
 import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { buildCreationManager, CreationChoiceProvider } from "./creation-advancement.mjs";
@@ -213,18 +214,6 @@ async function addSpells(actor, state) {
     data.push(obj);
   }
   if ( data.length ) await actor.createEmbeddedDocuments("Item", data, { render: false });
-}
-
-/**
- * The spell casting `method` a class's spells should use, from its spellcasting progression:
- * "pact" for a Warlock (Pact Magic slots), "spell" for full/half/third-caster classes. Falls back
- * to "spell" for anything unrecognised. Shared shape with the level-up spell grant.
- * @param {Item5e|null} classDoc
- * @returns {string}
- */
-export function spellMethodFor(classDoc) {
-  const progression = classDoc?.system?.spellcasting?.progression;
-  return CONFIG.DND5E?.spellProgression?.[progression]?.type || "spell";
 }
 
 /**

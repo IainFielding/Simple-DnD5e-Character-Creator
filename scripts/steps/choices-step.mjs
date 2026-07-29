@@ -109,7 +109,12 @@ export const choicesStep = {
   },
 
   async context({ state, source }) {
-    const resolved = await resolveChoices(state, source);
+    // Every path that can change the requirements re-resolves into `state.choiceCache`: the
+    // origin/class/background picks, Quick Build, and this step's own `handle()` below. So the
+    // render reuses that instead of resolving a second time for the same state (the resolver walks
+    // each origin's whole advancement tree, which is the most expensive read in the creator). The
+    // fallback covers the first render, before anything has been picked.
+    const resolved = state.choiceCache ?? await resolveChoices(state, source);
     state.choiceCache = resolved;
     // Keep the feat-spells gate fresh: a feat granted here (e.g. a background's Magic Initiate)
     // must light up the following step's rail entry before the player navigates onto it.

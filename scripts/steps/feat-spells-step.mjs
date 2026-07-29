@@ -1,5 +1,5 @@
 import { t } from "../config.mjs";
-import { advancementArray } from "../data/choice-resolver.mjs";
+import { advancementArray } from "../data/advancement-util.mjs";
 import { MAGIC_INITIATE_LISTS } from "../data/spell-source.mjs";
 
 /**
