@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { getEnabledPacks } from "./compendium-util.mjs";
+import { createItemData } from "./item-factory.mjs";
 import { TOOL_IMG, toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
@@ -45,14 +46,24 @@ export class EquipmentSource {
 
   /**
    * Build the option sets for the chosen class & background and seed default sub-choices.
+   *
+   * Origins normally arrive as compendium UUIDs on the state (`classUuid`/`backgroundUuid`). A state
+   * may instead hand over the origin *documents* via `equipmentDocs()` — the Ember hand-off does,
+   * because Ember synthesises its background from a culture and a path at completion time, so it
+   * exists only as an item on the advancement clone and has no compendium entry to resolve.
    * @returns {Promise<{class?: object, background?: object}>}
    */
   async load(state, source) {
     const out = {};
+    const docs = state.equipmentDocs?.() ?? null;
     for ( const [key, field] of [["class", "classUuid"], ["background", "backgroundUuid"]] ) {
-      const uuid = state[field];
+      const staged = docs?.[key] ?? null;
+      // Cache staged origins under the compendium entry they were copied from where there is one
+      // (a class), so every character shares that option set; a synthesised origin (Ember's
+      // background) falls back to its own uuid, which is unique to the character being built.
+      const uuid = staged ? (staged._stats?.compendiumSource ?? staged.uuid) : state[field];
       if ( !uuid ) continue;
-      const data = await this.#buildFor(uuid, key, source);
+      const data = await this.#buildFor(uuid, key, source, staged);
       if ( !data ) continue;
       out[key] = data;
 
@@ -88,9 +99,16 @@ export class EquipmentSource {
     });
   }
 
-  async #buildFor(uuid, key, source) {
+  /**
+   * @param {string} uuid            Cache key: the origin's compendium UUID, or a staged document's own.
+   * @param {"class"|"background"} key
+   * @param {import("./source-index.mjs").SourceIndex} source
+   * @param {Item5e|null} [staged]   An already-resolved origin document (see {@link load}); when
+   *   given, nothing is fetched — the tree is read straight off it.
+   */
+  async #buildFor(uuid, key, source, staged = null) {
     if ( this.#cache.has(uuid) ) return this.#cache.get(uuid);
-    const doc = await fromUuid(uuid).catch(() => null);
+    const doc = staged ?? await fromUuid(uuid).catch(() => null);
     if ( !doc ) return null;
 
     const entries = doc.system?.startingEquipment ?? [];
@@ -377,35 +395,15 @@ async function collectTree(node, orSelections = {}, currencyOnly = false) {
   if ( node.type === "tool" ) {
     if ( !node.isToolChoice || !node.choices?.length ) return [];
     const uuid = node.choices.length === 1 ? node.choices[0].uuid : (orSelections[node._id] ?? node.choices[0].uuid);
-    return createItems(uuid);
+    return createItemData(uuid, { context: "equipment item" });
   }
   if ( node.type === "linked" && (node.key || node.isFocusChoice) ) {
     const uuid = node.isFocusChoice && node.choices?.length
       ? (node.choices.length === 1 ? node.choices[0].uuid : (orSelections[node._id] ?? node.choices[0].uuid))
       : node.key;
-    return createItems(uuid, node.count ?? 1);
+    return createItemData(uuid, { qty: node.count ?? 1, context: "equipment item" });
   }
   return [];
-}
-
-/** Resolve a UUID into ready-to-create item data (with contents), counted and equipped. */
-async function createItems(uuid, qty = 1) {
-  if ( !uuid ) return [];
-  try {
-    const doc = await fromUuid(uuid);
-    if ( !doc ) return [];
-    const ItemClass = CONFIG.Item.documentClass;
-    const result = await ItemClass.createWithContents([doc], { keepId: false });
-    if ( !result?.length ) return [];
-    if ( qty > 1 && result[0].system?.quantity !== undefined ) result[0].system.quantity = qty;
-    for ( const item of result ) {
-      if ( (item.type === "weapon" || item.type === "equipment") && item.system ) item.system.equipped = true;
-    }
-    return result;
-  } catch ( err ) {
-    log(`equipment item create failed: ${uuid}`, err);
-    return [];
-  }
 }
 
 /* -------------------------------------------- */

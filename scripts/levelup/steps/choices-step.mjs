@@ -1,4 +1,4 @@
-import { t } from "../../config.mjs";
+import { t, log } from "../../config.mjs";
 import { atLevel, advancementHint } from "../levelup-state.mjs";
 import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended } from "../../data/choice-resolver.mjs";
 
@@ -18,7 +18,53 @@ import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended } fr
  * pick folded in (and any owned pick that isn't in the pool appended), each flagged as a normal
  * choice or an owned/replaceable one.
  */
-async function buildOptions(record, st) {
+/**
+ * The option entries for a **spell**-type ItemChoice, whose pickable spells are a named class spell
+ * list rather than an authored pool — a Paladin's Blessed Warrior ("learn two Cleric cantrips"), a
+ * Ranger's Druidic Warrior, a Magic Initiate variant. The native flow leaves this pool empty and
+ * sends the player to the compendium browser instead (filtered by spell list + level), so building
+ * the grid ourselves is what keeps the decision inside the wizard.
+ *
+ * `restriction.list` names the list(s) as `class:<id>`; `restriction.level` fixes the spell level —
+ * 0 for cantrips, 1 for first-level spells, which is the shape {@link SpellSource#forSpellList}
+ * serves (and the creation feat-spells step already relies on). Anything else the system allows
+ * ("available", a higher level) has no list bucket to draw from, so it yields nothing here and the
+ * block falls back to whatever the authored pool and drop-scan provide.
+ * @param {object} cfg                                          The advancement configuration.
+ * @param {import("../../data/spell-source.mjs").SpellSource} spells
+ * @returns {Promise<Map<string, {name: string, img: string}>>}  uuid -> option metadata.
+ */
+async function spellListOptions(cfg, spells) {
+  const out = new Map();
+  const raw = cfg.restriction?.level;
+  const level = Number(raw);
+  const lists = Array.from(cfg.restriction?.list ?? []).map(l => String(l).replace(/^class:/, ""));
+  if ( !lists.length ) return out;
+  if ( !spells ) {
+    log("spell choice: no spell source on this session, so its class list can't be offered");
+    return out;
+  }
+  if ( !Number.isInteger(level) || (level < 0) || (level > 1) ) {
+    log(`spell choice: no list pool for restriction level "${raw}"`);
+    return out;
+  }
+  for ( const listId of lists ) {
+    try {
+      // Always fetch the level-≤1 payload and pick the bucket: that is the key the session warm-up
+      // already fills for the Magic Initiate lists (cleric/druid/wizard), so a Blessed Warrior or
+      // Druidic Warrior pick reads a warm cache instead of opening a second, level-0-only one.
+      const { cantrips, level1 } = await spells.forSpellList(listId, 1);
+      for ( const spell of (level === 0 ? cantrips : level1) ) {
+        if ( spell?.uuid ) out.set(spell.uuid, { name: spell.name, img: spell.img });
+      }
+    } catch ( err ) {
+      log(`spell choice: failed to load the "${listId}" list`, err);
+    }
+  }
+  return out;
+}
+
+async function buildOptions(record, st, spells) {
   const cfg = record.advancement.configuration ?? {};
   const pool = Array.from(cfg.pool ?? []).map(p => p.uuid ?? p);
   const priorByUuid = new Map(st.priorEntries.map(e => [e.uuid, e]));
@@ -44,6 +90,11 @@ async function buildOptions(record, st) {
     for ( const opt of await findRestrictedItems(cfg, featureLevel) ) {
       meta.set(opt.uuid, { name: opt.label, img: opt.img, prereqItems: opt.prereqItems });
     }
+  }
+  // A spell choice draws on a class spell list, not the (empty) authored pool. Same `meta` channel:
+  // the entries carry their own name/img, so no option needs a separate `fromUuid`.
+  if ( cfg.type === "spell" ) {
+    for ( const [uuid, entry] of await spellListOptions(cfg, spells) ) meta.set(uuid, entry);
   }
 
   const uuids = [...new Set([...pool, ...extraPriors, ...meta.keys()])];
@@ -106,17 +157,18 @@ export const choicesStep = {
     return atLevel(state.choiceSteps, level).every(r => state.driver.choiceState(r).full || r.exhausted);
   },
 
-  async sectionsAt({ state, driver }, level) {
+  async sectionsAt({ state, driver, spells }, level) {
     const records = atLevel(state.choiceSteps, level);
     if ( !records.length ) return null;
-    const single = records.length === 1;
-    const sections = [];
+    // One block per decision (see trait-step.mjs for why): each feature pick keeps its own
+    // collapsible panel, titled and counted in its header.
+    const blocks = [];
     for ( const record of records ) {
       const st = driver.choiceState(record);
       const hasOwned = st.replaceable && st.priorEntries.length > 0;
-      const options = await buildOptions(record, st);
+      const options = await buildOptions(record, st, spells);
       record.exhausted = !st.full && !options.some(o => !o.owned && !o.selected && !o.disabled);
-      sections.push({
+      const section = {
         index: state.choiceSteps.indexOf(record),
         title: record.advancement.title || t("levelup.step.choices.choose"),
         count: t("levelup.step.choices.count", { current: st.current, max: st.max }),
@@ -129,18 +181,20 @@ export const choicesStep = {
         // A "Recommended" + "Other" split when the build unlocked any option (an item prerequisite
         // it satisfies, e.g. an invocation needing Pact of the Blade); null leaves the flat grid.
         groups: groupRecommended(options),
-        // A lone section shows its title/count in the block header instead of repeating it inside.
-        collapsed: single
+        // The block header carries the title and count, so the body never repeats them.
+        collapsed: true
+      };
+      blocks.push({
+        key: record.advancement.id ?? String(section.index),
+        blockLabel: section.title,
+        blockStatus: section.count,
+        complete: section.complete,
+        // A large pool (a long spell/feature list) packs into smaller cards; a short pick stays roomy.
+        density: options.length >= 9 ? "compact" : "standard",
+        sections: [section]
       });
     }
-    const maxOptions = Math.max(...sections.map(s => s.options.length));
-    return {
-      // A large pool (a long spell/feature list) packs into smaller cards; a short pick stays roomy.
-      density: maxOptions >= 9 ? "compact" : "standard",
-      blockLabel: single ? sections[0].title : null,
-      blockStatus: single ? sections[0].count : null,
-      sections
-    };
+    return blocks;
   },
 
   async handle(action, el, { state, driver }) {

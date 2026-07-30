@@ -76,28 +76,39 @@ export function levelStep(level, className = "") {
       for ( const component of COMPONENTS ) {
         const data = await component.sectionsAt(ctx, level);
         if ( !data ) continue;
-        const complete = component.isCompleteAt(ctx.state, level);
-        // A stable per-screen key (one block of each type per level) so the collapsed/expanded
-        // state persists as the shell rebuilds the step set each render.
-        const key = `${level}:${component.id}`;
-        blocks.push({
-          type: component.id,
-          icon: component.icon,
-          template: tpl(`${component.template}.hbs`),
-          // A single-section feature/trait block names itself after that section (e.g. "Fighting
-          // Style") rather than the generic "Features"; everything else uses its component label.
-          label: data.blockLabel ?? t(component.labelKey),
-          // The header pill: a count/value while choosing, a tick once the block is satisfied.
-          status: data.blockStatus ?? null,
-          showStatus: complete || (data.blockStatus != null),
-          complete,
-          // Drives the card/icon size tier for option grids (see creator.css [data-density]).
-          density: data.density ?? "standard",
-          ...data,
-          key,
-          // Collapsible header (like the creation choice checklist): expanded unless collapsed.
-          open: !ctx.state.collapsedBlocks.has(key)
-        });
+        // A component may hand back one block or a list of them. Splitting matters where a level
+        // grants several decisions of the same kind — a new character's species, background and
+        // class proficiencies all at once: pooled under one heading, one decision greying out an
+        // option in another (already-known skills, say) reads as a glitch rather than a rule.
+        const parts = Array.isArray(data) ? data : [data];
+        const componentComplete = component.isCompleteAt(ctx.state, level);
+        for ( const part of parts ) {
+          // A stable per-screen key — one block of each type per level, or one per decision when
+          // the component splits — so the collapsed/expanded state persists as the shell rebuilds
+          // the step set each render.
+          const key = `${level}:${component.id}${part.key ? `:${part.key}` : ""}`;
+          // A split block reports its own decision's completion; a pooled one the component's.
+          const complete = part.complete ?? componentComplete;
+          blocks.push({
+            type: component.id,
+            icon: component.icon,
+            template: tpl(`${component.template}.hbs`),
+            // A single-section feature/trait block names itself after that section (e.g. "Fighting
+            // Style") rather than the generic "Features"; everything else uses its component label.
+            label: part.blockLabel ?? t(component.labelKey),
+            // The header pill: a count/value while choosing, a tick once the block is satisfied.
+            status: part.blockStatus ?? null,
+            showStatus: complete || (part.blockStatus != null),
+            // Drives the card/icon size tier for option grids (see creator.css [data-density]).
+            density: part.density ?? "standard",
+            ...part,
+            // After the spread: the block's own identity and state win over the component's raw data.
+            complete,
+            key,
+            // Collapsible header (like the creation choice checklist): expanded unless collapsed.
+            open: !ctx.state.collapsedBlocks.has(key)
+          });
+        }
       }
       return { level, blocks };
     },

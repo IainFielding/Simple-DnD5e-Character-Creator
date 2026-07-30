@@ -1,5 +1,5 @@
-import { log } from "../config.mjs";
 import { collectEquipment } from "./equipment-source.mjs";
+import { createItemData } from "./item-factory.mjs";
 
 /**
  * The starting-gold store's data layer: what's on the shelves and what it costs.
@@ -368,21 +368,7 @@ export async function purchasedItems(purchases) {
   for ( const [uuid, p] of Object.entries(purchases ?? {}) ) {
     const qty = Number(p?.qty) || 0;
     if ( qty <= 0 ) continue;
-    try {
-      const doc = await fromUuid(uuid);
-      if ( !doc ) { log(`purchased item not found: ${uuid}`); continue; }
-      const ItemClass = CONFIG.Item.documentClass;
-      const result = await ItemClass.createWithContents([doc], { keepId: false });
-      if ( !result?.length ) continue;
-      if ( qty > 1 && result[0].system?.quantity !== undefined ) result[0].system.quantity = qty;
-      if ( result[0]._stats && uuid.startsWith("Compendium.") ) result[0]._stats.compendiumSource = uuid;
-      for ( const item of result ) {
-        if ( (item.type === "weapon" || item.type === "equipment") && item.system ) item.system.equipped = true;
-      }
-      out.push(...result);
-    } catch ( err ) {
-      log(`purchased item create failed: ${uuid}`, err);
-    }
+    out.push(...await createItemData(uuid, { qty, stampSource: true, context: "purchased item" }));
   }
   return out;
 }

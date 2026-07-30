@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/IainFielding/Simple-DnD5e-Character-Creator#readme
+    about: How each step works, GM settings, and Quick Build — check here before filing an issue.
+  - name: Support the module
+    url: https://ko-fi.com/sogrom
+    about: If the module saved you some time, you can buy me a coffee.

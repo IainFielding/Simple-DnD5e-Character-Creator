@@ -72,6 +72,37 @@ export class LevelUpState {
   needsClassChoice = false;
 
   /**
+   * Whether this session is the Ember hand-off: Ember's own builder has assigned the ancestry,
+   * background and class, and handed its advancement manager to us to ask the level-1 questions it
+   * doesn't (advancements, starting equipment, spells). Changes three things — the window's title,
+   * the rail (a starting-equipment step joins it) and the Apply path (Ember performs the write, so
+   * gear and spells are staged onto the clone rather than written after the commit).
+   * See {@link module:levelup/ember-creation}.
+   */
+  emberCreation = false;
+
+  /**
+   * The starting-equipment selection, one entry per origin: `{ selectedOption, orSelections }`.
+   * Only the Ember hand-off's rail carries the equipment step, so this stays empty on an ordinary
+   * level-up. Shaped exactly like the creator's own `state.equipment` so the creation step module
+   * is reused verbatim (see {@link module:steps/equipment-step}).
+   * @type {Record<string, {selectedOption: number, orSelections: Record<string, string>}>}
+   */
+  equipment = {};
+
+  /** Total spendable copper the chosen equipment option yields — written by the equipment step. */
+  storeBudgetCp = 0;
+
+  /**
+   * The starting-gold shop's cart and its filter state, shaped exactly like the creator's so the
+   * Store step module is reused verbatim: `purchases` is `uuid -> {qty, cp, name, img}` with the
+   * unit price cached at add time. Only the Ember hand-off's rail carries the step.
+   */
+  store = { purchases: {} };
+  storeCategory = "";
+  storeSubtype = "";
+
+  /**
    * The Class step's current pick: `{ kind: "existing", id }` for one of the actor's classes or
    * `{ kind: "new", uuid }` for a multiclass, null while undecided. Kept even though the adopted
    * driver implies it, so the step can mark the active card across re-renders.
@@ -145,14 +176,33 @@ export class LevelUpState {
    * @param {import("./manager-driver.mjs").LevelUpDriver|null} [driver]  Prepared driver, or null
    *   to open on the Class step and adopt one later.
    * @param {object} [options]
-   * @param {boolean} [options.chooseClass=false]  Lead with the in-wizard Class step.
+   * @param {boolean} [options.chooseClass=false]    Lead with the in-wizard Class step.
+   * @param {boolean} [options.emberCreation=false]  This session is the Ember hand-off.
    */
-  constructor(actor, driver = null, { chooseClass = false } = {}) {
+  constructor(actor, driver = null, { chooseClass = false, emberCreation = false } = {}) {
     this.actor = actor;
     this.fromLevel = actor.system?.details?.level ?? 0;
     this.toLevel = this.fromLevel + 1;
     this.needsClassChoice = chooseClass;
+    this.emberCreation = emberCreation;
     if ( driver ) this.adoptDriver(driver);
+  }
+
+  /**
+   * The origin documents the starting-equipment step should read its trees from, or null to let the
+   * {@link module:data/equipment-source.EquipmentSource} resolve compendium UUIDs as usual. The
+   * Ember hand-off returns the clone's own class and background items: Ember builds its background
+   * by combining a culture and a path at completion time, so it has no compendium entry — but it
+   * does carry both origins' concatenated `system.startingEquipment`.
+   * @returns {{class: Item5e|null, background: Item5e|null}|null}
+   */
+  equipmentDocs() {
+    const clone = this.driver?.clone;
+    if ( !this.emberCreation || !clone ) return null;
+    return {
+      class: clone.items.find(i => i.type === "class") ?? null,
+      background: clone.items.find(i => i.type === "background") ?? null
+    };
   }
 
   /**

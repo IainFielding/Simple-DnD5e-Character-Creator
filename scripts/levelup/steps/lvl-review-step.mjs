@@ -1,4 +1,6 @@
-import { ABILITIES, formatMod, t } from "../../config.mjs";
+import { ABILITIES, formatMod, t, log, storeConfig } from "../../config.mjs";
+import { summarizeOption } from "../../data/equipment-source.mjs";
+import { cartTotalCp, formatCp } from "../../data/store-source.mjs";
 
 /**
  * Final review for a level-up, laid out like the creation review: the character portrait and
@@ -136,6 +138,52 @@ function scaleRows(clone, actor, cloneClass) {
 }
 
 /* -------------------------------------------- */
+/*  Starting equipment (Ember hand-off only)    */
+/* -------------------------------------------- */
+
+/**
+ * The chosen starting gear, keyed by the origin that granted it — the same summary the creation
+ * review shows, since it is the same step and the same selection state. Only the Ember hand-off
+ * carries an equipment step (an ordinary level-up grants no starting gear), so this is empty
+ * otherwise, and a failure to resolve it costs the review a panel rather than the whole screen.
+ * @returns {Promise<Record<string, {items: object[], gold: string, hasAny: boolean}>>}
+ */
+async function reviewEquipment(state, source, equipment) {
+  if ( !state.emberCreation || !equipment ) return {};
+  try {
+    const loaded = await equipment.load(state, source);
+    const out = {};
+    for ( const key of ["class", "background"] ) {
+      if ( !loaded[key] || !state.equipment[key] ) continue;
+      const { items, gold } = summarizeOption(loaded[key], state.equipment[key]);
+      if ( !items.length && !gold ) continue;
+      out[key] = { items, gold, hasAny: true };
+    }
+    return out;
+  } catch ( err ) {
+    log("review equipment summary failed", err);
+    return {};
+  }
+}
+
+/**
+ * What was bought on the Store step, with the total spent — a panel of its own below the origin
+ * columns, exactly as the creation review shows it. Null when the store is off, the rail never
+ * carried it, or the cart is empty.
+ * @returns {{items: object[], total: string}|null}
+ */
+function reviewPurchases(state) {
+  if ( !state.emberCreation || !storeConfig().enabled ) return null;
+  const purchases = state.store?.purchases ?? {};
+  const items = Object.entries(purchases)
+    .filter(([, p]) => (Number(p?.qty) || 0) > 0)
+    .map(([uuid, p]) => ({ uuid, name: p.name, img: p.img, count: p.qty > 1 ? p.qty : null }))
+    .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
+  if ( !items.length ) return null;
+  return { items, total: formatCp(cartTotalCp(purchases)) };
+}
+
+/* -------------------------------------------- */
 /*  Step                                        */
 /* -------------------------------------------- */
 
@@ -149,7 +197,11 @@ export const lvlReviewStep = {
 
   summary() { return ""; },
 
-  context({ state, driver }) {
+  async context({ state, driver, source, equipment }) {
+    // Starting gear is chosen on the Ember hand-off's equipment step but isn't folded onto the
+    // clone until Apply, so — unlike features and spells — it has to be read back from the
+    // selection rather than diffed off the clone.
+    const equipBySource = await reviewEquipment(state, source, equipment);
     const clone = driver.clone;
     const actor = state.actor;
     const leveledId = state.classItem?.id ?? null;
@@ -262,8 +314,9 @@ export const lvlReviewStep = {
       rows.push(...scaleRows(clone, actor, cls));
 
       if ( leveled ) {
+        // Specifically the weapon-mastery keys, not the trait block's generic heading.
         if ( masteries.length ) rows.push({
-          title: t("levelup.step.traits.label"),
+          title: t("levelup.step.review.masteries"),
           values: masteries.map(name => ({ name }))
         });
         if ( profNow !== profWas ) rows.push({
@@ -300,7 +353,10 @@ export const lvlReviewStep = {
             : t("levelup.step.review.level", { level: toLevel }),
         rows,
         features: (features.get(cls.id) ?? []).sort(byNewThenName),
-        spells: sectionSpells.sort(byNewThenName)
+        spells: sectionSpells.sort(byNewThenName),
+        // The class's starting gear rides with the class that granted it (levelled class only —
+        // a multiclass level grants none, and only the hand-off has any at all).
+        equipment: leveled ? (equipBySource.class ?? null) : null
       });
     }
 
@@ -313,7 +369,9 @@ export const lvlReviewStep = {
       const gainedFeatures = (features.get(bucket) ?? []).filter(f => f.isNew);
       const gainedSpells = (newSpells.get(bucket) ?? []).sort(byNewThenName);
       const rows = abilityRows.get(bucket) ?? [];
-      if ( !gainedFeatures.length && !gainedSpells.length && !rows.length ) continue;
+      // A background that granted only gear (Ember's culture/path bundles) still earns its column.
+      const equip = equipBySource[bucket] ?? null;
+      if ( !gainedFeatures.length && !gainedSpells.length && !rows.length && !equip ) continue;
       const item = clone.items.find(i => i.type === type);
       sections.push({
         kind: t(`levelup.step.review.${kindKey}`),
@@ -323,25 +381,34 @@ export const lvlReviewStep = {
         levelLabel: "",
         rows,
         features: gainedFeatures.sort(byNewThenName),
-        spells: gainedSpells
+        spells: gainedSpells,
+        equipment: equip
       });
     }
 
     return {
       portrait: actor.img || "icons/svg/mystery-man.svg",
+      // Pills mark scores this session raised, so they can only ever reflect an *advancement* that
+      // applied here. In the Ember hand-off the point-buy and the Path's ability increases are
+      // Ember's own — it writes the finished totals to the actor before handing us the manager and
+      // keeps no record of the split (`EmberCharacterCreationSheet#boostAbilityScore` holds the
+      // boosts in a private field and stores only `base + boosts`) — so those show no pill, and any
+      // that does appear came from an advancement on one of the origin items.
       abilities: ABILITIES.map(key => {
         const now = clone.system?.abilities?.[key]?.value ?? 10;
         const was = actor.system?.abilities?.[key]?.value ?? now;
         const delta = now - was;
+        const tipKey = state.emberCreation ? "abilityTipCreation" : "abilityTip";
         return {
           key,
           abbr: CONFIG.DND5E?.abilities?.[key]?.abbreviation ?? key.slice(0, 3).toUpperCase(),
           value: now,
           modifier: formatMod(now),
           bonus: delta > 0 ? `+${delta}` : null,
-          bonusTip: delta > 0 ? t("levelup.step.review.abilityTip") : null
+          bonusTip: delta > 0 ? t(`levelup.step.review.${tipKey}`) : null
         };
       }),
+      purchases: reviewPurchases(state),
       sections
     };
   }

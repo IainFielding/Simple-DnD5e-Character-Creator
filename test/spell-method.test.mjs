@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { spellMethodFor } from "../scripts/build/actor-assembler.mjs";
+import { spellMethodFor } from "../scripts/data/spell-source.mjs";
 
 /**
  * `spellMethodFor` decides which casting `method` a class's chosen spells are stamped with, which in
  * turn selects the slot pool they draw from: a pact caster (Warlock) must land in Pact Magic slots
- * ("pact"), every other caster in ordinary spell slots ("spell"). The mapping comes from dnd5e's
+ * ("pact"), every other caster in ordinary spell slots ("spell"). Both the creation spell grant and
+ * the level-up spell plan run through it, so this one mapping covers both. It comes from dnd5e's
  * `CONFIG.DND5E.spellProgression[progression].type`, so the test seeds that config the way the
  * system builds it at runtime (see SpellcastingModel.fromConfig).
  */

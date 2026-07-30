@@ -1,10 +1,24 @@
 import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, log } from "../config.mjs";
+import { advancementArray } from "./advancement-util.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /** The class spell lists a Magic Initiate-style feat can draw from — warmed up front so the
  *  feat-spells step opens instantly. Kept in sync with feat-spells-step's CLASS_LISTS. */
 export const MAGIC_INITIATE_LISTS = ["cleric", "druid", "wizard"];
+
+/**
+ * Class spell lists a spellcasting *subclass* borrows when dnd5e registers no list of its own,
+ * keyed `<classIdentifier>:<subclassIdentifier>`. Most subclass casters (the domains, the Circles,
+ * the Oaths) ship a `subclass:` spell list, but the third-casters don't: the Eldritch Knight and
+ * the Arcane Trickster prepare from the Wizard list, and that fact lives only in the prose of their
+ * Spellcasting feature. Without this their pool resolves to nothing at all.
+ */
+export const SUBCLASS_SPELL_LISTS = {
+  "fighter:eldritch-knight": "wizard",
+  "rogue:trickster": "wizard",       // the PHB Arcane Trickster's identifier is "trickster"
+  "rogue:arcane-trickster": "wizard" // …but older/third-party data spells it out
+};
 
 /** Index fields fetched for spells, so cards can show components/range without the full doc. */
 const SPELL_INDEX_FIELDS = new Set([
@@ -110,13 +124,16 @@ export class SpellSource {
    *   subclass caster (Eldritch Knight / Arcane Trickster), whose list is registered under it.
    * @returns {Promise<{isSpellcaster:boolean, byLevel?:Record<number,object[]>, classId?:string, maxSpellLevel?:number}>}
    */
-  async forClassAtLevel(classUuid, maxSpellLevel, listType = "class") {
-    if ( !classUuid ) return { isSpellcaster: false };
-    const key = `${listType}:${classUuid}:${maxSpellLevel}`;
+  async forClassAtLevel(classUuid, maxSpellLevel, listType = "class", { doc = null } = {}) {
+    if ( !classUuid && !doc ) return { isSpellcaster: false };
+    // Key on the casting item's identifier when we have the document, since that — not the UUID it
+    // was copied from — is what the spell list is actually looked up by; every character casting as
+    // a sorcerer then shares one load. A UUID-only call keeps its old key.
+    const key = `${listType}:${doc?.system?.identifier || classUuid}:${maxSpellLevel}`;
     // Memoise the in-flight promise so the level-up shell's background warm-up and the spell
     // step's own load converge on one fetch; a failed load un-caches itself so it can retry.
     if ( !this.#byLevelUp.has(key) ) {
-      const promise = this.#resolveAtLevel(classUuid, maxSpellLevel, listType)
+      const promise = this.#resolveAtLevel(classUuid, maxSpellLevel, listType, doc)
         .catch(err => { this.#byLevelUp.delete(key); throw err; });
       this.#byLevelUp.set(key, promise);
     }
@@ -158,19 +175,28 @@ export class SpellSource {
     };
   }
 
-  async #resolveAtLevel(classUuid, maxSpellLevel, listType) {
-    const doc = await fromUuid(classUuid);
+  /**
+   * @param {Item5e|null} [staged]  The casting item itself, when the caller already holds it. The
+   *   level-up passes the actor's (or advancement clone's) own class/subclass item, which is the
+   *   only way this resolves for a class that has no compendium entry to fetch — Ember stages its
+   *   class onto the clone without a `compendiumSource`, so `fromUuid` yields nothing and the pool
+   *   would come back empty.
+   */
+  async #resolveAtLevel(classUuid, maxSpellLevel, listType, staged = null) {
+    const doc = staged ?? await fromUuid(classUuid);
     const progression = doc?.system?.spellcasting?.progression;
     if ( !doc || !progression || progression === "none" ) return { isSpellcaster: false };
 
     const classId = doc.system?.identifier ?? doc.name?.toLowerCase() ?? "";
+    const list = spellListFor(doc, classId, listType);
     const all = deduplicateSpells(
-      await loadSpellsForClass(classId, maxSpellLevel, listType, this.#fetchSpellPool(maxSpellLevel)));
+      await loadSpellsForClass(list.id, maxSpellLevel, list.type, this.#fetchSpellPool(maxSpellLevel)));
     const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
     const byLevel = {};
     for ( let l = 0; l <= maxSpellLevel; l++ ) byLevel[l] = all.filter(s => s.level === l).sort(byName);
 
-    log(`level-up spells for "${classId}" (≤ lvl ${maxSpellLevel}): ${all.length} total`);
+    const borrowed = list.id === classId ? "" : ` from the ${list.type} "${list.id}" list`;
+    log(`level-up spells for "${classId}"${borrowed} (≤ lvl ${maxSpellLevel}): ${all.length} total`);
     return { isSpellcaster: true, byLevel, classId, maxSpellLevel };
   }
 
@@ -261,7 +287,7 @@ export class SpellSource {
  * scale that is neither a cantrip nor a slot scale).
  */
 function scaleCount(doc, classId, kind, fallback, level = 1) {
-  for ( const adv of advancementEntries(doc) ) {
+  for ( const adv of advancementArray(doc) ) {
     if ( (adv.type ?? adv.constructor?.typeName) !== "ScaleValue" ) continue;
     const title = (adv.title ?? adv.configuration?.identifier ?? "").toLowerCase();
     const isCantrip = title.includes("cantrip");
@@ -298,6 +324,43 @@ export function cantripsKnownAtLevel(classDoc, level) {
 /* -------------------------------------------- */
 /*  Spell-list loading                          */
 /* -------------------------------------------- */
+
+/**
+ * Whether dnd5e's registry holds a non-empty spell list of this type and identifier.
+ * @param {"class"|"subclass"} type
+ * @param {string} identifier
+ * @returns {boolean}
+ */
+function registeredList(type, identifier) {
+  try {
+    return !!dnd5e.registry?.spellLists?.forType?.(type, identifier)?.uuids?.size;
+  } catch ( err ) {
+    log("spell list registry lookup failed", err);
+    return false;
+  }
+}
+
+/**
+ * The spell list a caster actually draws from. A subclass caster usually has a list registered
+ * under its own identifier, but one that doesn't borrows a class list instead ({@link
+ * SUBCLASS_SPELL_LISTS}, else its parent class's own list — right for a homebrew subclass of a
+ * casting class). Falls back to the caster's own key when neither is registered, so the pack-scan
+ * fallbacks in {@link loadSpellsForClass} still get their turn.
+ * @param {Item5e} doc                   The casting class or subclass document.
+ * @param {string} identifier            That document's own identifier.
+ * @param {"class"|"subclass"} listType  Registry type of the caster itself.
+ * @returns {{ id: string, type: "class"|"subclass" }}
+ */
+export function spellListFor(doc, identifier, listType) {
+  if ( (listType !== "subclass") || registeredList("subclass", identifier) ) {
+    return { id: identifier, type: listType };
+  }
+  const classIdentifier = doc.system?.classIdentifier ?? "";
+  for ( const id of [SUBCLASS_SPELL_LISTS[`${classIdentifier}:${identifier}`], classIdentifier] ) {
+    if ( id && registeredList("class", id) ) return { id, type: "class" };
+  }
+  return { id: identifier, type: listType };
+}
 
 /**
  * Cantrips and level-1 spells available to a class identifier. Prefers dnd5e's
@@ -460,13 +523,15 @@ export function buildSpellFromEntry(entry) {
   };
 }
 
-/** A document's advancements as a flat array, tolerating dnd5e's various shapes. */
-function advancementEntries(doc) {
-  const byId = doc.advancement?.byId;
-  if ( byId ) return typeof byId.values === "function" ? [...byId.values()] : Object.values(byId);
-  const raw = doc.system?.advancement;
-  if ( !raw ) return [];
-  if ( Array.isArray(raw) ) return raw;
-  if ( typeof raw.values === "function" ) return [...raw.values()];
-  return Object.values(raw);
+/**
+ * The spell casting `method` a class's spells should use, from its spellcasting progression:
+ * "pact" for a Warlock (Pact Magic slots), "spell" for full/half/third-caster classes. Falls back
+ * to "spell" for anything unrecognised. Shared by the creation spell grant and the level-up one, so
+ * a Warlock's spells land in the pact section either way.
+ * @param {Item5e|object|null} classDoc
+ * @returns {string}
+ */
+export function spellMethodFor(classDoc) {
+  const progression = classDoc?.system?.spellcasting?.progression;
+  return CONFIG.DND5E?.spellProgression?.[progression]?.type || "spell";
 }

@@ -1,14 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
-  advancementArray, choicesComplete, traitChoiceTitle, evalItemPrereq, groupRecommended
+  choicesComplete, traitChoiceTitle, evalItemPrereq, groupRecommended
 } from "../scripts/data/choice-resolver.mjs";
+import { advancementArray } from "../scripts/data/advancement-util.mjs";
 import { fighter, sage } from "./fixtures/dnd5e-5.3.3.mjs";
 
 /**
- * `advancementArray` is the resolver's "flattening" seam: dnd5e hands advancements back in
- * several shapes across versions (a live `advancement.byId` Map, a plain object, or the raw
- * `system.advancement` array/object of a `toObject()`d doc). Every downstream reader depends on
- * this returning a plain array, so it's exactly where a dnd5e version bump tends to break.
+ * `advancementArray` is the shared "flattening" seam the resolver (and every other advancement
+ * reader) is built on: dnd5e hands advancements back in several shapes across versions (a live
+ * `advancement.byId` Map, a plain object, or the raw `system.advancement` array/object of a
+ * `toObject()`d doc). Every downstream reader depends on this returning a plain array, so it's
+ * exactly where a dnd5e version bump tends to break.
  */
 describe("advancementArray", () => {
   it("reads the raw system.advancement array of a toObject()'d item", () => {
@@ -115,7 +117,9 @@ describe("evalItemPrereq", () => {
 
 /**
  * `groupRecommended` splits options into a leading "Recommended" panel and an "Other" panel, and
- * returns null (a single flat grid) when nothing is recommended.
+ * returns null (a single flat grid) when nothing is recommended. Because the flag is a *comparative*
+ * claim — "your build unlocked this one" — it only means anything when it separates some options from
+ * others, so a flag the whole pickable pool shares is cleared rather than shown on every card.
  */
 describe("groupRecommended", () => {
   it("returns null when no option is recommended", () => {
@@ -132,9 +136,41 @@ describe("groupRecommended", () => {
     expect(groups[1].options.map(o => o.key)).toEqual(["a", "c"]);
   });
 
-  it("omits the 'Other' panel when every option is recommended", () => {
-    const groups = groupRecommended([{ key: "a", recommended: true }]);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].options.map(o => o.key)).toEqual(["a"]);
+  /**
+   * A prerequisite shared by the whole pool recommends nothing. Every PHB fighting style lists the
+   * Fighting Style feature as its prerequisite — the very feature granting the choice — so a
+   * Paladin's level-2 pick satisfies it for all twelve options and would otherwise show every one
+   * badged and panelled under "Recommended", with "Other" empty.
+   */
+  it("clears a recommendation every pickable option shares, and stays ungrouped", () => {
+    const opts = [{ key: "a", recommended: true }, { key: "b", recommended: true }];
+    expect(groupRecommended(opts)).toBeNull();
+    expect(opts.every(o => o.recommended)).toBe(false);
+  });
+
+  it("clears it for a lone option too — one card cannot out-recommend itself", () => {
+    const opts = [{ key: "a", recommended: true }];
+    expect(groupRecommended(opts)).toBeNull();
+    expect(opts[0].recommended).toBe(false);
+  });
+
+  it("ignores already-owned picks when judging whether the flag discriminates", () => {
+    // The Champion's level-7 extra fighting style: the base style shows owned/locked alongside
+    // fresh options that all share the same prerequisite — still no signal to draw.
+    const opts = [
+      { key: "owned", owned: true },
+      { key: "a", recommended: true },
+      { key: "b", recommended: true }
+    ];
+    expect(groupRecommended(opts)).toBeNull();
+  });
+
+  it("keeps the split when the prerequisite genuinely discriminates", () => {
+    // A Warlock's invocation list: some options need Pact of the Blade, others need nothing.
+    const opts = [{ key: "plain" }, { key: "unlocked", recommended: true }];
+    const groups = groupRecommended(opts);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].options.map(o => o.key)).toEqual(["unlocked"]);
+    expect(groups[1].options.map(o => o.key)).toEqual(["plain"]);
   });
 });

@@ -10,7 +10,6 @@
       "available": "Available",
       "noEntries": "No entries found in the enabled compendiums.",
       "reset": "Reset",
-      "cancel": "Cancel",
       "on": "On",
       "off": "Off",
       "selectHint": "Choose an option from the list to see its full description.",
@@ -47,10 +46,12 @@
     },
     "levelup": {
       "window": {
-        "title": "Level Up — {name} (Level {level})"
+        "title": "Level Up — {name} (Level {level})",
+        "emberTitle": "Finish {name} — Level 1"
       },
       "nav": {
-        "apply": "Apply Level-Up"
+        "apply": "Apply Level-Up",
+        "emberApply": "Finish Character"
       },
       "button": "Level Up",
       "multiclass": {
@@ -62,8 +63,13 @@
         "title": "Discard this level-up?",
         "body": "Nothing has been applied to your character yet. If you close now, everything you've chosen here — hit points, features, spells, and other picks — will be discarded."
       },
+      "emberCancel": {
+        "title": "Discard these choices?",
+        "body": "Your Ember choices are safe. Only what you've picked here — hit points, features, equipment and spells — will be discarded, and Ember will ask again when you finish creating this character."
+      },
       "notify": {
         "applyFailed": "Level-up could not be applied. See the console for details.",
+        "emberGearFailed": "Starting equipment and spells could not be prepared. The rest of the character was applied — add them from the sheet.",
         "spellsFailed": "The chosen spells could not be added. The level-up itself was applied — add them from the sheet.",
         "takeoverFailed": "The level-up could not be prepared. The character was not changed — try again or use the system's own level-up.",
         "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow."
@@ -71,7 +77,6 @@
       "step": {
         "class": {
           "label": "Class",
-          "yours": "Your Classes",
           "multiclass": "Multiclass",
           "levelTag": "Level {from} → {to}",
           "newTag": "New Class",
@@ -100,18 +105,14 @@
           "label": "Hit Points",
           "intro": "Increase your {class}'s hit points — take the reliable average, or roll the hit die and take your chances.",
           "summary": "+{hp} HP",
-          "levelLabel": "Level {level}",
           "average": "Average HP",
           "max": "Max HP",
           "roll": "Roll {die}",
-          "custom": "Enter Manually",
           "gained": "Hit Points Gained",
-          "thisLevel": "This level:",
           "conBreakdown": "{con} Con = {total} HP"
         },
         "choices": {
           "label": "Features",
-          "summary": "{done}/{total} chosen",
           "choose": "Choose a Feature",
           "count": "{current} / {max} chosen",
           "current": "Current",
@@ -119,19 +120,16 @@
           "replaceHint": "Your current choice is ticked. Untick it to swap, then pick another."
         },
         "traits": {
-          "label": "Weapon Mastery",
-          "summary": "{done}/{total} chosen",
-          "choose": "Choose Weapon Masteries",
+          "label": "Traits & Proficiencies",
+          "choose": "Choose Traits",
           "count": "{current} / {max} chosen",
           "known": "Known"
         },
         "asi": {
           "label": "Ability Scores",
-          "remaining": "{points} points to spend",
           "hint": "Raise your ability scores by {points} points, up to +{cap} in any one.",
           "improvementTitle": "Ability Score Improvement",
           "improvementDesc": "You gain the following benefits:<br>{points} ability score increases",
-          "feat": "Feat",
           "takeFeat": "Take a feat instead",
           "changeFeat": "Choose a different feat",
           "useAbilities": "Improve abilities instead",
@@ -139,9 +137,7 @@
         },
         "subclass": {
           "label": "Subclass",
-          "intro": "Your class branches here — choose the subclass that shapes the rest of your journey.",
-          "choose": "Choose a Subclass",
-          "change": "Choose a different subclass"
+          "intro": "Your class branches here — choose the subclass that shapes the rest of your journey."
         },
         "grant": {
           "label": "Spell",
@@ -153,6 +149,7 @@
           "features": "Features",
           "newSpells": "New Spells",
           "newPill": "New",
+          "masteries": "Weapon Mastery",
           "profBonus": "Proficiency Bonus",
           "spellSlots": "Spell Slots",
           "pactSlots": "Pact Magic",
@@ -163,7 +160,8 @@
           "level": "Level {level}",
           "levelUp": "Level {from} → {to}",
           "levelNew": "New Class — Level {level}",
-          "abilityTip": "Increased by this level-up"
+          "abilityTip": "Increased by this level-up",
+          "abilityTipCreation": "Increased during character creation"
         },
         "spells": {
           "label": "Spells",
@@ -246,7 +244,6 @@
         "portrait": "Portrait",
         "token": "Token",
         "ringSubject": "Ring Subject",
-        "changeImage": "Change image…",
         "changePortrait": "Change Portrait",
         "changeToken": "Change Token",
         "changeRingSubject": "Change Ring Subject",

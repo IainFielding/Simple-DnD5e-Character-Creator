@@ -103,7 +103,7 @@ function makeState(actor, clone) {
 beforeEach(() => installFoundryShims());
 
 describe("level-up review — spells granted by nested sub-items", () => {
-  it("lists a spell granted by a subclass feature's own ItemGrant as New in the class column", () => {
+  it("lists a spell granted by a subclass feature's own ItemGrant as New in the class column", async () => {
     // Actor: Artificer 4 (Artillerist picked at 3, feat already owned). Clone: levelled to 5,
     // where the feat's level-5 grant landed Scorching Ray and Shatter.
     const actor = makeActor(baseItems(4), { level: 4 });
@@ -113,7 +113,7 @@ describe("level-up review — spells granted by nested sub-items", () => {
     );
     clone.reset = () => {};
 
-    const ctx = lvlReviewStep.context({ state: makeState(actor, clone), driver: { clone } });
+    const ctx = await lvlReviewStep.context({ state: makeState(actor, clone), driver: { clone } });
 
     const classSection = ctx.sections.find(s => s.name === "Artificer");
     expect(classSection).toBeDefined();
@@ -123,7 +123,7 @@ describe("level-up review — spells granted by nested sub-items", () => {
     for ( const s of classSection.spells ) expect(s.isNew).toBe(true);
   });
 
-  it("labels a brand-new class (multiclass) as new instead of 'Level 0 → 1', leading the columns", () => {
+  it("labels a brand-new class (multiclass) as new instead of 'Level 0 → 1', leading the columns", async () => {
     // Fighter 5 multiclassing into Wizard: the clone carries the new class at level 1 that the
     // actor lacks entirely.
     const fighter = {
@@ -141,7 +141,7 @@ describe("level-up review — spells granted by nested sub-items", () => {
     clone.reset = () => {};
     const state = { ...makeState(actor, clone), classItem: clone.items.get(wizard.id) };
 
-    const ctx = lvlReviewStep.context({ state, driver: { clone } });
+    const ctx = await lvlReviewStep.context({ state, driver: { clone } });
 
     const wizSection = ctx.sections.find(s => s.name === "Wizard");
     expect(wizSection.leveled).toBe(true);
@@ -157,7 +157,7 @@ describe("level-up review — spells granted by nested sub-items", () => {
     expect(ctx.sections[0].name).toBe("Wizard");
   });
 
-  it("also buckets the granting feature itself into the class column when gained this level-up", () => {
+  it("also buckets the granting feature itself into the class column when gained this level-up", async () => {
     // The subclass-pick level: actor Artificer 2, clone at 3 with subclass + feat + its spells all new.
     const actor = makeActor([baseItems(2)[0]], { level: 2 });
     const clone = makeActor(
@@ -166,12 +166,99 @@ describe("level-up review — spells granted by nested sub-items", () => {
     );
     clone.reset = () => {};
 
-    const ctx = lvlReviewStep.context({ state: makeState(actor, clone), driver: { clone } });
+    const ctx = await lvlReviewStep.context({ state: makeState(actor, clone), driver: { clone } });
 
     const classSection = ctx.sections.find(s => s.name === "Artificer");
     expect(classSection.features.map(f => f.name)).toContain("Artillerist Spells");
     const spellNames = classSection.spells.map(s => s.name);
     expect(spellNames).toContain("Shield");
     expect(spellNames).toContain("Thunderwave");
+  });
+});
+
+/**
+ * Starting equipment on the review. Gear is the one part of an Ember build the review can't diff off
+ * the clone — it isn't folded in until Apply — so it has to be read back from the equipment step's
+ * selection, or the summary shows a character with no possessions.
+ */
+describe("level-up review — starting equipment (the Ember hand-off)", () => {
+  const SWORD = "Compendium.dnd-players-handbook.equipment.Item.longsword000000";
+
+  /** An equipment service returning one geared class option and one "gold instead" background one. */
+  function makeEquipment() {
+    const calls = [];
+    return {
+      calls,
+      async load(state) {
+        calls.push(state);
+        return {
+          class: {
+            name: "Artificer", img: "artificer.webp",
+            options: [{ type: "equipment", label: "A", tree: {
+              type: "linked", _id: "n1", name: "Longsword", img: "sword.webp", key: SWORD, count: 1, children: []
+            } }]
+          },
+          background: { name: "Guild Artisan", img: "bg.webp", options: [{ type: "gold", label: "A", wealth: "50" }] }
+        };
+      }
+    };
+  }
+
+  /** An Ember-shaped session: level 0 → 1, both origins on the clone, equipment chosen. */
+  function emberState(actor, clone) {
+    return {
+      ...makeState(actor, clone),
+      emberCreation: true,
+      equipment: { class: { selectedOption: 0, orSelections: {} }, background: { selectedOption: 0, orSelections: {} } }
+    };
+  }
+
+  function emberWorld() {
+    const actor = makeActor([], { level: 0 });
+    const clone = makeActor([...baseItems(1), { id: "bg00000000000000", type: "background", name: "Guild Artisan", img: "bg.webp", system: {}, flags: {} }], { level: 1 });
+    clone.reset = () => {};
+    return { actor, clone };
+  }
+
+  it("lists the class's chosen gear in its column", async () => {
+    const { actor, clone } = emberWorld();
+    const ctx = await lvlReviewStep.context({
+      state: emberState(actor, clone), driver: { clone }, equipment: makeEquipment(), source: {}
+    });
+
+    const classSection = ctx.sections.find(s => s.name === "Artificer");
+    expect(classSection.equipment.items.map(i => i.name)).toEqual(["Longsword"]);
+  });
+
+  it("gives the background a column for gear alone, even having granted no features", async () => {
+    const { actor, clone } = emberWorld();
+    const ctx = await lvlReviewStep.context({
+      state: emberState(actor, clone), driver: { clone }, equipment: makeEquipment(), source: {}
+    });
+
+    const bgSection = ctx.sections.find(s => s.name === "Guild Artisan");
+    expect(bgSection).toBeDefined();
+    expect(bgSection.equipment.gold).toBe("50 GP");
+  });
+
+  it("asks for none of it on an ordinary level-up, which grants no starting gear", async () => {
+    const { actor, clone } = emberWorld();
+    const equipment = makeEquipment();
+    const ctx = await lvlReviewStep.context({
+      state: { ...emberState(actor, clone), emberCreation: false }, driver: { clone }, equipment, source: {}
+    });
+
+    expect(equipment.calls).toHaveLength(0);
+    expect(ctx.sections.every(s => !s.equipment)).toBe(true);
+  });
+
+  it("still renders the review when the equipment summary fails", async () => {
+    const { actor, clone } = emberWorld();
+    const equipment = { load: async () => { throw new Error("pack unavailable"); } };
+    const ctx = await lvlReviewStep.context({
+      state: emberState(actor, clone), driver: { clone }, equipment, source: {}
+    });
+
+    expect(ctx.sections.find(s => s.name === "Artificer")).toBeDefined();
   });
 });

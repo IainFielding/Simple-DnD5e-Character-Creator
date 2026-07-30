@@ -1,4 +1,6 @@
 import { t, log } from "../config.mjs";
+import { advancementArray } from "./advancement-util.mjs";
+import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { phbWeaponIcon } from "./weapon-source.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
@@ -60,14 +62,25 @@ export async function resolveChoices(state, source) {
     defs.push({ key, uuid, doc: uuid ? await fromUuid(uuid).catch(() => null) : null });
   }
 
+  // Walk each origin's level-≤1 owner tree ONCE and hang it off the def. Three consumers below need
+  // it (the cross-source trait dedupe, the owned-identifier set, and the per-source requirement
+  // build); the walk recursively resolves every granted/picked feature, so doing it per consumer
+  // tripled the compendium reads behind every click. `sel` is the source's pick bucket, created
+  // here because the requirement build writes pruned picks back into it.
+  for ( const d of defs ) {
+    if ( !d.doc ) continue;
+    d.sel = state.advChoices[d.key] ?? (state.advChoices[d.key] = {});
+    d.owners = await levelOneOwners(d.doc, d.sel);
+  }
+
   // Acquired trait keys across every source, so each selector can grey out a proficiency
   // or language already granted/chosen elsewhere. Computed before the per-source loop.
-  const crossTaken = await collectTakenTraitKeys(defs, state.advChoices);
+  const crossTaken = collectTakenTraitKeys(defs);
 
   // Feat/feature identifiers the whole build grants. A feat or invocation whose selection is
   // gated behind an item prerequisite (a Warlock invocation needing Pact of the Blade, say) is
   // hidden when the build doesn't satisfy it, and promoted to a "recommended" panel when it does.
-  const ownedIds = await collectOwnedIdentifiers(defs, state.advChoices);
+  const ownedIds = collectOwnedIdentifiers(defs);
 
   // The chosen class's spellcasting ability (and its display name). When a *granted* spell
   // from any origin (species/background) lets the player pick which ability casts it, the
@@ -84,7 +97,7 @@ export async function resolveChoices(state, source) {
     if ( !d.doc ) continue;
     let requirements = [];
     try {
-      requirements = await prepareRequirements(d.doc, d.key, state.advChoices, crossTaken, spellAbilityHint, ownedIds);
+      requirements = await prepareRequirements(d, crossTaken, spellAbilityHint, ownedIds);
     } catch ( err ) {
       log(`failed to resolve choices for ${d.key}`, err);
     }
@@ -185,15 +198,15 @@ function itemChoicePicks(adv, sel) {
 
 /**
  * Every feat/feature identifier the level-≤1 build grants across all origins — the origin items
- * themselves plus their granted/chosen features (via {@link levelOneOwners}). These are the slugs
+ * themselves plus their granted/chosen features (the pre-walked `def.owners`). These are the slugs
  * a feat's `system.prerequisites.items` is matched against, so an option requiring a feature the
  * build hasn't taken (a Warlock invocation needing Pact of the Blade) can be gated out.
+ * @param {{owners?: {item: Item}[]}[]} defs  Origin defs carrying their walked owner list.
  */
-async function collectOwnedIdentifiers(defs, advChoices) {
+function collectOwnedIdentifiers(defs) {
   const ids = new Set();
   for ( const d of defs ) {
-    if ( !d.doc ) continue;
-    for ( const { item } of await levelOneOwners(d.doc, advChoices[d.key] ?? {}) ) {
+    for ( const { item } of d.owners ?? [] ) {
       if ( item?.identifier ) ids.add(item.identifier);
     }
   }
@@ -205,15 +218,15 @@ async function collectOwnedIdentifiers(defs, advChoices) {
  * taken once can be greyed out elsewhere. Keys are namespaced `mode|key` so distinct
  * mechanics that reuse keys (weapon mastery vs proficiency) stay independent. Returns the
  * fixed grants and the player's picks keyed by `source:selKey`.
+ * @param {{key: string, sel?: object, owners?: {item: Item}[]}[]} defs
  */
-async function collectTakenTraitKeys(defs, advChoices) {
+function collectTakenTraitKeys(defs) {
   const grants = new Set();
   const chosenBySelKey = new Map();
   for ( const d of defs ) {
-    if ( !d.doc ) continue;
-    const bucket = advChoices[d.key] ?? {};
-    const owners = await levelOneOwners(d.doc, bucket);
-    for ( const { item: owner } of owners ) {
+    if ( !d.owners ) continue;
+    const bucket = d.sel;
+    for ( const { item: owner } of d.owners ) {
       for ( const adv of advancementArray(owner) ) {
         if ( adv.type !== "Trait" || (adv.level ?? 0) > 1 ) continue;
         const mode = adv.configuration?.mode || "default";
@@ -230,11 +243,15 @@ async function collectTakenTraitKeys(defs, advChoices) {
   return { grants, chosenBySelKey };
 }
 
-/** Parse one origin item's advancements (and its granted features') into requirements. */
-async function prepareRequirements(item, source, advChoices, crossTaken, spellAbilityHint, ownedIds) {
-  const sel = advChoices[source] ?? (advChoices[source] = {});
+/**
+ * Parse one origin item's advancements (and its granted features') into requirements. Takes the
+ * origin def prepared by {@link resolveChoices}, which already carries the source's pick bucket and
+ * its walked owner list.
+ * @param {{key: string, sel: object, owners: {item: Item, ownerUuid: string|null}[]}} def
+ */
+async function prepareRequirements(def, crossTaken, spellAbilityHint, ownedIds) {
+  const { key: source, sel, owners } = def;
   const reqs = [];
-  const owners = await levelOneOwners(item, sel);
 
   // Skills this source grants — the only valid options for an Expertise choice.
   const expertiseSkillPool = proficientSkillKeys(owners, sel);
@@ -578,8 +595,20 @@ export function evalItemPrereq(prereqItems, owned) {
  * Split feat/invocation options into a leading "Recommended" panel (those the build specifically
  * unlocks — an item prerequisite it satisfies) and an "Other" panel for the rest. Returns null when
  * nothing is recommended, so the choice renders as a single ungrouped grid as before.
+ *
+ * "Recommended" is a *comparative* signal: it means this build unlocked an option that another build
+ * wouldn't have. A prerequisite every pickable option shares carries no such signal, so this first
+ * clears the flag in that case — otherwise the whole pool lands in the panel and nothing lands in
+ * "Other", which reads as a recommendation of everything. Every PHB fighting style, for instance,
+ * lists the Fighting Style *feature* as its prerequisite — the very feature granting the choice — so
+ * a Paladin's level-2 pick satisfies it for all twelve options by construction. Earlier picks
+ * (`owned`) sit outside the comparison: they're shown locked, not offered.
  */
 export function groupRecommended(opts) {
+  const pickable = opts.filter(o => !o.owned);
+  if ( pickable.length && pickable.every(o => o.recommended) ) {
+    for ( const o of pickable ) o.recommended = false;
+  }
   if ( !opts.some(o => o.recommended) ) return null;
   const groups = [{ label: t("choice.recommended"), options: opts.filter(o => o.recommended) }];
   const rest = opts.filter(o => !o.recommended);
@@ -711,26 +740,6 @@ function toolPoolCategory(entry) {
 }
 
 /**
- * The compendium collections the player's Compendium Browser source configuration leaves enabled.
- * dnd5e stores per-pack toggles under the `packSourceConfiguration` setting (a pack is on unless
- * explicitly set to `false`); its own browser and every `allowDrops` ItemChoice honour it via
- * `CompendiumBrowserSettingsConfig.collateSources()`. We mirror that so our scan never surfaces
- * content from a pack the player switched off. Returns null when the setting isn't available
- * (an older dnd5e), meaning "don't restrict".
- * @returns {Set<string>|null}
- */
-function enabledPackSources() {
-  try {
-    const cfg = game.settings.get("dnd5e", "packSourceConfiguration") ?? {};
-    const on = new Set();
-    for ( const pack of game.packs ) if ( cfg[pack.collection] !== false ) on.add(pack.collection);
-    return on;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Scan enabled compendiums for items matching an `allowDrops` restriction, memoised.
  * When `maxLevel` is given, items are filtered to those the character qualifies for by
  * `system.prerequisites.level` (matching the native ItemChoice flow's feature-level gate — used at
@@ -751,14 +760,14 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
   const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}`;
   if ( restrictedCache.has(sig) ) return restrictedCache.get(sig);
 
-  const sources = enabledPackSources();
+  const enabled = getEnabledPacks();
   const results = [];
   const seenNames = new Set();
   const nameKey = n => (n ?? "").trim().toLowerCase();
   for ( const pack of game.packs ) {
-    if ( pack.metadata.type !== "Item" ) continue;
-    if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) continue;
-    if ( !pack.visible || (sources && !sources.has(pack.collection)) ) continue;
+    // `visible` is this scan's own extra bar: an `allowDrops` pool must never offer the player
+    // something out of a pack their permissions hide from them.
+    if ( !pack.visible || !isUsableItemPack(pack, enabled) ) continue;
     try {
       const index = await pack.getIndex({
         fields: ["type", "system.type.value", "system.type.subtype",
@@ -795,15 +804,4 @@ export const traitKeyLabel = k => dnd5e.documents.Trait?.keyLabel?.(k) ?? k;
 
 function enrichHTML(html) {
   return foundry.applications.ux.TextEditor.implementation.enrichHTML(html, { secrets: false });
-}
-
-/** A document's advancements as a flat array, tolerating dnd5e's various shapes. */
-export function advancementArray(doc) {
-  const byId = doc.advancement?.byId;
-  if ( byId ) return typeof byId.values === "function" ? [...byId.values()] : Object.values(byId);
-  const raw = doc.system?.advancement;
-  if ( !raw ) return [];
-  if ( Array.isArray(raw) ) return raw;
-  if ( typeof raw.values === "function" ) return [...raw.values()];
-  return Object.values(raw);
 }

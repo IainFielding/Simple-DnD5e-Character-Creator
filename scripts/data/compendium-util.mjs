@@ -31,14 +31,18 @@ export function getEnabledPacks() {
 }
 
 /**
- * Whether a pack should be scanned for dnd5e content: it must hold Items, and either
- * be in the enabled set (when source filtering is active) or belong to dnd5e (when
- * it isn't), so unrelated game systems are never trawled.
+ * Whether a pack should be scanned for dnd5e content: it must hold Items, belong to dnd5e (or
+ * declare no system at all), and — when source filtering is active — be in the enabled set.
+ *
+ * The system guard applies in both cases. `packSourceConfiguration` only ever names packs the
+ * GM has switched *off*, so a foreign system's pack is absent from it and therefore counts as
+ * "enabled"; without this check an enabled set would let it through, which is exactly what the
+ * "never trawl unrelated systems" rule exists to prevent.
  * @param {CompendiumCollection} pack
  * @param {Set<string>|null} enabled  Result of {@link getEnabledPacks}.
  */
 export function isUsableItemPack(pack, enabled) {
   if ( pack.metadata.type !== "Item" ) return false;
-  if ( enabled ) return enabled.has(pack.collection);
-  return !pack.metadata.system || pack.metadata.system === "dnd5e";
+  if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) return false;
+  return enabled ? enabled.has(pack.collection) : true;
 }

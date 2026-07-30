@@ -1,19 +1,19 @@
 import { MODULE_ID, tpl, t, log } from "../config.mjs";
+import { CreatorShellBase, shellOptions, railStageParts } from "../app/shell-base.mjs";
 import { buildSteps } from "./registry.mjs";
 import { getSources, isStale, invalidateSources } from "../data/source-cache.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "../data/concurrency.mjs";
 import { applyLevelUpSpells, spellChanges } from "./steps/lvl-spells-step.mjs";
-
-const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
+import { stageEmberGear, abandonEmberCreation } from "./ember-creation.mjs";
 
 /**
- * The level-up window. Like the creator's shell it is deliberately thin — it owns navigation
- * and a single event dispatcher, delegating per-step data and behaviour to the step modules —
- * but it drives a {@link LevelUpDriver} (the wrapped native AdvancementManager) instead of the
- * creation state, and it commits the driver's clone rather than assembling a new actor.
+ * The level-up window. Like the creator's shell it is deliberately thin — it owns its step list and
+ * delegates per-step data and behaviour to the step modules — but it drives a {@link LevelUpDriver}
+ * (the wrapped native AdvancementManager) instead of the creation state, and it commits the driver's
+ * clone rather than assembling a new actor.
  *
- * It shares the creator's rail/stage chrome by reusing those templates as its PARTS; §3.1 of
- * the plan extracts a common base mixin once a second shell exists, which is now.
+ * The window chrome, the click dispatcher, Back/Next, rail reachability and the discard prompt all
+ * come from {@link CreatorShellBase}, shared with the creator window.
  *
  * For a junior dev: this is the same ApplicationV2 pattern as creator-shell.mjs (see the big
  * teaching note there for DEFAULT_OPTIONS/PARTS/actions/_prepareContext). Two things are specific
@@ -24,39 +24,18 @@ const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applicat
  *      decisions live on the driver's clone, the spell picks are staged on the state, and
  *      {@link #applyLevelUp} writes both in one go before closing.
  */
-export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
+export class LevelUpShell extends CreatorShellBase {
 
-  static DEFAULT_OPTIONS = {
-    id: "sogrom-levelup",
-    classes: ["sogrom-creator"],
-    tag: "div",
-    window: { frame: false, positioned: false },
-    actions: {
-      goto: LevelUpShell.#onGoto,
-      navNext: LevelUpShell.#onNext,
-      navBack: LevelUpShell.#onBack,
-      stepAction: LevelUpShell.#onStepAction,
-      finish: LevelUpShell.#onFinish,
-      cancel: LevelUpShell.#onCancel
-    }
-  };
+  static DEFAULT_OPTIONS = shellOptions("sogrom-levelup");
 
-  static PARTS = {
-    rail: { id: "rail", template: `modules/${MODULE_ID}/templates/rail.hbs` },
-    stage: {
-      id: "stage",
-      template: `modules/${MODULE_ID}/templates/stage.hbs`,
-      // Preserve scroll across re-renders for the body and the subclass picker's independently
-      // scrolling list/detail columns (which reuse the creator's pick layout).
-      scrollable: [".creator-stage-body", ".creator-picklist", ".creator-pick-desc"]
-    }
-  };
+  // Beyond the shared stage body: the subclass picker's independently scrolling list/detail columns
+  // (which reuse the creator's pick layout).
+  static PARTS = railStageParts([".creator-picklist", ".creator-pick-desc"]);
 
   /** @type {import("./levelup-state.mjs").LevelUpState} */
   state;
   /** @type {object[]} The per-session step set (built from the driver's surfaced decisions). */
   #steps;
-  #current = 0;
   /** Keys of level-screen blocks complete at the previous render, plus the step they belong to, so
    *  {@link #guideToNext} can tell a fresh completion from a block that was already done. */
   #completeBlocks = null;
@@ -65,6 +44,9 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   #source;
   /** The shared spell source; the post-commit spell step's pool persists across windows. */
   #spells;
+  /** The shared starting-equipment and shop sources — only the Ember hand-off's rail uses them. */
+  #equipment;
+  #store;
 
   constructor(state, options = {}) {
     super(options);
@@ -75,9 +57,11 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // index, the spell pool) stay cached for the next level-up instead of dying with this window.
     // A changed enabled-source set means those caches no longer reflect the world; rebuild first.
     if ( isStale() ) invalidateSources();
-    const { source, spells } = getSources();
+    const { source, spells, equipment, store } = getSources();
     this.#source = source;
     this.#spells = spells;
+    this.#equipment = equipment;
+    this.#store = store;
     // Subclass decisions are fixed once the driver has prepared, so their data can start
     // loading immediately — long before the player scrolls down to the subclass block.
     this.#warmSubclasses();
@@ -121,11 +105,26 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   get title() {
-    return t("levelup.window.title", { name: this.state.actor?.name ?? "", level: this.state.toLevel });
+    const name = this.state.actor?.name ?? "";
+    // The Ember hand-off isn't a level-up from the player's point of view — they are still creating
+    // the character, and Ember's builder is waiting behind this window.
+    if ( this.state.emberCreation ) return t("levelup.window.emberTitle", { name });
+    return t("levelup.window.title", { name, level: this.state.toLevel });
   }
 
-  get #activeStep() {
-    return this.#steps[this.#current];
+  /** @override The level-up walks the per-session step set rebuilt on every render. */
+  get _activeStep() {
+    return this.#steps[this._stepIndex];
+  }
+
+  /** @override */
+  get _stepCount() {
+    return this.#steps.length;
+  }
+
+  /** @override One boolean per step, in list order: is it complete right now? */
+  _completeFlags() {
+    return this.#steps.map(s => s.isComplete(this.state));
   }
 
   /** Steps that must be complete before the level-up may be applied (everything but review). */
@@ -143,13 +142,13 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // set each render so the rail grows (or shrinks) with the decisions the driver has surfaced,
     // keeping the active index in range.
     this.#steps = buildSteps(this.state);
-    this.#current = Math.min(this.#current, this.#steps.length - 1);
-    const step = this.#activeStep;
+    this._stepIndex = Math.min(this._stepIndex, this.#steps.length - 1);
+    const step = this._activeStep;
     // Build the active screen BEFORE the completion flags: laying out its blocks refreshes the
     // per-record caches the flags read (e.g. a choice quota whose pool is exhausted), so Next
     // enables on the same render that shows the screen.
-    const stepContext = await step.context(this.#ctx());
-    const flags = this.#steps.map(s => s.isComplete(this.state));
+    const stepContext = await step.context(this._ctx());
+    const flags = this._completeFlags();
 
     return {
       loading: false,
@@ -166,17 +165,21 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
       // The finish button (Apply) replaces Next in the footer on the review step only.
       isReview: step.id === "review",
       nav: {
-        index: this.#current,
+        index: this._stepIndex,
         total: this.#steps.length,
-        position: t("nav.position", { current: this.#current + 1, total: this.#steps.length }),
-        canBack: this.#current > 0,
-        canNext: this.#current < this.#steps.length - 1 && flags[this.#current]
-          && this.#reachable(this.#current + 1, flags),
+        position: t("nav.position", { current: this._stepIndex + 1, total: this.#steps.length }),
+        canBack: this._stepIndex > 0,
+        canNext: this._stepIndex < this.#steps.length - 1 && flags[this._stepIndex]
+          && this._reachable(this._stepIndex + 1, flags),
         backLabel: t("nav.back"),
         nextLabel: t("nav.next")
       },
-      canFinish: this.#requiredSteps.every(s => s.isComplete(this.state)),
-      finishLabel: t("levelup.nav.apply")
+      // Derived from `flags` rather than re-running every step's isComplete() a second time; the
+      // review step is the last one, so "everything before it is done" is the Apply gate.
+      canFinish: this.#steps.every((s, i) => (s.id === "review") || flags[i]),
+      // The Ember hand-off is still character creation as far as the player is concerned — nothing
+      // is being levelled up — so the primary button says so.
+      finishLabel: t(this.state.emberCreation ? "levelup.nav.emberApply" : "levelup.nav.apply")
     };
   }
 
@@ -187,10 +190,10 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
       label: s.label ?? t(s.labelKey),
       icon: s.icon,
       ordinal: i + 1,
-      active: i === this.#current,
+      active: i === this._stepIndex,
       applicable: true,
       complete: flags[i] && s.id !== "review",
-      reachable: this.#reachable(i, flags),
+      reachable: this._reachable(i, flags),
       summary: s.summary?.(this.state) ?? ""
     }));
   }
@@ -199,9 +202,7 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   _onRender(context, options) {
     super._onRender(context, options);
     this.#warmSpellPool();
-    for ( const el of this.element.querySelectorAll("[data-step-change]") ) {
-      el.addEventListener("change", ev => this.#dispatch(el.dataset.stepChange, ev.currentTarget));
-    }
+    this._wireStepChanges(this.element);
     // Client-side spell-list filters on the spell step — search box plus the level/school
     // dropdowns. All filter in the DOM without a re-render, so the search field keeps focus
     // while typing; their values live on the state so the re-render a spell click causes
@@ -215,10 +216,10 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
       el.value = this.state[key];
       el.addEventListener(event, () => {
         this.state[key] = el.value;
-        this.#applySpellFilters();
+        this._applySpellFilters();
       });
     }
-    if ( filters.length ) this.#applySpellFilters();
+    if ( filters.length ) this._applySpellFilters();
     this.#guideToNext();
   }
 
@@ -235,7 +236,7 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
    * renders only snapshot the new screen's state without moving anything.
    */
   #guideToNext() {
-    const stepId = this.#activeStep?.id;
+    const stepId = this._activeStep?.id;
     const blocks = [...this.element.querySelectorAll(".levelup-block")];
     const keyOf = b => b.querySelector(".levelup-block-head")?.dataset.block ?? "";
     const complete = new Set(blocks.filter(b => b.classList.contains("is-complete")).map(keyOf));
@@ -285,95 +286,55 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
   #warmSpellPool() {
     const plan = this.state.spellPlan();
     if ( !plan.isSpellcaster || !plan.hasDelta || !plan.castUuid ) return;
-    this.#spells.forClassAtLevel(plan.castUuid, plan.maxSpellLevel, plan.listType)
+    // Same arguments the step itself uses, so the warm and the step share one memoised load.
+    this.#spells.forClassAtLevel(plan.castUuid, plan.maxSpellLevel, plan.listType, { doc: plan.castItem })
       .catch(err => log("level-up spell pool warm-up failed", err));
-  }
-
-  /**
-   * Hide pick-rows that don't match the active spell filters — the name search, spell level, and
-   * spell school — combined (a row must satisfy all three to show). Each control reads its current
-   * value straight from the DOM so any of them can drive the same pass. Mirrors the creator's list
-   * filter, extended for the level-up spell browser's dropdowns.
-   */
-  #applySpellFilters() {
-    const root = this.element;
-    const needle = (root.querySelector("[data-creator-search]")?.value ?? "").trim().toLowerCase();
-    const level = root.querySelector("[data-spell-filter-level]")?.value ?? "";
-    const school = root.querySelector("[data-spell-filter-school]")?.value ?? "";
-    for ( const row of root.querySelectorAll(".creator-pickrow") ) {
-      const matchesName = !needle || (row.dataset.name ?? "").toLowerCase().includes(needle);
-      const matchesLevel = !level || (row.dataset.level ?? "") === level;
-      const matchesSchool = !school || (row.dataset.school ?? "") === school;
-      const show = matchesName && matchesLevel && matchesSchool;
-      (row.closest("li") ?? row).classList.toggle("is-hidden", !show);
-    }
   }
 
   /* -------------------------------------------- */
   /*  Navigation                                  */
   /* -------------------------------------------- */
 
-  /** A step is reachable once every step before it is complete. */
-  #reachable(index, flags = this.#steps.map(s => s.isComplete(this.state))) {
-    return index === 0 || flags.slice(0, index).every(Boolean);
-  }
-
-  #ctx() {
-    return { state: this.state, driver: this.state.driver, source: this.#source, spells: this.#spells, app: this };
-  }
-
-  async #dispatch(action, el) {
-    const step = this.#activeStep;
-    const handled = step?.handle ? await step.handle(action, el, this.#ctx()) : undefined;
-    if ( handled === false ) return;
-    this.render();
-  }
-
-  static #onStepAction(event, target) {
-    return this.#dispatch(target.dataset.stepAction, target);
-  }
-
-  static #onGoto(event, target) {
-    const index = Number(target.dataset.index);
-    if ( Number.isInteger(index) && this.#reachable(index) ) {
-      this.#current = index;
-      this.render();
-    }
-  }
-
-  static #onNext() {
-    const next = this.#current + 1;
-    if ( next < this.#steps.length && this.#reachable(next) && this.#activeStep.isComplete(this.state) ) {
-      this.#current = next;
-      this.render();
-    }
-  }
-
-  static #onBack() {
-    if ( this.#current > 0 ) {
-      this.#current -= 1;
-      this.render();
-    }
-  }
-
-  static async #onFinish() {
-    return this.#applyLevelUp();
+  /** @override */
+  _ctx() {
+    return {
+      state: this.state, driver: this.state.driver, source: this.#source,
+      spells: this.#spells, equipment: this.#equipment, store: this.#store, app: this
+    };
   }
 
   /** Re-entrancy guard: a second Apply click while the first is writing must be a no-op. */
   #applying = false;
 
   /**
-   * Apply the whole level-up in one go: commit the driver's clone (the level decisions), then
-   * write the staged spell picks and any swap onto the freshly-updated actor, then close. The
-   * spell picks are staged on the state by the pre-review spell step, so a single Apply covers
+   * @override
+   * The footer's Apply button: commit the whole level-up in one go — the driver's clone (the level
+   * decisions), then the staged spell picks and any swap onto the freshly-updated actor, then close.
+   * The spell picks are staged on the state by the pre-review spell step, so a single Apply covers
    * everything the review screen showed. A commit failure leaves the actor untouched and the
    * window open for a retry; a spell failure after a successful commit keeps the level (it is
    * already applied) and tells the player to add the spells from the sheet.
+   *
+   * The Ember hand-off differs on both ends: the gear and spells are folded onto the clone *before*
+   * the commit (Ember performs the write, so a second write of ours would race it), and afterwards
+   * the sheet is left alone — Ember's builder finishes the character and swaps the sheet itself.
+   * See {@link module:levelup/ember-creation}.
    */
-  async #applyLevelUp() {
+  async _finish() {
     if ( this.#applying || !this.#requiredSteps.every(s => s.isComplete(this.state)) ) return;
     this.#applying = true;
+    const ember = this.state.emberCreation;
+
+    if ( ember ) {
+      try {
+        await stageEmberGear(this.state, this._ctx());
+      } catch ( err ) {
+        // Non-fatal: the advancements are the important part, and gear can be added on the sheet.
+        log("staging Ember starting equipment / spells failed", err);
+        ui.notifications?.warn(t("levelup.notify.emberGearFailed"));
+      }
+    }
+
     try {
       await this.state.driver.commit();
     } catch ( err ) {
@@ -388,7 +349,7 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
     // (an Eldritch Knight pick later undone) must not be created against a non-caster.
     const { actor } = this.state;
     const { sourceTag, method, create, deleteIds } = spellChanges(this.state);
-    if ( sourceTag && (create.length || deleteIds.length) ) {
+    if ( !ember && sourceTag && (create.length || deleteIds.length) ) {
       try {
         // Create the replacements before deleting the swapped-out spell, so a failure part-way
         // can only ever leave an extra spell to tidy up — never a destroyed one.
@@ -401,11 +362,7 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     await this.close({ force: true });
-    actor?.sheet?.render(true);
-  }
-
-  static #onCancel() {
-    this.close();
+    if ( !ember ) actor?.sheet?.render(true);
   }
 
   /**
@@ -415,18 +372,20 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
    * discards the whole level-up — safe, but rolled HP and picked features silently vanish, hence
    * the prompt. Apply itself passes `force` because its work is already saved; an untouched
    * window (or a pre-seeded one the player never interacted with) closes without ceremony.
+   *
+   * An abandoned Ember hand-off has one extra obligation: Ember's builder is blocked on the
+   * manager we suppressed, so it has to be released or it waits forever. Discarding drops only the
+   * advancement answers — the character keeps everything Ember already wrote, and its Complete
+   * button will offer the questions again.
    * @override
    */
   async close(options = {}) {
+    const abandoning = this.state.emberCreation && !this.state.committed;
     if ( !options.force && !this.state.committed && this.state.hasPlayerInput() ) {
-      const proceed = await DialogV2.confirm({
-        window: { title: t("levelup.cancel.title"), icon: "fa-solid fa-triangle-exclamation" },
-        content: `<p>${t("levelup.cancel.body")}</p>`,
-        modal: true,
-        rejectClose: false
-      });
-      if ( !proceed ) return this;
+      const key = this.state.emberCreation ? "levelup.emberCancel" : "levelup.cancel";
+      if ( !await this._confirmDiscard(`${key}.title`, `${key}.body`) ) return this;
     }
+    if ( abandoning ) abandonEmberCreation(this.state.driver?.manager);
     return super.close(options);
   }
 
@@ -441,6 +400,10 @@ export class LevelUpShell extends HandlebarsApplicationMixin(ApplicationV2) {
    */
   _onClose(options) {
     super._onClose(options);
+    // In the Ember hand-off the actor's sheet *is* Ember's character builder, waiting behind this
+    // window with all of the player's creation choices in it. Re-rendering it would reset that UI,
+    // and there is no level selector to snap back — so leave it to Ember either way.
+    if ( this.state.emberCreation ) return;
     const sheet = this.state.actor?.sheet;
     if ( sheet?.rendered ) sheet.render(true);
   }

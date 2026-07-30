@@ -1,7 +1,8 @@
 import { ABILITIES, formatMod, storeConfig, t } from "../config.mjs";
 import { cartTotalCp, formatCp } from "../data/store-source.mjs";
 import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
-import { resolveChoices, advancementArray, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
+import { advancementArray } from "../data/advancement-util.mjs";
+import { resolveChoices, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
 import { resolveFeatSpells, grantedSpellCards } from "./feat-spells-step.mjs";
 import { summarizeOption } from "../data/equipment-source.mjs";
 
@@ -128,7 +129,11 @@ function reviewPurchases(state) {
  * keep their uuid/img so the template can render clickable, tooltip-bearing content links.
  */
 async function reviewSections(state, source, equipBySource, spells, featSpellsBySource) {
-  const resolved = await resolveChoices(state, source);
+  // The resolved choice set comes straight off the cache every mutation path keeps current (the
+  // origin/class/background steps and every pick on the Choices step re-resolve into it), so the
+  // read-only review reuses that rather than paying for a full re-resolve on each render. The
+  // fallback covers a review reached before anything populated the cache.
+  const resolved = state.choiceCache ?? await resolveChoices(state, source);
   const out = [];
   for ( const { key, field, labelKey, emptyKey } of ORIGIN_META ) {
     const uuid = state[field];
@@ -163,7 +168,9 @@ async function reviewSections(state, source, equipBySource, spells, featSpellsBy
 function summaryPicks(resolved, key) {
   const src = (resolved?.sources ?? []).find(s => s.key === key);
   if ( !src ) return [];
-  return src.requirements.map(req => {
+  // Spell-choice requirements (Magic Initiate & variants) carry no `options` pool — they're
+  // surfaced under the section's feat-spells block, not here — so skip them.
+  return src.requirements.filter(req => !req.spellStep && Array.isArray(req.options)).map(req => {
     const values = req.options.filter(o => o.isSelected)
       .map(o => o.uuid ? { name: o.label, uuid: o.uuid, img: o.img } : { name: o.label });
     return { title: req.title, values, empty: values.length === 0 };
