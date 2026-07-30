@@ -2,6 +2,7 @@ import { levelStep } from "./steps/level-step.mjs";
 import { lvlClassStep } from "./steps/lvl-class-step.mjs";
 import { lvlReviewStep } from "./steps/lvl-review-step.mjs";
 import { lvlSpellsStep } from "./steps/lvl-spells-step.mjs";
+import { emberEquipmentStep, emberStoreStep, emberStoreEnabled } from "./ember-creation.mjs";
 
 /**
  * The ordered steps the level-up shell walks through: the Class pick (when the session opened
@@ -25,9 +26,15 @@ export function buildSteps(state) {
   if ( !state.driver ) return steps;
 
   // On a multiclass character the screens are class levels, not character levels — name the
-  // class on each ("Wizard 3") so the labels can't be misread as the character's level.
-  const className = state.isMulticlassed ? (state.classItem?.name ?? "") : "";
+  // class on each ("Wizard 3") so the labels can't be misread as the character's level. The Ember
+  // hand-off is a brand-new level-1 character, so its one screen is never ambiguous.
+  const className = (state.isMulticlassed && !state.emberCreation) ? (state.classItem?.name ?? "") : "";
   steps.push(...state.gainedLevels().map(level => levelStep(level, className)));
+  // Starting equipment isn't an advancement, so it only appears where something has to ask for it:
+  // the Ember hand-off, where Ember's builder never does (see {@link module:levelup/ember-creation}).
+  // The shop follows it, as in the creation rail, since the gold to spend is that step's outcome.
+  if ( state.emberCreation ) steps.push(emberEquipmentStep);
+  if ( emberStoreEnabled(state) ) steps.push(emberStoreStep);
   if ( state.hasSpellStep() ) steps.push(lvlSpellsStep);
   steps.push(lvlReviewStep);
   return steps;

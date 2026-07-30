@@ -46,14 +46,24 @@ export class EquipmentSource {
 
   /**
    * Build the option sets for the chosen class & background and seed default sub-choices.
+   *
+   * Origins normally arrive as compendium UUIDs on the state (`classUuid`/`backgroundUuid`). A state
+   * may instead hand over the origin *documents* via `equipmentDocs()` — the Ember hand-off does,
+   * because Ember synthesises its background from a culture and a path at completion time, so it
+   * exists only as an item on the advancement clone and has no compendium entry to resolve.
    * @returns {Promise<{class?: object, background?: object}>}
    */
   async load(state, source) {
     const out = {};
+    const docs = state.equipmentDocs?.() ?? null;
     for ( const [key, field] of [["class", "classUuid"], ["background", "backgroundUuid"]] ) {
-      const uuid = state[field];
+      const staged = docs?.[key] ?? null;
+      // Cache staged origins under the compendium entry they were copied from where there is one
+      // (a class), so every character shares that option set; a synthesised origin (Ember's
+      // background) falls back to its own uuid, which is unique to the character being built.
+      const uuid = staged ? (staged._stats?.compendiumSource ?? staged.uuid) : state[field];
       if ( !uuid ) continue;
-      const data = await this.#buildFor(uuid, key, source);
+      const data = await this.#buildFor(uuid, key, source, staged);
       if ( !data ) continue;
       out[key] = data;
 
@@ -89,9 +99,16 @@ export class EquipmentSource {
     });
   }
 
-  async #buildFor(uuid, key, source) {
+  /**
+   * @param {string} uuid            Cache key: the origin's compendium UUID, or a staged document's own.
+   * @param {"class"|"background"} key
+   * @param {import("./source-index.mjs").SourceIndex} source
+   * @param {Item5e|null} [staged]   An already-resolved origin document (see {@link load}); when
+   *   given, nothing is fetched — the tree is read straight off it.
+   */
+  async #buildFor(uuid, key, source, staged = null) {
     if ( this.#cache.has(uuid) ) return this.#cache.get(uuid);
-    const doc = await fromUuid(uuid).catch(() => null);
+    const doc = staged ?? await fromUuid(uuid).catch(() => null);
     if ( !doc ) return null;
 
     const entries = doc.system?.startingEquipment ?? [];

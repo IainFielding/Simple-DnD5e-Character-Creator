@@ -124,13 +124,16 @@ export class SpellSource {
    *   subclass caster (Eldritch Knight / Arcane Trickster), whose list is registered under it.
    * @returns {Promise<{isSpellcaster:boolean, byLevel?:Record<number,object[]>, classId?:string, maxSpellLevel?:number}>}
    */
-  async forClassAtLevel(classUuid, maxSpellLevel, listType = "class") {
-    if ( !classUuid ) return { isSpellcaster: false };
-    const key = `${listType}:${classUuid}:${maxSpellLevel}`;
+  async forClassAtLevel(classUuid, maxSpellLevel, listType = "class", { doc = null } = {}) {
+    if ( !classUuid && !doc ) return { isSpellcaster: false };
+    // Key on the casting item's identifier when we have the document, since that — not the UUID it
+    // was copied from — is what the spell list is actually looked up by; every character casting as
+    // a sorcerer then shares one load. A UUID-only call keeps its old key.
+    const key = `${listType}:${doc?.system?.identifier || classUuid}:${maxSpellLevel}`;
     // Memoise the in-flight promise so the level-up shell's background warm-up and the spell
     // step's own load converge on one fetch; a failed load un-caches itself so it can retry.
     if ( !this.#byLevelUp.has(key) ) {
-      const promise = this.#resolveAtLevel(classUuid, maxSpellLevel, listType)
+      const promise = this.#resolveAtLevel(classUuid, maxSpellLevel, listType, doc)
         .catch(err => { this.#byLevelUp.delete(key); throw err; });
       this.#byLevelUp.set(key, promise);
     }
@@ -172,8 +175,15 @@ export class SpellSource {
     };
   }
 
-  async #resolveAtLevel(classUuid, maxSpellLevel, listType) {
-    const doc = await fromUuid(classUuid);
+  /**
+   * @param {Item5e|null} [staged]  The casting item itself, when the caller already holds it. The
+   *   level-up passes the actor's (or advancement clone's) own class/subclass item, which is the
+   *   only way this resolves for a class that has no compendium entry to fetch — Ember stages its
+   *   class onto the clone without a `compendiumSource`, so `fromUuid` yields nothing and the pool
+   *   would come back empty.
+   */
+  async #resolveAtLevel(classUuid, maxSpellLevel, listType, staged = null) {
+    const doc = staged ?? await fromUuid(classUuid);
     const progression = doc?.system?.spellcasting?.progression;
     if ( !doc || !progression || progression === "none" ) return { isSpellcaster: false };
 

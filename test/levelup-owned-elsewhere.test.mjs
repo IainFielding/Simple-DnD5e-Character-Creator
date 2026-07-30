@@ -124,7 +124,7 @@ function stepFixture({ ownedElsewhere = [], selected = [], max = 1 } = {}) {
   return { record, state };
 }
 
-const byUuid = (data, uuid) => data.sections[0].options.find(o => o.uuid === uuid);
+const byUuid = (data, uuid) => data[0].sections[0].options.find(o => o.uuid === uuid);
 
 describe("choicesStep rendering of ownedElsewhere", () => {
   it("shows the clashing option as taken and disabled, leaving the rest pickable", async () => {
@@ -151,7 +151,7 @@ describe("choicesStep rendering of ownedElsewhere", () => {
     const { record, state } = stepFixture({ ownedElsewhere: POOL });
     const data = await choicesStep.sectionsAt({ state, driver: state.driver }, 7);
     expect(record.exhausted).toBe(true);
-    expect(data.sections[0].complete).toBe(true);
+    expect(data[0].sections[0].complete).toBe(true);
     expect(choicesStep.isCompleteAt(state, 7)).toBe(true);
   });
 

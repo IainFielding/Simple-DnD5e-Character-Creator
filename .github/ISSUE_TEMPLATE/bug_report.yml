@@ -1,0 +1,110 @@
+name: Bug report
+description: Something in the character creator or level-up wizard doesn't work as expected.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+
+        Before you file: please try reproducing the problem with **only** this module
+        and the D&D 5e system enabled. Most odd behaviour turns out to be a conflict
+        with another module, and knowing that up front saves a lot of back-and-forth.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem, and what you expected to happen instead.
+      placeholder: |
+        When I picked a Warlock at level 3 and clicked Next, the spell step showed no spells.
+        I expected to see the Warlock spell list.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact clicks needed to see the problem. Include the class, species, background or level involved — those choices usually matter.
+      placeholder: |
+        1. Open the Actors sidebar and click "Simple Character Builder"
+        2. Choose Warlock, set abilities to Standard Array
+        3. Click Next until the Spells step
+        4. The spell list is empty
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      description: Which part of the module is involved? Pick the closest match.
+      options:
+        - Character creation wizard
+        - Level-up wizard
+        - Quick Build
+        - Equipment / Store step
+        - Spell selection
+        - Module settings (GM options)
+        - Character sheet after creation
+        - Something else / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: foundry-version
+    attributes:
+      label: Foundry VTT version
+      description: Found in the bottom-left of the Foundry setup screen, e.g. 14.365.
+      placeholder: "14.365"
+    validations:
+      required: true
+
+  - type: input
+    id: system-version
+    attributes:
+      label: D&D 5e system version
+      description: Shown in Game Settings → Support & Issues, e.g. 5.3.3.
+      placeholder: "5.3.3"
+    validations:
+      required: true
+
+  - type: input
+    id: module-version
+    attributes:
+      label: Simple D&D Character Creator version
+      description: Shown in the Manage Modules list next to the module name.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: >-
+        Press F12 to open the developer tools, switch to the Console tab, reproduce the
+        problem, then paste any red error text here. This is automatically formatted as
+        code, so no backticks needed.
+      render: text
+
+  - type: textarea
+    id: content-modules
+    attributes:
+      label: Content modules in use
+      description: >-
+        Which compendium/content modules are active? Player's Handbook (2024), Tasha's,
+        Xanathar's, homebrew packs, and so on. Content differences are a common cause of
+        missing or duplicated options.
+      placeholder: "D&D Player's Handbook (2024), Tasha's Cauldron of Everything"
+
+  - type: checkboxes
+    id: isolated
+    attributes:
+      label: Confirmations
+      options:
+        - label: I reproduced this with only this module and the D&D 5e system enabled (plus any content module needed to see it).
+        - label: I searched the existing issues and this hasn't been reported yet.
+          required: true

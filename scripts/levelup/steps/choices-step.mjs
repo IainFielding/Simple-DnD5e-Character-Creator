@@ -160,14 +160,15 @@ export const choicesStep = {
   async sectionsAt({ state, driver, spells }, level) {
     const records = atLevel(state.choiceSteps, level);
     if ( !records.length ) return null;
-    const single = records.length === 1;
-    const sections = [];
+    // One block per decision (see trait-step.mjs for why): each feature pick keeps its own
+    // collapsible panel, titled and counted in its header.
+    const blocks = [];
     for ( const record of records ) {
       const st = driver.choiceState(record);
       const hasOwned = st.replaceable && st.priorEntries.length > 0;
       const options = await buildOptions(record, st, spells);
       record.exhausted = !st.full && !options.some(o => !o.owned && !o.selected && !o.disabled);
-      sections.push({
+      const section = {
         index: state.choiceSteps.indexOf(record),
         title: record.advancement.title || t("levelup.step.choices.choose"),
         count: t("levelup.step.choices.count", { current: st.current, max: st.max }),
@@ -180,18 +181,20 @@ export const choicesStep = {
         // A "Recommended" + "Other" split when the build unlocked any option (an item prerequisite
         // it satisfies, e.g. an invocation needing Pact of the Blade); null leaves the flat grid.
         groups: groupRecommended(options),
-        // A lone section shows its title/count in the block header instead of repeating it inside.
-        collapsed: single
+        // The block header carries the title and count, so the body never repeats them.
+        collapsed: true
+      };
+      blocks.push({
+        key: record.advancement.id ?? String(section.index),
+        blockLabel: section.title,
+        blockStatus: section.count,
+        complete: section.complete,
+        // A large pool (a long spell/feature list) packs into smaller cards; a short pick stays roomy.
+        density: options.length >= 9 ? "compact" : "standard",
+        sections: [section]
       });
     }
-    const maxOptions = Math.max(...sections.map(s => s.options.length));
-    return {
-      // A large pool (a long spell/feature list) packs into smaller cards; a short pick stays roomy.
-      density: maxOptions >= 9 ? "compact" : "standard",
-      blockLabel: single ? sections[0].title : null,
-      blockStatus: single ? sections[0].count : null,
-      sections
-    };
+    return blocks;
   },
 
   async handle(action, el, { state, driver }) {

@@ -189,6 +189,12 @@ export class LevelUpDriver {
       // truly *optional* grant (skippable config or optional items) is still beyond us.
       case "ItemGrant":  return !(adv.configuration?.optional
         || Array.from(adv.configuration?.items ?? []).some(i => i?.optional));
+      // Ember registers its own advancement type on background items (a culture/path granting
+      // knowledge areas). It is pure grant — its `automaticApplicationValue()` returns the whole
+      // grant list, so `#ingestFlow`'s default branch applies it with no screen of its own —
+      // but it still has to pass this gate, or the Ember hand-off would fall through to the
+      // native manager. The case is inert in a world without Ember: the type never appears.
+      case "EmberKnowledge": return true;
       default:           return false;             // (no renderable types left)
     }
   }
@@ -253,8 +259,15 @@ export class LevelUpDriver {
     const adv = flow.advancement;
     switch ( adv?.type ) {
       case "HitPoints":
-        // Always a player decision, even on a multi-level jump — the native flow would silently
-        // inherit a prior "avg" choice, but we want every gained level's hit points chosen here.
+        // The original class's *first* level takes maximum hit points by rule, with nothing to
+        // choose — the system applies it automatically (see HitPointsAdvancement
+        // #automaticApplicationValue), so a creation-shaped walk (the Ember hand-off, or our own
+        // headless creation) must not offer a roll there. A multiclass's first level is a real
+        // decision, hence the original-class test rather than a bare `level === 1`.
+        if ( (flow.level === 1) && adv.item?.isOriginalClass ) return adv.apply(flow.level, { 1: "max" });
+        // Otherwise always a player decision, even on a multi-level jump — the native flow would
+        // silently inherit a prior "avg" choice, but we want every gained level's hit points
+        // chosen here.
         return this.#recordHitPoints(flow);
       case "ItemChoice":
         // Record the decision but leave it unselected; the wizard applies the picks later.

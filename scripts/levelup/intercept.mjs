@@ -3,6 +3,7 @@ import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
 import { LevelUpShell } from "./levelup-shell.mjs";
 import { multiclassBlockers, formatBlockers } from "./multiclass.mjs";
+import { isEmberCreationManager, foldOriginScreens } from "./ember-creation.mjs";
 
 /**
  * Wires up the level-up takeover (§4). Two trigger paths:
@@ -89,6 +90,21 @@ function onPreAdvancementManagerRender(manager) {
   if ( !levelUpEnabled() ) return;
   // The hook fires on every (re-)render; once we have claimed a manager, never re-enter.
   if ( manager._sogromLevelUp ) return;
+
+  // Ember's builder renders this manager to ask the level-1 questions it doesn't own itself
+  // (see {@link module:levelup/ember-creation}). Claim it as a creation hand-off: the class it
+  // levels is staged on the clone, exactly like a multiclass, but the claim doesn't depend on the
+  // multiclass setting — Ember's flow has no other way to finish.
+  if ( isEmberCreationManager(manager) ) {
+    if ( !LevelUpDriver.canDrive(manager, { allowNewClass: true }) ) {
+      log("Ember hand-off carries choices we can't drive; leaving it to Ember's own flow");
+      return;
+    }
+    manager._sogromLevelUp = true;
+    launchLevelUp(manager, { emberCreation: true });
+    return false;
+  }
+
   if ( !shouldTakeOver(manager) ) return;
 
   manager._sogromLevelUp = true;
@@ -130,12 +146,16 @@ function shouldTakeOver(manager) {
  * hit-point decisions), then open our shell. The real actor is untouched until the player
  * applies, so any failure here leaves them exactly where they were.
  * @param {AdvancementManager} manager
+ * @param {object} [options]
+ * @param {boolean} [options.emberCreation=false]  This manager is Ember's creation hand-off: the
+ *   origin decisions fold onto the level-1 screen and the wizard gains its equipment step.
  */
-async function launchLevelUp(manager) {
+async function launchLevelUp(manager, { emberCreation = false } = {}) {
   try {
     const driver = new LevelUpDriver(manager);
     await driver.prepare();
-    const state = new LevelUpState(manager.actor, driver);
+    if ( emberCreation ) foldOriginScreens(driver);
+    const state = new LevelUpState(manager.actor, driver, { emberCreation });
     new LevelUpShell(state, launchWindowOptions()).render(true);
   } catch ( err ) {
     log("level-up takeover failed; the native advancement flow was suppressed", err);

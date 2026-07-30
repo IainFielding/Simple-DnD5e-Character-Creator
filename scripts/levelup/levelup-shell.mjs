@@ -4,6 +4,7 @@ import { buildSteps } from "./registry.mjs";
 import { getSources, isStale, invalidateSources } from "../data/source-cache.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "../data/concurrency.mjs";
 import { applyLevelUpSpells, spellChanges } from "./steps/lvl-spells-step.mjs";
+import { stageEmberGear, abandonEmberCreation } from "./ember-creation.mjs";
 
 /**
  * The level-up window. Like the creator's shell it is deliberately thin — it owns its step list and
@@ -43,6 +44,9 @@ export class LevelUpShell extends CreatorShellBase {
   #source;
   /** The shared spell source; the post-commit spell step's pool persists across windows. */
   #spells;
+  /** The shared starting-equipment and shop sources — only the Ember hand-off's rail uses them. */
+  #equipment;
+  #store;
 
   constructor(state, options = {}) {
     super(options);
@@ -53,9 +57,11 @@ export class LevelUpShell extends CreatorShellBase {
     // index, the spell pool) stay cached for the next level-up instead of dying with this window.
     // A changed enabled-source set means those caches no longer reflect the world; rebuild first.
     if ( isStale() ) invalidateSources();
-    const { source, spells } = getSources();
+    const { source, spells, equipment, store } = getSources();
     this.#source = source;
     this.#spells = spells;
+    this.#equipment = equipment;
+    this.#store = store;
     // Subclass decisions are fixed once the driver has prepared, so their data can start
     // loading immediately — long before the player scrolls down to the subclass block.
     this.#warmSubclasses();
@@ -99,7 +105,11 @@ export class LevelUpShell extends CreatorShellBase {
   }
 
   get title() {
-    return t("levelup.window.title", { name: this.state.actor?.name ?? "", level: this.state.toLevel });
+    const name = this.state.actor?.name ?? "";
+    // The Ember hand-off isn't a level-up from the player's point of view — they are still creating
+    // the character, and Ember's builder is waiting behind this window.
+    if ( this.state.emberCreation ) return t("levelup.window.emberTitle", { name });
+    return t("levelup.window.title", { name, level: this.state.toLevel });
   }
 
   /** @override The level-up walks the per-session step set rebuilt on every render. */
@@ -167,7 +177,9 @@ export class LevelUpShell extends CreatorShellBase {
       // Derived from `flags` rather than re-running every step's isComplete() a second time; the
       // review step is the last one, so "everything before it is done" is the Apply gate.
       canFinish: this.#steps.every((s, i) => (s.id === "review") || flags[i]),
-      finishLabel: t("levelup.nav.apply")
+      // The Ember hand-off is still character creation as far as the player is concerned — nothing
+      // is being levelled up — so the primary button says so.
+      finishLabel: t(this.state.emberCreation ? "levelup.nav.emberApply" : "levelup.nav.apply")
     };
   }
 
@@ -274,7 +286,8 @@ export class LevelUpShell extends CreatorShellBase {
   #warmSpellPool() {
     const plan = this.state.spellPlan();
     if ( !plan.isSpellcaster || !plan.hasDelta || !plan.castUuid ) return;
-    this.#spells.forClassAtLevel(plan.castUuid, plan.maxSpellLevel, plan.listType)
+    // Same arguments the step itself uses, so the warm and the step share one memoised load.
+    this.#spells.forClassAtLevel(plan.castUuid, plan.maxSpellLevel, plan.listType, { doc: plan.castItem })
       .catch(err => log("level-up spell pool warm-up failed", err));
   }
 
@@ -284,7 +297,10 @@ export class LevelUpShell extends CreatorShellBase {
 
   /** @override */
   _ctx() {
-    return { state: this.state, driver: this.state.driver, source: this.#source, spells: this.#spells, app: this };
+    return {
+      state: this.state, driver: this.state.driver, source: this.#source,
+      spells: this.#spells, equipment: this.#equipment, store: this.#store, app: this
+    };
   }
 
   /** Re-entrancy guard: a second Apply click while the first is writing must be a no-op. */
@@ -298,10 +314,27 @@ export class LevelUpShell extends CreatorShellBase {
    * everything the review screen showed. A commit failure leaves the actor untouched and the
    * window open for a retry; a spell failure after a successful commit keeps the level (it is
    * already applied) and tells the player to add the spells from the sheet.
+   *
+   * The Ember hand-off differs on both ends: the gear and spells are folded onto the clone *before*
+   * the commit (Ember performs the write, so a second write of ours would race it), and afterwards
+   * the sheet is left alone — Ember's builder finishes the character and swaps the sheet itself.
+   * See {@link module:levelup/ember-creation}.
    */
   async _finish() {
     if ( this.#applying || !this.#requiredSteps.every(s => s.isComplete(this.state)) ) return;
     this.#applying = true;
+    const ember = this.state.emberCreation;
+
+    if ( ember ) {
+      try {
+        await stageEmberGear(this.state, this._ctx());
+      } catch ( err ) {
+        // Non-fatal: the advancements are the important part, and gear can be added on the sheet.
+        log("staging Ember starting equipment / spells failed", err);
+        ui.notifications?.warn(t("levelup.notify.emberGearFailed"));
+      }
+    }
+
     try {
       await this.state.driver.commit();
     } catch ( err ) {
@@ -316,7 +349,7 @@ export class LevelUpShell extends CreatorShellBase {
     // (an Eldritch Knight pick later undone) must not be created against a non-caster.
     const { actor } = this.state;
     const { sourceTag, method, create, deleteIds } = spellChanges(this.state);
-    if ( sourceTag && (create.length || deleteIds.length) ) {
+    if ( !ember && sourceTag && (create.length || deleteIds.length) ) {
       try {
         // Create the replacements before deleting the swapped-out spell, so a failure part-way
         // can only ever leave an extra spell to tidy up — never a destroyed one.
@@ -329,7 +362,7 @@ export class LevelUpShell extends CreatorShellBase {
     }
 
     await this.close({ force: true });
-    actor?.sheet?.render(true);
+    if ( !ember ) actor?.sheet?.render(true);
   }
 
   /**
@@ -339,12 +372,20 @@ export class LevelUpShell extends CreatorShellBase {
    * discards the whole level-up — safe, but rolled HP and picked features silently vanish, hence
    * the prompt. Apply itself passes `force` because its work is already saved; an untouched
    * window (or a pre-seeded one the player never interacted with) closes without ceremony.
+   *
+   * An abandoned Ember hand-off has one extra obligation: Ember's builder is blocked on the
+   * manager we suppressed, so it has to be released or it waits forever. Discarding drops only the
+   * advancement answers — the character keeps everything Ember already wrote, and its Complete
+   * button will offer the questions again.
    * @override
    */
   async close(options = {}) {
+    const abandoning = this.state.emberCreation && !this.state.committed;
     if ( !options.force && !this.state.committed && this.state.hasPlayerInput() ) {
-      if ( !await this._confirmDiscard("levelup.cancel.title", "levelup.cancel.body") ) return this;
+      const key = this.state.emberCreation ? "levelup.emberCancel" : "levelup.cancel";
+      if ( !await this._confirmDiscard(`${key}.title`, `${key}.body`) ) return this;
     }
+    if ( abandoning ) abandonEmberCreation(this.state.driver?.manager);
     return super.close(options);
   }
 
@@ -359,6 +400,10 @@ export class LevelUpShell extends CreatorShellBase {
    */
   _onClose(options) {
     super._onClose(options);
+    // In the Ember hand-off the actor's sheet *is* Ember's character builder, waiting behind this
+    // window with all of the player's creation choices in it. Re-rendering it would reset that UI,
+    // and there is no level selector to snap back — so leave it to Ember either way.
+    if ( this.state.emberCreation ) return;
     const sheet = this.state.actor?.sheet;
     if ( sheet?.rendered ) sheet.render(true);
   }

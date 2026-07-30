@@ -13,6 +13,9 @@ import { cantripsKnownAtLevel, buildSpellFromEntry, spellMethodFor } from "../..
  * @property {string}  [method]        Casting method for added spells — "pact" for a Warlock (Pact
  *                                     Magic slots), "spell" otherwise.
  * @property {string}  [castUuid]      Compendium source UUID of the casting item, for the spell pool.
+ * @property {Item5e}  [castItem]      The casting item itself (on the clone, or the actor once
+ *                                     committed) — handed to the spell pool so a class with no
+ *                                     compendium entry to fetch still resolves its list.
  * @property {number}  [classLevel]    The class's current level (subclass scales key off it too).
  * @property {number}  [cantripTarget] Total cantrips known at this level.
  * @property {number}  [cantripHave]   Cantrips already known for this caster.
@@ -98,7 +101,7 @@ export function computeSpellPlan(actorLike, classItem) {
   const addSpells = maxSpellLevel > 0 ? Math.max(0, spellTarget - spellHave) : 0;
 
   return {
-    isSpellcaster: true, listId, listType, sourceTag, castUuid, classLevel, method,
+    isSpellcaster: true, listId, listType, sourceTag, castUuid, castItem, classLevel, method,
     cantripTarget, cantripHave, spellTarget, spellHave, maxSpellLevel,
     addCantrips, addSpells, hasDelta: (addCantrips > 0) || (addSpells > 0)
   };
@@ -161,7 +164,8 @@ export const lvlSpellsStep = {
     const plan = state.spellPlan();
     if ( !plan.isSpellcaster ) return { isSpellcaster: false, hint: t("levelup.step.spells.noneNeeded") };
 
-    const pool = await spells.forClassAtLevel(plan.castUuid, plan.maxSpellLevel, plan.listType);
+    const pool = await spells.forClassAtLevel(plan.castUuid, plan.maxSpellLevel, plan.listType,
+      { doc: plan.castItem });
     const tab = bucketFor(state, plan);
     const isCantrips = tab === "cantrips";
 
@@ -340,7 +344,21 @@ function byLevelThenName(a, b) {
  * @param {string} [method="spell"]  Casting method — "pact" for a Warlock, "spell" otherwise.
  */
 export async function applyLevelUpSpells(actor, sourceTag, picks, method = "spell") {
-  if ( !picks.length ) return;
+  const data = await buildSpellItemData(sourceTag, picks, method);
+  if ( data.length ) await actor.createEmbeddedDocuments("Item", data, { render: false });
+}
+
+/**
+ * The item data for a set of staged spell picks, ready to create on an actor (or to stage onto an
+ * advancement clone — the Ember hand-off writes through the clone so Ember's own single write
+ * carries the spells too).
+ * @param {string} sourceTag  The caster's `sourceItem` tag (`class:<id>` or `subclass:<id>`).
+ * @param {{uuid:string}[]} picks
+ * @param {string} [method="spell"]  Casting method — "pact" for a Warlock, "spell" otherwise.
+ * @returns {Promise<object[]>}
+ */
+export async function buildSpellItemData(sourceTag, picks, method = "spell") {
+  if ( !picks.length ) return [];
   // Load the picked spells' source documents in parallel — sequential fromUuid awaits made
   // Finish scale with the number of picks when any doc wasn't already in the pack cache.
   const docs = await Promise.all(picks.map(pick => fromUuid(pick.uuid).catch(() => null)));
@@ -354,5 +372,5 @@ export async function applyLevelUpSpells(actor, sourceTag, picks, method = "spel
     if ( sourceTag ) foundry.utils.setProperty(obj, "system.sourceItem", sourceTag);
     data.push(obj);
   });
-  if ( data.length ) await actor.createEmbeddedDocuments("Item", data, { render: false });
+  return data;
 }

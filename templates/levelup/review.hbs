@@ -67,6 +67,17 @@
       </div>
       {{/if}}
 
+      {{!-- Starting gear, chosen on the Equipment step (the Ember hand-off only). --}}
+      {{#if equipment.hasAny}}
+      <div class="creator-review-sub">
+        <h3>{{localize "sogrom-dnd5e-character-creator.equipment.heading"}}</h3>
+        <ul class="creator-review-spells creator-levelup-featlist">
+          {{#each equipment.items}}<li>{{#if uuid}}<a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{else}}{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}{{/if}}{{#if count}} ×{{count}}{{/if}}</li>{{/each}}
+          {{#if equipment.gold}}<li class="creator-review-gold"><i class="fa-solid fa-coins"></i> {{equipment.gold}}</li>{{/if}}
+        </ul>
+      </div>
+      {{/if}}
+
       {{#if spells.length}}
       <div class="creator-review-sub">
         <h3>{{localize "sogrom-dnd5e-character-creator.levelup.step.review.newSpells"}}</h3>
@@ -80,4 +91,15 @@
     </div>
     {{/each}}
   </div>
+
+  {{!-- Anything bought in the starting-gold shop (the Ember hand-off only). --}}
+  {{#if purchases}}
+  <div class="creator-review-block creator-levelup-purchases">
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.store.purchasesHeading"}}</h2>
+    <ul class="creator-review-spells creator-levelup-featlist">
+      {{#each purchases.items}}<li><a class="content-link" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{#if count}} ×{{count}}{{/if}}</li>{{/each}}
+      <li class="creator-review-gold"><i class="fa-solid fa-coins"></i> −{{purchases.total}}</li>
+    </ul>
+  </div>
+  {{/if}}
 </section>

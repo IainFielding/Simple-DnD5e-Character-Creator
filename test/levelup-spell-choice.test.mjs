@@ -68,7 +68,7 @@ describe("level-up spell choice (Blessed Warrior)", () => {
   it("offers the class list's cantrips even though the authored pool is empty", async () => {
     const { state, driver } = blessedWarrior();
     const data = await choicesStep.sectionsAt({ state, driver, spells: spellsStub }, 2);
-    const names = data.sections[0].options.map(o => o.name);
+    const names = data[0].sections[0].options.map(o => o.name);
     expect(names).toEqual(["Guidance", "Sacred Flame"]);     // sorted for scanability
   });
 
@@ -81,7 +81,7 @@ describe("level-up spell choice (Blessed Warrior)", () => {
   it("takes the cantrip bucket, not the level-1 spells", async () => {
     const { state, driver } = blessedWarrior();
     const data = await choicesStep.sectionsAt({ state, driver, spells: spellsStub }, 2);
-    expect(data.sections[0].options.map(o => o.name)).not.toContain("Bless");
+    expect(data[0].sections[0].options.map(o => o.name)).not.toContain("Bless");
   });
 
   it("reports the block incomplete until both cantrips are picked", async () => {
@@ -97,27 +97,27 @@ describe("level-up spell choice (Blessed Warrior)", () => {
     const { state, driver } = blessedWarrior({ selected: picked });
     const data = await choicesStep.sectionsAt({ state, driver, spells: spellsStub }, 2);
     expect(choicesStep.isCompleteAt(state, 2)).toBe(true);
-    expect(data.sections[0].options.every(o => o.selected)).toBe(true);
+    expect(data[0].sections[0].options.every(o => o.selected)).toBe(true);
   });
 
   it("marks nothing 'recommended' — every cantrip on the list is equally available", async () => {
     const { state, driver } = blessedWarrior();
     const data = await choicesStep.sectionsAt({ state, driver, spells: spellsStub }, 2);
-    expect(data.sections[0].options.some(o => o.recommended)).toBe(false);
-    expect(data.sections[0].groups).toBeNull();
+    expect(data[0].sections[0].options.some(o => o.recommended)).toBe(false);
+    expect(data[0].sections[0].groups).toBeNull();
   });
 
   it("yields no list options for a restriction level with no bucket to draw from", async () => {
     const { state, driver } = blessedWarrior();
     state.choiceSteps[0].advancement.configuration.restriction.level = "available";
     const data = await choicesStep.sectionsAt({ state, driver, spells: spellsStub }, 2);
-    expect(data.sections[0].options).toEqual([]);
+    expect(data[0].sections[0].options).toEqual([]);
     expect(spellsStub.calls).toEqual([]);
   });
 
   it("survives a session with no spell source wired up", async () => {
     const { state, driver } = blessedWarrior();
     const data = await choicesStep.sectionsAt({ state, driver, spells: null }, 2);
-    expect(data.sections[0].options).toEqual([]);
+    expect(data[0].sections[0].options).toEqual([]);
   });
 });

@@ -1,0 +1,60 @@
+name: Feature request
+description: Suggest a new option, step, or improvement to the wizard.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. The guiding principle for this module is **one decision per
+        screen, no rulebook required** — suggestions that keep the wizard simple are the
+        easiest to say yes to.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: What are you trying to do that the module makes hard or impossible today?
+      placeholder: >-
+        My table uses a house rule where players get a free feat at level 1, and there's
+        no way to grant it during creation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+      description: Describe the feature or change. If it's a new step or screen, say roughly where it would sit in the flow.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the module?
+      options:
+        - Character creation wizard
+        - Level-up wizard
+        - Quick Build
+        - Equipment / Store step
+        - Spell selection
+        - Module settings (GM options)
+        - Compatibility with another module or content pack
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Any workarounds you're using now, or other ways this could be solved.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched the existing issues and this hasn't already been suggested.
+          required: true

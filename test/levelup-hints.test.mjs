@@ -48,7 +48,7 @@ describe("trait sections carry the advancement description", () => {
   it("surfaces the hint (the Scholar case)", async () => {
     const { state } = traitFixture({ title: "Scholar", hint: SCHOLAR_HINT });
     const data = await traitStep.sectionsAt({ state, driver: state.driver }, 2);
-    expect(data.sections[0].hint).toBe(SCHOLAR_HINT);
+    expect(data[0].sections[0].hint).toBe(SCHOLAR_HINT);
   });
 
   it("falls back to the creator's generated blurb when the advancement has none", async () => {
@@ -56,8 +56,8 @@ describe("trait sections carry the advancement description", () => {
     // skills-pool trait with no authored hint reads as the skills blurb + a "choose one".
     const { state } = traitFixture({ title: "Weapon Mastery" });
     const data = await traitStep.sectionsAt({ state, driver: state.driver }, 2);
-    expect(data.sections[0].hint).toContain("choice.blurb.skills");
-    expect(data.sections[0].hint).toContain("choice.chooseOne");
+    expect(data[0].sections[0].hint).toContain("choice.blurb.skills");
+    expect(data[0].sections[0].hint).toContain("choice.chooseOne");
   });
 });
 
@@ -75,8 +75,8 @@ describe("feature-choice sections carry the advancement description", () => {
     };
     const state = { choiceSteps: [record], driver: { choiceState: () => st } };
     const data = await choicesStep.sectionsAt({ state, driver: state.driver }, 4);
-    expect(data.sections[0].hint).toBe("Choose a style of combat to specialize in.");
-    expect(data.sections[0].replaceHint).not.toBe("");
+    expect(data[0].sections[0].hint).toBe("Choose a style of combat to specialize in.");
+    expect(data[0].sections[0].replaceHint).not.toBe("");
   });
 
   it("falls back to the creator's generated blurb when the advancement has none", async () => {
@@ -91,7 +91,7 @@ describe("feature-choice sections carry the advancement description", () => {
     };
     const state = { choiceSteps: [record], driver: { choiceState: () => st } };
     const data = await choicesStep.sectionsAt({ state, driver: state.driver }, 4);
-    expect(data.sections[0].hint).toContain("choice.blurb.itemChoice");
-    expect(data.sections[0].hint).toContain("choice.chooseOne");
+    expect(data[0].sections[0].hint).toContain("choice.blurb.itemChoice");
+    expect(data[0].sections[0].hint).toContain("choice.chooseOne");
   });
 });

@@ -48,13 +48,16 @@ export const traitStep = {
   async sectionsAt({ state, driver }, level) {
     const records = atLevel(state.traitSteps, level);
     if ( !records.length ) return null;
-    const single = records.length === 1;
-    const sections = [];
+    // One block per decision, always: a level granting several (a new character's "Path Skills",
+    // "Path Language", "Cultural Proficiencies", …) gets a collapsible panel each, so the pools
+    // stay visibly separate — an option greying out because another decision already took it is
+    // obvious when the two are distinct panels, and baffling when they share one.
+    const blocks = [];
     for ( const record of records ) {
       const st = driver.traitState(record);
       const options = await driver.traitOptions(record);
       record.exhausted = !st.full && !options.some(o => !o.owned && !o.selected && !o.disabled);
-      sections.push({
+      const section = {
         index: state.traitSteps.indexOf(record),
         title: record.advancement.title || t("levelup.step.traits.choose"),
         // The authored description when there is one; otherwise the creator's generated blurb, so
@@ -68,20 +71,23 @@ export const traitStep = {
         count: t("levelup.step.traits.count", { current: st.current, max: st.max }),
         complete: st.full || record.exhausted,
         groups: groupOptions(options),
-        // A lone section shows its title/count in the block header instead of repeating it inside.
-        collapsed: single
+        // The block header carries the title and count, so the body never repeats them.
+        collapsed: true
+      };
+      // Density per decision: art-less keyword pools (languages) become inline chips; a big iconned
+      // pool (Weapon Mastery's many weapons) packs into compact cards.
+      const count = section.groups.reduce((n, g) => n + g.options.length, 0);
+      const anyImg = section.groups.some(g => g.options.some(o => o.img));
+      blocks.push({
+        key: record.advancement.id ?? String(section.index),
+        blockLabel: section.title,
+        blockStatus: section.count,
+        complete: section.complete,
+        density: !anyImg ? "chip" : (count >= 9 ? "compact" : "standard"),
+        sections: [section]
       });
     }
-    // Density from the busiest section: art-less keyword pools (languages) become inline chips; a
-    // big iconned pool (Weapon Mastery's many weapons) packs into compact cards.
-    const counts = sections.map(s => s.groups.reduce((n, g) => n + g.options.length, 0));
-    const anyImg = sections.some(s => s.groups.some(g => g.options.some(o => o.img)));
-    return {
-      density: !anyImg ? "chip" : (Math.max(...counts) >= 9 ? "compact" : "standard"),
-      blockLabel: single ? sections[0].title : null,
-      blockStatus: single ? sections[0].count : null,
-      sections
-    };
+    return blocks;
   },
 
   async handle(action, el, { state, driver }) {

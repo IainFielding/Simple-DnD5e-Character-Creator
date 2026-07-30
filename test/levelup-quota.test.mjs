@@ -51,7 +51,7 @@ describe("choicesStep quota exhaustion", () => {
     const data = await choicesStep.sectionsAt({ state, driver: state.driver }, 4);
     expect(record.exhausted).toBe(true);
     expect(choicesStep.isCompleteAt(state, 4)).toBe(true);
-    expect(data.sections[0].complete).toBe(true);
+    expect(data[0].sections[0].complete).toBe(true);
   });
 
   it("still completes the ordinary way when the quota fills", async () => {
@@ -108,7 +108,7 @@ describe("traitStep quota exhaustion", () => {
     const data = await traitStep.sectionsAt({ state, driver: state.driver }, 4);
     expect(record.exhausted).toBe(true);
     expect(traitStep.isCompleteAt(state, 4)).toBe(true);
-    expect(data.sections[0].complete).toBe(true);
+    expect(data[0].sections[0].complete).toBe(true);
   });
 
   it("completes with an empty pool (nothing was ever offered)", async () => {
