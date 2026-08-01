@@ -11,3 +11,6 @@ Thumbs.db
 
 # Local governance / architecture docs — not part of the shipped module.
 governance/
+
+# Local end-to-end harness (drives a real Foundry install) — machine-specific, not tracked.
+test-e2e/
