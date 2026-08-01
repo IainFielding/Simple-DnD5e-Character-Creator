@@ -236,13 +236,16 @@ function magicInitiateGrant(featDoc, originDoc, sourceKey, featUuid) {
     // Advancement-carrying (system) feat — read the shape from its own ItemChoices.
     const classList = new Set(), abilityKeys = new Set();
     let cantripCount = 0, spellCount = 0, spellLevel = 1;
+    // The advancement's own spell configuration, kept per slot type so the assembler can hand the
+    // created spell to the system's `applySpellChanges` rather than re-deriving the casting setup.
+    let cantripSpellConfig = null, spellSpellConfig = null;
     for ( const adv of spellAdvs ) {
       const cfg = adv.configuration;
       const choiceLevel = Object.keys(cfg.choices ?? {}).map(Number).filter(l => l <= 1).sort((a, b) => a - b)[0] ?? 0;
       const count = Number(cfg.choices?.[choiceLevel]?.count ?? cfg.choices?.[choiceLevel] ?? 0);
       const restrictLevel = Number(cfg.restriction?.level ?? 0);
-      if ( restrictLevel === 0 ) cantripCount = count;
-      else { spellCount = count; spellLevel = restrictLevel; }
+      if ( restrictLevel === 0 ) { cantripCount = count; cantripSpellConfig = cfg.spell ?? null; }
+      else { spellCount = count; spellLevel = restrictLevel; spellSpellConfig = cfg.spell ?? null; }
       for ( const c of Array.from(cfg.restriction?.list ?? []) ) classList.add(String(c).replace(/^class:/, ""));
       for ( const a of Array.from(cfg.spell?.ability ?? []) ) abilityKeys.add(a);
     }
@@ -258,7 +261,8 @@ function magicInitiateGrant(featDoc, originDoc, sourceKey, featUuid) {
       ...base, mode: "advancement",
       classList: finalList,
       abilityKeys: locked ? [locked] : allowed,
-      cantripCount, spellCount, spellLevel
+      cantripCount, spellCount, spellLevel,
+      cantripSpellConfig, spellSpellConfig
     };
   }
 
