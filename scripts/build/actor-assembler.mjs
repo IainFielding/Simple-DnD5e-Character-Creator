@@ -46,6 +46,13 @@ export async function assembleActor(state, source, equipment) {
     const doc = docs[key];
     if ( !doc ) { log(`origin item not found: ${key}`); return; }
     const data = doc.toObject();
+    // Give the staged item its own id. `toObject()` hands back the compendium document's `_id`,
+    // so without this every creator-built character carried the *pack's* id for its class,
+    // species and background — colliding across characters and leaking into the
+    // `flags.dnd5e.advancementOrigin` of everything those items grant
+    // ("phbbgSage0000000.<advId>" instead of an actor-local id). The system does the same thing
+    // for a dropped item (`AdvancementManager.forNewItem` assigns a fresh id before staging).
+    data._id = foundry.utils.randomID();
     if ( data._stats ) data._stats.compendiumSource = doc.uuid;
     mutate?.(data);
     items.push(data);
