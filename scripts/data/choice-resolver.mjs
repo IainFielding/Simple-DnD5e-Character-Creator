@@ -92,12 +92,20 @@ export async function resolveChoices(state, source) {
     ? { ability: classAbility, className: source.card(classDef.uuid)?.name ?? classDef.doc.name }
     : null;
 
+  // Everything computed across the whole build rather than per source. Expertise belongs here for
+  // the same reason the two above do: the rules scope it to the character, not to the class that
+  // offers it, so a skill from the species or background is a legitimate pick.
+  const shared = {
+    crossTaken, spellAbilityHint, ownedIds,
+    expertiseSkillPool: proficientSkillKeys(defs)
+  };
+
   const sources = [];
   for ( const d of defs ) {
     if ( !d.doc ) continue;
     let requirements = [];
     try {
-      requirements = await prepareRequirements(d, crossTaken, spellAbilityHint, ownedIds);
+      requirements = await prepareRequirements(d, shared);
     } catch ( err ) {
       log(`failed to resolve choices for ${d.key}`, err);
     }
@@ -262,15 +270,15 @@ function collectTakenTraitKeys(defs) {
 /**
  * Parse one origin item's advancements (and its granted features') into requirements. Takes the
  * origin def prepared by {@link resolveChoices}, which already carries the source's pick bucket and
- * its walked owner list.
+ * its walked owner list, plus the values {@link resolveChoices} computes across the whole build.
  * @param {{key: string, sel: object, owners: {item: Item, ownerUuid: string|null}[]}} def
+ * @param {{crossTaken: object, spellAbilityHint: object|null, ownedIds: Set<string>,
+ *          expertiseSkillPool: object[]}} shared
  */
-async function prepareRequirements(def, crossTaken, spellAbilityHint, ownedIds) {
+async function prepareRequirements(def, shared) {
   const { key: source, sel, owners } = def;
+  const { crossTaken, spellAbilityHint, ownedIds, expertiseSkillPool } = shared;
   const reqs = [];
-
-  // Skills this source grants — the only valid options for an Expertise choice.
-  const expertiseSkillPool = proficientSkillKeys(owners, sel);
 
   for ( const { item: owner, ownerUuid } of owners ) {
     for ( const adv of advancementArray(owner) ) {
@@ -286,20 +294,39 @@ async function prepareRequirements(def, crossTaken, spellAbilityHint, ownedIds) 
   return reqs;
 }
 
-/** The skill keys a source grants (fixed + current picks) — eligible Expertise options. */
-function proficientSkillKeys(owners, sel) {
+/**
+ * Every skill the build makes the character proficient in — the eligible Expertise options.
+ *
+ * Expertise is scoped to the *character*, not to the source that offers it: the Rogue's advancement
+ * pools `skills:*` in `mode: "expertise"`, and dnd5e intersects that with the skills the actor
+ * actually holds. So a Rogue with a Sage background may take Expertise in Arcana, which the
+ * background granted. Reading only the offering source's own advancements (as this did) silently
+ * dropped every skill from the species and background, and the character came out with plain
+ * proficiency where the rules — and a natively-built character — give expertise.
+ *
+ * Walks all sources for the same reason {@link collectTakenTraitKeys} and
+ * {@link collectOwnedIdentifiers} do, and is computed once beside them.
+ *
+ * Expertise-mode advancements are skipped: their picks upgrade a proficiency rather than granting
+ * one, so they are not themselves candidates.
+ * @param {{sel?: object, owners?: {item: Item}[]}[]} defs
+ */
+function proficientSkillKeys(defs) {
   const isSkill = k => typeof k === "string" && k.startsWith("skills:") && k !== "skills:*";
   const keys = new Set();
-  for ( const { item: owner } of owners ) {
-    for ( const adv of advancementArray(owner) ) {
-      if ( adv.type !== "Trait" || (adv.level ?? 0) > 1 ) continue;
-      if ( adv.classRestriction === "secondary" || adv.configuration?.mode === "expertise" ) continue;
-      for ( const g of adv.configuration?.grants ?? [] ) if ( isSkill(g) ) keys.add(g);
-      const choices = Array.from(adv.configuration?.choices ?? []);
-      for ( let ci = 0; ci < choices.length; ci++ ) {
-        const pool = Array.from(choices[ci].pool ?? []);
-        if ( !pool.some(k => typeof k === "string" && k.startsWith("skills:")) ) continue;
-        for ( const k of sel[`${adv._id}#${ci}`] ?? [] ) if ( isSkill(k) ) keys.add(k);
+  for ( const d of defs ) {
+    const sel = d.sel ?? {};
+    for ( const { item: owner } of d.owners ?? [] ) {
+      for ( const adv of advancementArray(owner) ) {
+        if ( adv.type !== "Trait" || (adv.level ?? 0) > 1 ) continue;
+        if ( adv.classRestriction === "secondary" || adv.configuration?.mode === "expertise" ) continue;
+        for ( const g of adv.configuration?.grants ?? [] ) if ( isSkill(g) ) keys.add(g);
+        const choices = Array.from(adv.configuration?.choices ?? []);
+        for ( let ci = 0; ci < choices.length; ci++ ) {
+          const pool = Array.from(choices[ci].pool ?? []);
+          if ( !pool.some(k => typeof k === "string" && k.startsWith("skills:")) ) continue;
+          for ( const k of sel[`${adv._id}#${ci}`] ?? [] ) if ( isSkill(k) ) keys.add(k);
+        }
       }
     }
   }
