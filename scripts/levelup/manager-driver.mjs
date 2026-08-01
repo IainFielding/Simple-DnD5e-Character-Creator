@@ -883,9 +883,31 @@ export class LevelUpDriver {
 
     const uuid = await browser.selectOne({ filters, tab: "feats" }).catch(() => null);
     if ( !uuid ) return false;
+    return this.applyAsiFeat(record, uuid);
+  }
+
+  /**
+   * Take a specific feat for an ASI decision: grant it and fold in the feat's *own* advancements —
+   * so a half-feat's ability bonus actually applies, granted features and proficiencies land, and
+   * any sub-choice surfaces as a further decision.
+   *
+   * Split out from {@link chooseAsiFeat} so the decision can also be answered without a UI, which
+   * is what {@link autoResolve} needs to honour a `{ feat }` answer — the interactive path is just
+   * this preceded by the compendium browser.
+   * @param {object} record        One of {@link asiSteps}.
+   * @param {string} uuid          Source UUID of the feat to take.
+   * @param {object} [options]
+   * @param {boolean} [options.showMessage=true]   Warn the player when prerequisites fail. Off for
+   *   a headless resolve, where there is no one at the keyboard to read it.
+   * @returns {Promise<boolean>}   Whether the feat was taken.
+   */
+  async applyAsiFeat(record, uuid, { showMessage = true } = {}) {
     const item = await fromUuid(uuid).catch(() => null);
-    if ( !item ) return false;
-    if ( item.system.validatePrerequisites?.(this.clone, { showMessage: true }) !== true ) return false;
+    if ( !item ) { log("ASI feat not found", uuid); return false; }
+    if ( item.system.validatePrerequisites?.(this.clone, { showMessage }) !== true ) {
+      log("ASI feat rejected by its own prerequisites", uuid);
+      return false;
+    }
 
     // Drop any previous feat's synthesised features, then the ASI value itself, before re-granting.
     if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
@@ -1180,6 +1202,13 @@ export class LevelUpDriver {
    * Types with no creation-time decision (`subclass` — subclasses come later, still interactive) or
    * that the provider defers (spell-type `ItemChoice`, owned by the feat-spells step and applied
    * after commit) are marked resolved and skipped.
+   *
+   * The provider answers one decision per method, each returning null to leave it alone:
+   * `hp(rec)` → `"avg" | "max" | number`; `size(rec)` → a size key; `grantAbility(rec)` → an
+   * ability key; `subclass(rec)` → a subclass uuid; `traitKeys(rec)` → the complete key set
+   * (grants ∪ picks); `defer(rec)`/`choiceUuids(rec)` for feature choices; and `asi(rec)` → either
+   * a per-ability allocation (`{int: 2}`) or `{ feat: uuid }` to take a feat instead — the same
+   * two modes the interactive ASI screen offers.
    * @param {import("../build/creation-advancement.mjs").CreationChoiceProvider} provider
    */
   async autoResolve(provider) {
@@ -1201,7 +1230,15 @@ export class LevelUpDriver {
       await drain(this.sizeSteps,     rec => { const k = provider.size(rec); return k ? this.applySize(rec, k) : null; });
       await drain(this.grantSteps,    rec => { const a = provider.grantAbility(rec); return a ? this.applyGrantAbility(rec, a) : null; });
       await drain(this.subclassSteps, rec => { const u = provider.subclass(rec); return u ? this.selectSubclass(rec, u) : null; });
-      await drain(this.asiSteps,      rec => { const a = provider.asi(rec); return a ? this.setAsi(rec, a) : null; });
+      // An ASI decision is answered either with a per-ability allocation or with a feat to take
+      // in its place — the two modes the interactive screen offers. A `{ feat }` answer routes to
+      // the same grant-and-synthesise path the UI uses, minus the compendium browser.
+      await drain(this.asiSteps,      rec => {
+        const a = provider.asi(rec);
+        if ( !a ) return null;
+        if ( typeof a.feat === "string" ) return this.applyAsiFeat(rec, a.feat, { showMessage: false });
+        return this.setAsi(rec, a);
+      });
       await drain(this.traitSteps,    rec => { const keys = provider.traitKeys(rec); return keys.length ? this.applyTraitKeys(rec, keys) : null; });
       await drain(this.choiceSteps,   async rec => {
         if ( provider.defer(rec) ) return;
