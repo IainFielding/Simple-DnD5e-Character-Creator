@@ -76,6 +76,17 @@ export async function assembleActor(state, source, equipment) {
     await driver.autoResolve(new CreationChoiceProvider(resolved, state));
     await driver.commit();
     await actor.setFlag(MODULE_ID, "created", true);
+
+    // Start at full health. dnd5e's HitPoints advancement writes *current* HP by adding the hit
+    // die plus the Constitution modifier as it stands at the moment it applies — and in this walk
+    // that moment is during prepare(), before the background's ability increase has been
+    // allocated (the ASI is only surfaced there and assigned later, in autoResolve). A background
+    // that raises Constitution therefore left the character starting below its own maximum: max is
+    // derived and self-corrects, but the stored current value does not. Re-applying the hit-point
+    // decisions cannot fix it — reverse and apply both recompute from the *new* modifier, so the
+    // round trip is a no-op — and a freshly created character is at full health by definition.
+    const hp = actor.system.attributes?.hp;
+    if ( hp?.max ) await actor.update({ "system.attributes.hp.value": hp.max }, { render: false });
   }
 
   // Add the spells chosen on the Spells step, as prepared class spells.
