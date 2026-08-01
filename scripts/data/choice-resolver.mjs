@@ -165,6 +165,12 @@ export function choicesComplete(resolved) {
  * the Human "choose a feat" option, where the chosen feat (Crafter) carries its own tool
  * choice. Recurses through both, so a chosen feat's choices surface and feed the same dedupe
  * and apply paths as granted ones. `seen` guards against cycles; depth caps runaway nesting.
+ *
+ * A feature carrying no advancements of its own is still recorded — it just isn't recursed into.
+ * Those leaves matter to {@link collectOwnedIdentifiers}: every PHB fighting style lists the
+ * advancement-less "Fighting Style" *feature* as its item prerequisite, so dropping leaves left
+ * that identifier out of the owned set, gated out all four styles, and made the whole
+ * fighting-style choice vanish from a level-1 Fighter.
  * @param {Item} item
  * @param {object} sel  The source's recorded picks (`advChoices[source]`), to read ItemChoices.
  */
@@ -183,9 +189,12 @@ async function levelOneOwners(item, sel = {}, seen = new Set(), ownerUuid = null
       if ( !uuid || seen.has(uuid) ) continue;
       seen.add(uuid);
       const doc = await fromUuid(uuid).catch(() => null);
-      if ( doc && advancementArray(doc).length ) {
-        owners.push(...await levelOneOwners(doc, sel, seen, uuid, depth + 1));
-      }
+      if ( !doc ) continue;
+      // Recurse into a feature that brings advancements of its own; record one that doesn't as a
+      // leaf. A leaf contributes no requirements (there is nothing to walk) but does contribute
+      // its identifier — see the note above.
+      if ( advancementArray(doc).length ) owners.push(...await levelOneOwners(doc, sel, seen, uuid, depth + 1));
+      else owners.push({ item: doc, ownerUuid: uuid });
     }
   }
   return owners;
@@ -201,13 +210,20 @@ function itemChoicePicks(adv, sel) {
  * themselves plus their granted/chosen features (the pre-walked `def.owners`). These are the slugs
  * a feat's `system.prerequisites.items` is matched against, so an option requiring a feature the
  * build hasn't taken (a Warlock invocation needing Pact of the Blade) can be gated out.
+ *
+ * Completeness matters more here than anywhere else the owner list is used: a *missing* identifier
+ * doesn't merely hide one option, it can empty a whole pool and make the choice disappear (see the
+ * fighting-style note on {@link levelOneOwners}).
  * @param {{owners?: {item: Item}[]}[]} defs  Origin defs carrying their walked owner list.
  */
 function collectOwnedIdentifiers(defs) {
   const ids = new Set();
   for ( const d of defs ) {
     for ( const { item } of d.owners ?? [] ) {
-      if ( item?.identifier ) ids.add(item.identifier);
+      // `Item5e#identifier` falls back to a slug of the name, but a plain object read straight
+      // from a pack index has no such getter — take the stored identifier in that case.
+      const id = item?.identifier ?? item?.system?.identifier;
+      if ( id ) ids.add(id);
     }
   }
   return ids;
