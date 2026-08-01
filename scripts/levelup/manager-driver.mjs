@@ -330,8 +330,18 @@ export class LevelUpDriver {
       case "Size": {
         // A single fixed size applies automatically; a size *choice* (Small or Medium) is surfaced.
         // Only the headless creation path resolves it — the level-up claim gate rejects multi-size.
-        const auto = await flow.getAutomaticApplicationValue();
-        if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
+        //
+        // The size count is tested here rather than taken from `getAutomaticApplicationValue()`,
+        // because the system's SizeAdvancement compares the `sizes` *Set* against a number:
+        //   `if ( this.configuration.sizes > 1 ) return false;`
+        // That is never true, so it reports the first size as automatic even for a real choice —
+        // which silently forced every Small-or-Medium species (Human, Halfling, Gnome…) to Small
+        // and swallowed the player's pick. Testing `.size` keeps this in agreement with
+        // {@link isStepSupported}, which already gates on the count correctly.
+        if ( (adv.configuration?.sizes?.size ?? 0) <= 1 ) {
+          const auto = await flow.getAutomaticApplicationValue();
+          if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
+        }
         this.sizeSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
