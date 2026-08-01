@@ -265,43 +265,51 @@ export class LevelUpDriver {
         // headless creation) must not offer a roll there. A multiclass's first level is a real
         // decision, hence the original-class test rather than a bare `level === 1`.
         if ( (flow.level === 1) && adv.item?.isOriginalClass ) return adv.apply(flow.level, { 1: "max" });
-        // Otherwise always a player decision, even on a multi-level jump — the native flow would
-        // silently inherit a prior "avg" choice, but we want every gained level's hit points
-        // chosen here.
+        // Otherwise always a player decision, even on a multi-level jump. This is the one
+        // deliberate exception to {@link #seed}: the native pre-fill silently inherits a prior
+        // level's "avg" across a multi-level jump, and we want every gained level chosen here.
         return this.#recordHitPoints(flow);
       case "ItemChoice":
-        // Record the decision but leave it unselected; the wizard applies the picks later.
+        // Record the decision but leave it unselected; the wizard applies the picks later. The seed
+        // still runs — for a spell-granting choice it is what settles the casting ability the
+        // granted spells are configured with before anything is picked.
+        await this.#seed(flow);
         this.choiceSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       case "AbilityScoreImprovement": {
-        // A class ASI (points to spend) is a player decision; a feat's *fixed* increase (a
-        // half-feat's set +1) has no choice and must just apply, or the bonus is silently lost.
+        // The seed applies the configuration's `fixed` part (a half-feat's set +1) and settles
+        // `value.type`, exactly as the native screen arrives pre-filled.
+        await this.#seed(flow);
         const cfg = adv.configuration ?? {};
-        const fixed = cfg.fixed ?? {};
-        const hasFixed = Object.values(fixed).some(v => v);
-        const data = hasFixed ? { type: "asi", assignments: { ...fixed } } : { type: "asi" };
-        if ( (cfg.points ?? 0) > 0 ) {
-          // PHB-style single-stat half-feats (Actor's "+1 Cha") are data-modelled as 1 point with
-          // every other ability locked, not as a fixed bonus. When only one ability can take the
-          // whole budget the allocation is forced — apply it outright instead of surfacing a
-          // "choice" with nothing to choose.
-          const open = Object.keys(CONFIG.DND5E.abilities)
-            .filter(k => adv.canImprove(k) && !cfg.locked?.has?.(k));
-          if ( (open.length === 1) && ((cfg.cap ?? Infinity) >= cfg.points) ) {
-            data.assignments = { ...(data.assignments ?? {}) };
-            data.assignments[open[0]] = (data.assignments[open[0]] ?? 0) + cfg.points;
-          } else {
-            // Real points to distribute — surface the decision (its fixed part is pre-applied).
-            this.asiSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
-          }
+        if ( (cfg.points ?? 0) <= 0 ) return;
+
+        // PHB-style single-stat half-feats (Actor's "+1 Cha") are data-modelled as 1 point with
+        // every other ability locked, not as a fixed bonus. When only one ability can take the
+        // whole budget the allocation is forced — apply it outright instead of surfacing a
+        // "choice" with nothing to choose.
+        const open = Object.keys(CONFIG.DND5E.abilities)
+          .filter(k => adv.canImprove(k) && !cfg.locked?.has?.(k));
+        if ( (open.length === 1) && ((cfg.cap ?? Infinity) >= cfg.points) ) {
+          return adv.apply(flow.level, { type: "asi", assignments: { [open[0]]: cfg.points } });
         }
-        return adv.apply(flow.level, data);
+
+        // Real points to distribute. Where the class also allows a feat the seed leaves
+        // `value.type` unset (native renders both options and commits to neither); our screen opens
+        // on the points view, so settle it — choosing a feat instead reverses this and re-applies.
+        if ( !adv.value.type ) await adv.apply(flow.level, { type: "asi" });
+        this.asiSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        return;
       }
       case "Trait": {
         // A real choice (Weapon Mastery, a "choose a language", …) is surfaced for the player;
         // a pure grant (one forced option) applies straight away via its automatic value.
         const auto = await flow.getAutomaticApplicationValue();
         if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
+        // Seed the rest: `{ initial: true }` lands the advancement's automatic `grants` plus any
+        // pool that has collapsed to a single remaining option, and leaves the genuine picks open.
+        // Without it a mixed grant-and-choice Trait (Dragon's Tongue, which *grants* Draconic and
+        // *chooses* a second language) dropped its grants entirely on this path.
+        await this.#seed(flow);
         this.traitSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
@@ -320,8 +328,17 @@ export class LevelUpDriver {
         const auto = await flow.getAutomaticApplicationValue();
         if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
         if ( this.#isAbilityGrant(adv) ) {
+          // The seed grants the non-optional items and defaults the casting ability to the first the
+          // configuration allows, which is how the native screen arrives. Then re-point it at an
+          // ability a sibling grant on the same item already uses, so a species lineage that picks
+          // one ability at level 1 doesn't default its later spells to a different one.
+          await this.#seed(flow);
+          const ability = this.#defaultGrantAbility(adv);
+          if ( ability && (ability !== adv.value?.ability) ) {
+            await adv.apply(flow.level, { ability, selected: this.#grantUuids(adv) });
+          }
           this.grantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
-          return adv.apply(flow.level, { ability: this.#defaultGrantAbility(adv), selected: this.#grantUuids(adv) });
+          return;
         }
         // An optional grant we don't re-skin; canDrive() would have rejected the level-up.
         log("skipping unsupported optional ItemGrant", adv?.id);
@@ -342,6 +359,9 @@ export class LevelUpDriver {
           const auto = await flow.getAutomaticApplicationValue();
           if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
         }
+        // Seed the first configured size so the clone is never sizeless while the choice is open —
+        // the same fallback the native pre-fill leaves in place until the player picks.
+        await this.#seed(flow);
         this.sizeSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
@@ -353,6 +373,25 @@ export class LevelUpDriver {
         log("skipping unsupported renderable advancement", adv?.type);
       }
     }
+  }
+
+  /**
+   * Pre-fill a decision the way the native manager does before it renders the flow behind it.
+   *
+   * `AdvancementManager#render` applies `advancement.apply(level, {}, { initial: true })` to every
+   * interactive step before the player ever sees it. That single call is how a Trait's automatic
+   * grants, an ItemGrant's non-optional items, an ItemChoice's default casting ability and an ASI's
+   * fixed increase all land whether or not the screen is touched. We used to hand-roll a seed per
+   * type and had none at all for Trait, so a choice-bearing Trait's grants were silently dropped and
+   * the *same* decision left untouched produced different characters through the two paths.
+   * Deferring to the system's own `initial` keeps every type in step by construction.
+   *
+   * Hit points are the one deliberate exception — see the `HitPoints` case in {@link #ingestFlow}.
+   * @param {AdvancementFlow} flow
+   * @returns {Promise<void>}
+   */
+  #seed(flow) {
+    return flow.advancement.apply(flow.level, {}, { initial: true });
   }
 
   /** Seed a hit-point decision with its average and apply it so the clone stays valid. */
@@ -602,6 +641,12 @@ export class LevelUpDriver {
     for ( const c of adv.configuration.choices ?? [] ) for ( const k of c.pool ) poolKeys.add(k);
     const expanded = (await Trait.mixedChoices(poolKeys)).asSet();
 
+    // The advancement's automatic grants, which the ingest seed has already applied. They sit in
+    // `value.chosen` alongside the player's own picks and are indistinguishable there, so they are
+    // identified from the configuration and locked below — the native flow never offers a grant for
+    // removal, and letting one be un-toggled here would hand back a slot the rules never opened.
+    const granted = (await Trait.mixedChoices(new Set(adv.configuration.grants ?? []))).asSet();
+
     // `selected` = keys already taken on the clone (this advancement's picks plus any from earlier
     // levels); `available` = eligible but not yet taken. Scope both to this advancement's pool —
     // except this advancement's own picks, which always stay visible (and toggleable): a
@@ -630,8 +675,10 @@ export class LevelUpDriver {
     // picks (Weapon Mastery) we prefer the Player's Handbook item art when that pack is active,
     // matching the creator's grids, and fall back to the system's generic icon otherwise.
     const options = await Promise.all([...keys].map(async key => {
-      const isChosen = chosen.has(key);
-      const owned = !isChosen && selected.has(key);   // taken earlier — shown selected but locked
+      const isGrant = granted.has(key) && chosen.has(key);
+      const isChosen = chosen.has(key) && !isGrant;
+      // Shown selected but locked: granted outright by this advancement, or taken at an earlier one.
+      const owned = isGrant || (!isChosen && selected.has(key));
       const parts = key.split(":");
       const groupKey = parts.length > 2 ? parts.slice(0, -1).join(":") : parts[0];
       return {
@@ -659,6 +706,9 @@ export class LevelUpDriver {
   async toggleTrait(record, key) {
     const adv = record.advancement;
     const { chosen, full } = this.traitState(record);
+    // An automatic grant sits in `chosen` too (the ingest seed applies it), but it is not the
+    // player's to give back — removing it would free a slot the rules never opened.
+    if ( adv.configuration?.grants?.has?.(key) ) return;
     if ( chosen.has(key) ) await adv.reverse(record.level, { key });
     else if ( !full ) await adv.apply(record.level, { key });
     this.clone.reset();

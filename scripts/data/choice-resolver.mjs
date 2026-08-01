@@ -710,9 +710,16 @@ async function expandTraitKeys(pool = []) {
  * Expand a tool-only Trait pool into concrete pick options from the compendium, handling both
  * whole-category wildcards (e.g. "tool:art:*" -> every Artisan's Tool) and pools of specific
  * named tools (e.g. the Crafter feat's eight "tool:art:carpenter"… keys -> just those eight).
- * Returns the options as `{key:"tool:<id>", label, img, uuid}` — dnd5e's Trait apply pops the
- * last `:` segment to reach `system.tools.<id>`, so the bare id key grants the proficiency
- * correctly. Returns null when the pool isn't a tool pool, so the generic expander handles it.
+ * Returns null when the pool isn't a tool pool, so the generic expander handles it.
+ *
+ * Keys keep their category — `tool:art:alchemist`, not `tool:alchemist`. The bare id also *applies*
+ * correctly (dnd5e's Trait apply pops the last `:` segment to reach `system.tools.<id>`), which is
+ * why this used to flatten them, but applying is not the only thing the system does with a recorded
+ * key. `Trait.actorValues` reports the character's existing tools in the prefixed form, and
+ * `unfulfilledChoices` matches `value.chosen` against pools expanded by `Trait.mixedChoices`, which
+ * is prefixed too — so a flattened key matches nothing, the fulfilled choice never gets spliced off
+ * `available`, and the pick shows as neither owned nor made. A tool chosen at creation then
+ * reappeared as pickable on a later level-up's tool screen.
  * @param {string[]} pool
  * @returns {Promise<{key:string,label:string,img?:string,uuid?:string}[]|null>}
  */
@@ -729,15 +736,17 @@ async function expandToolPool(pool) {
     if ( category && (wildcard || parts.length <= 2) ) {
       // Whole-category pick ("tool:art:*" or bare "tool:art") — every tool in the category.
       for ( const tool of await toolChoices(category) ) {
-        if ( tool.baseItem ) push({ key: `tool:${tool.baseItem}`, label: tool.name, img: tool.img, uuid: tool.uuid });
+        if ( tool.baseItem ) {
+          push({ key: `tool:${category}:${tool.baseItem}`, label: tool.name, img: tool.img, uuid: tool.uuid });
+        }
       }
     } else if ( category ) {
-      // A specific tool named within its category ("tool:art:carpenter") — just that one,
-      // keyed by its base item so it matches the category-expansion form and applies cleanly.
+      // A specific tool named within its category ("tool:art:carpenter") — just that one, keyed
+      // exactly as the pool named it so it matches the category expansion above.
       const id = parts[parts.length - 1];
       const match = (await toolChoices(category)).find(to => to.baseItem === id);
-      if ( match ) push({ key: `tool:${match.baseItem}`, label: match.name, img: match.img, uuid: match.uuid });
-      else push({ key: `tool:${id}`, label: traitKeyLabel(`tool:${id}`) });
+      if ( match ) push({ key: entry, label: match.name, img: match.img, uuid: match.uuid });
+      else push({ key: entry, label: traitKeyLabel(entry) });
     } else if ( wildcard ) {
       return null;                          // uncategorisable wildcard — defer to the generic expander
     } else {

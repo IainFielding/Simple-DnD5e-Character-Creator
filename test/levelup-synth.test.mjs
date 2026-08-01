@@ -280,18 +280,27 @@ describe("toggleChoice — picked item with its own advancements", () => {
  * (Actor's "+1 Cha") as 1 point with every other ability locked — not as a fixed bonus — so the
  * ingest must recognise a forced allocation and apply it rather than surfacing an empty "choice".
  */
-function asiFlow(item, { points = 0, cap, locked = [], fixed = {} } = {}) {
+function asiFlow(item, { points = 0, cap, locked = [], fixed = {}, allowFeat = false } = {}) {
   const advancement = {
     type: "AbilityScoreImprovement",
     item,
+    allowFeat,
     configuration: { points, cap, locked: new Set(locked), fixed },
     value: {},
     applied: [],
     canImprove: () => true,
-    async apply(lvl, data) {
-      this.applied.push({ lvl, data });
-      this.value.type = data.type;
-      if ( data.assignments ) this.value.assignments = { ...data.assignments };
+    // Mirrors AbilityScoreImprovementAdvancement#apply, including the `initial` branch the driver's
+    // ingest seed relies on: the configuration's fixed part lands, and `value.type` settles to
+    // "asi" unless the advancement also offers a feat (a feat's own increase never does).
+    async apply(lvl, data, options = {}) {
+      this.applied.push({ lvl, data, ...(options.initial ? { initial: true } : {}) });
+      let type = data.type ?? this.value.type;
+      if ( options.initial ) {
+        if ( Object.values(this.configuration.fixed).some(v => v) ) data = { ...data, assignments: { ...fixed } };
+        type = (data.assignments || !this.allowFeat) ? "asi" : null;
+      }
+      this.value.type = type;
+      if ( data.assignments ) this.value.assignments = { ...(this.value.assignments ?? {}), ...data.assignments };
     },
     async reverse() {}
   };
@@ -344,8 +353,10 @@ describe("half-feat ability score improvement ingest", () => {
     const w = makeHalfFeatWorld({ points: 1, cap: 1, locked: ["str", "dex", "con", "int", "wis"] });
     await w.driver.toggleChoice(w.record, w.uuid);
 
-    expect(w.asi.advancement.applied).toHaveLength(1);
-    expect(w.asi.advancement.applied[0].data).toEqual({ type: "asi", assignments: { cha: 1 } });
+    // Two applies: the ingest seed the native manager also performs, then the forced allocation.
+    expect(w.asi.advancement.applied).toHaveLength(2);
+    expect(w.asi.advancement.applied[0]).toMatchObject({ data: {}, initial: true });
+    expect(w.asi.advancement.applied[1].data).toEqual({ type: "asi", assignments: { cha: 1 } });
     // Forced allocation: nothing to decide, so no ASI decision surfaces.
     expect(w.driver.asiSteps).toHaveLength(0);
   });
@@ -355,7 +366,10 @@ describe("half-feat ability score improvement ingest", () => {
     await w.driver.toggleChoice(w.record, w.uuid);
 
     expect(w.driver.asiSteps).toHaveLength(1);
-    expect(w.asi.advancement.applied[0].data).toEqual({ type: "asi" });
+    // The seed alone settles `value.type`, so nothing is applied on top of it.
+    expect(w.asi.advancement.applied).toHaveLength(1);
+    expect(w.asi.advancement.applied[0]).toMatchObject({ data: {}, initial: true });
+    expect(w.asi.advancement.value.type).toBe("asi");
   });
 
   it("featAbilityRows shows the applied bonus and locks every other ability", async () => {

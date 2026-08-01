@@ -1,38 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeTraitGrants, CreationChoiceProvider } from "../scripts/build/creation-advancement.mjs";
-import { sage } from "./fixtures/dnd5e-5.3.3.mjs";
-
-/**
- * `mergeTraitGrants` folds an advancement's automatic `configuration.grants` back together with the
- * player's recorded picks, de-duplicated — the driver surfaces a choice-bearing Trait without
- * applying its grants, so the headless path must fold them back in or they're lost.
- */
-describe("mergeTraitGrants", () => {
-  const languageAdv = sage.system.advancement.find(a => a._id === "pLGiyOjTP7nwuwTl");
-
-  it("unions automatic grants with the player's picks", () => {
-    const chosen = mergeTraitGrants(languageAdv, ["languages:standard:elvish", "languages:standard:dwarvish"]);
-    expect(chosen).toEqual([
-      "languages:standard:common",       // the automatic grant
-      "languages:standard:elvish",
-      "languages:standard:dwarvish"
-    ]);
-  });
-
-  it("de-duplicates a pick that repeats an automatic grant", () => {
-    const chosen = mergeTraitGrants(languageAdv, ["languages:standard:common", "languages:standard:orc"]);
-    expect(chosen).toEqual(["languages:standard:common", "languages:standard:orc"]);
-  });
-
-  it("returns just the grants when there are no picks", () => {
-    expect(mergeTraitGrants(languageAdv)).toEqual(["languages:standard:common"]);
-  });
-
-  it("returns just the picks for a grant-less advancement", () => {
-    expect(mergeTraitGrants({ configuration: { grants: [] } }, ["skills:arc"])).toEqual(["skills:arc"]);
-    expect(mergeTraitGrants(undefined, ["skills:his"])).toEqual(["skills:his"]);
-  });
-});
+import { CreationChoiceProvider } from "../scripts/build/creation-advancement.mjs";
 
 /**
  * `CreationChoiceProvider` answers the driver's decisions from the creator's recorded state. Each
@@ -75,9 +42,11 @@ describe("CreationChoiceProvider", () => {
     expect(provider.hp()).toBe("max");
   });
 
-  it("merges trait picks across every choice group with the advancement's grants", () => {
+  // The advancement's own `configuration.grants` are deliberately absent: the driver seeds them at
+  // ingest the way the native manager does, so the provider only answers the player's picks.
+  it("collects trait picks across every choice group, without re-adding the grants", () => {
     const keys = provider.traitKeys(rec("T1", { grants: ["skills:per"] }));
-    expect(keys).toEqual(["skills:per", "skills:arc", "skills:his"]);
+    expect(keys).toEqual(["skills:arc", "skills:his"]);
   });
 
   it("normalises ItemChoice picks (string or {uuid}) to uuid strings", () => {

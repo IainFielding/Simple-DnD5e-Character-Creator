@@ -51,20 +51,6 @@ export function buildCreationManager(actor, items) {
   return manager;
 }
 
-/**
- * The full key set a Trait advancement must apply: its automatic `configuration.grants` unioned with
- * the player's recorded picks, de-duplicated. The choice-bearing Trait is surfaced without applying
- * its grants (the wizard owns the choice), so folding the grants back in here keeps the committed
- * value complete.
- * @param {Advancement} adv
- * @param {string[]} recordedKeys
- * @returns {string[]}
- */
-export function mergeTraitGrants(adv, recordedKeys = []) {
-  const grants = Array.from(adv?.configuration?.grants ?? []);
-  return [...new Set([...grants, ...recordedKeys])];
-}
-
 /** A recorded pick may be a bare uuid/key string or a `{uuid}` object; normalise to the string. */
 function pickValue(p) {
   return (typeof p === "string") ? p : p?.uuid ?? null;
@@ -147,11 +133,15 @@ export class CreationChoiceProvider {
     return this.#state.backgroundDeltas();
   }
 
-  /** The full trait key set to apply: recorded picks (across every choice group) ∪ automatic grants. */
+  /**
+   * The trait keys to apply: the player's recorded picks across every choice group of this
+   * advancement. The automatic `configuration.grants` are *not* folded in here — the driver seeds
+   * them at ingest exactly as the native manager does, so adding them again would be redundant.
+   */
   traitKeys(rec) {
     const keys = [];
     for ( const req of this.#reqs(rec.advancement.id, "Trait") ) keys.push(...this.#picks(req));
-    return mergeTraitGrants(rec.advancement, keys);
+    return keys;
   }
 
   /**

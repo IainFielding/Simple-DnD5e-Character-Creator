@@ -39,9 +39,13 @@ export const traitStep = {
   template: "levelup/trait",
 
   isCompleteAt(state, level) {
-    // `exhausted` is the escape hatch for a quota the pool can no longer fill ("pick 2 weapons"
-    // when the character already masters all but one): refreshed by sectionsAt each render — the
-    // shell builds the active screen before it reads these flags — it counts as settled.
+    // `exhausted` is the escape hatch for a quota the pool can no longer fill: refreshed by
+    // sectionsAt each render — the shell builds the active screen before it reads these flags — it
+    // counts as settled. Two things reach it. A pool with nothing left to pick ("choose 2 weapons"
+    // when the character already masters all but one); and a *grant* the character already
+    // satisfies, which the system never records in `value.chosen` (unfulfilledChoices excludes
+    // already-owned traits), so `current` can never reach the `max` that counts it. The native flow
+    // has the same hole and walks past it the same way.
     return atLevel(state.traitSteps, level).every(r => state.driver.traitState(r).full || r.exhausted);
   },
 
