@@ -92,7 +92,7 @@ function subclassAdvancementId(classDoc) {
  * @param {number} [options.level]    Level to carry each build to.
  * @returns {Promise<{scenarios: object[], skipped: object[]}>}
  */
-export async function sweepScenarios({ level = 20 } = {}) {
+export async function sweepScenarios({ level = 20, incremental = false } = {}) {
   const classes = await classesByIdentifier();
   const subclasses = await allSubclasses();
 
@@ -130,6 +130,9 @@ export async function sweepScenarios({ level = 20 } = {}) {
       id,
       name: `Sweep: ${cls.name} ${level} — ${sub.name} (${sub.pack})`,
       generate: true,
+      // One manager per level rather than one for the jump, snapshotted at each — see
+      // `harness.mjs#compareLevels`.
+      incremental,
       speciesUuid: SPECIES,
       backgroundUuid: BACKGROUND,
       classUuid: cls.uuid,

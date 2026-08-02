@@ -202,6 +202,7 @@ one just covers the content.
 ```bash
 node run.mjs --sweep                  # 92 subclasses at level 20 (hours)
 node run.mjs --sweep --level 6        # shallower
+node run.mjs --sweep --incremental    # one manager per level, compared after each
 node run.mjs --sweep --shard 1/20     # every 20th, for a smoke test
 node run.mjs --sweep --only artificer # substring match on the id, for chasing one finding
 node run.mjs --sweep --resume         # skip what is already recorded
@@ -214,6 +215,33 @@ own `classIdentifier`, and the Subclass advancement's id is read off the class d
 written down — an advancement id belongs to the content version that shipped it, so a hard-coded one
 goes stale the moment a module updates. That is also why the sweep covers third-party classes it has
 never seen.
+
+### One jump, or one level at a time
+
+By default a sweep raises the class from 1 to its target in a **single** manager — what the sheet's
+own level selector does. `--incremental` uses one manager per level instead, each starting from a
+committed actor rather than one long-lived clone.
+
+These are genuinely different walks, and each hides what the other exposes. The ordering that
+`deferredAsi` fixes — a level-20 capstone eating points a level-4 improvement is entitled to — can
+only go wrong in the jump, because in the increments level 4 is committed long before level 20
+exists. Conversely anything that has to *survive* a commit is only tested by the increments, because
+the jump does not commit until the end. And the increments are how a character is actually played.
+
+An incremental run snapshots after every level and compares each, so a failure reports **the level it
+starts at** rather than the level it was noticed at:
+
+```
+FAIL  Sweep: Artificer 6 — Battle Smith — diverges at level 3 (5 row(s)): source, derived
+```
+
+`report.levels.profile` carries the count per level (`L1=0 L2=0 L3=5 L4=5 …`), which distinguishes
+one difference persisting from several accumulating. Only the first diverging level's differences are
+kept — every later level repeats them plus whatever else has arrived, which is a great deal of output
+saying one thing. A level one side reached and the other did not is reported separately as
+`levels.missing`, since no field-by-field diff would explain that.
+
+Roughly twice the wall time of a jump run.
 
 **Node drives the loop**, one scenario per round trip, appending each report to
 `sweep-results.jsonl` as it lands. A run this long must not lose two hours of results to one stranded
@@ -666,6 +694,36 @@ the interactive shell has the same latent hazard — it applies picks as the pla
 the level-6 screen before the level-3 one would reproduce it. The screens are presented in level
 order, so it takes deliberate back-and-forth; a proper fix would re-evaluate expertise when an
 underlying proficiency changes.
+
+### Found by the incremental sweep, not yet fixed
+
+The first `--incremental` run — an eight-subclass spread — turned up two divergences that the
+jump-mode sweep reports as **passing**. That is the mode justifying itself: these are not subtle
+edge cases, they are on the path every real character takes.
+
+**Ranger Winter Walker gets two copies of Hunter's Mark.** Ours, and user-facing.
+
+```bash
+node run.mjs --sweep --incremental --level 5 --only ranger/winter-walker   # FAIL, 10 rows
+node run.mjs --sweep --level 5 --only ranger/winter-walker                 # PASS
+```
+
+Same target level, same answers; only the walk differs, and both sides level incrementally in that
+test — so the native build copes and ours does not. The creator's actor ends with the advancement's
+granted Hunter's Mark *and* a second copy carrying `flags.dnd5e.cachedFor` and a `dnd5espellchange`
+enchantment effect, with `prepared: 0` and no `advancementOrigin`.
+
+That second copy is dnd5e's **Cast-activity cached spell**: `ActivitiesTemplate`'s create hook makes
+a local copy of any spell a Cast activity references, guarded by `!a.cachedSpell` and fired from an
+un-awaited `createEmbeddedDocuments`. The Ranger's Favored Enemy has such an activity for Hunter's
+Mark, so the guard is a check-then-create that the advancement grant can lose. Levelling in one jump
+never exposes it because the grant is long since on the clone by the time the item is committed.
+
+Worth starting from *why the guard misses*, not from de-duplicating after the fact.
+
+**Artificer Alchemist loses Tasha's Bubbling Cauldron at level 17 — on the native side.** Creator has
+the spell, native does not, and it only happens incrementally. Same direction and probably the same
+family as the Battle Smith deviation below.
 
 ### Found by the sweep, not fixed — the native side is the one that is wrong
 

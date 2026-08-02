@@ -27,6 +27,17 @@ const { LevelUpDriver } = await import(`${MODULE}/levelup/manager-driver.mjs`);
 const { resolveFeatSpells } = await import(`${MODULE}/steps/feat-spells-step.mjs`);
 const { ScenarioChoiceProvider } = await import(`./provider.mjs${new URL(import.meta.url).search}`);
 
+/**
+ * Let the writes the system makes *off* a commit land before anything reads the actor.
+ *
+ * `SubclassData._onCreate` sets `attributes.spellcasting` for a subclass-derived caster (an Eldritch
+ * Knight, an Arcane Trickster) with a deliberately un-awaited `actor.update`, so the value arrives a
+ * tick after `commit()` resolves. The native adapter already waits for exactly this once its manager
+ * closes; without the same courtesy here the comparison is between a settled actor and an unsettled
+ * one, and the difference reads as a missing casting ability.
+ */
+const settle = () => new Promise(resolve => setTimeout(resolve, 300));
+
 /** The index is expensive to build and stateless between scenarios — build it once. */
 let sourceIndex = null;
 async function getSourceIndex() {
@@ -274,7 +285,9 @@ async function answerFeatSpells(state, source, scenario) {
  *   it) and the resulting `state.advChoices`. Reported by `run.mjs --debug`.
  * @returns {Promise<Actor5e>}
  */
-export async function buildCreator(scenario, { book, diagnostics, unofferable, consumed = new Set() } = {}) {
+export async function buildCreator(
+  scenario, { book, diagnostics, unofferable, onLevel, consumed = new Set() } = {}
+) {
   const source = await getSourceIndex();
   const actor = await Actor.implementation.create({
     name: scenario.name,
@@ -318,16 +331,12 @@ export async function buildCreator(scenario, { book, diagnostics, unofferable, c
   // driver, so the background ASI lands on top of them exactly as it does natively. Nothing may
   // touch `system.abilities` after this point or that increase would be overwritten.
   await assembleActor(state, source, null);
-  await levelUp(actor, scenario, book, consumed);
-  await multiclass(actor, scenario, book, consumed);
+  await settle();
+  await onLevel?.(1, actor);
 
-  // Let the writes the system makes *off* the commit land before anything reads the actor.
-  // `SubclassData._onCreate` sets `attributes.spellcasting` for a subclass-derived caster (an
-  // Eldritch Knight, an Arcane Trickster) with a deliberately un-awaited `actor.update`, so the
-  // value arrives a tick after `commit()` resolves. The native adapter already waits for exactly
-  // this after its manager closes; without the same courtesy here the comparison is between a
-  // settled actor and an unsettled one.
-  await new Promise(resolve => setTimeout(resolve, 300));
+  await levelUp(actor, scenario, book, consumed, onLevel);
+  await multiclass(actor, scenario, book, consumed);
+  await settle();
   return actor;
 }
 
@@ -424,17 +433,24 @@ async function offeredFor(driver, rec) {
  * @param {Set<string>} consumed   Shared with the creation pass; the provider records into it so
  *   the orphaned-answer check can see answers read by either leg.
  */
-async function levelUp(actor, scenario, book, consumed) {
+async function levelUp(actor, scenario, book, consumed, onLevel) {
   const target = scenario.targetLevel ?? 1;
   if ( target <= 1 ) return;
 
   const classItem = actor.items.find(i => i.type === "class");
   if ( !classItem ) throw new Error("cannot level up: the creator built no class");
-  const levels = target - (classItem.system?.levels ?? 1);
-  if ( levels < 1 ) return;
+  const from = classItem.system?.levels ?? 1;
+  if ( target <= from ) return;
 
-  const manager = dnd5e.applications.advancement.AdvancementManager
-    .forLevelChange(actor, classItem.id, levels);
-  manager._sogromLevelUp = true;
-  await resolveWith(manager, book, consumed);
+  // One manager for the whole jump, or one per level when the scenario asks for it — see the same
+  // branch in `native.mjs` for why the two are worth testing separately.
+  const stride = scenario.incremental ? 1 : (target - from);
+  for ( let level = from + stride; level <= target; level += stride ) {
+    const manager = dnd5e.applications.advancement.AdvancementManager
+      .forLevelChange(actor, classItem.id, stride);
+    manager._sogromLevelUp = true;
+    await resolveWith(manager, book, consumed);
+    await settle();
+    await onLevel?.(level, actor);
+  }
 }

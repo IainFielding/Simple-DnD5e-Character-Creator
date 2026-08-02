@@ -7,7 +7,7 @@
  * flows apply themselves from their *rendered form* (`advancement-manager.mjs` line 691:
  * `flow._updateObject(event, flow._getSubmitData())`). Short-circuiting that by calling
  * `advancement.apply()` ourselves would mean re-implementing the very walk we are trying to
- * verify â€” a bug in step ordering or mid-walk synthesis would then be invisible to the test.
+ * verify — a bug in step ordering or mid-walk synthesis would then be invisible to the test.
  *
  * So: render the manager for real, fill each step's actual form controls, and click Next. The
  * only per-advancement knowledge here is *which control holds which answer*, one small filler
@@ -15,7 +15,7 @@
  *
  * The module under test intercepts `dnd5e.preAdvancementManagerRender` and suppresses the native
  * UI for any level-up it can drive. `manager._sogromLevelUp` is the module's own re-entry guard
- * (see `levelup/intercept.mjs`), and setting it up front makes the hook stand down â€” so the
+ * (see `levelup/intercept.mjs`), and setting it up front makes the hook stand down — so the
  * reference build runs the native wizard even with the module active.
  */
 
@@ -52,8 +52,8 @@ async function flowElement(flow) {
 /**
  * Poll until a lookup yields something, then return it.
  *
- * The flows paint their frame before their *content* is ready â€” an ItemChoice's pool and a
- * Trait's option list are both resolved from compendia asynchronously â€” so a control that is
+ * The flows paint their frame before their *content* is ready — an ItemChoice's pool and a
+ * Trait's option list are both resolved from compendia asynchronously — so a control that is
  * merely late is indistinguishable from one that will never appear unless we wait for it.
  * @param {() => *} find      Returns the thing, or a falsy value while it is not there yet.
  * @param {() => string} describe   Builds the error message if it never appears.
@@ -89,7 +89,7 @@ async function change(element) {
  * Advancements with nothing to answer (ItemGrant without an ability choice, ScaleValue, a
  * single-option Size) are handled by the system automatically and never reach here. Everything that
  * does reach here is *asked about*, answered or not, so the book's ledger is a complete record of
- * what this side of the build was offered â€” which is what makes it comparable with the creator's.
+ * what this side of the build was offered — which is what makes it comparable with the creator's.
  * @param {object} step               The manager step being displayed.
  * @param {AnswerBook} book           The scenario's answers.
  * @param {Set<string>} [consumed]    Collects the ids an answer was read for.
@@ -143,7 +143,7 @@ async function fillStep(step, book, consumed) {
 async function fillHitPoints(flow, answer) {
   const root = await flowElement(flow);
   const average = root.querySelector("[name=useAverage]");
-  if ( !average ) return;                                   // first class level â€” nothing to choose
+  if ( !average ) return;                                   // first class level — nothing to choose
 
   if ( (answer ?? "avg") === "avg" ) {
     if ( !average.checked ) { average.checked = true; await change(average); }
@@ -210,7 +210,7 @@ async function fillItemChoice(flow, adv, answer) {
     const root = await flowElement(flow);
 
     // A configured pool renders a checkbox per entry. A restriction-driven pool (Magic Initiate's
-    // "any wizard cantrip") has no entries at all â€” the flow offers a browse button instead â€” so
+    // "any wizard cantrip") has no entries at all — the flow offers a browse button instead — so
     // fall back to that route when there is no checkbox to tick.
     const box = root.querySelector(`[name="${CSS.escape(uuid)}"]`);
     if ( box ) {
@@ -249,7 +249,7 @@ async function fillItemChoice(flow, adv, answer) {
  *
  * A restriction-driven pool is populated by the browser, not by the template, so this is the only
  * route to it. As with the ASI feat picker, `selectOne` is stubbed for a single call and the
- * flow's own handler runs for real around it â€” the stub replaces the user's click inside the
+ * flow's own handler runs for real around it — the stub replaces the user's click inside the
  * modal. Note this bypasses the browser's *filters*, so a scenario can pick something the
  * restriction would have excluded; the restriction itself is therefore not under test here.
  */
@@ -296,7 +296,7 @@ async function withBrowserPick(uuid, fn) {
 }
 
 /**
- * Subclass. The flow has no form fields at all â€” selection happens either through the compendium
+ * Subclass. The flow has no form fields at all — selection happens either through the compendium
  * browser modal or by dropping a subclass onto it, and `_handleForm` is empty. Dropping is the
  * cheaper of the two to drive faithfully: the flow binds a `DragDrop` with `dropSelector: "form"`,
  * so a real `drop` event carrying the usual `{type: "Item", uuid}` payload lands in `_onDrop`,
@@ -316,7 +316,7 @@ async function fillSubclass(flow, adv, answer) {
   await untilFound(
     () => adv.value?.uuid === uuid,
     () => `subclass ${uuid} was not accepted by "${adv.title}" `
-      + `(the flow still holds ${adv.value?.uuid ?? "nothing"}) â€” is the uuid a subclass of this class?`,
+      + `(the flow still holds ${adv.value?.uuid ?? "nothing"}) — is the uuid a subclass of this class?`,
     10_000
   );
   // `_onDrop` re-renders after applying; let that settle before the step is advanced.
@@ -377,7 +377,7 @@ async function fillAsi(flow, answer) {
  * Take a feat for an ASI decision instead of allocating points.
  *
  * The native flow's only route to a feat is `data-action="browse"`, which opens
- * `CompendiumBrowser.selectOne()` â€” a modal whose whole purpose is to return one uuid. Driving its
+ * `CompendiumBrowser.selectOne()` — a modal whose whole purpose is to return one uuid. Driving its
  * internals would be a large amount of fragile UI work to arrive at a value the scenario already
  * states, so the browser's `selectOne` is stubbed for exactly one call and the flow's own browse
  * handler runs for real around it: the click, the prerequisite check, the apply, the re-render.
@@ -397,7 +397,7 @@ async function takeAsiFeat(flow, uuid) {
     button.click();
     await untilFound(
       () => adv.value?.type === "feat",
-      () => `feat ${uuid} was not taken for "${adv.title}" â€” it may fail its own prerequisites `
+      () => `feat ${uuid} was not taken for "${adv.title}" — it may fail its own prerequisites `
         + "at this level, which the flow reports by declining silently",
       10_000
     );
@@ -464,13 +464,13 @@ export async function driveManager(manager, book, consumed) {
  * flow re-renders that can overlap it (ApplicationV2 drops a render that races another). The
  * result is a manager frame showing an empty placeholder forever. Clicking Next in that state
  * makes the flow submit with `this.form` undefined, which throws inside FormDataExtended and
- * strands the wizard â€” so the flow is nudged into existence here rather than clicked blind.
+ * strands the wizard — so the flow is nudged into existence here rather than clicked blind.
  */
 async function ensureFlowRendered(manager, step, trace, describe) {
   const flow = step.flow;
   // Be patient before nudging. `AdvancementManager#render` pre-applies the step's advancement
   // (`apply(level, {}, {initial: true})`), so a nudge that overlaps the manager's own in-flight
-  // render gives two `apply` calls that both read an empty `value.added` and both grant â€” which
+  // render gives two `apply` calls that both read an empty `value.added` and both grant — which
   // shows up as duplicated items and looks like a creator bug. The first wait is therefore long
   // enough that the manager almost always wins on its own.
   for ( let attempt = 1; attempt <= 3; attempt++ ) {
@@ -502,7 +502,7 @@ async function ensureFlowRendered(manager, step, trace, describe) {
 /**
  * Explain why a step refused to advance. The manager swallows advancement errors into
  * `step.error` and simply re-renders the same step, which from the outside looks identical to a
- * click that never landed â€” so both possibilities are reported.
+ * click that never landed — so both possibilities are reported.
  */
 function describeStuckStep(manager, step) {
   const adv = step.flow?.advancement;
@@ -516,7 +516,7 @@ function describeStuckStep(manager, step) {
   ];
   // Foundry builds the submit payload from `form.elements`, then looks each name back up with
   // `namedItem()`. A name that does not resolve makes FormDataExtended throw, which is a common
-  // way for a step to "not advance" â€” so report the resolution of every field.
+  // way for a step to "not advance" — so report the resolution of every field.
   const form = step.flow?.form ?? step.flow?.element?.querySelector("form") ?? step.flow?.element;
   if ( form ) {
     lines.push(`  form        : <${form.tagName?.toLowerCase()}> `
@@ -524,7 +524,7 @@ function describeStuckStep(manager, step) {
     for ( const el of form.elements ?? [] ) {
       const named = el.name ? form.elements.namedItem(el.name) : "(unnamed)";
       lines.push(`    <${el.tagName.toLowerCase()} name="${el.name}"> `
-        + `-> ${named === "(unnamed)" ? named : (named ? named.constructor.name : "NULL â€” this is the crash")}`);
+        + `-> ${named === "(unnamed)" ? named : (named ? named.constructor.name : "NULL — this is the crash")}`);
     }
   }
   return lines.join("\n");
@@ -536,15 +536,17 @@ function describeStuckStep(manager, step) {
 
 /**
  * Build a character the way a player would without this module: create a blank character, set
- * its base ability scores, then add species, background and class one at a time â€” each one
+ * its base ability scores, then add species, background and class one at a time — each one
  * opening the system's advancement wizard, which we answer from the book.
  * @param {object} scenario
  * @param {object} [options]
  * @param {AnswerBook} options.book        The scenario's answers, shared with the creator build.
  * @param {Set<string>} [options.consumed] Collects the ids an answer was read for.
+ * @param {Function} [options.onLevel]     Called `(level, actor)` once the character has finished a
+ *   level, for a scenario that wants the state at each one rather than only at the end.
  * @returns {Promise<Actor5e>}
  */
-export async function buildNative(scenario, { book, consumed } = {}) {
+export async function buildNative(scenario, { book, consumed, onLevel } = {}) {
   const actor = await Actor.implementation.create({
     name: scenario.name,
     type: "character",
@@ -553,7 +555,7 @@ export async function buildNative(scenario, { book, consumed } = {}) {
 
   const { AdvancementManager } = dnd5e.applications.advancement;
 
-  // Species â†’ background â†’ class, matching the order the creator stages them in.
+  // Species → background → class, matching the order the creator stages them in.
   for ( const key of ["species", "background", "class"] ) {
     const uuid = scenario[`${key}Uuid`];
     if ( !uuid ) continue;
@@ -569,21 +571,31 @@ export async function buildNative(scenario, { book, consumed } = {}) {
     else await actor.createEmbeddedDocuments("Item", [data], { render: false });
   }
 
+  await onLevel?.(1, actor);
+
   // A scenario above level 1 raises the class the rest of the way in one manager, which is what
-  // the sheet's own level selector does â€” and what the creator's post-creation jump mirrors.
+  // the sheet's own level selector does — and what the creator's post-creation jump mirrors.
+  //
+  // `incremental` takes one level at a time instead, which is how a character is actually played:
+  // a manager per level, each starting from a committed actor rather than one long-lived clone.
+  // The two are genuinely different walks. The ordering `deferredAsi` fixes only goes wrong in the
+  // jump; anything that fails to survive a commit only goes wrong in the increments.
   const target = scenario.targetLevel ?? 1;
   if ( target > 1 ) {
     const classItem = actor.items.find(i => i.type === "class");
     if ( !classItem ) throw new Error("cannot level up: the scenario built no class");
-    const levels = target - (classItem.system?.levels ?? 1);
-    if ( levels > 0 ) {
-      const manager = AdvancementManager.forLevelChange(actor, classItem.id, levels);
+    const from = classItem.system?.levels ?? 1;
+    const stride = scenario.incremental ? 1 : (target - from);
+
+    for ( let level = from + stride; level <= target; level += stride ) {
+      const manager = AdvancementManager.forLevelChange(actor, classItem.id, stride);
       if ( manager.steps.length ) await driveManager(manager, book, consumed);
-      else await classItem.update({ "system.levels": target });
+      else await classItem.update({ "system.levels": level });
+      await onLevel?.(level, actor);
     }
   }
 
-  // Multiclassing is adding a *new* class item, not raising the existing one â€” `forNewItem`
+  // Multiclassing is adding a *new* class item, not raising the existing one — `forNewItem`
   // again, exactly as dropping a second class on the sheet would. The system knows it is a
   // multiclass because the actor already has a class, and applies the `classRestriction:
   // "secondary"` advancements instead of the primary ones.
@@ -603,7 +615,7 @@ export async function buildNative(scenario, { book, consumed } = {}) {
   return actor;
 }
 
-/** `{str: 15, â€¦}` â†’ the nested shape `Actor.create` wants. */
+/** `{str: 15, …}` → the nested shape `Actor.create` wants. */
 export function abilityUpdate(abilities = {}) {
   return Object.fromEntries(Object.entries(abilities).map(([key, value]) => [key, { value }]));
 }

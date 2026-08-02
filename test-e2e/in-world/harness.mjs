@@ -121,6 +121,37 @@ function decisionDifferences(book) {
   }));
 }
 
+/**
+ * Line up the per-level snapshots and say where the two builds first parted company.
+ *
+ * A difference at level 3 is still there at level 20, so the final comparison alone says only "this
+ * subclass differs" and leaves the interesting question — *when* — to a manual bisect. This answers
+ * it directly: the count per level, and the first level with a non-zero one.
+ *
+ * The differences themselves are kept only for that first level. Every later level repeats them plus
+ * whatever else has accumulated, which is a great deal of output saying one thing.
+ * @param {{native: Map<number, object>, creator: Map<number, object>}} perLevel
+ */
+function compareLevels(perLevel) {
+  const levels = [...perLevel.native.keys()].filter(l => perLevel.creator.has(l)).sort((a, b) => a - b);
+  const out = { profile: [], firstDivergence: null };
+
+  for ( const level of levels ) {
+    const a = perLevel.native.get(level);
+    const b = perLevel.creator.get(level);
+    const differences = [...diff(a.source, b.source, "source"), ...diff(a.derived, b.derived, "derived")];
+    out.profile.push({ level, count: differences.length });
+    if ( differences.length && !out.firstDivergence ) out.firstDivergence = { level, differences };
+  }
+
+  // A level one side reached and the other did not is its own finding — the two builds disagree
+  // about how far the character got, which no amount of field-by-field diffing would explain.
+  const only = side => [...perLevel[side].keys()].filter(l => !perLevel[side === "native" ? "creator" : "native"].has(l));
+  const missing = { native: only("creator"), creator: only("native") };
+  if ( missing.native.length || missing.creator.length ) out.missing = missing;
+  return out;
+}
+
 /** advId -> advancement type across the scenario's origin documents. */
 function advancementTypes(docs) {
   const map = new Map();
@@ -173,10 +204,20 @@ export async function runScenario(scenario, { keep = false } = {}) {
     // the answer came from what the *other* side was showing and a mismatch is therefore a finding
     // about the two pools rather than a stale hand-written table. See `creator.mjs#distribute`.
     const unofferable = scenario.generate ? [] : null;
-    native = await buildNative({ ...scenario, name: `${PREFIX}${scenario.name} [native]` }, { book, consumed });
+
+    // An incremental scenario is snapshotted as it climbs, so a divergence can be attributed to the
+    // level it first appears at rather than to "level 20". Each side records independently and the
+    // two are lined up afterwards; there is no need to interleave the builds.
+    const perLevel = scenario.incremental ? { native: new Map(), creator: new Map() } : null;
+    const record = side => perLevel ? ((level, actor) => perLevel[side].set(level, snapshot(actor))) : undefined;
+
+    native = await buildNative(
+      { ...scenario, name: `${PREFIX}${scenario.name} [native]` },
+      { book, consumed, onLevel: record("native") }
+    );
     creator = await buildCreator(
       { ...scenario, name: `${PREFIX}${scenario.name} [creator]` },
-      { book, diagnostics: report.diagnostics, consumed, unofferable }
+      { book, diagnostics: report.diagnostics, consumed, unofferable, onLevel: record("creator") }
     );
 
     const originDocs = await Promise.all(["speciesUuid", "backgroundUuid", "classUuid"]
@@ -199,6 +240,7 @@ export async function runScenario(scenario, { keep = false } = {}) {
       ...diff(a.derived, b.derived, "derived")
     ];
     report.ok = report.differences.length === 0;
+    if ( perLevel ) report.levels = compareLevels(perLevel);
     report.summary = {
       native: { items: native.items.size, hp: native.system.attributes?.hp?.max },
       creator: { items: creator.items.size, hp: creator.system.attributes?.hp?.max }
@@ -245,8 +287,10 @@ export function list() {
  * the run consists of and on what each id means.
  */
 let sweep = null;
-async function getSweep(level) {
-  if ( !sweep || (sweep.level !== level) ) sweep = { level, ...(await sweepScenarios({ level })) };
+async function getSweep(level, incremental = false) {
+  if ( !sweep || (sweep.level !== level) || (sweep.incremental !== incremental) ) {
+    sweep = { level, incremental, ...(await sweepScenarios({ level, incremental })) };
+  }
   return sweep;
 }
 
@@ -254,10 +298,11 @@ async function getSweep(level) {
  * The sweep's plan: what it will run, and what it could not.
  * @param {object} [options]
  * @param {number} [options.level]
+ * @param {boolean} [options.incremental]
  */
-export async function sweepList({ level = 20 } = {}) {
-  const { scenarios, skipped } = await getSweep(level);
-  return { level, skipped, scenarios: scenarios.map(s => ({ id: s.id, name: s.name })) };
+export async function sweepList({ level = 20, incremental = false } = {}) {
+  const { scenarios, skipped } = await getSweep(level, incremental);
+  return { level, incremental, skipped, scenarios: scenarios.map(s => ({ id: s.id, name: s.name })) };
 }
 
 /**
@@ -271,8 +316,8 @@ export async function sweepList({ level = 20 } = {}) {
  * @param {number} [options.level]
  * @param {boolean} [options.keep]
  */
-export async function sweepOne({ id, level = 20, keep = false }) {
-  const { scenarios } = await getSweep(level);
+export async function sweepOne({ id, level = 20, incremental = false, keep = false }) {
+  const { scenarios } = await getSweep(level, incremental);
   const scenario = scenarios.find(s => s.id === id);
   if ( !scenario ) throw new Error(`unknown sweep scenario "${id}"`);
   await cleanup();

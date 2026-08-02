@@ -15,6 +15,7 @@
  *
  *   node run.mjs --sweep                  # the whole thing (hours)
  *   node run.mjs --sweep --level 6        # shallower
+ *   node run.mjs --sweep --incremental    # one manager per level, comparing after each
  *   node run.mjs --sweep --shard 1/20     # one twentieth of it, for a smoke test
  *   node run.mjs --sweep --resume         # skip scenarios already in sweep-results.jsonl
  *   node run.mjs --sweep --plan           # list what it would run, and what it skips
@@ -143,8 +144,9 @@ async function load(session) {
 async function runSweep(harness) {
   const { appendFileSync, readFileSync, existsSync } = await import("node:fs");
   const level = Number(value("level") ?? 20);
+  const incremental = flag("incremental");
 
-  const plan = await harness("sweepList", { level });
+  const plan = await harness("sweepList", { level, incremental });
   if ( plan.skipped.length ) {
     console.log(`skipping ${plan.skipped.length} subclass(es):`);
     for ( const s of plan.skipped ) console.log(`  ${s.subclass.padEnd(30)} ${s.reason}`);
@@ -182,7 +184,8 @@ async function runSweep(harness) {
     return 0;
   }
 
-  console.log(`\nsweeping ${ids.length} subclass(es) at level ${level} → test-e2e/sweep-results.jsonl\n`);
+  console.log(`\nsweeping ${ids.length} subclass(es) at level ${level}`
+    + `${incremental ? ", one level at a time" : ""} → test-e2e/sweep-results.jsonl\n`);
   let passed = 0;
   let failed = 0;
   let errored = 0;
@@ -191,7 +194,7 @@ async function runSweep(harness) {
     const position = `[${String(i + 1).padStart(3)}/${ids.length}]`;
     let r;
     try {
-      r = await harness("sweepOne", { id, level, keep });
+      r = await harness("sweepOne", { id, level, incremental, keep });
     } catch ( err ) {
       // A scenario that takes the page down with it must not take the run down with it.
       r = { id, name: id, ok: false, error: err.message, differences: [], ms: 0 };
@@ -206,7 +209,13 @@ async function runSweep(harness) {
       console.log(`${position} PASS  ${r.name} (${r.ms}ms)`);
     } else {
       failed++;
-      console.log(`${position} FAIL  ${r.name} (${r.ms}ms) — ${r.differences.length} difference(s)`
+      // The level a difference *starts* at is the useful part of an incremental run; the count at
+      // level 20 is mostly that same difference still being there.
+      const at = r.levels?.firstDivergence
+        ? ` — diverges at level ${r.levels.firstDivergence.level}`
+        + ` (${r.levels.firstDivergence.differences.length} row(s))`
+        : ` — ${r.differences.length} difference(s)`;
+      console.log(`${position} FAIL  ${r.name} (${r.ms}ms)${at}`
         + `: ${[...new Set(r.differences.map(d => d.path.split(".")[0]))].join(", ")}`);
     }
   }
