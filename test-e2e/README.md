@@ -53,6 +53,14 @@ npm run provision           # create + configure both worlds
 | --- | --- |
 | `playwright` | creator + dice-so-nice, dnd-dungeon-masters-guide, dnd-forge-artificer, dnd-heroes-faerun, dnd-monster-manual, dnd-players-handbook, dnd-ravenloft-horrors-within |
 | `playwright-ember` | the same plus `ember`, with the Ember adventure imported |
+| `playwright-clean` | the same content **without** the creator — for deciding whether a difference is dnd5e's or ours |
+
+`playwright-clean` exists because several findings come down to timing around writes the system makes
+from un-awaited hooks, and "does this still happen with our module absent" is the question that
+decides whose bug it is. Only the native adapter runs there — `--probe-native` builds the reference
+alone and counts an item at each level. The module stays junction-linked into `Data/modules`, so the
+harness's own files are still served: Foundry's static routes come from the filesystem, not from the
+world's module list.
 
 Both run dnd5e 5.3.3 on Foundry 14.365, on port 30099 (not 30000).
 
@@ -695,41 +703,72 @@ the level-6 screen before the level-3 one would reproduce it. The screens are pr
 order, so it takes deliberate back-and-forth; a proper fix would re-evaluate expertise when an
 underlying proficiency changes.
 
-### Found by the incremental sweep, not yet fixed
+### Found by the incremental sweep — a known dnd5e issue, confirmed in a clean room
 
 The first `--incremental` run — an eight-subclass spread — turned up two divergences that the
 jump-mode sweep reports as **passing**. That is the mode justifying itself: these are not subtle
 edge cases, they are on the path every real character takes.
 
-**Ranger Winter Walker gets two copies of Hunter's Mark.** Ours, and user-facing.
+Both are dnd5e's, and that is not an inference. `playwright-clean` is the same content with this
+module **not enabled**, and `--probe-native` builds only the reference in it and counts an item at
+each level. Both reproduce there, with nothing of ours in the room:
 
 ```bash
-node run.mjs --sweep --incremental --level 5 --only ranger/winter-walker   # FAIL, 10 rows
-node run.mjs --sweep --level 5 --only ranger/winter-walker                 # PASS
+node run.mjs playwright-clean --probe-native "sweep:ranger/winter-walker/Hunter's Mark" --level 6
+#   L1–L4  2 copies … L5  1 copy      ← the cached copy is dropped at 5
+node run.mjs playwright-clean --probe-native "sweep:artificer/alchemist/Tasha's Bubbling Cauldron" --level 18
+#   L15–L16  1 copy … L17  0 copies   ← gained at 15, dropped at 17
 ```
 
-Same target level, same answers; only the walk differs, and both sides level incrementally in that
-test — so the native build copes and ours does not. The creator's actor ends with the advancement's
-granted Hunter's Mark *and* a second copy carrying `flags.dnd5e.cachedFor` and a `dnd5espellchange`
-enchantment effect, with `prepared: 0` and no `advancementOrigin`.
+**The native build drops Cast-activity cached spells at a later level.** Both divergences the first
+incremental shard found are this one cause:
 
-That second copy is dnd5e's **Cast-activity cached spell**: `ActivitiesTemplate`'s create hook makes
-a local copy of any spell a Cast activity references, guarded by `!a.cachedSpell` and fired from an
-un-awaited `createEmbeddedDocuments`. The Ranger's Favored Enemy has such an activity for Hunter's
-Mark, so the guard is a check-then-create that the advancement grant can lose. Levelling in one jump
-never exposes it because the grant is long since on the clone by the time the item is committed.
+| Subclass | Spell | Level |
+| --- | --- | --- |
+| Ranger Winter Walker | Hunter's Mark (Favored Enemy) | 5 |
+| Artificer Alchemist | Tasha's Bubbling Cauldron | 17 |
 
-Worth starting from *why the guard misses*, not from de-duplicating after the fact.
+The shape of the diff reads as "the creator has a spare copy", and that reading is wrong. Count the
+copies on each side either side of the boundary and the direction reverses:
 
-**Artificer Alchemist loses Tasha's Bubbling Cauldron at level 17 — on the native side.** Creator has
-the spell, native does not, and it only happens incrementally. Same direction and probably the same
-family as the Battle Smith deviation below.
+```bash
+node run.mjs --compare-item "sweep:ranger/winter-walker/Hunter's Mark" --level 4 --incremental
+#   native 2, creator 2          ← both hold it
+node run.mjs --compare-item "sweep:ranger/winter-walker/Hunter's Mark" --level 5 --incremental
+#   native 1, creator 2          ← native drops it
 
-### Found by the sweep, not fixed — the native side is the one that is wrong
+node run.mjs --compare-item "sweep:artificer/alchemist/Tasha's Bubbling Cauldron" --level 16 --incremental
+#   native 1, creator 1
+node run.mjs --compare-item "sweep:artificer/alchemist/Tasha's Bubbling Cauldron" --level 17 --incremental
+#   native 0, creator 1
+```
+
+The copy is *supposed* to be there. When an item carries a Cast activity, dnd5e keeps a local cached
+copy of the spell it references (`ActivitiesTemplate`'s create hook, guarded by `!a.cachedSpell`);
+it is flagged `cachedFor`, sits at `prepared: 0`, and is what the sheet's cast button drives. Both
+builds hold it right up to the level where the native one loses it.
+
+It is not immediate: the Alchemist's copy arrives with its level-15 feature, survives level 16, and
+is gone at 17. So something at one particular later level removes it rather than it never settling.
+
+The likely shape is `#complete`'s `toDelete`, which begins as every item on the actor and keeps only
+those present on the manager's clone — a cached copy created by that deliberately un-awaited hook
+after the clone was taken is not on it. Our `commit()` computes `toDelete` by identical logic, so
+what differs is timing; we keep the copy, and keeping it is correct.
+
+**Raised with the dnd5e maintainers and confirmed by them as a known issue.** Nothing to change here.
+The user-visible consequence upstream is that a character levelled one level at a time silently loses
+the cast button for a spell one of its features grants it.
+
+### Found by the sweep — a known dnd5e issue, fix in progress upstream
 
 **Artificer Battle Smith: native never applies a level-3 spell grant, so the creator's character has
 two spells the reference does not** (`Heroism`, `Shield`). 1/92, and the only remaining difference in
 the whole sweep.
+
+**Raised with the dnd5e maintainers and confirmed by them as a known issue they are working on.** So
+this needs nothing here, and the sweep should reach 92/92 on a system update — worth re-running it
+after one rather than assuming, since a fix in this area could move other things too.
 
 The subclass grants a *Battle Smith Spells* feature at level 3, and that feature carries five
 ItemGrants, at levels 3, 5, 9, 13 and 17. On the native build the level-3 one has `value: {}` while
@@ -741,10 +780,13 @@ apply.
 
 Left alone deliberately: matching native here would mean dropping two spells the content says a
 level-3 Battle Smith has. Same category as the `riders` flag and the `details.background` race — the
-reference is the unreliable one. Reproduce with:
+reference is the unreliable one. Confirmed in the clean room as well, so it is dnd5e's and not an
+artefact of this module being loaded:
 
 ```bash
 node run.mjs --compare-item "sweep:artificer/battle-smith/Battle Smith Spells"
+node run.mjs playwright-clean --probe-native "sweep:artificer/battle-smith/Heroism" --level 5
+#   0 copies at every level — the grant is never applied
 ```
 
 ### Not yet covered

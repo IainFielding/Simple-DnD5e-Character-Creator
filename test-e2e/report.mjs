@@ -114,14 +114,21 @@ const KNOWN = [
   // carrying content, and that is a finding rather than a documented nuisance.
   // Artificer Battle Smith, and the only difference left in the sweep. dnd5e's mid-walk synthesis
   // misses an advancement at level N on a feature *granted* at level N, so the native reference is
-  // short two spells the content gives a level-3 Battle Smith. Ours is the correct character.
+  // short two spells the content gives a level-3 Battle Smith. Ours is the correct character, and
+  // the dnd5e maintainers have confirmed it as a known issue with a fix in progress — so this
+  // should disappear on a system update rather than needing anything here.
+  // Two distinct upstream bugs share these signatures, and both are known to the dnd5e maintainers:
+  // the Battle Smith missed grant, and — on an `--incremental` run — a Cast-activity cached spell
+  // the native build deletes at a later level (Winter Walker, Alchemist).
   { sig: "source.items.* (whole item on one side only)",
-    note: "Battle Smith only: native never applies the level-3 grant on the Battle Smith Spells "
-      + "feature, so Heroism and Shield are missing from the *reference*. See the README." },
+    note: "An item present on one build only, and in both known cases it is the *reference* that is "
+      + "short: Battle Smith's level-3 grant is never applied, and on an incremental run native "
+      + "deletes a Cast-activity cached spell at a later level. Both known dnd5e issues. See the "
+      + "README before assuming the direction — it is not the one the diff suggests." },
   { sig: "source.items.*.system.advancement.*.value.added",
     note: "The empty `value.added` behind the same Battle Smith grant." },
   { sig: "derived.itemsByType.spell[]",
-    note: "The two spells above, seen from the derived side." },
+    note: "The spells above, seen from the derived side." },
   { sig: "source.items.*.system.source.book",
     note: "Open, and order-dependent across scenarios — creator \"SRD 5.2\", native empty." },
   { sig: "derived.itemsByType.spell[]",

@@ -9,6 +9,8 @@
  *   node run.mjs --list                   # list scenarios and exit
  *   node run.mjs --ids <uuid>             # dump an item's advancement ids (for writing scenarios)
  *   node run.mjs --keep-riders            # don't strip empty rider flags (see normalize.mjs)
+ *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
+ *                                         # native only, per level, in a world without this module
  *   HEADED=1 node run.mjs                 # watch the native wizard being driven
  *
  * And the subclass sweep — every subclass in the world, built both ways at level 20:
@@ -59,8 +61,26 @@ try {
     // Split on the *last* slash: a sweep id has one of its own (`sweep:artificer/battle-smith`).
     const arg = value("compare-item");
     const cut = arg.lastIndexOf("/");
-    const r = await harness("compareItem", { scenarioId: arg.slice(0, cut), itemName: arg.slice(cut + 1) });
+    const r = await harness("compareItem", {
+      scenarioId: arg.slice(0, cut), itemName: arg.slice(cut + 1),
+      level: Number(value("level") ?? 20), incremental: flag("incremental")
+    });
     console.log(JSON.stringify(r, null, 2));
+  } else if ( flag("probe-native") ) {
+    // Native only, per level — point it at `playwright-clean` to answer "does dnd5e still do this
+    // with our module switched off".
+    const arg = value("probe-native");
+    const cut = arg.lastIndexOf("/");
+    const r = await harness("probeNative", {
+      scenarioId: arg.slice(0, cut), itemName: arg.slice(cut + 1),
+      level: Number(value("level") ?? 20), incremental: !flag("jump")
+    });
+    console.log(`world: ${r.world}   ${r.incremental ? "incremental" : "single jump"}`);
+    for ( const l of r.byLevel ) {
+      console.log(`  L${String(l.level).padStart(2)}  ${l.count} copy(ies)`
+        + l.copies.map(c => `\n        prepared=${c.prepared} cachedFor=${c.cachedFor ?? "-"}`
+          + ` advOrigin=${c.advancementOrigin ?? "-"}`).join(""));
+    }
   } else if ( flag("probe-warm") ) {
     console.log(JSON.stringify(await harness("probeWarmCalls"), null, 2));
   } else if ( flag("probe") ) {

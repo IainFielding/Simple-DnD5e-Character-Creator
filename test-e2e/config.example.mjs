@@ -79,6 +79,19 @@ export const WORLDS = {
       + "imported, for the Ember character-creation hand-off.</p>",
     modules: [...BASE_MODULES, "ember"],
     adventures: ["ember.adventure"]
+  },
+  /**
+   * The same content with the module under test **switched off**, so only the native adapter runs.
+   * Several findings come down to timing around the system's own un-awaited writes, and "does this
+   * still happen without us in the room" is what decides whether they are dnd5e's or ours.
+   */
+  "playwright-clean": {
+    id: "playwright-clean",
+    title: "Playwright-Clean",
+    description: "<p>Native dnd5e only — the Simple Character Creator is deliberately not enabled. "
+      + "For deciding whether a difference is the system's or ours.</p>",
+    modules: BASE_MODULES.filter(m => m !== MODULE_ID),
+    adventures: []
   }
 };
 

@@ -393,19 +393,21 @@ export async function probeWarmCalls() {
  * @param {string} scenarioId
  * @param {string} itemName     Case-insensitive substring of the item's name.
  */
-export async function compareItem({ scenarioId, itemName, level = 20 }) {
+export async function compareItem({ scenarioId, itemName, level = 20, incremental = false }) {
   // Sweep ids resolve too (`sweep:artificer/battle-smith`), because a sweep finding is exactly when
   // you want this: the report shows the normalised path, and the question is always what each side
-  // actually stored underneath it.
+  // actually stored underneath it. `incremental` has to be honoured for the same reason — a finding
+  // that only exists in that mode cannot be explained by a build that does not reproduce it.
   const scenario = SCENARIOS.find(s => s.id === scenarioId)
-    ?? (await getSweep(level)).scenarios.find(s => s.id === scenarioId);
+    ?? (await getSweep(level, incremental)).scenarios.find(s => s.id === scenarioId);
   if ( !scenario ) throw new Error(`unknown scenario "${scenarioId}"`);
   await cleanup();
 
-  const pick = actor => {
-    const item = actor.items.find(i => i.name.toLowerCase().includes(itemName.toLowerCase()));
-    return item ? item.toObject() : null;
-  };
+  // *Every* match, not the first: a duplicated item is exactly the kind of thing this is pointed at,
+  // and returning one copy of two would hide the finding it was opened to explain.
+  const pick = actor => actor.items
+    .filter(i => i.name.toLowerCase().includes(itemName.toLowerCase()))
+    .map(i => i.toObject());
 
   let native = null;
   let creator = null;
@@ -423,6 +425,51 @@ export async function compareItem({ scenarioId, itemName, level = 20 }) {
   } finally {
     const ids = [native?.id, creator?.id].filter(Boolean);
     if ( ids.length ) await Actor.implementation.deleteDocuments(ids, { render: false }).catch(() => {});
+  }
+}
+
+/**
+ * Build **only** the native reference and return every copy of one item, per level.
+ *
+ * The clean-room half of {@link compareItem}. Several findings come down to timing around writes the
+ * system makes from un-awaited hooks — a Cast activity's cached spell being the current one — and the
+ * question that decides whose they are is whether dnd5e still does it with this module absent. Run
+ * this against the `playwright-clean` world, where it is not enabled, and nothing of ours is in the
+ * room to perturb the answer.
+ *
+ * Reports at every level rather than only the last, because the interesting moment is the transition:
+ * an item held at one level and gone at the next.
+ * @param {object} options
+ * @param {string} options.scenarioId
+ * @param {string} options.itemName
+ * @param {number} [options.level]
+ * @param {boolean} [options.incremental]
+ */
+export async function probeNative({ scenarioId, itemName, level = 20, incremental = true }) {
+  const scenario = SCENARIOS.find(s => s.id === scenarioId)
+    ?? (await getSweep(level, incremental)).scenarios.find(s => s.id === scenarioId);
+  if ( !scenario ) throw new Error(`unknown scenario "${scenarioId}"`);
+  await cleanup();
+
+  const wanted = itemName.toLowerCase();
+  const byLevel = [];
+  let actor = null;
+  try {
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate });
+    actor = await buildNative({ ...scenario, name: `${PREFIX}${scenario.name} [native]` }, {
+      book,
+      onLevel: (lvl, a) => {
+        const copies = a.items.filter(i => i.name.toLowerCase().includes(wanted)).map(i => ({
+          prepared: i.system?.prepared ?? null,
+          cachedFor: i.flags?.dnd5e?.cachedFor ?? null,
+          advancementOrigin: i.flags?.dnd5e?.advancementOrigin ?? null
+        }));
+        byLevel.push({ level: lvl, count: copies.length, copies });
+      }
+    });
+    return { scenario: scenarioId, item: itemName, world: game.world.id, incremental, byLevel };
+  } finally {
+    if ( actor?.id ) await Actor.implementation.deleteDocuments([actor.id], { render: false }).catch(() => {});
   }
 }
 
