@@ -1301,6 +1301,32 @@ export class LevelUpDriver {
    * because it read the actor before that un-awaited write arrived. Left as the faithful port.
    * @returns {Promise<Actor5e>}  The updated real actor.
    */
+  /**
+   * Whether an item still carries a rider list the system would have cleaned away.
+   *
+   * `flags.dnd5e.riders` records which of an item's activities and effects ride along with an
+   * enchantment. The system maintains it in `preUpdateActivities` (`data/item/templates/activities.mjs`),
+   * which recomputes it on every item update and deletes whatever ends up empty — the whole flag, or
+   * an individual empty list. Compendium packs ship items whose flag is already empty, and the
+   * *native* manager clears them for free because it re-writes every item the actor owns; skipping
+   * unchanged items (see {@link commit}) means ours never got the chance, so a creator-built
+   * character kept stale bookkeeping a natively-built one shed.
+   *
+   * Testing for it here rather than stripping the flag ourselves keeps the rule where it belongs:
+   * the item goes through a normal update, and the system's own hook decides what to remove. It
+   * costs one extra write per affected item, once — the clone reflects the actor next time round.
+   * @param {object} data   Item source data from the clone.
+   * @returns {boolean}
+   */
+  #hasStaleRiders(data) {
+    const riders = data?.flags?.dnd5e?.riders;
+    if ( riders === undefined ) return false;
+    if ( Array.isArray(riders) ) return !riders.length;
+    if ( !riders || (typeof riders !== "object") ) return false;
+    const lists = Object.values(riders);
+    return !lists.length || lists.some(v => Array.isArray(v) ? !v.length : !v);
+  }
+
   async commit() {
     const updates = this.clone.toObject();
     const items = updates.items;
@@ -1310,7 +1336,8 @@ export class LevelUpDriver {
       const existing = this.actor.items.get(item._id);
       if ( !existing ) obj.toCreate.push(item);
       else {
-        if ( !foundry.utils.equals(existing.toObject(), item) ) obj.toUpdate.push(item);
+        const changed = !foundry.utils.equals(existing.toObject(), item);
+        if ( changed || this.#hasStaleRiders(item) ) obj.toUpdate.push(item);
         obj.toDelete.findSplice(id => id === item._id);
       }
       return obj;
