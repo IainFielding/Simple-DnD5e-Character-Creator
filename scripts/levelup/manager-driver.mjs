@@ -1292,6 +1292,13 @@ export class LevelUpDriver {
    *    actually changed is written.
    *  - The four writes suppress their per-operation renders (each would re-render the open
    *    character sheet behind the wizard); the sheet is re-rendered once at the end instead.
+   *
+   * The wholesale `clone.toObject()` actor write looks like it should race the hooks this very
+   * `Promise.all` triggers — `SubclassData._onCreate` sets `attributes.spellcasting` from a
+   * deliberately un-awaited `actor.update` — and an earlier note here proposed writing only changed
+   * keys to avoid it. Measured, it does not: `Promise.all` starts the actor update first, so the
+   * hook's write always lands after and survives. The equivalence harness reported otherwise only
+   * because it read the actor before that un-awaited write arrived. Left as the faithful port.
    * @returns {Promise<Actor5e>}  The updated real actor.
    */
   async commit() {
