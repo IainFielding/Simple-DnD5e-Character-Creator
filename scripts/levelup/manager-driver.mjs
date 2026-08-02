@@ -72,6 +72,23 @@ export class LevelUpDriver {
   asiSteps = [];
 
   /**
+   * Ability-score improvements that raise no decision — a capstone's fixed `+4` (Primal Champion,
+   * Body and Mind), a half-feat's `+1`, or a point budget with a single legal target — as
+   * `{ level, advancement, key, points }`.
+   *
+   * Held back rather than applied where they are found, because {@link prepare} walks *every* level
+   * before any decision is answered. Applying a level-20 `+4 Strength` during that walk consumes the
+   * headroom the level-4 improvement is entitled to: the player's own points then clamp against the
+   * maximum and are silently discarded, and a Barbarian carried 1→20 finishes on 20 Strength where
+   * the rules — and the system's own wizard, which applies each level in turn — give 24.
+   *
+   * They are re-applied on top of the player's allocations by {@link #applyDeferredAsi}, and
+   * suspended again around every edit, so level order is preserved however the screens are visited.
+   * {@link asiState} discounts them so the budget on an ASI screen is the player's alone.
+   */
+  deferredAsi = [];
+
+  /**
    * The trait decisions, one per choice-bearing `Trait` advancement gained this level (Weapon
    * Mastery being the common one): `{ level, advancement, item }`. Like feature choices these are
    * left unpicked until the player selects in the UI, which applies straight to the clone via the
@@ -213,7 +230,48 @@ export class LevelUpDriver {
     while ( this.#step ) {
       await this.#processStep(this.#step);
     }
+    // Now the walk is over, the increases nobody decides go on top — in level order, after any
+    // allocation the player will make. See {@link deferredAsi}.
+    await this.#applyDeferredAsi();
     return this.hpSteps;
+  }
+
+  /**
+   * Apply every {@link deferredAsi} in level order, on top of whatever the point allocations
+   * currently hold. Idempotent: an already-applied increase is reversed first, so this can run
+   * again after any edit.
+   */
+  async #applyDeferredAsi() {
+    for ( const rec of [...this.deferredAsi].sort((a, b) => (a.level ?? 0) - (b.level ?? 0)) ) {
+      const adv = rec.advancement;
+      if ( adv.value?.type ) await adv.reverse(rec.level);
+      // `initial` is what applies the configuration's fixed part, exactly as the native manager
+      // pre-fills the screen this advancement would have rendered.
+      await adv.apply(rec.level, {}, { initial: true });
+      if ( rec.key ) await adv.apply(rec.level, { type: "asi", assignments: { [rec.key]: rec.points } });
+    }
+    if ( this.deferredAsi.length ) this.clone.reset();
+  }
+
+  /** Take the deferred increases back off the clone, so an allocation sees its true headroom. */
+  async #suspendDeferredAsi() {
+    for ( const rec of this.deferredAsi ) {
+      if ( rec.advancement.value?.type ) await rec.advancement.reverse(rec.level);
+    }
+    if ( this.deferredAsi.length ) this.clone.reset();
+  }
+
+  /**
+   * Run an ability-score edit against the scores as they stand *without* the increases nobody
+   * decides, then put those back. Without this a level-4 allocation made after the walk would be
+   * clamped by a level-20 capstone that has not happened yet.
+   * @param {() => Promise<*>} edit
+   */
+  async #withOwnHeadroom(edit) {
+    if ( !this.deferredAsi.length ) return edit();
+    await this.#suspendDeferredAsi();
+    try { return await edit(); }
+    finally { await this.#applyDeferredAsi(); }
   }
 
   /** Process the step at the cursor, then advance — mirrors one iteration of `#forward`. */
@@ -277,25 +335,30 @@ export class LevelUpDriver {
         this.choiceSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       case "AbilityScoreImprovement": {
-        // The seed applies the configuration's `fixed` part (a half-feat's set +1) and settles
-        // `value.type`, exactly as the native screen arrives pre-filled.
-        await this.#seed(flow);
         const cfg = adv.configuration ?? {};
-        if ( (cfg.points ?? 0) <= 0 ) return;
-
+        const points = cfg.points ?? 0;
         // PHB-style single-stat half-feats (Actor's "+1 Cha") are data-modelled as 1 point with
         // every other ability locked, not as a fixed bonus. When only one ability can take the
-        // whole budget the allocation is forced — apply it outright instead of surfacing a
-        // "choice" with nothing to choose.
+        // whole budget the allocation is forced — there is nothing to choose.
         const open = Object.keys(CONFIG.DND5E.abilities)
           .filter(k => adv.canImprove(k) && !cfg.locked?.has?.(k));
-        if ( (open.length === 1) && ((cfg.cap ?? Infinity) >= cfg.points) ) {
-          return adv.apply(flow.level, { type: "asi", assignments: { [open[0]]: cfg.points } });
+        const forced = (open.length === 1) && ((cfg.cap ?? Infinity) >= points);
+
+        // Nothing for the player to decide: a fixed increase, or a forced allocation. Deferred
+        // rather than applied here — see {@link deferredAsi} for why the order matters.
+        if ( (points <= 0) || forced ) {
+          this.deferredAsi.push({
+            level: flow.level, advancement: adv, item: adv.item,
+            key: forced ? open[0] : null, points: forced ? points : 0
+          });
+          return;
         }
 
-        // Real points to distribute. Where the class also allows a feat the seed leaves
-        // `value.type` unset (native renders both options and commits to neither); our screen opens
-        // on the points view, so settle it — choosing a feat instead reverses this and re-applies.
+        // A real allocation. The seed applies the configuration's `fixed` part and settles
+        // `value.type`, exactly as the native screen arrives pre-filled; where the class also allows
+        // a feat it leaves the type unset (native renders both options and commits to neither) and
+        // our screen opens on the points view, so settle it — taking a feat reverses and re-applies.
+        await this.#seed(flow);
         if ( !adv.value.type ) await adv.apply(flow.level, { type: "asi" });
         this.asiSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
@@ -814,7 +877,11 @@ export class LevelUpDriver {
     for ( const [key, data] of Object.entries(CONFIG.DND5E.abilities) ) {
       if ( !adv.canImprove(key) ) continue;
       const abil = this.clone.system.abilities[key];
-      const sourceValue = this.clone.system._source.abilities[key]?.value ?? abil.value;
+      // Discount the increases nobody decides (a level-20 capstone's +4). They sit on the clone so
+      // Review shows the true score, but they are not this screen's to spend against — counting
+      // them would price the player out of points the rules give them. See {@link deferredAsi}.
+      const deferred = this.#deferredAsiBonus(key);
+      const sourceValue = (this.clone.system._source.abilities[key]?.value ?? abil.value) - deferred;
       const assignment = assignments[key] ?? 0;
       const fixed = fixedFor(key);
       const locked = isLocked(key);
@@ -835,6 +902,11 @@ export class LevelUpDriver {
     }
 
     return { type: value.type ?? null, total, cap, assigned, available, abilities, feat: this.#asiFeat(adv), allowFeat: adv.allowFeat };
+  }
+
+  /** How much of an ability's current score comes from a {@link deferredAsi} rather than a choice. */
+  #deferredAsiBonus(key) {
+    return this.deferredAsi.reduce((n, r) => n + (r.advancement.value?.assignments?.[key] ?? 0), 0);
   }
 
   /** The chosen feat for an ASI decision, or null. */
@@ -894,9 +966,11 @@ export class LevelUpDriver {
     assignments[key] = (assignments[key] ?? 0) + dir;
     if ( assignments[key] <= 0 ) delete assignments[key];
 
-    await adv.reverse(record.level);
-    await adv.apply(record.level, { type: "asi", assignments });
-    this.clone.reset();
+    return this.#withOwnHeadroom(async () => {
+      await adv.reverse(record.level);
+      await adv.apply(record.level, { type: "asi", assignments });
+      this.clone.reset();
+    });
   }
 
   /** The clone's chosen feat item for an ASI decision, or null. */
@@ -908,10 +982,12 @@ export class LevelUpDriver {
   /** Switch an ASI decision back to the ability-improvement mode (clearing any chosen feat). */
   async useAsiAbilities(record) {
     const adv = record.advancement;
-    if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
-    if ( adv.value.type ) await adv.reverse(record.level);
-    await adv.apply(record.level, { type: "asi" });
-    this.clone.reset();
+    return this.#withOwnHeadroom(async () => {
+      if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
+      if ( adv.value.type ) await adv.reverse(record.level);
+      await adv.apply(record.level, { type: "asi" });
+      this.clone.reset();
+    });
   }
 
   /**
@@ -959,24 +1035,28 @@ export class LevelUpDriver {
       return false;
     }
 
-    // Drop any previous feat's synthesised features, then the ASI value itself, before re-granting.
-    if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
-    if ( record.advancement.value.type ) await record.advancement.reverse(record.level);
-    await record.advancement.apply(record.level, { type: "feat", uuid });
-    this.clone.reset();
+    // Suspended for the same reason an allocation is: the feat's own increase is deferred, and
+    // re-applying at the end puts every undecided increase back in level order.
+    return this.#withOwnHeadroom(async () => {
+      // Drop any previous feat's synthesised features, then the ASI value itself, before re-granting.
+      if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
+      if ( record.advancement.value.type ) await record.advancement.reverse(record.level);
+      await record.advancement.apply(record.level, { type: "feat", uuid });
+      this.clone.reset();
 
-    // Run the feat's own advancements (fixed ASI bonus, granted features, sub-choices).
-    const featItem = this.#asiFeatItem(record.advancement);
-    if ( featItem ) {
-      record.featSynth = await this.#ingestItemFeatures(featItem, 0);
-      // The feat's own advancements come off level-0 flows; surface any choices they reveal on the
-      // same screen as the granting ASI rather than a phantom "level 0" screen.
-      for ( const r of [...record.featSynth.choices, ...record.featSynth.asi, ...record.featSynth.traits, ...record.featSynth.grants] ) {
-        r.screenLevel = record.level;
+      // Run the feat's own advancements (fixed ASI bonus, granted features, sub-choices).
+      const featItem = this.#asiFeatItem(record.advancement);
+      if ( featItem ) {
+        record.featSynth = await this.#ingestItemFeatures(featItem, 0);
+        // The feat's own advancements come off level-0 flows; surface any choices they reveal on the
+        // same screen as the granting ASI rather than a phantom "level 0" screen.
+        for ( const r of [...record.featSynth.choices, ...record.featSynth.asi, ...record.featSynth.traits, ...record.featSynth.grants] ) {
+          r.screenLevel = record.level;
+        }
       }
-    }
-    this.clone.reset();
-    return true;
+      this.clone.reset();
+      return true;
+    });
   }
 
   /* -------------------------------------------- */
@@ -1001,6 +1081,10 @@ export class LevelUpDriver {
     const beforeGrants = this.grantSteps.length;
     const flows = [];
     await this.#ingestItemTree(item, maxLevel, flows, new Set([item.id]));
+    // A feature synthesised after the main walk — a subclass's, or a chosen feat's — can carry an
+    // increase nobody decides. Put the deferred set back so it lands here too, not only at the end
+    // of {@link prepare}; the re-apply is idempotent, so doing it twice costs nothing.
+    await this.#applyDeferredAsi();
     return {
       flows,
       choices: this.choiceSteps.slice(beforeChoices),
@@ -1056,6 +1140,13 @@ export class LevelUpDriver {
     }
     if ( synth.choices?.length ) this.choiceSteps = this.choiceSteps.filter(c => !synth.choices.includes(c));
     if ( synth.asi?.length ) this.asiSteps = this.asiSteps.filter(a => !synth.asi.includes(a));
+    // A half-feat's fixed increase was deferred rather than applied, so dropping the feat has to
+    // drop its record too — otherwise the next re-apply would reach for an advancement that has
+    // been reversed off an item no longer on the clone.
+    if ( synth.flows?.length ) {
+      const gone = new Set(synth.flows.map(f => f.advancement));
+      this.deferredAsi = this.deferredAsi.filter(r => !gone.has(r.advancement));
+    }
     if ( synth.traits?.length ) this.traitSteps = this.traitSteps.filter(tr => !synth.traits.includes(tr));
     if ( synth.grants?.length ) this.grantSteps = this.grantSteps.filter(g => !synth.grants.includes(g));
     this.clone.reset();
@@ -1316,9 +1407,11 @@ export class LevelUpDriver {
    */
   async setAsi(record, assignments) {
     const adv = record.advancement;
-    if ( adv.value.type ) await adv.reverse(record.level);
-    await adv.apply(record.level, { type: "asi", assignments });
-    this.clone.reset();
+    return this.#withOwnHeadroom(async () => {
+      if ( adv.value.type ) await adv.reverse(record.level);
+      await adv.apply(record.level, { type: "asi", assignments });
+      this.clone.reset();
+    });
   }
 
   /**
