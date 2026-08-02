@@ -82,6 +82,29 @@ node run.mjs --sweep                  # every subclass in the world, at level 20
 HEADED=1 node run.mjs                 # watch the native wizard being driven
 ```
 
+## Verified by hand
+
+Checked in Foundry on 2026-08-03, covering everything this harness cannot see because it compares
+committed actors and never opens a screen:
+
+| Check | Result |
+| --- | --- |
+| Ember hand-off claimed on a real Ember manager | works |
+| Ember **Cancel** returns to its builder | works — found and fixed the double-prompt below |
+| Ember **Complete**: Ember's own diff-and-apply | works, starting equipment included |
+| Barbarian 1→20 jump: every ASI screen spends its full budget | works |
+| …and Review reports Strength **24** | works — the `deferredAsi` fix |
+| Rogue 6 Expertise offers culture/path skills | works — the pool-scoping fix |
+| …and Expertise on a skill granted at level 3 (Phantom) gives **2** | works — the trait-ordering fix |
+| A half-feat at an ASI level applies its +1 and shows it | works |
+
+One warning seen during the Barbarian build, on Path of the Berserker: *"item configured to be
+consumed by Recharge with Rage activity on Intimidating Presence could not be found"*. **Not ours**:
+that subclass is one of the 91 the sweep reports byte-identical to a natively-built character, and
+Intimidating Presence is a level-10 feature, so its activities and consumption targets were compared
+and matched. A dangling consumption reference present in both builds is the content's or the
+system's.
+
 ## Testing by hand
 
 Some of what this module changes is only visible on a screen — a granted trait rendering locked, an
