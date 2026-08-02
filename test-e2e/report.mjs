@@ -112,6 +112,16 @@ const KNOWN = [
   // `flags.dnd5e.riders` used to head this list at 91/92. The normaliser now drops it when it holds
   // no rider, which is what it always held — see `normalize.mjs`. If it reappears here it is
   // carrying content, and that is a finding rather than a documented nuisance.
+  // Artificer Battle Smith, and the only difference left in the sweep. dnd5e's mid-walk synthesis
+  // misses an advancement at level N on a feature *granted* at level N, so the native reference is
+  // short two spells the content gives a level-3 Battle Smith. Ours is the correct character.
+  { sig: "source.items.* (whole item on one side only)",
+    note: "Battle Smith only: native never applies the level-3 grant on the Battle Smith Spells "
+      + "feature, so Heroism and Shield are missing from the *reference*. See the README." },
+  { sig: "source.items.*.system.advancement.*.value.added",
+    note: "The empty `value.added` behind the same Battle Smith grant." },
+  { sig: "derived.itemsByType.spell[]",
+    note: "The two spells above, seen from the derived side." },
   { sig: "source.items.*.system.source.book",
     note: "Open, and order-dependent across scenarios — creator \"SRD 5.2\", native empty." },
   { sig: "derived.itemsByType.spell[]",

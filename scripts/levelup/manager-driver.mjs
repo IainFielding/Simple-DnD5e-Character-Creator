@@ -1388,8 +1388,18 @@ export class LevelUpDriver {
    */
   async autoResolve(provider) {
     const done = new Set();
-    const drain = async (steps, resolve) => {
-      for ( const rec of [...steps] ) {
+    const drain = async (steps, resolve, { byLevel = false } = {}) => {
+      // Insertion order is the walk order for everything `prepare()` found, but a decision a
+      // subclass or feat *synthesised* is appended after the whole main walk — so a level-3 feature's
+      // choice lands behind a level-6 one. That only matters where one decision depends on another
+      // having already applied, which among these is traits: an expertise upgrade writes nothing
+      // unless the character is already proficient (`TraitAdvancement#apply` skips it when the
+      // current value is 0). A Rogue Phantom picking Expertise in a skill that the subclass's own
+      // level-3 feature grants would silently keep plain proficiency.
+      const order = byLevel
+        ? [...steps].sort((a, b) => ((a.screenLevel ?? a.level ?? 0) - (b.screenLevel ?? b.level ?? 0)))
+        : [...steps];
+      for ( const rec of order ) {
         if ( done.has(rec) ) continue;
         done.add(rec);
         try { await resolve(rec); } catch ( err ) { log("headless resolve failed", err); }
@@ -1414,7 +1424,9 @@ export class LevelUpDriver {
         if ( typeof a.feat === "string" ) return this.applyAsiFeat(rec, a.feat, { showMessage: false });
         return this.setAsi(rec, a);
       });
-      await drain(this.traitSteps,    rec => { const keys = provider.traitKeys(rec); return keys.length ? this.applyTraitKeys(rec, keys) : null; });
+      await drain(this.traitSteps,
+        rec => { const keys = provider.traitKeys(rec); return keys.length ? this.applyTraitKeys(rec, keys) : null; },
+        { byLevel: true });
       await drain(this.choiceSteps,   async rec => {
         if ( provider.defer(rec) ) return;
         for ( const uuid of provider.choiceUuids(rec) ) await this.toggleChoice(rec, uuid);

@@ -522,7 +522,10 @@ than one row per item it touched.
 | | identical | differing | errored | rows | causes |
 | --- | --- | --- | --- | --- | --- |
 | First run | 0 | 91 | 1 | 514 | 23 |
-| After the fixes below | **90** | 2 | 0 | 7 | 5 |
+| After the fixes below | **91** | 1 | 0 | 5 | 3 |
+
+The one remaining difference is Artificer Battle Smith, and it is dnd5e's rather than ours — see
+below. Every cause in the report is now a documented one.
 
 `sweep-results-run1.jsonl` keeps the first run for comparison; `sweep-results-final.jsonl` is the
 current one.
@@ -633,19 +636,58 @@ strips empty rider lists, and `node run.mjs --keep-riders` turns that off to sho
 — currently 9 rows, all on the three level-1-only scenarios. Cleaning those would mean stripping the
 flag ourselves on creation, which is a rule the system does not have.
 
-### Found by the sweep, not yet fixed
+**Expertise was applied before the proficiency it upgrades.** Rogue Phantom, 1/92 — `skills.ani` came
+out 2 natively and 1 for us.
 
-Two subclasses, both narrow, both new in the post-fix run:
+`TraitAdvancement#apply` writes nothing for an expertise-mode trait unless the character is *already*
+proficient (it skips when the current value is 0). Both sides recorded the same picks — level 1
+`acr, arc`, level 6 `ani, ath` — so the difference was purely when they were applied. Animal Handling
+is not on the Rogue's skill list at all; it comes from *Whispers of the Dead*, the level-3 feature the
+Phantom grants, whose Trait choice is any skill.
 
-**Battle Smith — the creator grants two spells the native build does not** (`Heroism`, `Shield`).
-Note the direction: this is the *opposite* of the old missing-spell cluster. `value.added` on the
-subclass's spell ItemGrant is empty natively and populated for us, so the native side never applied
-that grant. Worth establishing why native declines it before assuming we are the wrong one.
+`autoResolve` drained `traitSteps` in insertion order. Everything `prepare()` found goes in during
+the main walk, but a decision a subclass or feat *synthesises* is appended after all of it — so the
+level-3 feature's choice sat behind the level-6 Expertise, the upgrade ran while the skill was still
+unproficient, and dnd5e silently declined to write it. Traits now drain in level order
+(`screenLevel ?? level`, so a feat's own level-0 advancements sort at the level the feat was taken).
 
-**Rogue Phantom — `skills.ani` is 2 natively and 1 for us**, so an Expertise pick landed on one side
-only. Distinct from the Expertise pool bug fixed above: that one was creation-scope, this is a
-level-6 Expertise on the level-up path, which reads the system's own `actorSelected()`. Only 1/92,
-and only on the Ravenloft copy of the subclass.
+**Duplicate items were paired by position, not content.** Sorcerer Shadow Sorcery, and intermittent —
+it passed one run and failed the next.
+
+A character can hold two items sharing one compendium source with *different* data: a Shadow Sorcerer
+carries two copies of Summon Beast, one enchantment-modified. `buildIdMap` numbers same-identity
+duplicates `#1`, `#2` by array order, so whenever the two builds created them in opposite order the
+diff paired `#1` against `#2` and reported every field of both as different — when the pair was in
+fact identical, just crossed. `normalize.mjs` now breaks the tie on a content digest that ignores
+ids, timestamps and flags, so a duplicate always takes the same number as its counterpart.
+
+Only traits are ordered by level, because they are the type here with an intra-type dependency. Note
+the interactive shell has the same latent hazard — it applies picks as the player clicks, so visiting
+the level-6 screen before the level-3 one would reproduce it. The screens are presented in level
+order, so it takes deliberate back-and-forth; a proper fix would re-evaluate expertise when an
+underlying proficiency changes.
+
+### Found by the sweep, not fixed — the native side is the one that is wrong
+
+**Artificer Battle Smith: native never applies a level-3 spell grant, so the creator's character has
+two spells the reference does not** (`Heroism`, `Shield`). 1/92, and the only remaining difference in
+the whole sweep.
+
+The subclass grants a *Battle Smith Spells* feature at level 3, and that feature carries five
+ItemGrants, at levels 3, 5, 9, 13 and 17. On the native build the level-3 one has `value: {}` while
+all four later ones are populated; the creator applies all five. It reproduces at `--level 3`, so it
+is not an artefact of the long walk — the pattern is that an advancement at level N, on a feature
+that *arrives* at level N, is missed by dnd5e's mid-walk step synthesis. The Cartographer's
+equivalent grants sit directly on the subclass rather than on a granted feature, which is why they
+apply.
+
+Left alone deliberately: matching native here would mean dropping two spells the content says a
+level-3 Battle Smith has. Same category as the `riders` flag and the `details.background` race — the
+reference is the unreliable one. Reproduce with:
+
+```bash
+node run.mjs --compare-item "sweep:artificer/battle-smith/Battle Smith Spells"
+```
 
 ### Not yet covered
 

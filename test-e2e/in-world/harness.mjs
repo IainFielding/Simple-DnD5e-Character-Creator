@@ -348,8 +348,12 @@ export async function probeWarmCalls() {
  * @param {string} scenarioId
  * @param {string} itemName     Case-insensitive substring of the item's name.
  */
-export async function compareItem({ scenarioId, itemName }) {
-  const scenario = SCENARIOS.find(s => s.id === scenarioId);
+export async function compareItem({ scenarioId, itemName, level = 20 }) {
+  // Sweep ids resolve too (`sweep:artificer/battle-smith`), because a sweep finding is exactly when
+  // you want this: the report shows the normalised path, and the question is always what each side
+  // actually stored underneath it.
+  const scenario = SCENARIOS.find(s => s.id === scenarioId)
+    ?? (await getSweep(level)).scenarios.find(s => s.id === scenarioId);
   if ( !scenario ) throw new Error(`unknown scenario "${scenarioId}"`);
   await cleanup();
 
@@ -362,8 +366,14 @@ export async function compareItem({ scenarioId, itemName }) {
   let creator = null;
   try {
     const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate });
+    // The same tolerance `runScenario` grants a generating scenario. Without it the resolver's first
+    // pass — which legitimately offers a narrower pool than the settled one — throws, and this tool
+    // cannot be pointed at the sweep findings it exists to explain.
+    const unofferable = scenario.generate ? [] : null;
     native = await buildNative({ ...scenario, name: `${PREFIX}${scenario.name} [native]` }, { book });
-    creator = await buildCreator({ ...scenario, name: `${PREFIX}${scenario.name} [creator]` }, { book });
+    creator = await buildCreator(
+      { ...scenario, name: `${PREFIX}${scenario.name} [creator]` }, { book, unofferable }
+    );
     return { scenario: scenarioId, item: itemName, native: pick(native), creator: pick(creator) };
   } finally {
     const ids = [native?.id, creator?.id].filter(Boolean);

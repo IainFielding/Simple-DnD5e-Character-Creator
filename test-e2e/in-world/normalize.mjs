@@ -90,20 +90,48 @@ function itemIdentity(item) {
 }
 
 /**
+ * A digest of what an item *is*, ignoring everything that differs between two builds of the same
+ * character. Used only to order same-identity duplicates — see {@link buildIdMap}.
+ *
+ * Volatile keys are dropped wherever they appear (`_id` on the item and on every embedded effect,
+ * `_stats` timestamps, `sort`, and the whole `flags` subtree, which carries advancement-origin ids),
+ * and object keys are emitted in sorted order so two equal items always digest the same.
+ */
+function contentKey(value) {
+  if ( Array.isArray(value) ) return `[${value.map(contentKey).join(",")}]`;
+  if ( !value || (typeof value !== "object") ) return JSON.stringify(value) ?? "null";
+  const drop = new Set(["_id", "_stats", "sort", "ownership", "folder", "flags"]);
+  return `{${Object.keys(value).sort()
+    .filter(k => !drop.has(k))
+    .map(k => `${k}:${contentKey(value[k])}`)
+    .join(",")}}`;
+}
+
+/**
  * Map every embedded item id to a stable identity, disambiguating repeats of the same source
  * with an occurrence suffix so two copies of one item stay distinguishable but comparable.
+ *
+ * The tie-break between duplicates is their **content**, not their position. A character can hold
+ * two items with one compendium source and different data — a Shadow Sorcerer carries two copies of
+ * Summon Beast, one of them enchantment-modified — and ordering those by array position pairs
+ * `#1` with `#2` across the two builds whenever they happened to create them in opposite order. The
+ * diff then reports every field of both copies as different when the pair is in fact identical.
  * @param {object[]} items
  * @returns {Map<string, string>}
  */
 function buildIdMap(items) {
   const seen = new Map();
   const map = new Map();
-  // Sort by identity first so the occurrence numbering does not depend on creation order.
-  for ( const item of [...items].sort((a, b) => itemIdentity(a).localeCompare(itemIdentity(b))) ) {
-    const base = itemIdentity(item);
-    const n = (seen.get(base) ?? 0) + 1;
-    seen.set(base, n);
-    map.set(item._id, n > 1 ? `${base}#${n}` : base);
+  // Identity first so numbering does not depend on creation order, then content so a duplicate
+  // always takes the same number as its counterpart in the other build.
+  const ordered = [...items]
+    .map(item => ({ item, identity: itemIdentity(item), content: contentKey(item) }))
+    .sort((a, b) => a.identity.localeCompare(b.identity) || a.content.localeCompare(b.content));
+
+  for ( const { item, identity } of ordered ) {
+    const n = (seen.get(identity) ?? 0) + 1;
+    seen.set(identity, n);
+    map.set(item._id, n > 1 ? `${identity}#${n}` : identity);
   }
   return map;
 }

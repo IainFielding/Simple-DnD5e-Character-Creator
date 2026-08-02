@@ -55,8 +55,10 @@ try {
     const uuid = value("ids");
     console.log(JSON.stringify(await harness("describeAdvancements", uuid), null, 2));
   } else if ( flag("compare-item") ) {
-    const [scenarioId, itemName] = value("compare-item").split("/");
-    const r = await harness("compareItem", { scenarioId, itemName });
+    // Split on the *last* slash: a sweep id has one of its own (`sweep:artificer/battle-smith`).
+    const arg = value("compare-item");
+    const cut = arg.lastIndexOf("/");
+    const r = await harness("compareItem", { scenarioId: arg.slice(0, cut), itemName: arg.slice(cut + 1) });
     console.log(JSON.stringify(r, null, 2));
   } else if ( flag("probe-warm") ) {
     console.log(JSON.stringify(await harness("probeWarmCalls"), null, 2));
