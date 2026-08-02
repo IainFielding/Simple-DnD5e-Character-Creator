@@ -66,7 +66,25 @@ const HUMAN_SAGE = {
     "languages:standard:dwarvish"]
 };
 
-export const SCENARIOS = [
+/**
+ * Ember content, for the hand-off scenarios at the end of this file.
+ *
+ * Ember's builder asks for an ancestry, a culture and a path, and merges the latter two into one
+ * background (`in-world/ember.mjs`). Its cultures are the peoples — the `emberBkg*` items — and its
+ * paths are the vocations; that split is taken from the naming, since the module exposes no API to
+ * ask. Pairing them the other way round would still produce a manager both adapters could build, so
+ * a mistake here costs realism rather than correctness.
+ */
+const EMBER = {
+  ancestry: "Compendium.ember.character.Item.emberAncHuman000",
+  culture: "Compendium.ember.character.Item.emberBkgStrider0",
+  path: "Compendium.ember.character.Item.monsterHunter000",
+  sorcerer: "Compendium.dnd-players-handbook.classes.Item.phbscrSorcerer00",
+  fighter: "Compendium.dnd-players-handbook.classes.Item.phbftrFighter000",
+  warlock: "Compendium.dnd-players-handbook.classes.Item.phbwlkWarlock000"
+};
+
+const SCENARIO_LIST = [
   {
     id: "human-fighter-sage",
     name: "Equivalence: Human Fighter (Sage)",
@@ -263,5 +281,61 @@ export const SCENARIOS = [
       EmTANp6x6GfXFTmU: [UUID.archery],                          // Fighting Style
       a16u6wgnJQq8HMoq: "avg"                                    // Wizard's first level: a real roll
     }
+  },
+
+  /**
+   * Ember's creation hand-off — the one flow where this module does not build the character at all.
+   * Ember assembles ancestry, culture, path and class itself, stages them onto one manager's clone
+   * and renders it; `intercept.mjs` claims that manager and runs the level-up wizard over it.
+   *
+   * These three scenarios stage the same manager Ember does (`in-world/ember.mjs` — see its header
+   * for what that can and cannot stand in for) and compare our driver against the system's own
+   * wizard over it. They answer generated, because there is no hand-written table that would survive
+   * an Ember content update, and because the interesting question is whether the two walks agree
+   * rather than what a particular character picked.
+   *
+   * The three exist because the implementation notes flag exactly these as unverified beyond one
+   * hand-checked sorcerer: a full caster, a martial with no spellcasting at all, and a warlock, whose
+   * pact slots are a different spellcasting progression from either.
+   *
+   * `world` pins them to `playwright-ember`; nothing here resolves in a world without Ember.
+   */
+  {
+    id: "ember-sorcerer",
+    name: "Ember: Human Strider Monster Hunter Sorcerer",
+    world: "playwright-ember",
+    generate: true,
+    ember: { ancestryUuid: EMBER.ancestry, cultureUuid: EMBER.culture, pathUuid: EMBER.path },
+    classUuid: EMBER.sorcerer,
+    abilities: { str: 8, dex: 14, con: 13, int: 10, wis: 12, cha: 15 }
+  },
+  {
+    id: "ember-fighter",
+    name: "Ember: Human Strider Monster Hunter Fighter",
+    world: "playwright-ember",
+    generate: true,
+    ember: { ancestryUuid: EMBER.ancestry, cultureUuid: EMBER.culture, pathUuid: EMBER.path },
+    classUuid: EMBER.fighter,
+    abilities: { str: 15, dex: 14, con: 13, int: 10, wis: 12, cha: 8 }
+  },
+  {
+    id: "ember-warlock",
+    name: "Ember: Human Strider Monster Hunter Warlock",
+    world: "playwright-ember",
+    generate: true,
+    ember: { ancestryUuid: EMBER.ancestry, cultureUuid: EMBER.culture, pathUuid: EMBER.path },
+    classUuid: EMBER.warlock,
+    abilities: { str: 8, dex: 14, con: 13, int: 10, wis: 12, cha: 15 }
   }
 ];
+
+/**
+ * Every scenario belongs to a world, and the base world is the default.
+ *
+ * That is not just tidiness: the hand-written scenarios above answer trait choices with literal keys
+ * like `languages:standard:elvish`, and **Ember replaces the language list** — its world offers
+ * Arcden, Cascal, Imperial and the rest, and none of the standard ones. Running them there fails on
+ * a key the pool has never heard of, which looks alarming and means nothing. Anything naming
+ * specific content is portable only to the world that content is in.
+ */
+export const SCENARIOS = SCENARIO_LIST.map(s => ({ world: "playwright", ...s }));

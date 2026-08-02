@@ -53,7 +53,9 @@ try {
   const harness = await load(session);
 
   if ( flag("list") ) {
-    for ( const s of await harness("list") ) console.log(`${s.id.padEnd(28)} ${s.name}`);
+    for ( const s of await harness("list") ) {
+      console.log(`${s.id.padEnd(28)} ${String(s.world).padEnd(18)} ${s.name}`);
+    }
   } else if ( flag("ids") ) {
     const uuid = value("ids");
     console.log(JSON.stringify(await harness("describeAdvancements", uuid), null, 2));

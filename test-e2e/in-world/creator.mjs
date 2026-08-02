@@ -25,18 +25,49 @@ const { SourceIndex } = await import(`${MODULE}/data/source-index.mjs`);
 const { resolveChoices } = await import(`${MODULE}/data/choice-resolver.mjs`);
 const { LevelUpDriver } = await import(`${MODULE}/levelup/manager-driver.mjs`);
 const { resolveFeatSpells } = await import(`${MODULE}/steps/feat-spells-step.mjs`);
-const { ScenarioChoiceProvider } = await import(`./provider.mjs${new URL(import.meta.url).search}`);
+const { isEmberCreationManager, foldOriginScreens } = await import(`${MODULE}/levelup/ember-creation.mjs`);
+const BUST = new URL(import.meta.url).search;
+const { ScenarioChoiceProvider } = await import(`./provider.mjs${BUST}`);
+const { stageEmberManager } = await import(`./ember.mjs${BUST}`);
 
 /**
- * Let the writes the system makes *off* a commit land before anything reads the actor.
+ * Wait for the writes the system makes *off* a commit to land, before anything reads the actor.
  *
- * `SubclassData._onCreate` sets `attributes.spellcasting` for a subclass-derived caster (an Eldritch
- * Knight, an Arcane Trickster) with a deliberately un-awaited `actor.update`, so the value arrives a
- * tick after `commit()` resolves. The native adapter already waits for exactly this once its manager
- * closes; without the same courtesy here the comparison is between a settled actor and an unsettled
- * one, and the difference reads as a missing casting ability.
+ * Several of dnd5e's `_onCreate` handlers finish the job with a deliberately un-awaited
+ * `actor.update`: `SubclassData` sets `attributes.spellcasting` for a subclass-derived caster,
+ * `ClassData` assigns the primary class, `BackgroundData` links the background. All of them arrive a
+ * tick or more after `commit()` resolves, so reading the actor immediately compares a settled build
+ * against an unsettled one — which reads as a missing casting ability or an unlinked background.
+ *
+ * Watching the actor go quiet is not enough on its own: "unchanged since the last sample" is true
+ * *trivially* in the window before a pending write has landed, so a naive version returns
+ * immediately and reads the actor a moment too early. Hence `floor` — the earliest this may conclude
+ * — with the quiet check on top of it to catch the slower cases.
+ *
+ * The floor is per-caller because the right one differs by an order of magnitude. A level-up commits
+ * one or two items and is done almost at once; Ember's hand-off creates the whole character in a
+ * single write and chains `ClassData`, `BackgroundData` and race handlers behind it. A floor long
+ * enough for the second would add tens of seconds per scenario to the first, and the incremental
+ * sweep pays it twenty times over.
+ * @param {Actor5e} actor
+ * @param {object} [options]
+ * @param {number} [options.floor]  Earliest this may return, however quiet the actor looks.
+ * @param {number} [options.quiet]  How long unchanged, past the floor, counts as settled.
+ * @param {number} [options.cap]    Give up waiting after this; a build that never settles is a
+ *                                  finding for the diff to report, not something to hang on.
  */
-const settle = () => new Promise(resolve => setTimeout(resolve, 300));
+async function settle(actor, { floor = 300, quiet = 150, cap = 5000 } = {}) {
+  const started = Date.now();
+  const snap = () => JSON.stringify(actor?.toObject() ?? null);
+  let last = snap();
+  while ( (Date.now() - started) < cap ) {
+    await new Promise(resolve => setTimeout(resolve, quiet));
+    const now = snap();
+    const quietNow = now === last;
+    last = now;
+    if ( quietNow && ((Date.now() - started) >= floor) ) return;
+  }
+}
 
 /** The index is expensive to build and stateless between scenarios — build it once. */
 let sourceIndex = null;
@@ -288,6 +319,8 @@ async function answerFeatSpells(state, source, scenario) {
 export async function buildCreator(
   scenario, { book, diagnostics, unofferable, onLevel, consumed = new Set() } = {}
 ) {
+  if ( scenario.ember ) return buildEmberCreator(scenario, { book, consumed, onLevel });
+
   const source = await getSourceIndex();
   const actor = await Actor.implementation.create({
     name: scenario.name,
@@ -331,12 +364,56 @@ export async function buildCreator(
   // driver, so the background ASI lands on top of them exactly as it does natively. Nothing may
   // touch `system.abilities` after this point or that increase would be overwritten.
   await assembleActor(state, source, null);
-  await settle();
+  await settle(actor);
   await onLevel?.(1, actor);
 
   await levelUp(actor, scenario, book, consumed, onLevel);
   await multiclass(actor, scenario, book, consumed);
-  await settle();
+  await settle(actor);
+  return actor;
+}
+
+/**
+ * The creator's side of an Ember hand-off.
+ *
+ * In a real Ember world `intercept.mjs` claims the manager Ember renders and hands it to the
+ * interactive shell. This is that path with the UI removed, exactly as {@link levelUp} is for an
+ * ordinary level-up: the same driver, the same `foldOriginScreens`, the same commit — answered by
+ * the book instead of by a person.
+ *
+ * `isEmberCreationManager` is asserted rather than assumed. It is the module's own fingerprint for
+ * "this is Ember's hand-off", and if a staged manager does not satisfy it the scenario is testing
+ * something that would never reach this code in a real world — better to fail loudly than to quietly
+ * compare two builds of a manager the module would have ignored.
+ * @param {object} scenario
+ * @param {object} options
+ * @returns {Promise<Actor5e>}
+ */
+async function buildEmberCreator(scenario, { book, consumed, onLevel }) {
+  const { actor, manager } = await stageEmberManager(scenario);
+  if ( !isEmberCreationManager(manager) ) {
+    throw new Error("the staged manager is not one the module would claim as an Ember hand-off — "
+      + "either Ember is not active in this world, or its staging and `isEmberCreationManager` "
+      + "have diverged (see in-world/ember.mjs)");
+  }
+
+  manager._sogromLevelUp = true;
+  const driver = new LevelUpDriver(manager);
+  await driver.prepare();
+  // Origin decisions belong on the level-1 screen for a character being created; the shell does this
+  // too. It moves `screenLevel` only, so nothing about what applies where changes.
+  foldOriginScreens(driver);
+  await warmBook(driver, book);
+
+  const provider = new ScenarioChoiceProvider(book);
+  await driver.autoResolve(provider);
+  await driver.commit();
+  for ( const id of provider.consumed ) consumed.add(id);
+
+  // A patient floor here: one commit creates the entire character, so `ClassData._onCreate`'s
+  // primary-class assignment, `BackgroundData`'s link and the race link all queue behind it.
+  await settle(actor, { floor: 1500 });
+  await onLevel?.(1, actor);
   return actor;
 }
 
@@ -384,14 +461,7 @@ async function multiclass(actor, scenario, book, consumed) {
 async function resolveWith(manager, book, consumed) {
   const driver = new LevelUpDriver(manager);
   await driver.prepare();
-
-  const records = [
-    ...driver.hpSteps, ...driver.sizeSteps, ...driver.grantSteps, ...driver.subclassSteps,
-    ...driver.asiSteps, ...driver.traitSteps, ...driver.choiceSteps
-  ];
-  for ( const rec of records ) {
-    await book.answer(rec.advancement, rec.level, { asker: "creator", offered: () => offeredFor(driver, rec) });
-  }
+  const records = await warmBook(driver, book);
 
   const provider = new ScenarioChoiceProvider(book);
   await driver.autoResolve(provider);
@@ -404,6 +474,28 @@ async function resolveWith(manager, book, consumed) {
   for ( const rec of [...driver.traitSteps, ...driver.choiceSteps, ...driver.asiSteps] ) {
     if ( !records.includes(rec) ) book.peek(rec.advancement, rec.level, "creator");
   }
+}
+
+/**
+ * Ask the book about every decision the driver surfaced, before anything reads an answer back.
+ *
+ * `autoResolve` reads its provider **synchronously**, and generating an answer is not — it reads
+ * compendium indexes — so the answers have to exist first. Warming is also what makes this side's
+ * ledger complete: every decision the driver raised is recorded as asked, answered or not, so it can
+ * be compared against what the native wizard raised.
+ * @param {LevelUpDriver} driver
+ * @param {AnswerBook} book
+ * @returns {Promise<object[]>}  The records warmed, so a caller can tell which were already present.
+ */
+async function warmBook(driver, book) {
+  const records = [
+    ...driver.hpSteps, ...driver.sizeSteps, ...driver.grantSteps, ...driver.subclassSteps,
+    ...driver.asiSteps, ...driver.traitSteps, ...driver.choiceSteps
+  ];
+  for ( const rec of records ) {
+    await book.answer(rec.advancement, rec.level, { asker: "creator", offered: () => offeredFor(driver, rec) });
+  }
+  return records;
 }
 
 /**
@@ -450,7 +542,7 @@ async function levelUp(actor, scenario, book, consumed, onLevel) {
       .forLevelChange(actor, classItem.id, stride);
     manager._sogromLevelUp = true;
     await resolveWith(manager, book, consumed);
-    await settle();
+    await settle(actor);
     await onLevel?.(level, actor);
   }
 }

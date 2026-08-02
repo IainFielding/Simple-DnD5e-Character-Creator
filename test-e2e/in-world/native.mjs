@@ -19,6 +19,8 @@
  * reference build runs the native wizard even with the module active.
  */
 
+const { stageEmberManager } = await import(`./ember.mjs${new URL(import.meta.url).search}`);
+
 /* -------------------------------------------- */
 /*  Small async helpers                          */
 /* -------------------------------------------- */
@@ -94,7 +96,7 @@ async function change(element) {
  * @param {AnswerBook} book           The scenario's answers.
  * @param {Set<string>} [consumed]    Collects the ids an answer was read for.
  */
-async function fillStep(step, book, consumed) {
+async function fillStep(step, book, consumed, manager) {
   const flow = step.flow;
   const adv = flow?.advancement;
   if ( !adv ) return;
@@ -121,14 +123,21 @@ async function fillStep(step, book, consumed) {
   const answer = await book.answer(adv, flow.level, { asker: "native", offered });
   if ( answer !== undefined ) consumed?.add(adv.id);
 
+  // A manager built with `automaticApplication` — Ember's hand-off is one — re-evaluates
+  // `getAutomaticApplicationValue()` on every render and forwards past the step the moment nothing
+  // is left to decide. Applying a pick can therefore *finish* the screen, resetting the clone and
+  // leaving the advancement object captured above behind. Anything waiting on that object has to
+  // accept "the manager has moved on" as the answer, or it waits for a state that will never arrive.
+  const moved = () => manager.step !== step;
+
   switch ( adv.type ) {
     case "HitPoints": return fillHitPoints(flow, answer);
     case "Size": return fillSize(flow, answer);
-    case "Trait": return fillTrait(flow, adv, answer);
-    case "ItemChoice": return fillItemChoice(flow, adv, answer);
+    case "Trait": return fillTrait(flow, adv, answer, moved);
+    case "ItemChoice": return fillItemChoice(flow, adv, answer, moved);
     case "ItemGrant": return fillGrantAbility(flow, answer);
     case "AbilityScoreImprovement": return fillAsi(flow, answer);
-    case "Subclass": return fillSubclass(flow, adv, answer);
+    case "Subclass": return fillSubclass(flow, adv, answer, moved);
     default:
       // Nothing to answer, or a type this harness does not drive yet. Leave it as rendered and
       // let the manager apply whatever the flow defaults to.
@@ -173,16 +182,17 @@ async function fillSize(flow, answer) {
  * re-reading the select each pass, until the advancement's own `value.chosen` holds every
  * requested key (or the pool stops offering them).
  */
-async function fillTrait(flow, adv, answer) {
+async function fillTrait(flow, adv, answer, moved = () => false) {
   const wanted = [...(answer ?? [])];
   if ( !wanted.length ) return;
 
   for ( const key of wanted ) {
-    if ( adv.value.chosen?.has?.(key) ) continue;
+    if ( adv.value.chosen?.has?.(key) || moved() ) break;
     const root = await flowElement(flow);
     if ( !root.querySelector("[name=added]") ) break;        // pool exhausted / quota already full
     const select = await untilFound(
       () => {
+        if ( moved() ) return true;
         const el = flow.form?.querySelector("[name=added]");
         return [...(el?.options ?? [])].some(o => o.value === key) ? el : null;
       },
@@ -192,9 +202,10 @@ async function fillTrait(flow, adv, answer) {
           + `(offered: ${[...(el?.options ?? [])].map(o => o.value).filter(Boolean).join(", ") || "nothing"})`;
       }
     );
+    if ( moved() ) break;
     select.value = key;
     await change(select);
-    await until(() => adv.value.chosen?.has?.(key), `trait "${key}" to apply`);
+    await until(() => adv.value.chosen?.has?.(key) || moved(), `trait "${key}" to apply`);
   }
 }
 
@@ -202,11 +213,12 @@ async function fillTrait(flow, adv, answer) {
  * Feature/spell choices: one `dnd5e-checkbox` per pool entry, named for the entry's uuid.
  * An `ability` select is present when the choice grants spells with a choosable casting ability.
  */
-async function fillItemChoice(flow, adv, answer) {
+async function fillItemChoice(flow, adv, answer, moved = () => false) {
   const uuids = Array.isArray(answer) ? answer : (answer?.uuids ?? []);
   const ability = answer?.ability ?? null;
 
   for ( const uuid of uuids ) {
+    if ( moved() ) return;
     const root = await flowElement(flow);
 
     // A configured pool renders a checkbox per entry. A restriction-driven pool (Magic Initiate's
@@ -224,21 +236,22 @@ async function fillItemChoice(flow, adv, answer) {
 
     // Neither route available: wait a beat in case the pool is merely late, then report.
     await untilFound(
-      () => flow.form?.querySelector(`[name="${CSS.escape(uuid)}"]`)
-        ?? flow.form?.querySelector("[data-action=browse]"),
+      () => moved() || flow.form?.querySelector(`[name="${CSS.escape(uuid)}"]`)
+        || flow.form?.querySelector("[data-action=browse]"),
       () => {
         const offered = [...(flow.form?.querySelectorAll("li.item[data-uuid]") ?? [])].map(li => li.dataset.uuid);
         return `choice "${adv.title}" does not offer ${uuid} `
           + `(offered: ${offered.join(", ") || "nothing, and no browse button"})`;
       }
     );
-    await fillItemChoice(flow, adv, { uuids: [uuid] });
+    if ( moved() ) return;
+    await fillItemChoice(flow, adv, { uuids: [uuid] }, moved);
   }
 
   // Set the casting ability last. Each change here re-applies the advancement and re-renders the
   // flow; doing it after the picks keeps one fewer re-render in flight while the browser modal is
   // being driven, which is where the manager was observed tearing its own step down mid-render.
-  if ( ability ) {
+  if ( ability && !moved() ) {
     const select = (await flowElement(flow)).querySelector("[name=ability]");
     if ( select && (select.value !== ability) ) { select.value = ability; await change(select); }
   }
@@ -303,7 +316,7 @@ async function withBrowserPick(uuid, fn) {
  * which does its own type validation and applies the advancement. Driving the browser modal
  * instead would be a pile of fragile UI work for no extra fidelity.
  */
-async function fillSubclass(flow, adv, answer) {
+async function fillSubclass(flow, adv, answer, moved = () => false) {
   const uuid = Array.isArray(answer) ? answer[0] : (typeof answer === "string" ? answer : answer?.uuid);
   if ( !uuid ) return;
   if ( adv.value?.uuid === uuid ) return;
@@ -314,7 +327,7 @@ async function fillSubclass(flow, adv, answer) {
   form.dispatchEvent(new DragEvent("drop", { dataTransfer, bubbles: true, cancelable: true }));
 
   await untilFound(
-    () => adv.value?.uuid === uuid,
+    () => moved() || (adv.value?.uuid === uuid),
     () => `subclass ${uuid} was not accepted by "${adv.title}" `
       + `(the flow still holds ${adv.value?.uuid ?? "nothing"}) — is the uuid a subclass of this class?`,
     10_000
@@ -435,7 +448,15 @@ export async function driveManager(manager, book, consumed) {
 
     if ( step.flow ) await ensureFlowRendered(manager, step, trace, describe);
 
-    await fillStep(step, book, consumed);
+    // A manager built with `automaticApplication` — Ember's hand-off is the one here — forwards
+    // through automatic steps *asynchronously* after each advance, because the check it makes is
+    // `await getAutomaticApplicationValue()`. So `manager.step` read at the top of this loop can be
+    // a step it is already leaving, and filling one it has left applies to a clone that no longer
+    // exists: Ember's "Path Skills" picks silently went nowhere that way. Re-read before filling and
+    // let the next iteration pick up wherever it actually settled.
+    if ( manager.step !== step ) continue;
+
+    await fillStep(step, book, consumed, manager);
 
     const button = manager.element.querySelector("[data-action=next], [data-action=complete]");
     if ( !button ) throw new Error(`no next/complete button on step "${step.flow?.advancement?.title}"`);
@@ -475,7 +496,11 @@ async function ensureFlowRendered(manager, step, trace, describe) {
   // enough that the manager almost always wins on its own.
   for ( let attempt = 1; attempt <= 3; attempt++ ) {
     try {
-      await until(() => !!flow.form, "flow form", attempt === 1 ? 12_000 : 8000);
+      // The manager leaving this step counts as settled: an automatic step never paints a form, so
+      // on an `automaticApplication` manager waiting the full timeout for one would stall the walk
+      // by twelve seconds per step and then fill a step that is no longer current.
+      await until(() => !!flow.form || (manager.step !== step), "flow form",
+        attempt === 1 ? 12_000 : 8000);
       return;
     } catch {
       if ( manager.step !== step ) return;                 // it moved on by itself; nothing to do
@@ -547,6 +572,15 @@ function describeStuckStep(manager, step) {
  * @returns {Promise<Actor5e>}
  */
 export async function buildNative(scenario, { book, consumed, onLevel } = {}) {
+  // An Ember character is not built origin-by-origin: its builder stages everything onto one
+  // manager's clone and hands that over. The reference is the system's own wizard driving it.
+  if ( scenario.ember ) {
+    const { actor, manager } = await stageEmberManager(scenario);
+    if ( manager.steps.length ) await driveManager(manager, book, consumed);
+    await onLevel?.(1, actor);
+    return actor;
+  }
+
   const actor = await Actor.implementation.create({
     name: scenario.name,
     type: "character",

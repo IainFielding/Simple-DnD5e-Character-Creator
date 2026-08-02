@@ -789,7 +789,45 @@ node run.mjs playwright-clean --probe-native "sweep:artificer/battle-smith/Heroi
 #   0 copies at every level — the grant is never applied
 ```
 
-### Not yet covered
+## Ember
 
-Ember. The Ember world is provisioned but has no scenarios: Ember builds its own manager rather than
-going through `forNewItem`, so it needs its own native build path, not just a scenario.
+Ember is the one flow where this module does not build the character. Ember's builder assembles
+ancestry, culture, path and class itself, stages them onto a single manager's clone and renders it;
+`intercept.mjs` claims that manager and runs the level-up wizard over it.
+
+Three scenarios cover it — `ember-sorcerer`, `ember-fighter`, `ember-warlock` — pinned to
+`playwright-ember` and answered by the generator. They are a full caster, a martial with no
+spellcasting at all, and a warlock's pact progression: exactly the three the implementation notes
+flagged as unverified beyond one hand-checked sorcerer. All three come back identical.
+
+```bash
+node run.mjs playwright-ember
+```
+
+`in-world/ember.mjs` stages the hand-off rather than driving Ember's builder. That builder lives in a
+~6 MB bundle with no API whose internals move between releases; a test driving it would break on
+every Ember update for reasons unrelated to this module. The hand-off *shape* is twenty mechanical
+lines (`createAdvancementManager`) and is what `isEmberCreationManager` fingerprints, so the harness
+reproduces that and both adapters are pointed at a genuine Ember-shaped manager. The creator side
+asserts the fingerprint rather than assuming it — a staged manager the module would not claim is
+testing nothing.
+
+**What this cannot reach**, and still wants a person in Foundry: detection against a manager Ember
+*actually* built (this stages what we believe Ember stages, so it agrees with itself); Ember's own
+completion, where it returns `false` from `preAdvancementManagerComplete` and applies the diff
+itself; and Cancel.
+
+Two things the Ember work turned up that apply well beyond it:
+
+**A manager built with `automaticApplication` forwards asynchronously.** Ember passes it; nothing
+else here does. The check is `await getAutomaticApplicationValue()`, so the manager can leave a step
+*while the harness is waiting for that step's flow to paint* — and filling a step it has left applies
+to a clone that no longer exists. Ember's "Path Skills" picks silently went nowhere that way, and the
+symptom was a fifteen-second timeout with no hint of the cause. `driveManager` now re-reads
+`manager.step` before filling, and `ensureFlowRendered` treats the manager moving on as settled
+rather than waiting the full timeout for a form an automatic step will never paint.
+
+**Ember replaces the language list.** Its world offers Arcden, Cascal, Imperial and the rest, and
+none of `languages:standard:elvish` or its neighbours. The six hand-written scenarios name those
+keys literally, so they cannot run there — which is why every scenario now declares a `world` and the
+base world is the default. Anything naming specific content is portable only to the world holding it.

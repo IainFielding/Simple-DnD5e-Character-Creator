@@ -265,8 +265,19 @@ export async function runScenario(scenario, { keep = false } = {}) {
  */
 export async function run({ only = null, keep = false } = {}) {
   await cleanup();
-  const scenarios = only?.length ? SCENARIOS.filter(s => only.includes(s.id)) : SCENARIOS;
+  // A scenario may pin itself to one world — the Ember hand-off ones resolve nothing without Ember.
+  // Naming a scenario explicitly still runs it, so `--only ember-sorcerer` in the wrong world fails
+  // loudly rather than silently doing nothing.
+  const here = s => !s.world || (s.world === game.world.id);
+  const scenarios = only?.length
+    ? SCENARIOS.filter(s => only.includes(s.id))
+    : SCENARIOS.filter(here);
   if ( !scenarios.length ) throw new Error(`no scenarios matched ${JSON.stringify(only)}`);
+  const foreign = scenarios.filter(s => !here(s));
+  if ( foreign.length ) {
+    throw new Error(`${foreign.map(s => `"${s.id}"`).join(", ")} need world `
+      + `"${foreign[0].world}" but this is "${game.world.id}"`);
+  }
 
   const reports = [];
   for ( const scenario of scenarios ) reports.push(await runScenario(scenario, { keep }));
@@ -275,7 +286,7 @@ export async function run({ only = null, keep = false } = {}) {
 
 /** The scenario table, for listing from the command line. */
 export function list() {
-  return SCENARIOS.map(s => ({ id: s.id, name: s.name }));
+  return SCENARIOS.map(s => ({ id: s.id, name: s.name, world: s.world ?? "any" }));
 }
 
 /* -------------------------------------------- */
