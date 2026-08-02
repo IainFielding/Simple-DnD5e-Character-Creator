@@ -1,0 +1,282 @@
+/**
+ * Run the equivalence suite against one of the test worlds.
+ *
+ *   node run.mjs                          # base world, every scenario
+ *   node run.mjs playwright-ember         # the Ember world
+ *   node run.mjs --only human-fighter-sage
+ *   node run.mjs --keep                   # leave the built actors in the world to inspect
+ *   node run.mjs --debug                  # also dump every choice the creator's resolver raised
+ *   node run.mjs --list                   # list scenarios and exit
+ *   node run.mjs --ids <uuid>             # dump an item's advancement ids (for writing scenarios)
+ *   node run.mjs --keep-riders            # don't strip empty rider flags (see normalize.mjs)
+ *   HEADED=1 node run.mjs                 # watch the native wizard being driven
+ *
+ * And the subclass sweep — every subclass in the world, built both ways at level 20:
+ *
+ *   node run.mjs --sweep                  # the whole thing (hours)
+ *   node run.mjs --sweep --level 6        # shallower
+ *   node run.mjs --sweep --shard 1/20     # one twentieth of it, for a smoke test
+ *   node run.mjs --sweep --resume         # skip scenarios already in sweep-results.jsonl
+ *   node run.mjs --sweep --plan           # list what it would run, and what it skips
+ *
+ * Node's only jobs are booting Foundry, joining as GM, and printing results. The comparison
+ * itself runs inside the world (see `in-world/harness.mjs`).
+ */
+
+import { WORLDS } from "./config.mjs";
+import { startFoundry } from "./lib/server.mjs";
+import { Session } from "./lib/session.mjs";
+import { ensureWorld } from "./lib/worlds.mjs";
+
+const argv = process.argv.slice(2);
+const flag = name => argv.includes(`--${name}`);
+const value = name => {
+  const i = argv.indexOf(`--${name}`);
+  return i >= 0 ? argv[i + 1] : null;
+};
+
+const worldId = argv.find(a => !a.startsWith("--") && WORLDS[a]) ?? "playwright";
+const only = value("only")?.split(",").map(s => s.trim()).filter(Boolean) ?? null;
+const keep = flag("keep");
+const SWEEP_RESULTS = new URL("./sweep-results.jsonl", import.meta.url);
+
+ensureWorld(worldId);
+const server = await startFoundry(worldId, { verbose: flag("verbose") });
+let session;
+let exitCode = 0;
+
+try {
+  session = await Session.open();
+  const harness = await load(session);
+
+  if ( flag("list") ) {
+    for ( const s of await harness("list") ) console.log(`${s.id.padEnd(28)} ${s.name}`);
+  } else if ( flag("ids") ) {
+    const uuid = value("ids");
+    console.log(JSON.stringify(await harness("describeAdvancements", uuid), null, 2));
+  } else if ( flag("compare-item") ) {
+    const [scenarioId, itemName] = value("compare-item").split("/");
+    const r = await harness("compareItem", { scenarioId, itemName });
+    console.log(JSON.stringify(r, null, 2));
+  } else if ( flag("probe-warm") ) {
+    console.log(JSON.stringify(await harness("probeWarmCalls"), null, 2));
+  } else if ( flag("probe") ) {
+    const probe = { uuid: value("probe"), warm: flag("warm") };
+    console.log(JSON.stringify(await harness("probeSource", probe), null, 2));
+  } else if ( flag("find") ) {
+    for ( const i of await harness("findItems", value("find")) ) {
+      console.log(`${i.type.padEnd(12)} ${i.name.padEnd(30)} ${i.uuid}`);
+    }
+  } else if ( flag("subclasses") ) {
+    for ( const s of await harness("listSubclasses", value("subclasses")) ) {
+      console.log(`${s.name.padEnd(28)} ${s.uuid}`);
+    }
+  } else if ( flag("sweep") ) {
+    exitCode = await runSweep(harness);
+  } else {
+    const result = await harness("run", { only, keep });
+    exitCode = report(result, { debug: flag("debug") });
+    // A scenario that threw is usually a harness/content mismatch rather than a real difference,
+    // and the world's own console is where the explanation lives.
+    if ( result.reports.some(r => r.error) ) {
+      const errors = session.consoleLog.filter(l => /^\[(error|warning|pageerror)\]/.test(l));
+      console.log(`\n--- world errors & warnings (${errors.length}) ---\n${errors.slice(-25).join("\n")}`);
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(new URL("./console.log", import.meta.url), session.consoleLog.join("\n"), "utf8");
+      console.log("full world console written to test-e2e/console.log");
+    }
+  }
+} catch ( err ) {
+  console.error(`\n${err.message}`);
+  if ( session ) console.error(`--- world console tail ---\n${session.tail(50)}`);
+  exitCode = 1;
+} finally {
+  if ( session ) await session.close();
+  await server.stop();
+}
+process.exit(exitCode);
+
+/* -------------------------------------------- */
+
+/**
+ * Import the in-world harness into the page and return a caller for its exports.
+ *
+ * The module is served from Foundry's own static route, because the repo is junction-linked into
+ * `Data/modules` — so these files are real ES modules with real imports, not stringified blobs.
+ * The cache-buster makes an edited harness take effect without restarting Foundry.
+ */
+async function load(session) {
+  const bust = Date.now();
+  await session.eval(async bust => {
+    const url = `/modules/sogrom-dnd5e-character-creator/test-e2e/in-world/harness.mjs?v=${bust}`;
+    globalThis.__harness = await import(url);
+  }, bust);
+  // `--keep-riders` turns off the normaliser's empty-rider strip, to check whether that strip is
+  // still doing any work now the driver cleans the flag at commit.
+  if ( flag("keep-riders") ) await session.eval(() => { globalThis.__keepRiders = true; });
+
+  return (fn, arg) => session.eval(
+    ({ fn, arg }) => globalThis.__harness[fn](arg),
+    { fn, arg }
+  );
+}
+
+/* -------------------------------------------- */
+/*  The subclass sweep                           */
+/* -------------------------------------------- */
+
+/**
+ * Run the sweep, one scenario at a time, appending each result to `sweep-results.jsonl` as it lands.
+ *
+ * Driving the loop from here rather than in the world is the whole point: a level-20 build of ninety
+ * subclasses, twice each, through a rendered wizard, is measured in hours. A run that returned only
+ * at the end would lose everything to one stranded flow, and there would be no way to pick it back
+ * up. So each scenario crosses the bridge on its own, is written out immediately, and `--resume`
+ * reads the file back to decide what is left.
+ *
+ * The console gets one line per scenario; the full difference list goes to the file, because sixty
+ * differences across ninety scenarios is not something to read as it scrolls past.
+ * @returns {Promise<number>}   The process exit code.
+ */
+async function runSweep(harness) {
+  const { appendFileSync, readFileSync, existsSync } = await import("node:fs");
+  const level = Number(value("level") ?? 20);
+
+  const plan = await harness("sweepList", { level });
+  if ( plan.skipped.length ) {
+    console.log(`skipping ${plan.skipped.length} subclass(es):`);
+    for ( const s of plan.skipped ) console.log(`  ${s.subclass.padEnd(30)} ${s.reason}`);
+  }
+
+  let ids = plan.scenarios.map(s => s.id);
+
+  // `--only` takes substrings, not exact ids — chasing one finding usually means "every Artificer"
+  // or "every subclass of this class", and the ids are shaped `sweep:<class>/<subclass>` for it.
+  if ( only ) {
+    ids = ids.filter(id => only.some(q => id.includes(q)));
+    if ( !ids.length ) throw new Error(`no sweep scenario matches ${JSON.stringify(only)}`);
+  }
+
+  // `--shard i/n` takes every nth scenario rather than a contiguous block, so one shard covers a
+  // spread of classes instead of the first two alphabetically — a smoke test wants variety.
+  const shard = value("shard");
+  if ( shard ) {
+    const [i, n] = shard.split("/").map(Number);
+    if ( !(i >= 1 && i <= n) ) throw new Error(`--shard wants "i/n" with 1 <= i <= n, got "${shard}"`);
+    ids = ids.filter((_, idx) => (idx % n) === (i - 1));
+  }
+
+  if ( flag("resume") && existsSync(SWEEP_RESULTS) ) {
+    const done = new Set(readFileSync(SWEEP_RESULTS, "utf8").split("\n").filter(Boolean)
+      .map(line => { try { return JSON.parse(line).id; } catch { return null; } }).filter(Boolean));
+    const before = ids.length;
+    ids = ids.filter(id => !done.has(id));
+    console.log(`resuming: ${before - ids.length} already recorded, ${ids.length} to go`);
+  }
+
+  if ( flag("plan") ) {
+    for ( const id of ids ) console.log(id);
+    console.log(`\n${ids.length} scenario(s) at level ${level}`);
+    return 0;
+  }
+
+  console.log(`\nsweeping ${ids.length} subclass(es) at level ${level} → test-e2e/sweep-results.jsonl\n`);
+  let passed = 0;
+  let failed = 0;
+  let errored = 0;
+
+  for ( const [i, id] of ids.entries() ) {
+    const position = `[${String(i + 1).padStart(3)}/${ids.length}]`;
+    let r;
+    try {
+      r = await harness("sweepOne", { id, level, keep });
+    } catch ( err ) {
+      // A scenario that takes the page down with it must not take the run down with it.
+      r = { id, name: id, ok: false, error: err.message, differences: [], ms: 0 };
+    }
+    appendFileSync(SWEEP_RESULTS, `${JSON.stringify(r)}\n`, "utf8");
+
+    if ( r.error ) {
+      errored++;
+      console.log(`${position} ERROR ${r.name} — ${r.error.split("\n")[0]}`);
+    } else if ( r.ok ) {
+      passed++;
+      console.log(`${position} PASS  ${r.name} (${r.ms}ms)`);
+    } else {
+      failed++;
+      console.log(`${position} FAIL  ${r.name} (${r.ms}ms) — ${r.differences.length} difference(s)`
+        + `: ${[...new Set(r.differences.map(d => d.path.split(".")[0]))].join(", ")}`);
+    }
+  }
+
+  console.log(`\n${passed} identical, ${failed} differing, ${errored} errored (of ${ids.length})`);
+  console.log("group sweep-results.jsonl by difference path to triage — one cause spans many subclasses");
+  return (failed || errored) ? 1 : 0;
+}
+
+/* -------------------------------------------- */
+
+/**
+ * Print a suite result. Returns the process exit code.
+ * @param {{reports: object[], passed: number, total: number}} result
+ */
+function report({ reports, passed, total }, { debug = false } = {}) {
+  for ( const r of reports ) {
+    if ( r.error ) {
+      console.log(`\nERROR  ${r.name} (${r.ms}ms)\n${indent(r.error)}`);
+      printDiagnostics(r, debug);
+      continue;
+    }
+    if ( r.ok ) {
+      console.log(`\nPASS   ${r.name} (${r.ms}ms) — `
+        + `${r.summary.native.items} items, ${r.summary.native.hp} hp, identical both ways`);
+      printDiagnostics(r, debug);
+      continue;
+    }
+    console.log(`\nFAIL   ${r.name} (${r.ms}ms) — ${r.differences.length} difference(s)`);
+    console.log(`       native: ${r.summary.native.items} items / ${r.summary.native.hp} hp`
+      + `   creator: ${r.summary.creator.items} items / ${r.summary.creator.hp} hp`);
+    for ( const d of r.differences.slice(0, 60) ) {
+      console.log(`  ${d.path}`);
+      console.log(`      native : ${d.native}`);
+      console.log(`      creator: ${d.creator}`);
+    }
+    if ( r.differences.length > 60 ) {
+      console.log(`  … and ${r.differences.length - 60} more`);
+    }
+    printDiagnostics(r, debug);
+  }
+
+  const failed = total - passed;
+  console.log(`\n${passed}/${total} scenarios identical${failed ? `, ${failed} failing` : ""}`);
+  return failed ? 1 : 0;
+}
+
+function indent(text) {
+  return text.split("\n").map(l => `       ${l}`).join("\n");
+}
+
+/**
+ * Print the creator's view of the scenario: every choice its resolver raised, whether the
+ * scenario answered it, and what it settled on. This is the answer to "did the creator even ask
+ * about that?", which is the first question whenever a difference looks like a missing pick.
+ */
+function printDiagnostics(report, debug) {
+  const d = report.diagnostics;
+  if ( !debug || !d?.requirements ) {
+    if ( !debug && d?.requirements ) console.log("       (re-run with --debug for the resolver dump)");
+    return;
+  }
+
+  console.log(`\n  resolver dump — ${d.requirements.length} requirement(s) `
+    + `over ${d.passes} pass(es):`);
+  for ( const r of d.requirements ) {
+    const mark = r.answered ? "answered" : "UNANSWERED";
+    console.log(`    [${mark.padEnd(10)}] ${r.type.padEnd(12)} ${r.source.padEnd(10)} `
+      + `${r.selKey}  "${r.title}" (choose ${r.count})`);
+    console.log(`                   chosen : ${JSON.stringify(r.chosen)}`);
+    console.log(`                   offers : ${r.options.join(", ")}`
+      + `${r.moreOptions ? ` … +${r.moreOptions} more` : ""}`);
+  }
+  console.log(`\n  state.advChoices: ${JSON.stringify(d.advChoices, null, 2).split("\n").join("\n  ")}`);
+}
