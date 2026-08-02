@@ -216,10 +216,18 @@ export async function stageEmberGear(state, { equipment, source }) {
  * promise's `resolve`, so arriving twice is harmless.)
  * @param {AdvancementManager} manager
  */
-export function abandonEmberCreation(manager) {
+export async function abandonEmberCreation(manager) {
   if ( !manager ) return;
   try {
-    manager.close({ animate: false });
+    // `skipConfirmation`, because the player has already been asked. `AdvancementManager#close`
+    // otherwise puts up dnd5e's own "Stop advancement / Continue" prompt, which is a second dialog
+    // for a decision made in ours — and an orphaned one: the release below does not wait for it, so
+    // Ember's builder is already back by the time it is answered and neither button can change that.
+    // Every call site inside dnd5e passes the same flag for the same reason.
+    await manager.close({ animate: false, skipConfirmation: true });
+    // Released *after* the close settles, and by hand: the takeover suppressed the manager's render,
+    // so `ApplicationV2#close` returns early on an element-less application without ever firing the
+    // `close` event Ember's builder is waiting on.
     manager.dispatchEvent(new Event("close"));
   } catch ( err ) {
     log("failed to release Ember's character creation hand-off", err);

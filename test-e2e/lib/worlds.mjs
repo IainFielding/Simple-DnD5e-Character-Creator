@@ -38,6 +38,14 @@ export function ensureWorld(worldId, { force = false } = {}) {
   const manifestPath = path.join(dir, "world.json");
   fs.mkdirSync(dir, { recursive: true });
 
+  // Foundry creates the database itself, but not the asset tree a world gets when it is made through
+  // the setup screen. Ember writes character art into `assets/actors` and does *not* create it,
+  // failing the actor creation outright with "Target directory … does not exist". Made
+  // unconditionally: empty directories cost nothing and the base world simply never uses them.
+  for ( const sub of [["assets", "actors"], ["scenes"]] ) {
+    fs.mkdirSync(path.join(dir, ...sub), { recursive: true });
+  }
+
   if ( fs.existsSync(manifestPath) && !force ) return { created: false, dir };
 
   const manifest = {

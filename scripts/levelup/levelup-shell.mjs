@@ -385,7 +385,7 @@ export class LevelUpShell extends CreatorShellBase {
       const key = this.state.emberCreation ? "levelup.emberCancel" : "levelup.cancel";
       if ( !await this._confirmDiscard(`${key}.title`, `${key}.body`) ) return this;
     }
-    if ( abandoning ) abandonEmberCreation(this.state.driver?.manager);
+    if ( abandoning ) await abandonEmberCreation(this.state.driver?.manager);
     return super.close(options);
   }
 

@@ -5,22 +5,42 @@
  *   node shell.mjs playwright
  *   node shell.mjs playwright --hold
  *   HEADED=1 node shell.mjs playwright --hold
+ *   node shell.mjs playwright-ember --serve     # server only — join from your own browser
  */
 
 import { setTimeout as sleep } from "node:timers/promises";
-import { BASE_URL, WORLDS } from "./config.mjs";
+import { BASE_URL, GM_USER, WORLDS } from "./config.mjs";
 import { startFoundry } from "./lib/server.mjs";
 import { Session } from "./lib/session.mjs";
 import { ensureWorld } from "./lib/worlds.mjs";
 
 const argv = process.argv.slice(2);
 const hold = argv.includes("--hold");
+const serve = argv.includes("--serve");
 const worldId = argv.find(a => !a.startsWith("--")) ?? "playwright";
 if ( !WORLDS[worldId] ) throw new Error(`Unknown world "${worldId}"`);
 
 ensureWorld(worldId);
 const server = await startFoundry(worldId, { verbose: argv.includes("--verbose") });
 console.log(`Foundry up at ${BASE_URL} with world "${worldId}"`);
+
+/**
+ * `--serve` is for testing by hand, and deliberately opens no browser at all.
+ *
+ * These worlds have exactly one user — Foundry creates a passwordless "Gamemaster" on first
+ * activation and the harness logs in as it. So a held Playwright session *is* that user, and there
+ * is nobody left for a person to join as. Serving without joining leaves the seat free.
+ */
+if ( serve ) {
+  console.log(`\nOpen ${BASE_URL} in your browser and join as "${GM_USER}" (no password).`);
+  console.log("Nothing else is logged in. Ctrl+C to stop the server.");
+  try {
+    await sleep(3_600_000);
+  } finally {
+    await server.stop();
+  }
+  process.exit(0);
+}
 
 let session;
 try {

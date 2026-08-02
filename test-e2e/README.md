@@ -21,7 +21,7 @@ Copy `config.example.mjs` to `config.mjs` and edit the paths before the setup st
 | `lib/worlds.mjs` | Writes `world.json` manifests |
 | `provision.mjs` | One-time world setup: modules, adventure import |
 | `run.mjs` | Runs the suite and prints the diff |
-| `shell.mjs` | Diagnostics; `--hold` leaves the browser open |
+| `shell.mjs` | Diagnostics; `--hold` leaves Playwright's browser open, `--serve` opens none |
 | `in-world/*.mjs` | Everything that runs **inside** the world |
 | `in-world/answers.mjs` | The answer book: one decision-answering strategy, both adapters |
 | `in-world/sweep.mjs` | Generates one scenario per subclass in the world |
@@ -82,7 +82,26 @@ node run.mjs --sweep                  # every subclass in the world, at level 20
 HEADED=1 node run.mjs                 # watch the native wizard being driven
 ```
 
-Two tools for chasing a difference once the suite reports one:
+## Testing by hand
+
+Some of what this module changes is only visible on a screen — a granted trait rendering locked, an
+ASI screen's remaining budget, Ember's Cancel returning to its own builder. The harness compares
+committed actors and never opens a screen, so those need a person:
+
+```bash
+node shell.mjs playwright-ember --serve
+```
+
+Server up, **no browser**, so the single Gamemaster seat is free for you to join at
+`http://127.0.0.1:30099`. That matters: these worlds have exactly one user, and `--hold` spends it on
+Playwright's own (headless by default) browser, leaving nobody for you to log in as.
+
+Foundry locks its data directory, so a manual session and a sweep cannot run at the same time.
+Actors you make by hand are safe — cleanup only ever deletes ones named `[e2e] …`.
+
+## Chasing a difference
+
+Two tools for once the suite reports one:
 
 ```bash
 node run.mjs --probe <uuid>                              # where a field first appears:
@@ -812,10 +831,19 @@ reproduces that and both adapters are pointed at a genuine Ember-shaped manager.
 asserts the fingerprint rather than assuming it — a staged manager the module would not claim is
 testing nothing.
 
-**What this cannot reach**, and still wants a person in Foundry: detection against a manager Ember
+**What this cannot reach**, and needs a person in Foundry: detection against a manager Ember
 *actually* built (this stages what we believe Ember stages, so it agrees with itself); Ember's own
 completion, where it returns `false` from `preAdvancementManagerComplete` and applies the diff
 itself; and Cancel.
+
+Detection and Cancel were checked by hand and both work; Cancel returns cleanly to Ember's builder.
+
+Cancel turned up a bug the harness could never have seen, which is the argument for doing those
+passes at all: `abandonEmberCreation` closed the manager *without* `skipConfirmation`, so dnd5e's own
+"Stop advancement / Continue" prompt appeared on top of the discard dialog our shell had already
+asked — and since the close was not awaited, the release event fired first, leaving that second
+prompt orphaned over Ember's already-returned builder, its buttons unable to change anything. Fixed,
+unit-pinned in `test/ember-creation.test.mjs`, and re-verified in Foundry.
 
 Two things the Ember work turned up that apply well beyond it:
 

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { isEmberCreationManager, foldOriginScreens, emberEquipmentStep } from "../scripts/levelup/ember-creation.mjs";
+import {
+  isEmberCreationManager, foldOriginScreens, emberEquipmentStep, abandonEmberCreation
+} from "../scripts/levelup/ember-creation.mjs";
 import { LevelUpDriver } from "../scripts/levelup/manager-driver.mjs";
 
 /**
@@ -270,5 +272,55 @@ describe("emberEquipmentStep", () => {
     expect(emberEquipmentStep.template).toBe("steps/equipment");
     expect(typeof emberEquipmentStep.context).toBe("function");
     expect(typeof emberEquipmentStep.handle).toBe("function");
+  });
+});
+
+/* -------------------------------------------- */
+/*  Cancel                                      */
+/* -------------------------------------------- */
+
+/**
+ * Ember's builder blocks on the manager we suppressed, so cancelling has to release it or the
+ * builder waits forever. Both properties below were wrong in Foundry and invisible here until a real
+ * Ember character was cancelled by hand, which is why they are pinned now.
+ */
+describe("abandonEmberCreation", () => {
+  /** A manager that records how it was closed and when the release event arrived. */
+  function stub({ closeDelay = 0 } = {}) {
+    const seen = { closeOptions: null, events: [], closedBeforeEvent: null };
+    let closed = false;
+    return {
+      seen,
+      async close(options) {
+        seen.closeOptions = options;
+        if ( closeDelay ) await new Promise(r => setTimeout(r, closeDelay));
+        closed = true;
+      },
+      dispatchEvent(event) {
+        seen.events.push(event.type);
+        seen.closedBeforeEvent = closed;
+      }
+    };
+  }
+
+  it("skips dnd5e's own close prompt — the player already confirmed in our dialog", async () => {
+    const manager = stub();
+    await abandonEmberCreation(manager);
+    expect(manager.seen.closeOptions.skipConfirmation).toBe(true);
+  });
+
+  it("releases Ember only once the close has settled", async () => {
+    const manager = stub({ closeDelay: 20 });
+    await abandonEmberCreation(manager);
+    expect(manager.seen.events).toEqual(["close"]);
+    // Firing the release first hands Ember's builder back while dnd5e's dialog is still up, leaving
+    // a prompt whose buttons can no longer change anything.
+    expect(manager.seen.closedBeforeEvent).toBe(true);
+  });
+
+  it("survives a manager that throws on close, and does nothing without one", async () => {
+    await expect(abandonEmberCreation(null)).resolves.toBeUndefined();
+    const throwing = { close() { throw new Error("no element"); }, dispatchEvent() {} };
+    await expect(abandonEmberCreation(throwing)).resolves.toBeUndefined();
   });
 });
