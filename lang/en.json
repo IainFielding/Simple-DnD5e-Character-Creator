@@ -425,11 +425,13 @@
         "trait": "Pick from the options below.",
         "size": "Your species can be more than one size — pick the token size your character uses.",
         "spellAbility": "Pick which ability score you use to cast this spell.",
+        "subclass": "Your class chooses its subclass at 1st level — pick the one your character follows.",
         "itemChoice": "Pick from the options below to add to your character."
       }
     },
     "advancement": {
       "size": "Size",
+      "subclass": "Subclass",
       "expertise": "Expertise",
       "chooseItems": "Choose a Feature",
       "spellAbility": "Spellcasting Ability",

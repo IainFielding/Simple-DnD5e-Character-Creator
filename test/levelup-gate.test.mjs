@@ -64,18 +64,21 @@ describe("LevelUpDriver.isStepSupported", () => {
     expect(LevelUpDriver.isStepSupported(step("Size", { cfg: { sizes: new Set(["sm", "med"]) } }))).toBe(false);
   });
 
-  it("supports a plain ItemGrant but not an optional one", () => {
+  // Optional grants used to be rejected, which handed the whole level-up back to dnd5e — so our
+  // wizard never appeared for a 2014-rules class in a world running Tasha's optional class features.
+  // They are now seeded the way the native manager seeds them and surfaced so the player can decline.
+  it("supports an ItemGrant whether or not it is optional", () => {
     const items = [{ uuid: "Compendium.x.Item.a", optional: false }];
     expect(LevelUpDriver.isStepSupported(step("ItemGrant", { cfg: { items, optional: false } }))).toBe(true);
-    expect(LevelUpDriver.isStepSupported(step("ItemGrant", { cfg: { items, optional: true } }))).toBe(false);
+    expect(LevelUpDriver.isStepSupported(step("ItemGrant", { cfg: { items, optional: true } }))).toBe(true);
   });
 
-  it("rejects an ItemGrant whose individual items are optional", () => {
+  it("supports an ItemGrant whose individual items are optional", () => {
     const items = [
       { uuid: "Compendium.x.Item.a", optional: false },
       { uuid: "Compendium.x.Item.b", optional: true }
     ];
-    expect(LevelUpDriver.isStepSupported(step("ItemGrant", { cfg: { items, optional: false } }))).toBe(false);
+    expect(LevelUpDriver.isStepSupported(step("ItemGrant", { cfg: { items, optional: false } }))).toBe(true);
   });
 
   it("rejects an advancement type it has never seen", () => {
@@ -173,7 +176,9 @@ describe("LevelUpDriver.canDrive", () => {
   it("rejects the whole level-up when any renderable step is unsupported", () => {
     const manager = makeManager([
       step("HitPoints"),
-      step("ItemGrant", { cfg: { items: [{ uuid: "Compendium.x.Item.a", optional: true }], optional: false } }),
+      // A real size *choice* is the remaining renderable type the wizard cannot present on a
+      // level-up; it stands in here for "some step we do not handle".
+      step("Size", { cfg: { sizes: new Set(["sm", "med"]) } }),
       marker()
     ]);
     expect(LevelUpDriver.canDrive(manager)).toBe(false);

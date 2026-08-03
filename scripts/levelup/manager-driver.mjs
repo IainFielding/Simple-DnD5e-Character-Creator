@@ -105,6 +105,16 @@ export class LevelUpDriver {
   subclassSteps = [];
 
   /**
+   * The optional-grant decisions, one per `ItemGrant` advancement whose items the player may decline
+   * — in practice Tasha's optional class features, injected into every 2014-rules class.
+   *
+   * Seeded *selected* at ingest, because that is how the native manager presents them: dnd5e's
+   * `initial` apply grants every item not individually marked optional, so the screen opens with the
+   * boxes ticked and the player unticks what they do not want.
+   */
+  optionalGrantSteps = [];
+
+  /**
    * The spell-grant decisions, one per `ItemGrant` advancement that grants a spell with a choosable
    * casting ability (a species lineage's Int/Wis/Cha spell, granted at a class level):
    * `{ level, screenLevel, advancement, item }`. The spell is granted to the clone immediately with a
@@ -202,10 +212,11 @@ export class LevelUpDriver {
       case "Size":       return (adv.configuration?.sizes?.size ?? 0) <= 1;
       case "Trait":      return true;              // grants apply automatically; choices the wizard presents
       // Plain grants apply automatically; a spell grant with a choosable casting ability (a species
-      // lineage's Int/Wis/Cha spell at a class level) is presented as the ability picker. Only a
-      // truly *optional* grant (skippable config or optional items) is still beyond us.
-      case "ItemGrant":  return !(adv.configuration?.optional
-        || Array.from(adv.configuration?.items ?? []).some(i => i?.optional));
+      // lineage's Int/Wis/Cha spell at a class level) is presented as the ability picker; an
+      // *optional* grant (Tasha's optional class features) is seeded like the native manager seeds
+      // it and surfaced so the player can decline. Declining this used to hand the whole level-up
+      // back to dnd5e, which meant our wizard never appeared for a 2014 class in a Tasha's world.
+      case "ItemGrant":  return true;
       // Ember registers its own advancement type on background items (a culture/path granting
       // knowledge areas). It is pure grant — its `automaticApplicationValue()` returns the whole
       // grant list, so `#ingestFlow`'s default branch applies it with no screen of its own —
@@ -403,8 +414,19 @@ export class LevelUpDriver {
           this.grantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
           return;
         }
-        // An optional grant we don't re-skin; canDrive() would have rejected the level-up.
-        log("skipping unsupported optional ItemGrant", adv?.id);
+        // An *optional* grant — Tasha's optional class features are the case in the wild, injected
+        // into every 2014-rules class by `dnd-tashas-cauldron`.
+        //
+        // These used to be skipped outright, on the reasoning that `canDrive()` had already declined
+        // the level-up. That left creation — which has no such gate — building characters missing
+        // everything the grant carries, and it misread what "optional" means to the system. dnd5e's
+        // own seed grants every item the grant does *not* individually mark optional
+        // (`ItemGrantAdvancement#apply` under `initial`), so on the native path an untouched optional
+        // grant arrives *applied*, not skipped. Seeding here is what makes the two agree, and it is
+        // the right default besides: the world only carries these at all because the GM turned them
+        // on, and the player can still decline in the wizard.
+        await this.#seed(flow);
+        this.optionalGrantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
       case "Size": {
@@ -1396,9 +1418,12 @@ export class LevelUpDriver {
       // unless the character is already proficient (`TraitAdvancement#apply` skips it when the
       // current value is 0). A Rogue Phantom picking Expertise in a skill that the subclass's own
       // level-3 feature grants would silently keep plain proficiency.
+      // A decision array is absent rather than empty on a driver assembled from partial state (the
+      // unit tests build one per decision type), so an added array must not break the others.
+      const list = steps ?? [];
       const order = byLevel
-        ? [...steps].sort((a, b) => ((a.screenLevel ?? a.level ?? 0) - (b.screenLevel ?? b.level ?? 0)))
-        : [...steps];
+        ? [...list].sort((a, b) => ((a.screenLevel ?? a.level ?? 0) - (b.screenLevel ?? b.level ?? 0)))
+        : [...list];
       for ( const rec of order ) {
         if ( done.has(rec) ) continue;
         done.add(rec);
@@ -1415,6 +1440,14 @@ export class LevelUpDriver {
       await drain(this.sizeSteps,     rec => { const k = provider.size(rec); return k ? this.applySize(rec, k) : null; });
       await drain(this.grantSteps,    rec => { const a = provider.grantAbility(rec); return a ? this.applyGrantAbility(rec, a) : null; });
       await drain(this.subclassSteps, rec => { const u = provider.subclass(rec); return u ? this.selectSubclass(rec, u) : null; });
+      // An optional grant arrives seeded (every item taken). A provider that says nothing leaves it
+      // that way — matching the native manager — so only an explicit answer changes anything, and
+      // `null` and `[]` have to stay distinguishable: the first means "no opinion", the second
+      // means "decline all of them".
+      await drain(this.optionalGrantSteps, rec => {
+        const uuids = provider.optionalGrant?.(rec);
+        return Array.isArray(uuids) ? this.setOptionalGrant(rec, uuids) : null;
+      });
       // An ASI decision is answered either with a per-ability allocation or with a feat to take
       // in its place — the two modes the interactive screen offers. A `{ feat }` answer routes to
       // the same grant-and-synthesise path the UI uses, minus the compendium browser.
@@ -1432,6 +1465,43 @@ export class LevelUpDriver {
         for ( const uuid of provider.choiceUuids(rec) ) await this.toggleChoice(rec, uuid);
       });
     }
+  }
+
+  /**
+   * The current state of an optional-grant decision: every item it offers, and whether each is
+   * currently taken. Read off `value.added` rather than remembered, so it stays true after a
+   * reverse/re-apply.
+   * @param {object} record   One of {@link optionalGrantSteps}.
+   */
+  optionalGrantState(record) {
+    const adv = record.advancement;
+    const taken = new Set(Object.values(adv.value?.added ?? {}));
+    return {
+      options: Array.from(adv.configuration?.items ?? []).map(i => {
+        const uuid = (typeof i === "string") ? i : i?.uuid;
+        return { uuid, selected: taken.has(uuid) };
+      }).filter(o => o.uuid)
+    };
+  }
+
+  /**
+   * Set exactly which of an optional grant's items the character takes.
+   *
+   * Reverse-then-apply rather than an incremental toggle: `ItemGrantAdvancement#apply` only ever
+   * *adds* (it skips a uuid already in `value.added`), so there is no subtractive call to make and
+   * un-ticking a box has to go through a full reverse. Reversing deletes the granted items, which is
+   * exactly what declining one should do.
+   * @param {object} record     One of {@link optionalGrantSteps}.
+   * @param {string[]} uuids    The uuids to end up holding; anything else offered is dropped.
+   */
+  async setOptionalGrant(record, uuids) {
+    const adv = record.advancement;
+    const wanted = new Set(uuids);
+    const current = new Set(Object.values(adv.value?.added ?? {}));
+    if ( (wanted.size === current.size) && [...wanted].every(u => current.has(u)) ) return;
+    await adv.reverse(record.level);
+    if ( wanted.size ) await adv.apply(record.level, { selected: [...wanted] });
+    this.clone.reset();
   }
 
   /**

@@ -22,9 +22,34 @@
 /** Base ability scores, spread so no class is crippled and every ASI has somewhere to go. */
 const ABILITIES = { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 };
 
-/** The characterised origins: see the file header. */
-const SPECIES = "Compendium.dnd5e.origins24.Item.phbspHuman000000";
-const BACKGROUND = "Compendium.dnd5e.origins24.Item.phbbgSage0000000";
+/**
+ * The characterised origins, per rules edition — see the file header.
+ *
+ * A 2014 class gets 2014 origins. Pairing Tasha's Path of the Beast with the 2024 Human and the 2024
+ * Sage builds a character no edition describes: three origin items and a class that were never
+ * written to sit together, whose disagreements are then reported as findings about the subclass. The
+ * system ships the 2014 SRD origins alongside the 2014 classes, so each edition can be built with
+ * its own.
+ *
+ * Human and Sage stay the 2024 pair the six hand-written scenarios use, so anything they contribute
+ * is already characterised. The 2014 side takes SRD Human (a flat +1 to every ability, so no
+ * allocation decision) and Acolyte — the only background the 2014 SRD ships.
+ */
+const ORIGINS = {
+  2024: {
+    species: "Compendium.dnd5e.origins24.Item.phbspHuman000000",
+    background: "Compendium.dnd5e.origins24.Item.phbbgSage0000000"
+  },
+  2014: {
+    species: "Compendium.dnd5e.races.Item.ydP3QzCmur55mtY2",
+    background: "Compendium.dnd5e.backgrounds.Item.IgJkSnLiLJOWH7eK"
+  }
+};
+
+/** The origins to build a class of this rules edition with; unmarked content is treated as 2024. */
+function originsFor(rules) {
+  return ORIGINS[String(rules) === "2014" ? 2014 : 2024];
+}
 
 /** A subclass name to an id-safe slug. */
 function slug(name) {
@@ -59,11 +84,14 @@ async function classesByIdentifier() {
   const out = new Map();
   const found = [];
   for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
-    const index = await pack.getIndex({ fields: ["system.identifier"] });
+    const index = await pack.getIndex({ fields: ["system.identifier", "system.source.rules"] });
     for ( const entry of index ) {
       if ( entry.type !== "class" ) continue;
       const identifier = entry.system?.identifier;
-      if ( identifier ) found.push({ identifier, uuid: entry.uuid, name: entry.name, pack: pack.collection });
+      if ( identifier ) found.push({
+        identifier, uuid: entry.uuid, name: entry.name, pack: pack.collection,
+        rules: entry.system?.source?.rules ?? null
+      });
     }
   }
   found.sort((a, b) => a.uuid.localeCompare(b.uuid));

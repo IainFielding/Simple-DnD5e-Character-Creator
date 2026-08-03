@@ -97,7 +97,11 @@ export async function resolveChoices(state, source) {
   // offers it, so a skill from the species or background is a legitimate pick.
   const shared = {
     crossTaken, spellAbilityHint, ownedIds,
-    expertiseSkillPool: proficientSkillKeys(defs)
+    expertiseSkillPool: proficientSkillKeys(defs),
+    // The index itself, for the one requirement whose options are documents rather than keys: a
+    // level-1 Subclass choice needs the subclass cards, and `SourceIndex.subclasses()` memoises
+    // that scan for the whole session.
+    index: source
   };
 
   const sources = [];
@@ -192,6 +196,13 @@ async function levelOneOwners(item, sel = {}, seen = new Set(), ownerUuid = null
       refs = Array.from(adv.configuration?.items ?? []).map(r => typeof r === "string" ? r : r?.uuid);
     } else if ( adv.type === "ItemChoice" ) {
       refs = itemChoicePicks(adv, sel);
+    } else if ( adv.type === "Subclass" ) {
+      // A 2014-rules Cleric, Sorcerer or Warlock chooses its subclass at level 1, so the subclass is
+      // part of the level-≤1 build and its own advancements (domain spells, heavy armour, an extra
+      // cantrip) are creation decisions. Recursing here is what surfaces them: without it the
+      // subclass item would be granted with none of what it brings. 2024 classes take theirs at
+      // level 3, where the `level > 1` guard above skips this entirely.
+      refs = Array.from(sel?.[adv._id] ?? []).map(p => typeof p === "string" ? p : p?.uuid).filter(Boolean);
     } else continue;
     for ( const uuid of refs ) {
       if ( !uuid || seen.has(uuid) ) continue;
@@ -277,12 +288,12 @@ function collectTakenTraitKeys(defs) {
  */
 async function prepareRequirements(def, shared) {
   const { key: source, sel, owners } = def;
-  const { crossTaken, spellAbilityHint, ownedIds, expertiseSkillPool } = shared;
+  const { crossTaken, spellAbilityHint, ownedIds, expertiseSkillPool, index } = shared;
   const reqs = [];
 
   for ( const { item: owner, ownerUuid } of owners ) {
     for ( const adv of advancementArray(owner) ) {
-      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds });
+      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds, index, ownerItem: owner });
     }
   }
 
@@ -351,9 +362,28 @@ async function decorateTraitIcons(options) {
 
 /** Parse a single advancement into zero or more requirements, appended to `reqs`. */
 async function parseAdvancementChoice(adv, ctx) {
-  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint } = ctx;
+  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, index, ownerItem } = ctx;
   let level = adv.level ?? 0;
   if ( level > 1 || adv.classRestriction === "secondary" ) return;
+
+  // Subclass: only reachable for a class that unlocks one at level ≤1 — the 2014-rules Cleric,
+  // Sorcerer and Warlock. Under the 2024 rules every class takes its subclass at level 3, so this
+  // never fires and creation had no reason to handle it; in a world holding 2014 classes it does,
+  // and without this the character was built with no subclass at all.
+  if ( adv.type === "Subclass" ) {
+    // From the owning item rather than `adv.item`: `advancementArray` also yields raw advancement
+    // *data* (no back-reference) when a document arrives un-prepared.
+    const identifier = ownerItem?.system?.identifier ?? ownerItem?.identifier;
+    const cards = identifier ? await index?.subclasses(identifier) ?? [] : [];
+    if ( !cards.length ) return;
+    reqs.push(buildChoiceReq({
+      advId: adv._id, source, ownerUuid, type: "Subclass", level,
+      title: adv.title || t("advancement.subclass"), hint: adv.hint, count: 1,
+      options: cards.map(c => ({ key: c.uuid, label: c.name, img: c.img })),
+      sel, crossTaken
+    }));
+    return;
+  }
 
   // Size: a species offering a choice of token size (e.g. Small or Medium). A single
   // fixed size is not a decision, so only pools of more than one size become a requirement.
@@ -555,6 +585,7 @@ export function choiceBlurb({ type, mode = "default", poolType = null, count = 1
   // Blocks that are inherently a single pick read as complete sentences on their own.
   if ( type === "Size" ) return t("choice.blurb.size");
   if ( type === "SpellAbility" ) return t("choice.blurb.spellAbility");
+  if ( type === "Subclass" ) return t("choice.blurb.subclass");
 
   let desc;
   if ( type === "ItemChoice" ) desc = t("choice.blurb.itemChoice");
