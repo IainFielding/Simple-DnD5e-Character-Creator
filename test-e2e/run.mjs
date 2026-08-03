@@ -19,6 +19,8 @@
  *   node run.mjs --sweep                  # the whole thing (hours)
  *   node run.mjs --sweep --level 6        # shallower
  *   node run.mjs --sweep --incremental    # one manager per level, comparing after each
+ *   node run.mjs --sweep --axis species     # vary the species instead of the subclass
+ *   node run.mjs --sweep --axis background  # vary the background, taking a feat at every ASI
  *   node run.mjs --sweep --shard 1/20     # one twentieth of it, for a smoke test
  *   node run.mjs --sweep --resume         # skip scenarios already in sweep-results.jsonl
  *   node run.mjs --sweep --plan           # list what it would run, and what it skips
@@ -192,8 +194,11 @@ async function runSweep(harness) {
   const { appendFileSync, readFileSync, existsSync } = await import("node:fs");
   const level = Number(value("level") ?? 20);
   const incremental = flag("incremental");
+  // Which axis to sweep. "subclass" is the original and the default; "species" holds the class fixed
+  // and varies the species instead, covering the advancements a species gains above level 1.
+  const axis = value("axis") ?? "subclass";
 
-  const plan = await harness("sweepList", { level, incremental });
+  const plan = await harness("sweepList", { level, incremental, axis });
   if ( plan.skipped.length ) {
     console.log(`skipping ${plan.skipped.length} subclass(es):`);
     for ( const s of plan.skipped ) console.log(`  ${s.subclass.padEnd(30)} ${s.reason}`);
@@ -230,8 +235,8 @@ async function runSweep(harness) {
     // which is the part of a plan worth checking by eye — see `sweep.mjs#classFor`.
     const names = new Map(plan.scenarios.map(s => [s.id, s.name]));
     for ( const id of ids ) {
-      const contested = names.get(id)?.match(/\[class: [^\]]+\]/)?.[0] ?? "";
-      console.log(`${id}${contested ? `  ${contested}` : ""}`);
+      const markers = (names.get(id)?.match(/\[[^\]]+\]/g) ?? []).join(" ");
+      console.log(`${id}${markers ? `  ${markers}` : ""}`);
     }
     console.log(`\n${ids.length} scenario(s) at level ${level}`);
     return 0;
@@ -247,7 +252,7 @@ async function runSweep(harness) {
     const position = `[${String(i + 1).padStart(3)}/${ids.length}]`;
     let r;
     try {
-      r = await harness("sweepOne", { id, level, incremental, keep, render: flag("render") });
+      r = await harness("sweepOne", { id, level, incremental, keep, render: flag("render"), axis });
     } catch ( err ) {
       // A scenario that takes the page down with it must not take the run down with it.
       r = { id, name: id, ok: false, error: err.message, differences: [], ms: 0 };

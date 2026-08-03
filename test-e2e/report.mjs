@@ -3,6 +3,13 @@
  *
  *   node report.mjs                    # -> sweep-report.html
  *   node report.mjs --in other.jsonl --out other.html
+ *   node report.mjs --watch            # regenerate every 30s while a sweep is running
+ *   node report.mjs --expect 122       # show progress against a known total
+ *
+ * `--watch` is for reading a run in flight: results stream into the jsonl one scenario at a time, so
+ * a report built mid-run is simply a report of what has finished. The page auto-refreshes itself
+ * while it is incomplete and stops once `--expect` is reached, so a finished run does not keep
+ * reloading in a tab left open overnight.
  *
  * The console output of a sweep is a progress log: fine for watching, useless for
  * triage. Ninety-two scenarios each carrying a dozen differences is a thousand rows, and
@@ -191,8 +198,16 @@ const STATE = {
   error: { label: "errored", icon: "✕" }
 };
 
+// Progress against an expected total, for a report generated while the sweep is still running.
+const expected = Number(value("expect", 0)) || 0;
+const inFlight = expected > total;
+const elapsedMin = Math.round(reports.reduce((n, r) => n + (r.ms ?? 0), 0) / 60000);
+const etaMin = (inFlight && total) ? Math.round((elapsedMin / total) * (expected - total)) : 0;
+
 const tiles = [
-  { label: "Subclasses run", value: total, note: `${totalRows} difference rows` },
+  { label: inFlight ? "Run so far" : "Subclasses run",
+    value: inFlight ? `${total}/${expected}` : total,
+    note: inFlight ? `still running · ~${etaMin} min left` : `${totalRows} difference rows` },
   { label: "Identical", value: passed, state: "pass" },
   { label: "Differing", value: differing, state: "fail" },
   { label: "Errored", value: errored, state: "error" },
@@ -201,6 +216,7 @@ const tiles = [
 ];
 
 const html = `<title>dnd5e subclass sweep — level 20 equivalence</title>
+${inFlight ? '<meta http-equiv="refresh" content="30">' : ""}
 <style>
   .root {
     color-scheme: light;
@@ -358,7 +374,7 @@ const html = `<title>dnd5e subclass sweep — level 20 equivalence</title>
     </div>`).join("")}
   </div>
 
-  <footer>${total} subclass${total === 1 ? "" : "es"} ·
+  <footer>${inFlight ? `IN PROGRESS — ${total} of ${expected}, this page refreshes every 30s · ` : ""}${total} subclass${total === 1 ? "" : "es"} ·
     ${Math.round(reports.reduce((n, r) => n + (r.ms ?? 0), 0) / 60000)} minutes of build time ·
     generated ${new Date().toISOString().replace("T", " ").slice(0, 16)}</footer>
 </div></div>

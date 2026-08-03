@@ -1,12 +1,25 @@
 /**
- * The subclass sweep: one generated scenario per subclass in the world, each carried to level 20.
+ * The sweeps: generated scenarios that vary **one** thing across everything the world installs.
  *
  * The hand-written scenarios in `scenarios.mjs` are chosen — each one exists to exercise a specific
- * mechanism, and its answers are argued for in a comment. This is the opposite: breadth, no
- * judgement, every subclass the installed content offers, built both ways and diffed. Nothing here
- * is hand-written except the origins, which are deliberately the same Human/Sage the existing
- * scenarios use — their contribution to a diff is already characterised, so a difference that shows
- * up here is about the subclass and not about the species.
+ * mechanism, and its answers are argued for in a comment. These are the opposite: breadth, no
+ * judgement, built both ways and diffed.
+ *
+ * Three axes, selected with `run.mjs --sweep --axis <name>`:
+ *
+ * | Axis | Varies | Holds fixed |
+ * | --- | --- | --- |
+ * | `subclass` (default) | every subclass installed | Human/Sage origins, points at every ASI |
+ * | `species` | every 2024 species | Wizard/Evoker, Sage |
+ * | `background` | every 2024 background | Fighter/Champion, Human — **a feat at every ASI** |
+ *
+ * The second and third exist because the first holds three things still that turned out to matter:
+ * Human is the one PHB'24 species with no advancement above level 0, backgrounds were never varied
+ * at all, and `generateAsi` spends every improvement on ability scores so no feat is ever taken.
+ *
+ * Whatever an axis holds fixed is deliberately the characterised choice — the same origins the six
+ * hand-written scenarios use — so a difference is about the thing being varied and not about its
+ * companions.
  *
  * Answers come from the {@link AnswerBook} generator (`generate: true`), with exactly one override:
  * the subclass itself, which is the variable being swept and the one decision generation refuses to
@@ -185,14 +198,201 @@ function subclassAdvancementId(classDoc) {
 }
 
 /* -------------------------------------------- */
+/*  The species axis                             */
+/* -------------------------------------------- */
 
 /**
- * Build the sweep's scenario list.
+ * The class every species scenario is built on, and the subclass it takes.
+ *
+ * The Wizard, deliberately. Six of the eight species with advancement above level 1 grant *spells*
+ * at levels 1, 3 and 5, and every one of those carries a casting-ability decision — so the class
+ * needs a spellcasting ability of its own for the resolver's "align it with your class" hint to be
+ * exercised at all. On a Fighter that hint is null and the most interesting half of the decision
+ * never runs.
+ */
+const SPECIES_AXIS = { classIdentifier: "wizard", subclass: "Evoker" };
+
+/**
+ * Resolve an axis's fixed class and subclass to live uuids, by identifier and name.
+ *
+ * Not hard-coded uuids, for the reason {@link subclassAdvancementId} gives about advancement ids: an
+ * id belongs to the content version that shipped it, and a written-down one goes stale the moment a
+ * module updates. Resolving here also means an axis names what it wants ("a 2024 Wizard, Evoker")
+ * rather than which pack happens to hold it today.
+ * @param {{classIdentifier: string, subclass: string}} spec
+ * @returns {Promise<{cls: object, subclassUuid: string|null, advId: string|null}|null>}
+ */
+async function resolveAxisClass(spec) {
+  const classes = await classesByIdentifier();
+  const candidates = classes.get(spec.classIdentifier) ?? [];
+  // The 2024 class, since both axes vary a 2024 origin against it.
+  const cls = candidates.find(c => String(c.rules) !== "2014") ?? candidates[0];
+  if ( !cls ) return null;
+
+  const doc = await fromUuid(cls.uuid).catch(() => null);
+  if ( !doc ) return null;
+
+  const subs = await allSubclasses();
+  const sub = subs.find(s => (s.classIdentifier === spec.classIdentifier)
+    && (s.name === spec.subclass) && (s.pack === cls.pack))
+    ?? subs.find(s => (s.classIdentifier === spec.classIdentifier) && (s.name === spec.subclass));
+  return { cls, subclassUuid: sub?.uuid ?? null, advId: subclassAdvancementId(doc) };
+}
+
+/** Every species in the world, sorted by uuid so the axis runs in the same order every time. */
+async function allSpecies() {
+  const out = [];
+  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+    const index = await pack.getIndex({ fields: ["system.source.rules"] });
+    for ( const entry of index ) {
+      // dnd5e's item type for a species is historically "race".
+      if ( entry.type !== "race" ) continue;
+      out.push({
+        name: entry.name, uuid: entry.uuid, pack: pack.collection,
+        rules: entry.system?.source?.rules ?? null
+      });
+    }
+  }
+  return out.sort((a, b) => a.uuid.localeCompare(b.uuid));
+}
+
+/**
+ * One scenario per species, on a fixed class — the axis the subclass sweep holds still.
+ *
+ * The subclass sweep pins Human, which is the one PHB'24 species whose every advancement sits at
+ * level 0. Eight of the fifteen do not: the three Elves and three Tieflings grant spells at levels 1,
+ * 3 and 5, Dragonborn gains Draconic Flight at 5 on top of a level-keyed Breath Weapon scale, and
+ * Goliath gains Large Form at 5. None of that was reachable before this axis existed.
+ *
+ * Species advancements are keyed to *character* level and dnd5e pushes their flows at every level
+ * (`createLevelChangeSteps`), so a species grant arrives mid-walk on a class that knows nothing about
+ * it — the shape that has produced findings here before.
+ */
+async function speciesScenarios({ level, incremental }) {
+  const species = await allSpecies();
+  const axis = await resolveAxisClass(SPECIES_AXIS);
+  if ( !axis ) {
+    return { scenarios: [], skipped: [{ subclass: "species axis", reason: `no "${SPECIES_AXIS.classIdentifier}" class is installed` }] };
+  }
+
+  const scenarios = [];
+  const skipped = [];
+  for ( const sp of species ) {
+    // A 2014 species on the 2024 Wizard would reintroduce exactly the mixed-edition pairing the
+    // origins split above exists to avoid, and the 2014 species are already covered as the origins
+    // of every 2014-class scenario in the subclass sweep.
+    if ( String(sp.rules) === "2014" ) {
+      skipped.push({ subclass: sp.name, uuid: sp.uuid, reason: "2014 species; the axis class is 2024" });
+      continue;
+    }
+    let id = `species:${slug(sp.name)}`;
+    if ( scenarios.some(s => s.id === id) ) id += `-${slug(sp.pack)}`;
+    scenarios.push({
+      id,
+      name: `Species: ${sp.name} ${level} — ${axis.cls.name}/${SPECIES_AXIS.subclass} (${sp.pack})`,
+      generate: true,
+      incremental,
+      speciesUuid: sp.uuid,
+      backgroundUuid: ORIGINS[2024].background,
+      classUuid: axis.cls.uuid,
+      targetLevel: level,
+      abilities: { ...ABILITIES },
+      answers: (axis.advId && axis.subclassUuid) ? { [axis.advId]: axis.subclassUuid } : {}
+    });
+  }
+  return { scenarios, skipped };
+}
+
+/* -------------------------------------------- */
+/*  The background / feat axis                   */
+/* -------------------------------------------- */
+
+/**
+ * The class every background scenario is built on, and the subclass it takes.
+ *
+ * The Fighter: a martial with no spellcasting of its own, so nothing a feat brings can be confused
+ * with class spell progression — and the class with the *most* ability-score improvements in the
+ * game (4, 6, 8, 12, 14, 16, 19), which on this axis means the most feats taken per character.
+ */
+const FEAT_AXIS = { classIdentifier: "fighter", subclass: "Champion" };
+
+/** Every background in the world, sorted by uuid so the axis runs in the same order every time. */
+async function allBackgrounds() {
+  const out = [];
+  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+    const index = await pack.getIndex({ fields: ["system.source.rules"] });
+    for ( const entry of index ) {
+      if ( entry.type !== "background" ) continue;
+      out.push({
+        name: entry.name, uuid: entry.uuid, pack: pack.collection,
+        rules: entry.system?.source?.rules ?? null
+      });
+    }
+  }
+  return out.sort((a, b) => a.uuid.localeCompare(b.uuid));
+}
+
+/**
+ * One scenario per background, with **every ASI answered by taking a feat**.
+ *
+ * Two gaps in one axis, both of which the subclass sweep leaves wide open:
+ *
+ * - **No feat is ever taken.** `generateAsi` allocates points, so across 122 level-20 characters not
+ *   one general feat is selected and nothing a feat *brings* — its own half-feat increase, its
+ *   grants, its spell choices — is ever compared. Here a Fighter takes seven.
+ * - **One background.** Sage is the only origin the sweep uses, so its origin feat (Magic Initiate)
+ *   is the only one any character holds.
+ *
+ * Backgrounds themselves have every advancement at level 0 — there is no per-level behaviour to
+ * cover — so varying the background is worth doing *because* of what it changes about the feats,
+ * not for the background's own sake.
+ */
+async function backgroundScenarios({ level, incremental }) {
+  const backgrounds = await allBackgrounds();
+  const axis = await resolveAxisClass(FEAT_AXIS);
+  if ( !axis ) {
+    return { scenarios: [], skipped: [{ subclass: "background axis", reason: `no "${FEAT_AXIS.classIdentifier}" class is installed` }] };
+  }
+
+  const scenarios = [];
+  const skipped = [];
+  for ( const bg of backgrounds ) {
+    if ( String(bg.rules) === "2014" ) {
+      skipped.push({ subclass: bg.name, uuid: bg.uuid, reason: "2014 background; the axis class is 2024" });
+      continue;
+    }
+    let id = `background:${slug(bg.name)}`;
+    if ( scenarios.some(s => s.id === id) ) id += `-${slug(bg.pack)}`;
+    scenarios.push({
+      id,
+      name: `Background: ${bg.name} ${level} — ${axis.cls.name}/${FEAT_AXIS.subclass}, feats at every ASI (${bg.pack})`,
+      generate: true,
+      // The axis itself: every ability-score improvement is answered with a feat.
+      asiFeats: true,
+      incremental,
+      speciesUuid: ORIGINS[2024].species,
+      backgroundUuid: bg.uuid,
+      classUuid: axis.cls.uuid,
+      targetLevel: level,
+      abilities: { ...ABILITIES },
+      answers: (axis.advId && axis.subclassUuid) ? { [axis.advId]: axis.subclassUuid } : {}
+    });
+  }
+  return { scenarios, skipped };
+}
+
+/* -------------------------------------------- */
+
+/**
+ * Build a sweep's scenario list.
  * @param {object} [options]
  * @param {number} [options.level]    Level to carry each build to.
+ * @param {string} [options.axis]     "subclass" (the default), "species" or "background".
  * @returns {Promise<{scenarios: object[], skipped: object[]}>}
  */
-export async function sweepScenarios({ level = 20, incremental = false } = {}) {
+export async function sweepScenarios({ level = 20, incremental = false, axis = "subclass" } = {}) {
+  if ( axis === "species" ) return speciesScenarios({ level, incremental });
+  if ( axis === "background" ) return backgroundScenarios({ level, incremental });
   const classes = await classesByIdentifier();
   const subclasses = await allSubclasses();
 
@@ -227,18 +427,22 @@ export async function sweepScenarios({ level = 20, incremental = false } = {}) {
     let id = `sweep:${sub.classIdentifier}/${slug(sub.name)}`;
     if ( scenarios.some(s => s.id === id) ) id += `-${slug(sub.pack)}`;
 
+    const origins = originsFor(cls.rules);
+
     scenarios.push({
       id,
       // The class pack is named only when the identifier was contested, because that is the only
-      // time a reader could be wrong about which class the subclass was built onto.
+      // time a reader could be wrong about which class the subclass was built onto. The edition is
+      // named whenever it is not the 2024 default, since it changes the origins too.
       name: `Sweep: ${cls.name} ${level} — ${sub.name} (${sub.pack})`
-        + (candidates.length > 1 ? ` [class: ${cls.pack}]` : ""),
+        + (candidates.length > 1 ? ` [class: ${cls.pack}]` : "")
+        + (String(cls.rules) === "2014" ? " [2014]" : ""),
       generate: true,
       // One manager per level rather than one for the jump, snapshotted at each — see
       // `harness.mjs#compareLevels`.
       incremental,
-      speciesUuid: SPECIES,
-      backgroundUuid: BACKGROUND,
+      speciesUuid: origins.species,
+      backgroundUuid: origins.background,
       classUuid: cls.uuid,
       targetLevel: level,
       abilities: { ...ABILITIES },

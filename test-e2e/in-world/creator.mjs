@@ -104,7 +104,14 @@ function distribute(reqs, answer, { unofferable } = {}) {
   const remaining = [...answer];
   const out = new Map();
   for ( const req of reqs ) {
-    const offered = new Set((req.options ?? []).map(o => o.key));
+    // Enabled options only. The resolver keeps a key another source already grants in the list but
+    // greys it out, and writing a greyed-out pick back is what made a 2014 Rogue oscillate forever:
+    // the Acolyte's language choice offers Thieves' Cant, the class *grants* it, and the book — which
+    // memoises its answer on the first pass, before anything was selected to dedupe against — kept
+    // re-supplying it after the resolver stripped it to reopen the slot. Filtering the pool the book
+    // is *shown* cannot fix that on its own, because the memo predates the narrowing; the answer has
+    // to be filtered where it is applied.
+    const offered = new Set((req.options ?? []).filter(o => !o.disabled).map(o => o.key));
     const taken = [];
     for ( let i = 0; i < remaining.length && taken.length < (req.count ?? 1); ) {
       if ( offered.has(remaining[i]) ) taken.push(remaining.splice(i, 1)[0]);
@@ -187,6 +194,8 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
   const origins = {
     class: state.classUuid, species: state.speciesUuid, background: state.backgroundUuid
   };
+  /** Per-pass record of what changed, so a failure to settle can say *what* is oscillating. */
+  const passChurn = [];
   for ( let pass = 0; pass < 5; pass++ ) {
     const resolved = await resolveChoices(state, source);
     state.choiceCache = resolved;
@@ -209,6 +218,10 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
     }
 
     let changed = false;
+    // What moved this pass, for the error below. "Did not settle" with no detail says only that
+    // something oscillates; naming the selKeys and the values they alternate between turns a
+    // bisecting session into a read.
+    const churn = [];
     for ( const [advId, reqs] of byAdv ) {
       const adv = await advancementFor(reqs[0], origins);
       // Not "no answer" but "no question" — the book cannot be asked and an answer for this
@@ -220,9 +233,16 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
       // The requirement's own already-gated option list stands in for the pool the native flow
       // renders — the resolver has done the prerequisite filtering the compendium documents alone
       // could not.
+      //
+      // Disabled options are excluded, because a player cannot pick one either: the resolver keeps a
+      // key another source already grants in the list but greys it out, which is right for a screen
+      // and wrong for a pool to answer from. Offering them made the loop oscillate forever on a
+      // 2014 Rogue — the Acolyte's language choice offers Thieves' Cant, the class *grants* it, so
+      // the book picked it, the cross-source dedupe stripped it to reopen the slot, and the memoised
+      // answer put it straight back.
       const answer = await book.answer(adv, reqs[0].level ?? 0, {
         asker: "creator",
-        offered: () => reqs.flatMap(r => (r.options ?? []).map(o => o.key))
+        offered: () => reqs.flatMap(r => (r.options ?? []).filter(o => !o.disabled).map(o => o.key))
       });
       if ( (answer === undefined) || (answer === null) ) continue;
       // A feat's spell choices are not stored in `advChoices` at all — the creator owns them in
@@ -237,11 +257,14 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
         const bucket = state.advChoices[reqs[0].source] ??= {};
         const current = bucket[selKey] ?? [];
         if ( (current.length === keys.length) && keys.every(k => current.includes(k)) ) continue;
+        churn.push(`${reqs[0].source}:${selKey} ${JSON.stringify(current)} -> ${JSON.stringify(keys)}`
+          + ` (offered ${(reqs.flatMap(r => r.options ?? []).map(o => o.key)).join("|") || "nothing"})`);
         bucket[selKey] = keys;
         changed = true;
       }
     }
 
+    passChurn.push(churn);
     if ( !changed ) {
       if ( passUnofferable?.length ) unofferable.push(...passUnofferable);
       if ( diagnostics ) {
@@ -263,7 +286,10 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
       return resolved;
     }
   }
-  throw new Error("choice answers did not settle after 5 resolver passes");
+  const detail = passChurn
+    .map((c, i) => `  pass ${i + 1}:\n${c.map(l => `    ${l}`).join("\n") || "    (nothing)"}`)
+    .join("\n");
+  throw new Error(`choice answers did not settle after 5 resolver passes\n${detail}`);
 }
 
 /**

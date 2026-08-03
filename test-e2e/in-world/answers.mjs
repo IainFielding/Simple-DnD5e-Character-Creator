@@ -72,6 +72,14 @@ function canImprove(adv, key) {
 function generateSize(adv) {
   const sizes = new Set(adv.configuration?.sizes ?? []);
   if ( !sizes.size ) return { missing: "the Size advancement configures no sizes" };
+
+  // One configured size is not a decision — the 2014 SRD species are all plain Medium. Both paths
+  // apply it without asking anyone, so answering would only make the ledger report a decision
+  // neither side made: the native manager renders a step for an automatic advancement and therefore
+  // still asks, while the driver applies it silently. The same false positive `generateAsi` avoids
+  // for a forced increase and `generateTrait` for a grants-only Trait.
+  if ( sizes.size === 1 ) return { answer: null, note: "a single fixed size, nothing to choose" };
+
   const order = Object.keys(CONFIG.DND5E.actorSizes ?? {});
   const pick = order.find(s => sizes.has(s)) ?? sorted(sizes)[0];
   return { answer: pick };
@@ -236,6 +244,63 @@ function generateGrantAbility(adv) {
  * prerequisites and pulls a second advancement tree in behind it; that belongs in a scenario written
  * for it, not in a sweep whose subject is the subclass.
  */
+/**
+ * Every *general* feat in the world, uuid-sorted, memoised for the session.
+ *
+ * Only `subtype: "general"` — origin feats come from a background and epic boons and fighting styles
+ * are taken through their own advancements, none of which is what an ASI offers. Feats carrying
+ * `prerequisites.items` are excluded outright rather than evaluated: deciding whether the character
+ * satisfies one is exactly the gating logic under test elsewhere, and a book that re-implemented it
+ * would be marking its own homework. What is left is the large majority, and every one of them is
+ * takeable by anyone of the right level.
+ */
+let generalFeats = null;
+async function loadGeneralFeats() {
+  if ( generalFeats ) return generalFeats;
+  const out = [];
+  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+    const index = await pack.getIndex({ fields: ["system.type.value", "system.type.subtype",
+      "system.prerequisites.level", "system.prerequisites.items", "system.prerequisites.repeatable"] });
+    for ( const e of index ) {
+      if ( (e.type !== "feat") || (e.system?.type?.value !== "feat") ) continue;
+      if ( e.system?.type?.subtype !== "general" ) continue;
+      if ( Array.from(e.system?.prerequisites?.items ?? []).length ) continue;
+      out.push({
+        uuid: e.uuid, name: e.name,
+        level: e.system?.prerequisites?.level ?? 0,
+        repeatable: !!e.system?.prerequisites?.repeatable
+      });
+    }
+  }
+  generalFeats = out.sort((a, b) => a.uuid.localeCompare(b.uuid));
+  return generalFeats;
+}
+
+/**
+ * Answer an ASI by taking a **feat** rather than allocating points — the `asiFeats` axis.
+ *
+ * The subclass sweep spends every ASI on ability scores, so across 122 level-20 characters not one
+ * feat is ever taken and nothing a feat *brings* (its own ASI, its grants, its spell choices) is
+ * compared. This answers each ASI with the first eligible general feat not already held, walking
+ * further down one stable uuid-sorted list at each successive ASI so a character taking five of them
+ * takes five different ones.
+ * @param {Advancement} adv
+ * @param {number} level   The character level the decision is raised at.
+ */
+async function generateAsiFeat(adv, level) {
+  const cfg = adv.configuration ?? {};
+  // A *background* increase offers no feat (the flow renders the ability inputs outright), and a
+  // forced increase has nothing to decide. Both fall through to the points generator.
+  if ( (cfg.points ?? 0) <= 0 ) return generateAsi(adv);
+
+  const feats = await loadGeneralFeats();
+  const held = new Set(adv.actor?.items?.map(i => i._stats?.compendiumSource ?? i.flags?.dnd5e?.sourceId) ?? []);
+  const characterLevel = level || adv.actor?.system?.details?.level || 0;
+  const pick = feats.find(f => (f.level <= characterLevel) && (f.repeatable || !held.has(f.uuid)));
+  if ( !pick ) return { missing: `no general feat is takeable at level ${characterLevel}` };
+  return { answer: { feat: pick.uuid } };
+}
+
 function generateAsi(adv) {
   const cfg = adv.configuration ?? {};
   const fixed = cfg.fixed ?? {};
@@ -276,7 +341,7 @@ function generateAsi(adv) {
  *                                       against a character (see {@link generateTrait}).
  * @returns {Promise<{answer?: *, missing?: string, note?: string}>}
  */
-async function generate(adv, level, { offered } = {}) {
+async function generate(adv, level, { offered, asiFeats = false } = {}) {
   if ( isDeferred(adv) ) return { answer: null, note: "deferred to the creator's feat-spells step" };
   switch ( adv?.type ) {
     case "HitPoints": return { answer: "avg" };   // never "roll" — a die is not an equivalence test
@@ -284,7 +349,7 @@ async function generate(adv, level, { offered } = {}) {
     case "Trait": return generateTrait(adv, offered);
     case "ItemChoice": return generateItemChoice(adv, level, offered);
     case "ItemGrant": return generateGrantAbility(adv);
-    case "AbilityScoreImprovement": return generateAsi(adv);
+    case "AbilityScoreImprovement": return asiFeats ? generateAsiFeat(adv, level) : generateAsi(adv);
     case "Subclass":
       // The subclass is the variable a sweep is sweeping. Generating one would defeat the point, so
       // a scenario that raises this decision must state it.
@@ -306,6 +371,12 @@ export class AnswerBook {
   /** @type {boolean} Whether unanswered decisions are generated or simply left alone. */
   #generate;
 
+  /**
+   * @type {boolean} Whether a generated ASI takes a feat instead of allocating points. The axis that
+   * exists because the subclass sweep never takes a feat at all.
+   */
+  #asiFeats;
+
   /** @type {Map<string, object>} `advId@level` → the ledger entry holding the settled answer. */
   #memo = new Map();
 
@@ -314,9 +385,10 @@ export class AnswerBook {
    * @param {object} [options.overrides]   The scenario's `answers` table.
    * @param {boolean} [options.generate]   Generate an answer for anything the table does not cover.
    */
-  constructor({ overrides = {}, generate = false } = {}) {
+  constructor({ overrides = {}, generate = false, asiFeats = false } = {}) {
     this.#overrides = overrides ?? {};
     this.#generate = generate;
+    this.#asiFeats = asiFeats;
   }
 
   /* -------------------------------------------- */

@@ -198,7 +198,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
     // whoever asks second, which is what makes a generated scenario comparable at all: the two
     // builds walk in different orders off different clones and still cannot disagree about what was
     // chosen. A scenario without `generate` answers only from its own table, exactly as before.
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats });
 
     // Both adapters record which answers they actually read, so an answer nobody wanted can be
     // caught below rather than quietly changing the character.
@@ -312,9 +312,9 @@ export function list() {
  * the run consists of and on what each id means.
  */
 let sweep = null;
-async function getSweep(level, incremental = false) {
-  if ( !sweep || (sweep.level !== level) || (sweep.incremental !== incremental) ) {
-    sweep = { level, incremental, ...(await sweepScenarios({ level, incremental })) };
+async function getSweep(level, incremental = false, axis = "subclass") {
+  if ( !sweep || (sweep.level !== level) || (sweep.incremental !== incremental) || (sweep.axis !== axis) ) {
+    sweep = { level, incremental, axis, ...(await sweepScenarios({ level, incremental, axis })) };
   }
   return sweep;
 }
@@ -324,10 +324,11 @@ async function getSweep(level, incremental = false) {
  * @param {object} [options]
  * @param {number} [options.level]
  * @param {boolean} [options.incremental]
+ * @param {string} [options.axis]   Which axis to sweep: "subclass" (default) or "species".
  */
-export async function sweepList({ level = 20, incremental = false } = {}) {
-  const { scenarios, skipped } = await getSweep(level, incremental);
-  return { level, incremental, skipped, scenarios: scenarios.map(s => ({ id: s.id, name: s.name })) };
+export async function sweepList({ level = 20, incremental = false, axis = "subclass" } = {}) {
+  const { scenarios, skipped } = await getSweep(level, incremental, axis);
+  return { level, incremental, axis, skipped, scenarios: scenarios.map(s => ({ id: s.id, name: s.name })) };
 }
 
 /**
@@ -341,8 +342,8 @@ export async function sweepList({ level = 20, incremental = false } = {}) {
  * @param {number} [options.level]
  * @param {boolean} [options.keep]
  */
-export async function sweepOne({ id, level = 20, incremental = false, keep = false, render = false }) {
-  const { scenarios } = await getSweep(level, incremental);
+export async function sweepOne({ id, level = 20, incremental = false, keep = false, render = false, axis = "subclass" }) {
+  const { scenarios } = await getSweep(level, incremental, axis);
   const scenario = scenarios.find(s => s.id === id);
   if ( !scenario ) throw new Error(`unknown sweep scenario "${id}"`);
   await cleanup();
@@ -505,7 +506,7 @@ export async function compareItem({ scenarioId, itemName, level = 20, incrementa
   let native = null;
   let creator = null;
   try {
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats });
     // The same tolerance `runScenario` grants a generating scenario. Without it the resolver's first
     // pass — which legitimately offers a narrower pool than the settled one — throws, and this tool
     // cannot be pointed at the sweep findings it exists to explain.
@@ -555,7 +556,7 @@ export async function probeNative({
   const byLevel = [];
   let actor = null;
   try {
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats });
     actor = await buildNative({ ...scenario, name: `${PREFIX}${scenario.name} [native]` }, {
       book,
       onLevel: (lvl, a) => {

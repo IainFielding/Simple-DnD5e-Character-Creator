@@ -323,7 +323,12 @@ async function prepareRequirements(def, shared) {
  * @param {{sel?: object, owners?: {item: Item}[]}[]} defs
  */
 function proficientSkillKeys(defs) {
-  const isSkill = k => typeof k === "string" && k.startsWith("skills:") && k !== "skills:*";
+  // Skills *and* tools. The 2014 Rogue's Expertise is `count: 2` over a pool of
+  // `[tool:thief, skills:*]` — thieves' tools are a legitimate expertise pick by the rules — so a
+  // skills-only set cannot satisfy it. What keeps a 2024 Rogue (whose pool is `skills:*` alone) from
+  // being offered a tool is the pool intersection at the call site, not this filter.
+  const isProficiency = k => typeof k === "string"
+    && (k.startsWith("skills:") || k.startsWith("tool:")) && !k.endsWith(":*");
   const keys = new Set();
   for ( const d of defs ) {
     const sel = d.sel ?? {};
@@ -331,12 +336,12 @@ function proficientSkillKeys(defs) {
       for ( const adv of advancementArray(owner) ) {
         if ( adv.type !== "Trait" || (adv.level ?? 0) > 1 ) continue;
         if ( adv.classRestriction === "secondary" || adv.configuration?.mode === "expertise" ) continue;
-        for ( const g of adv.configuration?.grants ?? [] ) if ( isSkill(g) ) keys.add(g);
+        for ( const g of adv.configuration?.grants ?? [] ) if ( isProficiency(g) ) keys.add(g);
         const choices = Array.from(adv.configuration?.choices ?? []);
         for ( let ci = 0; ci < choices.length; ci++ ) {
           const pool = Array.from(choices[ci].pool ?? []);
-          if ( !pool.some(k => typeof k === "string" && k.startsWith("skills:")) ) continue;
-          for ( const k of sel[`${adv._id}#${ci}`] ?? [] ) if ( isSkill(k) ) keys.add(k);
+          if ( !pool.some(k => typeof k === "string" && (k.startsWith("skills:") || k.startsWith("tool:"))) ) continue;
+          for ( const k of sel[`${adv._id}#${ci}`] ?? [] ) if ( isProficiency(k) ) keys.add(k);
         }
       }
     }
@@ -414,7 +419,18 @@ async function parseAdvancementChoice(adv, ctx) {
       const selKey = `${adv._id}#${ci}`;
 
       if ( isExpertise ) {
-        const options = expertiseSkillPool;
+        // dnd5e intersects an expertise pool with what the *character* is already proficient in, so
+        // `expertiseSkillPool` is the character side — but the advancement's own pool still decides
+        // what kind of proficiency is eligible. A 2024 Rogue pools `skills:*` and may take expertise
+        // in skills alone; the 2014 Rogue pools `[tool:thief, skills:*]` and may take it in thieves'
+        // tools too. Offering the character's whole proficiency set to both would hand a 2024 Rogue
+        // a tool the rules do not allow; offering only skills to both left the 2014 Rogue's second
+        // pick unfillable, and the resolver's fixed-point loop never settled.
+        // The module's own expansion, so a tool key is shaped the same way it is everywhere else
+        // (`expandToolPool` keeps the category prefix — see the tool-proficiency note in the e2e
+        // README, where flattening it broke `unfulfilledChoices`).
+        const expanded = new Set((await expandTraitPool(pool)).map(o => o.key));
+        const options = expertiseSkillPool.filter(o => expanded.has(o.key));
         const valid = new Set(options.map(o => o.key));
         if ( sel[selKey] ) sel[selKey] = sel[selKey].filter(k => valid.has(k));
         const req = buildChoiceReq({
