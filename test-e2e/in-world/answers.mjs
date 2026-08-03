@@ -134,6 +134,21 @@ async function generateTrait(adv, offered) {
       remaining--;
     }
     if ( remaining ) {
+      // A pool big enough for the choice, emptied by what the character already has, is *exhausted*
+      // rather than too small — an Eberron background whose one offered proficiency it also grants
+      // outright is the case in the wild. Neither side can pick anything, so both apply nothing and
+      // the two agree; reporting it as unanswerable failed the scenario over a non-difference.
+      //
+      // A pool genuinely shorter than the choice is a different thing and still reported: that is
+      // content the generator cannot satisfy, and silence would hide it.
+      if ( pool.length >= count ) continue;
+      // An *empty* pool is the same symmetry once more: neither side can pick anything, so both
+      // apply nothing and agree. The 2024 Criminal background ships a "Background Proficiencies"
+      // choice of 1 over no options at all. Recorded as a note so the oddity stays visible in the
+      // report rather than failing a scenario over a non-difference.
+      if ( !pool.length ) {
+        return { answer: null, note: `"${adv.title}" offers no options for a choice of ${count}` };
+      }
       return {
         missing: `"${adv.title}" offers ${pool.length} key(s) for a choice of ${count}`
           + `${available.size ? "" : " (the asker showed no pool, so this is the configured one)"}`

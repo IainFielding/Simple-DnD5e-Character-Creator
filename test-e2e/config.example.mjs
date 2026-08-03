@@ -46,7 +46,11 @@ export const BASE_MODULES = [
   "dnd-heroes-faerun",
   "dnd-monster-manual",
   "dnd-players-handbook",
-  "dnd-ravenloft-horrors-within"
+  "dnd-ravenloft-horrors-within",
+  // Tasha's Cauldron of Everything — 30 subclasses across 13 classes, plus the Artificer and the
+  // five sidekick classes. The sweep's only 2014-rules content, built onto the 2014 classes the
+  // system still ships; it also injects optional features into every 2014 class in the world.
+  "dnd-tashas-cauldron"
 ];
 
 /** The system the test worlds run, and the version this harness was written against. */

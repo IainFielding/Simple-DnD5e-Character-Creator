@@ -275,9 +275,19 @@ async function speciesScenarios({ level, incremental }) {
     return { scenarios: [], skipped: [{ subclass: "species axis", reason: `no "${SPECIES_AXIS.classIdentifier}" class is installed` }] };
   }
 
+  // The Player's Handbook module and the system's own `origins24` ship the *same* 2024 species, so
+  // an undeduped axis builds every one of them twice — 38 scenarios to test 19 species. Deduped by
+  // name, preferring `dnd5e.origins24` because that is where the subclass sweep's characterised
+  // Human comes from, so the two axes agree about what "Human" means.
+  const byName = new Map();
+  for ( const sp of species ) {
+    const seen = byName.get(sp.name);
+    if ( !seen || ((seen.pack !== "dnd5e.origins24") && (sp.pack === "dnd5e.origins24")) ) byName.set(sp.name, sp);
+  }
+
   const scenarios = [];
   const skipped = [];
-  for ( const sp of species ) {
+  for ( const sp of byName.values() ) {
     // A 2014 species on the 2024 Wizard would reintroduce exactly the mixed-edition pairing the
     // origins split above exists to avoid, and the 2014 species are already covered as the origins
     // of every 2014-class scenario in the subclass sweep.
@@ -285,8 +295,7 @@ async function speciesScenarios({ level, incremental }) {
       skipped.push({ subclass: sp.name, uuid: sp.uuid, reason: "2014 species; the axis class is 2024" });
       continue;
     }
-    let id = `species:${slug(sp.name)}`;
-    if ( scenarios.some(s => s.id === id) ) id += `-${slug(sp.pack)}`;
+    const id = `species:${slug(sp.name)}`;
     scenarios.push({
       id,
       name: `Species: ${sp.name} ${level} — ${axis.cls.name}/${SPECIES_AXIS.subclass} (${sp.pack})`,
@@ -354,15 +363,22 @@ async function backgroundScenarios({ level, incremental }) {
     return { scenarios: [], skipped: [{ subclass: "background axis", reason: `no "${FEAT_AXIS.classIdentifier}" class is installed` }] };
   }
 
+  // Deduped by name for the same reason the species axis is: the Player's Handbook module and the
+  // system's own `origins24` ship the same 2024 backgrounds, so an undeduped axis builds each twice.
+  const byName = new Map();
+  for ( const bg of backgrounds ) {
+    const seen = byName.get(bg.name);
+    if ( !seen || ((seen.pack !== "dnd5e.origins24") && (bg.pack === "dnd5e.origins24")) ) byName.set(bg.name, bg);
+  }
+
   const scenarios = [];
   const skipped = [];
-  for ( const bg of backgrounds ) {
+  for ( const bg of byName.values() ) {
     if ( String(bg.rules) === "2014" ) {
       skipped.push({ subclass: bg.name, uuid: bg.uuid, reason: "2014 background; the axis class is 2024" });
       continue;
     }
-    let id = `background:${slug(bg.name)}`;
-    if ( scenarios.some(s => s.id === id) ) id += `-${slug(bg.pack)}`;
+    const id = `background:${slug(bg.name)}`;
     scenarios.push({
       id,
       name: `Background: ${bg.name} ${level} — ${axis.cls.name}/${FEAT_AXIS.subclass}, feats at every ASI (${bg.pack})`,
