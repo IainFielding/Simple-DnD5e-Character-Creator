@@ -6,6 +6,7 @@ import { spellInfoFor } from "./spells-step.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { applyQuickBuild } from "../data/quick-build.mjs";
 import { t, log, levelUpEnabled } from "../config.mjs";
+import { matchesRules } from "../data/source-index.mjs";
 
 /**
  * The Class step. Class selection and ability scores share one step: the class
@@ -101,6 +102,11 @@ export const classStep = {
       state.classUuid = state.classUuid === uuid ? null : uuid;
       // Spells, class advancement picks, and class equipment are all class-specific.
       state.resetClassDependent();
+      // Changing to a class of a different edition invalidates origins the new class would never
+      // have offered — the grids are scoped, but a pick made before the switch would survive it and
+      // build the mixed-edition character the scoping exists to prevent. Only genuinely
+      // incompatible picks are dropped, so switching *within* an edition costs the player nothing.
+      dropOffEditionOrigins(state, source);
       // Refresh the cached choice requirements so the Choices step's completion gate
       // reflects the new class even before it is visited.
       state.choiceCache = await resolveChoices(state, source);
@@ -180,4 +186,29 @@ function hasMeaningfulPicks(state) {
     || state.selectedSpells.length
     || Object.values(state.advChoices).some(bucket => Object.keys(bucket).length)
   );
+}
+
+/**
+ * Drop a chosen species or background the newly-chosen class's edition would never have offered.
+ *
+ * The grids are scoped to the class's edition, but the class is the *first* step: a player who goes
+ * back and switches a 2024 class for a 2014 one would otherwise keep origins the 2014 grids never
+ * show, which is exactly the mixed-edition character the scoping exists to prevent.
+ *
+ * Deliberately narrow — only a genuine mismatch is cleared, so switching class within an edition, or
+ * to/from content that declares no edition, costs the player nothing. Their advancement picks for the
+ * dropped origin go with it, since those were made against an item the character no longer has.
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ * @param {import("../data/source-index.mjs").SourceIndex} source
+ */
+function dropOffEditionOrigins(state, source) {
+  const want = source.rulesOf(state.classUuid);
+  if ( !want ) return;                     // no class, or one that declares no edition
+  for ( const [field, key] of [["speciesUuid", "species"], ["backgroundUuid", "background"]] ) {
+    const uuid = state[field];
+    if ( !uuid || matchesRules(source.rulesOf(uuid), want) ) continue;
+    log(`dropping ${key} ${uuid}: not ${want} content`);
+    state[field] = null;
+    state.resetSourceChoices(key);
+  }
 }

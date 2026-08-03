@@ -57,37 +57,6 @@ export function registerLevelUp() {
  * @returns {boolean|void}  `false` suppresses the native render once we have claimed the manager.
  */
 function onPreAdvancementManagerRender(manager) {
-  // Temporary diagnostics for the Phase 1 bring-up: report why we did or didn't take over.
-  // NOTE (junior): this console.table/log block is developer scaffolding for the in-progress
-  // level-up feature — safe to strip once the takeover is stable. It only logs; it changes nothing.
-  const steps = manager?.steps ?? [];
-  const actorLevel = manager?.actor?.system?.details?.level ?? 0;
-  const classItem = steps.find(s => s.class)?.class?.item;
-  console.table(steps.map(s => ({
-    type: s.type,
-    automatic: !!s.automatic,
-    level: s.level,
-    advType: s.flow?.advancement?.type ?? "—",
-    advName: s.flow?.advancement?.title ?? s.flow?.advancement?.constructor?.name ?? "—",
-    hasClass: !!s.class,
-    supported: !!s.automatic || LevelUpDriver.isStepSupported(s)
-  })));
-  log("preAdvancementManagerRender gates", {
-    levelUpEnabled: levelUpEnabled(),
-    isOwner: !!manager?.actor?.isOwner,
-    actorLevel,
-    classItemId: classItem?.id ?? null,
-    classOnActor: !!(classItem && manager.actor?.items?.get(classItem.id)),
-    classOnClone: !!(classItem && manager.clone?.items?.get(classItem.id)),
-    multiclassMode: multiclassMode(),
-    hasReverseOrDelete: steps.some(s => s.type === "reverse" || s.type === "delete"),
-    raisesLevel: steps.some(s => s.type === "forward" && s.class && (s.level ?? 0) > actorLevel),
-    canDrive: LevelUpDriver.canDrive(manager, { allowNewClass: multiclassMode() !== "off" }),
-    unsupportedSteps: steps
-      .filter(s => !s.automatic && !LevelUpDriver.isStepSupported(s))
-      .map(s => `${s.flow?.advancement?.type ?? "?"} — ${s.flow?.advancement?.title ?? s.flow?.item?.name ?? "?"}`)
-  });
-
   if ( !levelUpEnabled() ) return;
   // The hook fires on every (re-)render; once we have claimed a manager, never re-enter.
   if ( manager._sogromLevelUp ) return;

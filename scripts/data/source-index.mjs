@@ -31,6 +31,25 @@ import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
  */
 const SIDEKICK_IDENTIFIERS = new Set(["expert", "warrior", "healer", "mage", "prodigy"]);
 
+/**
+ * Whether a card belongs in a grid scoped to one rules edition.
+ *
+ * A world can hold both editions side by side — the system still ships the 2014 classes, species and
+ * backgrounds beside the 2024 ones — and mixing them builds a character neither edition describes:
+ * a 2014 class advances on a different schedule than the 2024 content assumes.
+ *
+ * Content that declares **no** edition matches everything. Homebrew and third-party packs frequently
+ * leave `source.rules` unset, and hiding those from every grid would be a far worse failure than
+ * showing them in both.
+ * @param {string|null} cardRules   The card's normalised edition, or null.
+ * @param {string|null} want        The edition to scope to, or null for "no scoping".
+ * @returns {boolean}
+ */
+export function matchesRules(cardRules, want) {
+  if ( !want || !cardRules ) return true;
+  return String(cardRules) === String(want);
+}
+
 export class SourceIndex {
 
   /** type id -> card[]. Note dnd5e's item type for "species" is historically "race". */
@@ -101,23 +120,55 @@ export class SourceIndex {
   }
 
   classes() { return this.#cards.class; }
-  species() { return this.#cards.race; }
-  backgrounds() { return this.#cards.background; }
+
+  /**
+   * Species and background cards, optionally scoped to one rules edition.
+   *
+   * The creation wizard picks the class first, so by the time these grids render the character's
+   * edition is known — and a 2014 class should not be offered the 2024 origins. Classes themselves
+   * are never scoped: the class *is* the choice that sets the edition.
+   * @param {object} [options]
+   * @param {string|number|null} [options.rules]   Edition to scope to; unset returns everything.
+   */
+  species({ rules = null } = {}) {
+    return this.#cards.race.filter(c => matchesRules(c.rules, rules));
+  }
+
+  backgrounds({ rules = null } = {}) {
+    return this.#cards.background.filter(c => matchesRules(c.rules, rules));
+  }
+
+  /** The rules edition of a card, by uuid — how a step learns the chosen class's edition. */
+  rulesOf(uuid) {
+    return this.card(uuid)?.rules ?? null;
+  }
 
   /**
    * The subclass cards belonging to one class, by its identifier. Fetched (and cached) lazily on
    * first request — independent of {@link load}, so the level-up flow can use it without warming
    * the full origin index. {@link detail} and {@link advancementGroups} work on these UUIDs too.
+   *
+   * **Scoped to the class's own rules edition.** A world can hold both editions of a class — the
+   * system still ships the 2014 classes alongside the 2024 ones — and they share an identifier, so
+   * matching on identifier alone offers a 2014 Cleric the 2024 domains and vice versa. They are not
+   * interchangeable: a 2024 subclass grants its features at the levels the 2024 class advances on,
+   * so pairing it with the 2014 progression produces a character neither edition describes.
+   *
+   * Content that declares no edition is offered to both, which is the right default for homebrew and
+   * for third-party packs that never set `source.rules`.
    * @param {string} classIdentifier
+   * @param {object} [options]
+   * @param {string|number|null} [options.rules]   The class's `system.source.rules`; unset offers all.
    * @returns {Promise<object[]>}
    */
-  async subclasses(classIdentifier) {
+  async subclasses(classIdentifier, { rules = null } = {}) {
     if ( !this.#subclasses ) {
       this.#subclasses = this.#fetchSubclasses()
         .catch(err => { this.#subclasses = null; throw err; });
     }
     return (await this.#subclasses)
       .filter(c => c.classIdentifier === classIdentifier)
+      .filter(c => matchesRules(c.rules, rules))
       .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
   }
 
@@ -129,7 +180,7 @@ export class SourceIndex {
       try {
         entries = await browser.fetch(Item, {
           types: new Set(["subclass"]),
-          indexFields: new Set(["system.classIdentifier"])
+          indexFields: new Set(["system.classIdentifier", "system.source.rules"])
         });
       } catch ( err ) {
         log("Compendium Browser fetch failed for subclasses, scanning packs directly", err);
@@ -140,7 +191,10 @@ export class SourceIndex {
       uuid: e.uuid,
       name: e.name,
       img: e.img || "icons/svg/item-bag.svg",
-      classIdentifier: e.system?.classIdentifier ?? ""
+      classIdentifier: e.system?.classIdentifier ?? "",
+      // Normalised to a string (packs store it as `'2014'`, but a number is legal) and left null
+      // when absent, which {@link subclasses} treats as "offer to either edition".
+      rules: e.system?.source?.rules != null ? String(e.system.source.rules) : null
     }));
   }
 
@@ -174,7 +228,7 @@ export class SourceIndex {
       try {
         entries = await browser.fetch(Item, {
           types: new Set([type]),
-          indexFields: new Set(["system.identifier"])
+          indexFields: new Set(["system.identifier", "system.source.rules"])
         });
       } catch ( err ) {
         log(`Compendium Browser fetch failed for "${type}", scanning packs directly`, err);
@@ -191,7 +245,9 @@ export class SourceIndex {
     for ( const pack of game.packs ) {
       if ( pack.metadata.type !== "Item" ) continue;
       try {
-        const index = await pack.getIndex({ fields: ["type", "system.identifier", "system.classIdentifier"] });
+        const index = await pack.getIndex({
+          fields: ["type", "system.identifier", "system.classIdentifier", "system.source.rules"]
+        });
         for ( const e of index ) if ( e.type === type ) out.push(e);
       } catch ( err ) {
         log(`pack scan failed for ${pack.collection}`, err);
@@ -207,7 +263,10 @@ export class SourceIndex {
       uuid: entry.uuid,
       name: entry.name,
       img: entry.img || "icons/svg/item-bag.svg",
-      identifier: entry.system?.identifier ?? ""
+      identifier: entry.system?.identifier ?? "",
+      // Normalised to a string (packs store `'2014'`, but a number is legal) and null when the
+      // content declares nothing — see {@link matchesRules}.
+      rules: entry.system?.source?.rules != null ? String(entry.system.source.rules) : null
     };
   }
 

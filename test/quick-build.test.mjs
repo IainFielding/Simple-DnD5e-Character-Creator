@@ -311,6 +311,9 @@ function makeSource({ backgrounds = [sageCard], species = [humanCard] } = {}) {
     species: () => species,
     backgrounds: () => backgrounds,
     card: uuid => all.find(c => c.uuid === uuid) ?? null,
+    // These fixtures declare no rules edition, which is the "offer everything" case — Quick Build
+    // scopes its origin picks to the class's edition and must not narrow when there isn't one.
+    rulesOf: () => null,
     abilityScoreIncrease: async uuid => (uuid === UUID.sage ? SAGE_ASI : null)
   };
 }

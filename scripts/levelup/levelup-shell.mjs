@@ -89,7 +89,10 @@ export class LevelUpShell extends CreatorShellBase {
       for ( const record of this.state.subclassSteps ) {
         const identifier = record.advancement?.item?.identifier;
         if ( !identifier ) continue;
-        const cards = await this.#source.subclasses(identifier);
+        // Same edition scoping the step itself applies, or the warm-up would prefetch cards the
+        // screen will never show.
+        const rules = record.advancement?.item?.system?.source?.rules ?? null;
+        const cards = await this.#source.subclasses(identifier, { rules });
         await forEachLimit(cards, WARM_CONCURRENCY, async card => {
           try {
             await this.#source.detail(card.uuid);

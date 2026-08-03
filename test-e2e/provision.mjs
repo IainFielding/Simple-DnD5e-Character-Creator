@@ -11,7 +11,7 @@
  * every module actually came up active, and imports any configured adventure packs.
  */
 
-import { WORLDS } from "./config.mjs";
+import { MODULE_ID, WORLDS } from "./config.mjs";
 import { startFoundry } from "./lib/server.mjs";
 import { Session } from "./lib/session.mjs";
 import { ensureWorld, resetWorldData, worldInitialised } from "./lib/worlds.mjs";
@@ -58,6 +58,17 @@ async function provision(worldId) {
       await session.reload();
     } else {
       console.log("  module configuration already correct");
+    }
+
+    // The module's `log()` is silent unless debug logging is on, and the harness leans on it: a
+    // stranded flow or a swallowed resolver error explains itself through those lines, and
+    // `run.mjs --console` captures the page console to read them back. Turned on per world, after
+    // the reload, because the setting only exists once the module has registered it.
+    if ( spec.modules.includes(MODULE_ID) ) {
+      await session.eval(async id => {
+        try { await game.settings.set(id, "debugLogging", true); } catch { /* module not active */ }
+      }, MODULE_ID);
+      console.log("  debug logging enabled (harness diagnostics)");
     }
 
     const status = await moduleStatus(session, spec.modules);

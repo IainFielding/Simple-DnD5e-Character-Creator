@@ -24,7 +24,9 @@ export const STEPS = [
     labelKey: "step.species.label",
     field: "speciesUuid",
     hintKey: "step.species.hint",
-    cards: src => src.species()
+    // Scoped to the chosen class's edition — class is the first step, so it is always known by
+    // the time this grid renders. See `SourceIndex#matchesRules`.
+    cards: (src, state) => src.species({ rules: src.rulesOf(state.classUuid) })
   }),
   detailsStep,
   spellsStep,

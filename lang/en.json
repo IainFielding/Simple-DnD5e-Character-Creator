@@ -290,13 +290,13 @@
         "placeholder": {
           "alignment": "e.g. Chaotic Good",
           "faith": "Deity or philosophy",
-          "gender": "",
-          "eyes": "",
-          "hair": "",
-          "skin": "",
-          "height": "",
-          "weight": "",
-          "age": "",
+          "gender": "How do they identify?",
+          "eyes": "e.g. Hazel",
+          "hair": "e.g. Auburn, close-cropped",
+          "skin": "e.g. Deep bronze",
+          "height": "e.g. 5 ft 10 in",
+          "weight": "e.g. 165 lb",
+          "age": "e.g. 27",
           "trait": "How do they carry themselves?",
           "ideals": "What do they believe in?",
           "bonds": "Who or what matters to them?",
@@ -531,6 +531,10 @@
         "name": "Starting-Gold Store",
         "label": "Configure Store",
         "hint": "Curate the store's shelves: drag items in from any compendium, set per-item prices, and hide or remove stock."
+      },
+      "debugLogging": {
+        "name": "Debug logging",
+        "hint": "Print this module's diagnostics to your browser console. Off by default; turn it on if you've been asked for details about a problem. Affects only you."
       }
     },
     "storeConfig": {

@@ -24,7 +24,8 @@
  * @param {string} cfg.labelKey     i18n key for the step label.
  * @param {string} cfg.field        CreatorState property holding the chosen UUID.
  * @param {string} [cfg.hintKey]    i18n key for the "nothing picked yet" Next-button hint.
- * @param {(src: import("../data/source-index.mjs").SourceIndex) => object[]} cfg.cards
+ * @param {(src: import("../data/source-index.mjs").SourceIndex,
+ *           state: import("../state/creator-state.mjs").CreatorState) => object[]} cfg.cards
  * @returns {object} A step module.
  */
 import { resolveChoices } from "../data/choice-resolver.mjs";
@@ -65,7 +66,7 @@ export function originStep({ id, icon, labelKey, field, cards, hintKey }) {
       const selected = state[field];
       const detail = selected ? await source.detail(selected) : null;
       const groups = selected ? await source.advancementGroups(selected) : null;
-      const list = cards(source).map(c => ({ ...c, selected: c.uuid === selected }));
+      const list = cards(source, state).map(c => ({ ...c, selected: c.uuid === selected }));
       return {
         cards: list,
         count: list.length,

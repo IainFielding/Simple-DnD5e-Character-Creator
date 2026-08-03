@@ -379,7 +379,10 @@ async function parseAdvancementChoice(adv, ctx) {
     // From the owning item rather than `adv.item`: `advancementArray` also yields raw advancement
     // *data* (no back-reference) when a document arrives un-prepared.
     const identifier = ownerItem?.system?.identifier ?? ownerItem?.identifier;
-    const cards = identifier ? await index?.subclasses(identifier) ?? [] : [];
+    // Scoped to the class's own edition — a 2014 Cleric must not be offered the 2024 domains, which
+    // grant their features on the 2024 progression. See `SourceIndex#subclasses`.
+    const rules = ownerItem?.system?.source?.rules ?? null;
+    const cards = identifier ? await index?.subclasses(identifier, { rules }) ?? [] : [];
     if ( !cards.length ) return;
     reqs.push(buildChoiceReq({
       advId: adv._id, source, ownerUuid, type: "Subclass", level,

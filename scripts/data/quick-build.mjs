@@ -46,6 +46,9 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
   };
 
   const identifier = source.card(state.classUuid)?.identifier ?? "";
+  // Quick Build picks the origins for the player, so it has to respect the same edition scoping the
+  // grids do — a 2014 class must not be handed a 2024 species. See `SourceIndex#matchesRules`.
+  const rules = source.rulesOf(state.classUuid);
   const profile = QUICK_BUILD[identifier] ?? await genericProfile(state.classUuid);
   const classDoc = await fromUuid(state.classUuid).catch(() => null);
 
@@ -67,7 +70,7 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
 
   // Background: the suggested one when installed, else the best ability-aligned fit.
   await attempt("background", async () => {
-    const card = await pickBackground(source, profile);
+    const card = await pickBackground(source, profile, { rules });
     if ( !card ) { warnings.push("no-backgrounds"); return; }
     state.backgroundUuid = card.uuid;
     state.backgroundAsi = await source.abilityScoreIncrease(card.uuid);
@@ -76,7 +79,7 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
 
   // Species: random — every installed species is somebody's favourite.
   await attempt("species", async () => {
-    const list = source.species();
+    const list = source.species({ rules });
     if ( !list.length ) { warnings.push("no-species"); return; }
     state.speciesUuid = list[Math.floor(rng() * list.length)]?.uuid ?? null;
   });
@@ -173,10 +176,12 @@ export function allocateBackgroundAsi(state, priorities) {
  * class's top three priorities (+3/+2/+1, alphabetical tiebreak — deterministic either way).
  * @param {import("./source-index.mjs").SourceIndex} source
  * @param {object} profile
+ * @param {object} [options]
+ * @param {string|null} [options.rules]   Scope to the class's rules edition.
  * @returns {Promise<object|null>}  A background card, or null when none are installed.
  */
-export async function pickBackground(source, profile) {
-  const cards = source.backgrounds();
+export async function pickBackground(source, profile, { rules = null } = {}) {
+  const cards = source.backgrounds({ rules });
   if ( !cards.length ) return null;
 
   const slug = c => String(c.identifier || c.name || "").trim().toLowerCase().replace(/\s+/g, "-");

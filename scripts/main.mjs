@@ -139,6 +139,14 @@ function registerSettings() {
     type: StoreConfigApp,
     restricted: true
   });
+  // The one `client` setting: what this module prints to *your* console is your business, not a
+  // world-wide decision the GM makes for everybody. Off by default — a working game should say
+  // nothing — and turned on when someone is asked to reproduce a bug.
+  game.settings.register(MODULE_ID, SETTINGS.debug, {
+    name: t("settings.debugLogging.name"),
+    hint: t("settings.debugLogging.hint"),
+    scope: "client", config: true, type: Boolean, default: DEFAULTS.debug
+  });
 }
 
 /* -------------------------------------------- */
