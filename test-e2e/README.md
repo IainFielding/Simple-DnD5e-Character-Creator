@@ -281,23 +281,78 @@ written down — an advancement id belongs to the content version that shipped i
 goes stale the moment a module updates. That is also why the sweep covers third-party classes it has
 never seen.
 
+### What the sweep holds fixed
+
+One axis varies — the subclass. Three others are pinned, and it is worth being explicit about what
+that does *not* cover, because "122 characters to level 20" reads like more breadth than it is.
+
+**Species: Human, and Human is the quiet one.** dnd5e's `createLevelChangeSteps` pushes species flows
+at every character level (`advancement-manager.mjs`, the `raceItem` line), so the mechanism is on the
+path both adapters walk — there is just nothing to walk. Human has every advancement at level 0. Of
+the 15 PHB'24 species, eight do not:
+
+| Species | Above level 1 |
+| --- | --- |
+| Elf — Drow / High / Wood | ItemGrant at **1, 3, 5** — the free spells, each carrying a casting-ability decision |
+| Tiefling — Abyssal / Chthonic / Infernal | ItemGrant at **1, 3, 5**, same shape |
+| Dragonborn | ItemGrant at **5** (Draconic Flight), plus a level-keyed Breath Weapon ScaleValue |
+| Goliath | **5** (Large Form) |
+
+A spell granted by the *species* at level 3, with an ability choice, arriving mid-walk on a class
+that knows nothing about it, is the shape that has produced findings here before.
+
+**Background: Sage — and nothing is being missed.** Every 2024 background has all of its
+advancements at level 0. A background contributes at creation and never again.
+
+**Feats: never taken.** `generateAsi` always allocates points, so every ASI at 4/8/12/16/19 spends
+its budget on ability scores and no general feat is ever selected. That matters more than it looks:
+feat pools gate on `prerequisites.items`, which holds the *identifiers* of required items — the same
+gate that hid every fighting style at creation (fix **1** above). A general feat gated behind an
+origin feat is unreachable twice over here: no feat is ever taken, and the only origin feat a sweep
+character holds is Sage's Magic Initiate.
+
 ### Tasha's Cauldron of Everything
 
 `dnd-tashas-cauldron` joined the module list on 2026-08-03, taking the sweep from 92 subclasses to
-**122**. It is the largest single body of content the sweep can reach, and the most different in
-character from the rest: thirty 2014-era subclasses built onto 2024 classes, by an author who could
-not have designed for either this system version or this module.
+**122**. It is the largest single body of content the sweep can reach, and the only 2014-rules
+content in it: thirty subclasses written against the 2014 classes, which the system still ships in
+`dnd5e.classes`, so that is what they are built onto. Its own four Artificer subclasses go onto its
+own Artificer — see the pairing rule below.
 
-Two consequences worth knowing before reading its results:
+That makes this the first part of the sweep that is not 2024 content at all, which is where its value
+lies and also where its findings come from.
 
-- **Two Artificers now share one identifier.** `dnd-forge-artificer` and Tasha's both publish a class
-  with `system.identifier: "artificer"`, and `classesByIdentifier` keeps the first by uuid — the
-  Forge one. So Tasha's four Artificer subclasses are swept against the Forge Artificer class. That
-  is not a fudge: dnd5e matches a subclass to a class on the identifier, so it is exactly the pairing
-  a player in this world would get.
-- **Names collide too**, and the sweep already handles it — an id that is taken gains its pack as a
-  suffix (`sweep:rogue/phantom-dnd-tashas-cauldron-tcoe-character-options`), so the Tasha's Phantom
-  and the Ravenloft one are both built rather than one silently shadowing the other.
+**Names collide**, and the sweep already handled that — an id that is taken gains its pack as a
+suffix (`sweep:rogue/phantom-dnd-tashas-cauldron-tcoe-character-options`), so the Tasha's Phantom and
+the Ravenloft one are both built rather than one silently shadowing the other. What Tasha's forced
+was the harder question underneath it: *which class*.
+
+### Which class a subclass is built onto
+
+The sweep used to keep the first class by uuid for each identifier, which is arbitrary — and with
+Tasha's installed, wrong in three different ways at once. `classFor` now resolves nearest publisher
+first, and `--sweep --plan` prints `[class: <pack>]` on any contested identifier so the result is
+checkable by eye rather than inferred:
+
+1. **Same pack.** A `dnd5e.classes24` subclass belongs on the 2024 class sitting beside it, not the
+   2014 one in `dnd5e.classes` — module alone cannot tell those apart.
+2. **The module's stated class source** (`CLASS_SOURCE`). Tasha's is 2014 content: Path of the Beast
+   was written against the 2014 Barbarian, which has different features at different levels from the
+   2024 one, so building it onto the Player's Handbook 2024 Barbarian would test a pairing that never
+   existed. Its subclasses go onto `dnd5e.classes`.
+3. **Same module**, for a module shipping both without needing to be named.
+4. **The stated fallback** (`CLASS_FALLBACK`), then first by uuid.
+
+Which resolves the Artificer three ways, deliberately:
+
+| Subclasses | Class | Why |
+| --- | --- | --- |
+| Tasha's four (Alchemist, Armorer, Artillerist, Battle Smith) | Tasha's Artificer | same pack — tier 1 |
+| Forge's five, including Cartographer | Forge Artificer | same module — tier 3 |
+| Ravenloft's Reanimator | Forge Artificer | ships no artificer class; tier 4, and **stated** rather than inherited from `dnd-f` sorting before `dnd-t` |
+
+The 2014-vs-2024 split is the point of tier 2, and it is not cosmetic: 38 of the 122 scenarios now
+build on `dnd5e.classes` — Tasha's 26 non-Artificer subclasses plus the twelve 2014 SRD ones.
 
 ### The sidekicks are not swept, and that is the test
 
@@ -824,10 +879,10 @@ node run.mjs playwright-clean --probe-native "sweep:artificer/alchemist/Tasha's 
 **The native build drops Cast-activity cached spells at a later level.** Both divergences the first
 incremental shard found are this one cause:
 
-| Subclass | Spell | Level |
-| --- | --- | --- |
-| Ranger Winter Walker | Hunter's Mark (Favored Enemy) | 5 |
-| Artificer Alchemist | Tasha's Bubbling Cauldron | 17 |
+| Subclass | Spell | Level | Upstream issue |
+| --- | --- | --- | --- |
+| Ranger Winter Walker | Hunter's Mark (Favored Enemy) | 5 | [premium-content#1704](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1704) |
+| Artificer Alchemist | Tasha's Bubbling Cauldron | 17 | [premium-content#1706](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1706) |
 
 The shape of the diff reads as "the creator has a spare copy", and that reading is wrong. Count the
 copies on each side either side of the boundary and the direction reverses:
@@ -857,9 +912,13 @@ those present on the manager's clone — a cached copy created by that deliberat
 after the clone was taken is not on it. Our `commit()` computes `toDelete` by identical logic, so
 what differs is timing; we keep the copy, and keeping it is correct.
 
-**Raised with the dnd5e maintainers and confirmed by them as a known issue.** Nothing to change here.
-The user-visible consequence upstream is that a character levelled one level at a time silently loses
-the cast button for a spell one of its features grants it.
+**Raised with the dnd5e maintainers and confirmed by them as a known issue** — logged as
+[premium-content#1704](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1704) (Winter
+Walker) and [#1706](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1706)
+(Alchemist). The same maintainers hold both the system and the premium content, and that tracker is
+where they want these logged. Nothing to change here. The user-visible consequence upstream is that a character
+levelled one level at a time silently loses the cast button for a spell one of its features grants
+it.
 
 ### Found by the sweep — a known dnd5e issue, fix in progress upstream
 
@@ -867,8 +926,9 @@ the cast button for a spell one of its features grants it.
 two spells the reference does not** (`Heroism`, `Shield`). 1/92, and the only remaining difference in
 the whole sweep.
 
-**Raised with the dnd5e maintainers and confirmed by them as a known issue they are working on.** So
-this needs nothing here, and the sweep should reach 92/92 on a system update — worth re-running it
+**Raised with the dnd5e maintainers and confirmed by them as a known issue they are working on** —
+logged as [premium-content#1705](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1705). So
+this needs nothing here, and the sweep should clear it on a content update — worth re-running it
 after one rather than assuming, since a fix in this area could move other things too.
 
 The subclass grants a *Battle Smith Spells* feature at level 3, and that feature carries five
