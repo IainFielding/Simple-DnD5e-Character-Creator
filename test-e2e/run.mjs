@@ -75,7 +75,7 @@ try {
     const cut = arg.lastIndexOf("/");
     const r = await harness("probeNative", {
       scenarioId: arg.slice(0, cut), itemName: arg.slice(cut + 1),
-      level: Number(value("level") ?? 20), incremental: !flag("jump")
+      level: Number(value("level") ?? 20), incremental: !flag("jump"), render: flag("render")
     });
     console.log(`world: ${r.world}   ${r.incremental ? "incremental" : "single jump"}`);
     for ( const l of r.byLevel ) {
@@ -116,6 +116,14 @@ try {
   if ( session ) console.error(`--- world console tail ---\n${session.tail(50)}`);
   exitCode = 1;
 } finally {
+  // `--console` writes the world's console whatever happened. The suite only keeps it on a failure,
+  // which is right for a diff — but some questions are *about* what the world said rather than what
+  // it built, and a warning raised mid-build leaves no trace in the committed actor at all.
+  if ( flag("console") && session ) {
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(new URL("./console.log", import.meta.url), session.consoleLog.join("\n"), "utf8");
+    console.log(`\nworld console written to test-e2e/console.log (${session.consoleLog.length} lines)`);
+  }
   if ( session ) await session.close();
   await server.stop();
 }
@@ -216,7 +224,7 @@ async function runSweep(harness) {
     const position = `[${String(i + 1).padStart(3)}/${ids.length}]`;
     let r;
     try {
-      r = await harness("sweepOne", { id, level, incremental, keep });
+      r = await harness("sweepOne", { id, level, incremental, keep, render: flag("render") });
     } catch ( err ) {
       // A scenario that takes the page down with it must not take the run down with it.
       r = { id, name: id, ok: false, error: err.message, differences: [], ms: 0 };

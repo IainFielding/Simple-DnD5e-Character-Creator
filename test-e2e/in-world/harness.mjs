@@ -178,7 +178,7 @@ export async function cleanup() {
  * @param {object} [options]
  * @param {boolean} [options.keep]   Leave the built actors in the world for inspection.
  */
-export async function runScenario(scenario, { keep = false } = {}) {
+export async function runScenario(scenario, { keep = false, render = false } = {}) {
   const started = performance.now();
   const report = {
     id: scenario.id, name: scenario.name, ok: false, differences: [], error: null,
@@ -225,6 +225,17 @@ export async function runScenario(scenario, { keep = false } = {}) {
     assertAnswersConsumed(scenario.answers ?? {}, consumed, advancementTypes(originDocs), report.diagnostics);
     assertBookComplete(book);
     report.decisions = book.entries.map(({ askedBy, ...rest }) => ({ ...rest, askedBy: [...askedBy] }));
+
+    // `render` opens each sheet in turn, for problems that only exist once something prepares an
+    // item for display — the actors are byte-identical and neither says a word until asked. The
+    // creator's is rendered second so its output is the tail of the console.
+    if ( render ) {
+      for ( const actor of [native, creator] ) {
+        await actor.sheet.render(true);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        await actor.sheet.close();
+      }
+    }
 
     const a = snapshot(native);
     const b = snapshot(creator);
@@ -327,12 +338,12 @@ export async function sweepList({ level = 20, incremental = false } = {}) {
  * @param {number} [options.level]
  * @param {boolean} [options.keep]
  */
-export async function sweepOne({ id, level = 20, incremental = false, keep = false }) {
+export async function sweepOne({ id, level = 20, incremental = false, keep = false, render = false }) {
   const { scenarios } = await getSweep(level, incremental);
   const scenario = scenarios.find(s => s.id === id);
   if ( !scenario ) throw new Error(`unknown sweep scenario "${id}"`);
   await cleanup();
-  return runScenario(scenario, { keep });
+  return runScenario(scenario, { keep, render });
 }
 
 /* -------------------------------------------- */
@@ -455,8 +466,15 @@ export async function compareItem({ scenarioId, itemName, level = 20, incrementa
  * @param {string} options.itemName
  * @param {number} [options.level]
  * @param {boolean} [options.incremental]
+ * @param {boolean} [options.render]   Open the finished character's sheet before tearing it down.
+ *   The harness otherwise never renders anything — it builds with `render: false` and only reads
+ *   data — so a problem that only surfaces when something *prepares an item for display* leaves no
+ *   trace at all. A consumption target that cannot resolve is exactly that shape: the actor's stored
+ *   data is identical either way, and the complaint only arrives when the sheet asks for it.
  */
-export async function probeNative({ scenarioId, itemName, level = 20, incremental = true }) {
+export async function probeNative({
+  scenarioId, itemName, level = 20, incremental = true, render = false
+}) {
   const scenario = SCENARIOS.find(s => s.id === scenarioId)
     ?? (await getSweep(level, incremental)).scenarios.find(s => s.id === scenarioId);
   if ( !scenario ) throw new Error(`unknown scenario "${scenarioId}"`);
@@ -478,7 +496,12 @@ export async function probeNative({ scenarioId, itemName, level = 20, incrementa
         byLevel.push({ level: lvl, count: copies.length, copies });
       }
     });
-    return { scenario: scenarioId, item: itemName, world: game.world.id, incremental, byLevel };
+    if ( render && actor ) {
+      await actor.sheet.render(true);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await actor.sheet.close();
+    }
+    return { scenario: scenarioId, item: itemName, world: game.world.id, incremental, rendered: render, byLevel };
   } finally {
     if ( actor?.id ) await Actor.implementation.deleteDocuments([actor.id], { render: false }).catch(() => {});
   }
