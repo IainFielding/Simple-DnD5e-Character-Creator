@@ -161,3 +161,93 @@ describe("switching class edition drops incompatible origins", () => {
     expect(state.speciesUuid).toBe("species-2024");
   });
 });
+
+/**
+ * The same content ships from more than one publisher.
+ *
+ * The system's SRD 5.2 packs and the Player's Handbook module both carry the 2024 classes, species,
+ * backgrounds and subclasses, so a world with both showed every one of them twice — two identical
+ * "Barbarian" cards, and three "Champion"s once the 2014 SRD is counted. `dedupeCards` keeps the
+ * Player's Handbook copy.
+ *
+ * The rule reproduced here is the whole of `dedupeCards`; the surrounding class is compendium
+ * plumbing that cannot load outside Foundry.
+ */
+describe("duplicate content collapses to the Player's Handbook copy", () => {
+  const PREFERRED = "dnd-players-handbook";
+  const pkg = uuid => String(uuid).split(".")[1] ?? "";
+
+  const dedupe = cards => {
+    const byKey = new Map();
+    for ( const card of cards ) {
+      const key = [card.classIdentifier ?? "", card.identifier ?? "", card.name, card.rules ?? ""].join("|");
+      const seen = byKey.get(key);
+      if ( !seen ) { byKey.set(key, card); continue; }
+      if ( (pkg(card.uuid) === PREFERRED) && (pkg(seen.uuid) !== PREFERRED) ) byKey.set(key, card);
+    }
+    return [...byKey.values()];
+  };
+
+  const card = (uuid, name, extra = {}) => ({ uuid, name, identifier: name.toLowerCase(), rules: "2024", ...extra });
+
+  it("keeps the Player's Handbook copy however the packs are ordered", () => {
+    const srdFirst = dedupe([
+      card("Compendium.dnd5e.classes24.Item.a", "Barbarian"),
+      card("Compendium.dnd-players-handbook.classes.Item.b", "Barbarian")
+    ]);
+    const phbFirst = dedupe([
+      card("Compendium.dnd-players-handbook.classes.Item.b", "Barbarian"),
+      card("Compendium.dnd5e.classes24.Item.a", "Barbarian")
+    ]);
+    expect(srdFirst).toHaveLength(1);
+    expect(phbFirst).toHaveLength(1);
+    expect(pkg(srdFirst[0].uuid)).toBe(PREFERRED);
+    expect(pkg(phbFirst[0].uuid)).toBe(PREFERRED);
+  });
+
+  // The whole reason the key is strict. Both are `artificer`; they are different classes.
+  it("never collapses different content that shares an identifier", () => {
+    const out = dedupe([
+      card("Compendium.dnd-forge-artificer.options.Item.a", "Artificer", { rules: "2024" }),
+      card("Compendium.dnd-tashas-cauldron.tcoe-character-options.Item.b", "Artificer", { rules: "2014" })
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("keeps both editions of the same name", () => {
+    const out = dedupe([
+      card("Compendium.dnd5e.classes.Item.a", "Cleric", { rules: "2014" }),
+      card("Compendium.dnd-players-handbook.classes.Item.b", "Cleric", { rules: "2024" })
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("collapses subclasses too, keyed by their class as well", () => {
+    const sub = (uuid, name, classIdentifier) => ({ uuid, name, classIdentifier, rules: "2024" });
+    const out = dedupe([
+      sub("Compendium.dnd5e.classes24.Item.a", "Champion", "fighter"),
+      sub("Compendium.dnd5e.subclasses.Item.b", "Champion", "fighter"),
+      sub("Compendium.dnd-players-handbook.classes.Item.c", "Champion", "fighter")
+    ]);
+    expect(out).toHaveLength(1);
+    expect(pkg(out[0].uuid)).toBe(PREFERRED);
+  });
+
+  it("keeps a same-named subclass belonging to a different class", () => {
+    const sub = (uuid, name, classIdentifier) => ({ uuid, name, classIdentifier, rules: "2024" });
+    const out = dedupe([
+      sub("Compendium.x.y.Item.a", "Scion", "rogue"),
+      sub("Compendium.x.y.Item.b", "Scion", "bard")
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("preserves order, so a grid's existing sort survives", () => {
+    const out = dedupe([
+      card("Compendium.dnd5e.classes24.Item.a", "Barbarian"),
+      card("Compendium.dnd5e.classes24.Item.b", "Bard"),
+      card("Compendium.dnd-players-handbook.classes.Item.c", "Barbarian")
+    ]);
+    expect(out.map(c => c.name)).toEqual(["Barbarian", "Bard"]);
+  });
+});

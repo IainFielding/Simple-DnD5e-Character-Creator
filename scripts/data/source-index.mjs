@@ -50,6 +50,54 @@ export function matchesRules(cardRules, want) {
   return String(cardRules) === String(want);
 }
 
+/**
+ * The content module a compendium uuid belongs to: `Compendium.<packageId>.<pack>.Item.<id>`.
+ */
+function packageOf(uuid) {
+  return String(uuid).split(".")[1] ?? "";
+}
+
+/**
+ * The publisher whose copy wins when the same content ships twice.
+ *
+ * The system's own SRD packs and the Player's Handbook module carry the same 2024 classes, species,
+ * backgrounds and subclasses, so a world with both shows every one of them twice — two identical
+ * "Barbarian" cards with nothing to tell them apart. The Player's Handbook copy is the one to keep:
+ * a GM who installed it wants its version, and it is the one carrying the official artwork the
+ * class, species and background screens already use as their backdrops.
+ */
+const PREFERRED_PACKAGE = "dnd-players-handbook";
+
+/**
+ * Collapse cards that are the same content republished, keeping {@link PREFERRED_PACKAGE}'s copy.
+ *
+ * Deliberately strict about what counts as "the same": identifier, name **and** rules edition must
+ * all agree. Matching on the identifier alone would collapse genuinely different content that shares
+ * one — the Forge Artificer and Tasha's Artificer are both `artificer`, and are different classes
+ * with different features at different levels. Anything that is not an exact match is left alone,
+ * which errs towards showing a duplicate rather than hiding someone's content.
+ *
+ * Insertion order is preserved, so a grid's existing ordering survives.
+ * @param {object[]} cards
+ * @returns {object[]}
+ */
+function dedupeCards(cards) {
+  const byKey = new Map();
+  for ( const card of cards ) {
+    const key = [card.classIdentifier ?? "", card.identifier ?? "", card.name, card.rules ?? ""].join("|");
+    const seen = byKey.get(key);
+    if ( !seen ) {
+      byKey.set(key, card);
+      continue;
+    }
+    // First one found wins unless the preferred publisher turns up later.
+    if ( (packageOf(card.uuid) === PREFERRED_PACKAGE) && (packageOf(seen.uuid) !== PREFERRED_PACKAGE) ) {
+      byKey.set(key, card);
+    }
+  }
+  return [...byKey.values()];
+}
+
 export class SourceIndex {
 
   /** type id -> card[]. Note dnd5e's item type for "species" is historically "race". */
@@ -187,7 +235,7 @@ export class SourceIndex {
       }
     }
     if ( !entries.length ) entries = await this.#scanPacks("subclass");
-    return entries.map(e => ({
+    return dedupeCards(entries.map(e => ({
       uuid: e.uuid,
       name: e.name,
       img: e.img || "icons/svg/item-bag.svg",
@@ -195,7 +243,7 @@ export class SourceIndex {
       // Normalised to a string (packs store it as `'2014'`, but a number is legal) and left null
       // when absent, which {@link subclasses} treats as "offer to either edition".
       rules: e.system?.source?.rules != null ? String(e.system.source.rules) : null
-    }));
+    })));
   }
 
   /** Look up a single card across all types by its UUID. */
@@ -236,7 +284,8 @@ export class SourceIndex {
     }
     if ( !entries.length ) entries = await this.#scanPacks(type);
     const cards = entries.map(e => this.#toCard(e));
-    return type === "class" ? cards.filter(c => !SIDEKICK_IDENTIFIERS.has(c.identifier)) : cards;
+    const offered = type === "class" ? cards.filter(c => !SIDEKICK_IDENTIFIERS.has(c.identifier)) : cards;
+    return dedupeCards(offered);
   }
 
   /** Direct fallback scan when the Compendium Browser is unavailable. */
