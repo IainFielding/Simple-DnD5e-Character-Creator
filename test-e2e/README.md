@@ -51,7 +51,7 @@ npm run provision           # create + configure both worlds
 
 | World | Modules |
 | --- | --- |
-| `playwright` | creator + dice-so-nice, dnd-dungeon-masters-guide, dnd-forge-artificer, dnd-heroes-faerun, dnd-monster-manual, dnd-players-handbook, dnd-ravenloft-horrors-within |
+| `playwright` | creator + dice-so-nice, dnd-dungeon-masters-guide, dnd-forge-artificer, dnd-heroes-faerun, dnd-monster-manual, dnd-players-handbook, dnd-ravenloft-horrors-within, dnd-tashas-cauldron |
 | `playwright-ember` | the same plus `ember`, with the Ember adventure imported |
 | `playwright-clean` | the same content **without** the creator — for deciding whether a difference is dnd5e's or ours |
 
@@ -78,6 +78,7 @@ node run.mjs --list
 node run.mjs --ids <compendium-uuid>  # dump an item's advancement ids + options
 node run.mjs --find "feat:Actor"      # find items by name (optionally type-prefixed)
 node run.mjs --subclasses wizard      # subclasses for a class identifier
+node run.mjs --sidekicks              # assert Tasha's sidekicks are not offered as classes
 node run.mjs --sweep                  # every subclass in the world, at level 20 (see below)
 HEADED=1 node run.mjs                 # watch the native wizard being driven
 ```
@@ -98,12 +99,26 @@ committed actors and never opens a screen:
 | …and Expertise on a skill granted at level 3 (Phantom) gives **2** | works — the trait-ordering fix |
 | A half-feat at an ASI level applies its +1 and shows it | works |
 
-One warning seen during the Barbarian build, on Path of the Berserker: *"item configured to be
-consumed by Recharge with Rage activity on Intimidating Presence could not be found"*. **Not ours**:
-that subclass is one of the 91 the sweep reports byte-identical to a natively-built character, and
-Intimidating Presence is a level-10 feature, so its activities and consumption targets were compared
-and matched. A dangling consumption reference present in both builds is the content's or the
-system's.
+### One warning, seen once, not reproduced
+
+*"item configured to be consumed by Recharge with Rage activity on Intimidating Presence could not be
+found"* — Path of the Berserker, on a jump to level 14. Neither a repeat by hand nor four harness
+runs reproduced it, so it is closed as a one-off. Recorded only so a recurrence does not start from
+nothing; what was ruled out:
+
+- Native jump to 14 with this module **absent** — no warning, with and without the sheet rendered
+- Both builds, base world and Ember world, sheets rendered — no warning
+- The two builds are byte-identical at 14, and that comparison covers consumption targets: the
+  normaliser rewrites actor-local ids to identities, so a reference dangling on one side only would
+  have surfaced as a difference rather than matching
+
+If it returns, the question that splits the remaining space is *when* it appears — stepping through
+the wizard (the shell), on Apply (the commit), on opening the sheet (stored data), or on clicking
+Rage (runtime resolution).
+
+It also exposed a real blind spot, now fixed: the harness built with `render: false` and never opened
+a sheet, so anything that only complains while *preparing an item for display* was invisible to it.
+`--render` and `--console` exist because of this.
 
 ## Testing by hand
 
@@ -250,7 +265,7 @@ scenarios above each exist to exercise one mechanism and argue for their answers
 one just covers the content.
 
 ```bash
-node run.mjs --sweep                  # 92 subclasses at level 20 (hours)
+node run.mjs --sweep                  # 122 subclasses at level 20 (hours)
 node run.mjs --sweep --level 6        # shallower
 node run.mjs --sweep --incremental    # one manager per level, compared after each
 node run.mjs --sweep --shard 1/20     # every 20th, for a smoke test
@@ -265,6 +280,50 @@ own `classIdentifier`, and the Subclass advancement's id is read off the class d
 written down — an advancement id belongs to the content version that shipped it, so a hard-coded one
 goes stale the moment a module updates. That is also why the sweep covers third-party classes it has
 never seen.
+
+### Tasha's Cauldron of Everything
+
+`dnd-tashas-cauldron` joined the module list on 2026-08-03, taking the sweep from 92 subclasses to
+**122**. It is the largest single body of content the sweep can reach, and the most different in
+character from the rest: thirty 2014-era subclasses built onto 2024 classes, by an author who could
+not have designed for either this system version or this module.
+
+Two consequences worth knowing before reading its results:
+
+- **Two Artificers now share one identifier.** `dnd-forge-artificer` and Tasha's both publish a class
+  with `system.identifier: "artificer"`, and `classesByIdentifier` keeps the first by uuid — the
+  Forge one. So Tasha's four Artificer subclasses are swept against the Forge Artificer class. That
+  is not a fudge: dnd5e matches a subclass to a class on the identifier, so it is exactly the pairing
+  a player in this world would get.
+- **Names collide too**, and the sweep already handles it — an id that is taken gains its pack as a
+  suffix (`sweep:rogue/phantom-dnd-tashas-cauldron-tcoe-character-options`), so the Tasha's Phantom
+  and the Ravenloft one are both built rather than one silently shadowing the other.
+
+### The sidekicks are not swept, and that is the test
+
+Tasha's also ships five **sidekick** classes — Expert, Warrior, and the three Spellcasters (Healer,
+Mage, Prodigy). They are real `class` items with real advancements, and nothing in their data marks
+them as anything else, but they are DM-run companions rather than player options. This module's
+answer is to keep them out of the class grid entirely, by identifier
+(`source-index.mjs`'s `SIDEKICK_IDENTIFIERS`).
+
+So there is nothing for the sweep to do with them — a sidekick has no subclasses, and a character
+the creator will not let you build cannot be compared against one it will. The whole test is a
+presence check on the index the grid renders from:
+
+```bash
+node run.mjs --sidekicks
+```
+
+It asserts three things, and needs all three to mean anything: the five sidekicks are **installed**
+(an empty class grid would otherwise pass); none of them is offered; and the **Artificer** — same
+pack, same publisher, genuinely playable — still is, so the filter is exactly as wide as those five
+identifiers and no wider. It drives the real `SourceIndex.load()`, so it covers whichever route that
+takes in the world: dnd5e's Compendium Browser fetch, or the direct pack scan it falls back to.
+
+Their ASI schedules differ from each other by design (Expert 4/8/10/12/16/19, Warrior
+4/8/12/14/16/19, Spellcaster 4/8/12/16/18) — correct data, not a content bug, and irrelevant here
+only because nobody can select them.
 
 ### One jump, or one level at a time
 

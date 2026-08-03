@@ -20,6 +20,9 @@ const { SCENARIOS } = await import(`./scenarios.mjs${BUST}`);
 const { AnswerBook } = await import(`./answers.mjs${BUST}`);
 const { sweepScenarios } = await import(`./sweep.mjs${BUST}`);
 
+// The module under test, imported *without* a buster — the same instance the world already loaded.
+const { SourceIndex } = await import("/modules/sogrom-dnd5e-character-creator/scripts/data/source-index.mjs");
+
 /**
  * Every actor this harness creates is named with this prefix, and cleanup only ever deletes
  * actors that carry it — so a stray run can never touch real world content. A name prefix rather
@@ -344,6 +347,74 @@ export async function sweepOne({ id, level = 20, incremental = false, keep = fal
   if ( !scenario ) throw new Error(`unknown sweep scenario "${id}"`);
   await cleanup();
   return runScenario(scenario, { keep, render });
+}
+
+/* -------------------------------------------- */
+/*  Sidekicks                                    */
+/* -------------------------------------------- */
+
+/**
+ * Tasha's five sidekick classes must **not** be offered as player classes.
+ *
+ * They are the one part of `dnd-tashas-cauldron` the sweep deliberately cannot reach: a sidekick has
+ * no subclasses, so a subclass-driven sweep has nothing to build, and there is nothing to build
+ * anyway — the module's answer to a sidekick is to leave it out of the class grid entirely
+ * (`source-index.mjs`'s `SIDEKICK_IDENTIFIERS`). So the whole test is a presence check on the index
+ * the grid renders from, and it needs three parts to mean anything:
+ *
+ *  - the sidekicks are **installed**, or an empty class grid would pass;
+ *  - none of them is offered;
+ *  - the Artificer, which ships in the *same pack* and is a genuine player class, still is — the
+ *    filter has to be exactly as wide as the five identifiers and no wider.
+ *
+ * This runs the real `SourceIndex.load()`, so it covers whichever route that takes in this world:
+ * the dnd5e Compendium Browser's own fetch, or the direct pack scan it falls back to.
+ * @returns {Promise<object>}
+ */
+export async function checkSidekicks() {
+  const SIDEKICKS = ["expert", "warrior", "healer", "mage", "prodigy"];
+
+  // What the world actually holds, read straight from the packs rather than through the index under
+  // test — otherwise the filter would be marking its own homework.
+  const installed = new Map();
+  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+    const index = await pack.getIndex({ fields: ["system.identifier"] });
+    for ( const entry of index ) {
+      if ( entry.type !== "class" ) continue;
+      const id = entry.system?.identifier;
+      if ( id && !installed.has(id) ) installed.set(id, { name: entry.name, uuid: entry.uuid });
+    }
+  }
+
+  const index = new SourceIndex();
+  await index.load();
+  const offered = index.classes();
+  const offeredIds = new Set(offered.map(c => c.identifier));
+
+  const failures = [];
+  const checks = [];
+
+  for ( const id of SIDEKICKS ) {
+    const inWorld = installed.get(id);
+    const shown = offeredIds.has(id);
+    checks.push({ identifier: id, installed: !!inWorld, offered: shown, name: inWorld?.name ?? null });
+    if ( !inWorld ) failures.push(`sidekick "${id}" is not installed — this check proves nothing`);
+    else if ( shown ) failures.push(`sidekick "${id}" (${inWorld.name}) is offered in the class grid`);
+  }
+
+  // The control: same pack, same publisher, genuinely playable.
+  const artificer = offered.find(c => c.identifier === "artificer");
+  checks.push({ identifier: "artificer", installed: installed.has("artificer"), offered: !!artificer,
+    name: artificer?.name ?? null });
+  if ( installed.has("artificer") && !artificer ) {
+    failures.push(`"artificer" is installed but not offered — the sidekick filter is too wide`);
+  }
+
+  return {
+    ok: !failures.length, failures, checks,
+    classesOffered: offered.length,
+    offered: offered.map(c => `${c.identifier} — ${c.name}`).sort()
+  };
 }
 
 /* -------------------------------------------- */

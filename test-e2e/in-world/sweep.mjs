@@ -34,11 +34,26 @@ function slug(name) {
 /* -------------------------------------------- */
 
 /**
- * Every class item in the world, keyed by its identifier.
+ * The module a pack belongs to. A pack collection is `<packageId>.<packName>`, so this is the
+ * publisher — `dnd-tashas-cauldron`, `dnd-forge-artificer`, `dnd5e` for the system's own.
+ */
+function packageOf(packCollection) {
+  return String(packCollection).split(".")[0];
+}
+
+/**
+ * Every class item in the world, keyed by its identifier — **all** candidates per identifier,
+ * sorted by uuid.
  *
  * Index-scanned rather than loaded: a class document is large and all this needs is the uuid and the
- * identifier its subclasses point at. A duplicate identifier (the same class shipped by two packs)
- * keeps the first by uuid order, so the sweep is stable across runs.
+ * identifier its subclasses point at.
+ *
+ * Two modules can publish a class under one identifier — `dnd-forge-artificer` and
+ * `dnd-tashas-cauldron` both ship `artificer` — and they are *different classes*, with different
+ * features at different levels. Which one a subclass is built onto is not a detail: a Tasha's
+ * Artillerist grew up alongside Tasha's Artificer, and pairing it with the Forge one tests a
+ * combination its author never wrote. So the choice is made per subclass rather than once per
+ * identifier — see {@link classFor}.
  */
 async function classesByIdentifier() {
   const out = new Map();
@@ -48,12 +63,69 @@ async function classesByIdentifier() {
     for ( const entry of index ) {
       if ( entry.type !== "class" ) continue;
       const identifier = entry.system?.identifier;
-      if ( identifier ) found.push({ identifier, uuid: entry.uuid, name: entry.name });
+      if ( identifier ) found.push({ identifier, uuid: entry.uuid, name: entry.name, pack: pack.collection });
     }
   }
   found.sort((a, b) => a.uuid.localeCompare(b.uuid));
-  for ( const cls of found ) if ( !out.has(cls.identifier) ) out.set(cls.identifier, cls);
+  for ( const cls of found ) {
+    if ( !out.has(cls.identifier) ) out.set(cls.identifier, []);
+    out.get(cls.identifier).push(cls);
+  }
   return out;
+}
+
+/**
+ * Which classes a module's subclasses belong on, when the module does not ship the class itself.
+ * Keyed by the subclass's package, valued with a pack collection.
+ *
+ * Tasha's Cauldron is 2014 content. Its Path of the Beast was written against the 2014 Barbarian —
+ * different features at different levels from the 2024 one — so building it onto the Player's
+ * Handbook 2024 Barbarian would be testing a pairing that never existed. The system still ships the
+ * 2014 classes in `dnd5e.classes`, so that is where they go. Its *own* Artificer is unaffected: the
+ * same-pack tier in {@link classFor} runs first and keeps Tasha's four Artificer subclasses on
+ * Tasha's Artificer.
+ */
+const CLASS_SOURCE = { "dnd-tashas-cauldron": "dnd5e.classes" };
+
+/**
+ * Where a subclass lands when its own module ships no class for it and the identifier is contested.
+ *
+ * Only `artificer` needs saying: three modules publish Artificer subclasses and two publish an
+ * Artificer class, so Ravenloft's Reanimator — which ships neither — would otherwise be decided by
+ * whichever module id sorts first. It does currently resolve to the Forge Artificer that way, which
+ * is the right answer; this states the intent rather than inheriting it from the alphabet, so a
+ * module named `dnd-a…` appearing later cannot silently move it.
+ */
+const CLASS_FALLBACK = { artificer: "dnd-forge-artificer" };
+
+/**
+ * The class a subclass should be built onto, nearest publisher first.
+ *
+ * A subclass and the class it was written for travel together, so proximity is the tie-break that
+ * matters. Three tiers, narrowest first:
+ *
+ *  1. **Same pack.** Decides the two the system itself ships: a `dnd5e.classes24` subclass belongs
+ *     on the 2024 class beside it, not on the 2014 one in `dnd5e.classes`, and package alone cannot
+ *     tell those apart.
+ *  2. **The module's stated class source** in {@link CLASS_SOURCE} — Tasha's subclasses onto the
+ *     2014 classes the system still ships, because that is the edition they were written for.
+ *  3. **Same module**, for a module that ships both without needing to be named here.
+ *  4. **The stated fallback** in {@link CLASS_FALLBACK}, then first by uuid — stable across runs,
+ *     and what every uncontested identifier resolves to. This is where a subclass whose module ships
+ *     no class of its own lands: Ravenloft's Reanimator onto the Forge Artificer, every 2014 SRD
+ *     subclass onto the 2014 SRD class.
+ * @param {object[]} candidates    Class records for one identifier, uuid-sorted.
+ * @param {string} subclassPack    The subclass's pack collection.
+ */
+function classFor(candidates, subclassPack) {
+  const home = packageOf(subclassPack);
+  const source = CLASS_SOURCE[home];
+  const fallback = CLASS_FALLBACK[candidates[0].identifier];
+  return candidates.find(c => c.pack === subclassPack)
+    ?? (source ? candidates.find(c => c.pack === source) : null)
+    ?? candidates.find(c => packageOf(c.pack) === home)
+    ?? (fallback ? candidates.find(c => packageOf(c.pack) === fallback) : null)
+    ?? candidates[0];
 }
 
 /** Every subclass in the world, sorted by uuid so the sweep runs in the same order every time. */
@@ -101,7 +173,8 @@ export async function sweepScenarios({ level = 20, incremental = false } = {}) {
   const advIds = new Map();   // class uuid -> subclass advancement id, resolved once per class
 
   for ( const sub of subclasses ) {
-    const cls = sub.classIdentifier ? classes.get(sub.classIdentifier) : null;
+    const candidates = sub.classIdentifier ? classes.get(sub.classIdentifier) : null;
+    const cls = candidates?.length ? classFor(candidates, sub.pack) : null;
     if ( !cls ) {
       // A subclass whose class is not installed — common when a module ships content for a class
       // from a book the world does not have. Reported, not thrown: the sweep is about what is here.
@@ -128,7 +201,10 @@ export async function sweepScenarios({ level = 20, incremental = false } = {}) {
 
     scenarios.push({
       id,
-      name: `Sweep: ${cls.name} ${level} — ${sub.name} (${sub.pack})`,
+      // The class pack is named only when the identifier was contested, because that is the only
+      // time a reader could be wrong about which class the subclass was built onto.
+      name: `Sweep: ${cls.name} ${level} — ${sub.name} (${sub.pack})`
+        + (candidates.length > 1 ? ` [class: ${cls.pack}]` : ""),
       generate: true,
       // One manager per level rather than one for the jump, snapshotted at each — see
       // `harness.mjs#compareLevels`.

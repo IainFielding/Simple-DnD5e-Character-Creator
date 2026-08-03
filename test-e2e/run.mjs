@@ -9,6 +9,7 @@
  *   node run.mjs --list                   # list scenarios and exit
  *   node run.mjs --ids <uuid>             # dump an item's advancement ids (for writing scenarios)
  *   node run.mjs --keep-riders            # don't strip empty rider flags (see normalize.mjs)
+ *   node run.mjs --sidekicks              # assert Tasha's sidekick classes are not offered
  *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
  *                                         # native only, per level, in a world without this module
  *   HEADED=1 node run.mjs                 # watch the native wizard being driven
@@ -91,6 +92,22 @@ try {
   } else if ( flag("find") ) {
     for ( const i of await harness("findItems", value("find")) ) {
       console.log(`${i.type.padEnd(12)} ${i.name.padEnd(30)} ${i.uuid}`);
+    }
+  } else if ( flag("sidekicks") ) {
+    const r = await harness("checkSidekicks");
+    for ( const c of r.checks ) {
+      const mark = c.identifier === "artificer"
+        ? (c.offered ? "offered (expected)" : "MISSING")
+        : (c.offered ? "OFFERED" : (c.installed ? "hidden (expected)" : "not installed"));
+      console.log(`  ${c.identifier.padEnd(12)} ${String(c.name ?? "—").padEnd(22)} ${mark}`);
+    }
+    console.log(`\n${r.classesOffered} class(es) offered by the creator:`);
+    for ( const c of r.offered ) console.log(`  ${c}`);
+    if ( r.ok ) console.log("\nPASS   no sidekick class is offered");
+    else {
+      console.log(`\nFAIL   ${r.failures.length} problem(s)`);
+      for ( const f of r.failures ) console.log(`  ${f}`);
+      exitCode = 1;
     }
   } else if ( flag("subclasses") ) {
     for ( const s of await harness("listSubclasses", value("subclasses")) ) {
@@ -209,7 +226,13 @@ async function runSweep(harness) {
   }
 
   if ( flag("plan") ) {
-    for ( const id of ids ) console.log(id);
+    // The name carries `[class: <pack>]` whenever two modules publish a class under one identifier,
+    // which is the part of a plan worth checking by eye — see `sweep.mjs#classFor`.
+    const names = new Map(plan.scenarios.map(s => [s.id, s.name]));
+    for ( const id of ids ) {
+      const contested = names.get(id)?.match(/\[class: [^\]]+\]/)?.[0] ?? "";
+      console.log(`${id}${contested ? `  ${contested}` : ""}`);
+    }
     console.log(`\n${ids.length} scenario(s) at level ${level}`);
     return 0;
   }
