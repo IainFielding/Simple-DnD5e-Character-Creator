@@ -38,6 +38,7 @@ export function registerLevelUp() {
     tpl("levelup/asi.hbs"),
     tpl("levelup/subclass.hbs"),
     tpl("levelup/grant.hbs"),
+    tpl("levelup/optional-grant.hbs"),
     tpl("levelup/review.hbs"),
     tpl("levelup/spells.hbs")
   ]);

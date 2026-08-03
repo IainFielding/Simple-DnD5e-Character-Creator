@@ -77,8 +77,14 @@ function signature(path) {
 
 /** Replace document ids with `*` and array indices with `[]` (the diff already emits a bare `[]`). */
 function generalise(path) {
-  return path.split(".").map(p => {
-    const bare = p.replace(/\[\d*\]$/, "");
+  // A uuid can appear as a *key* rather than a path segment — `value.added` is a map keyed by the
+  // granted item's uuid, so its entries arrive as
+  // `…value.added.Compendium.dnd-players-handbook.spells.Item.phbsplHuntersMar#2`. Collapsing those
+  // first is what keeps one cause from splitting into one row per spell it happened to touch, which
+  // is the whole point of grouping by signature.
+  const collapsed = path.replace(/Compendium\.[^.]+\.[^.]+\.Item\.[A-Za-z0-9]+(#\d+)?/g, "*");
+  return collapsed.split(".").map(p => {
+    const bare = p.replace(/\[\d*\]$/, "").replace(/#\d+$/, "");
     return (ID_RE.test(bare) ? "*" : bare) + (p.endsWith("]") ? "[]" : "");
   }).join(".");
 }
@@ -141,7 +147,55 @@ const KNOWN = [
   { sig: "derived.itemsByType.spell[]",
     note: "Positional: the lists are compared index by index, so one missing entry shifts every "
       + "later one. Read the count of *items* on either side, not the number of rows." },
-  { sig: "derived.itemsByType.feat[]", note: "Positional — see the spell list note." }
+  { sig: "derived.itemsByType.feat[]", note: "Positional — see the spell list note." },
+
+  // Added after the Tasha's work, when the sweep reached 2014-rules content and two new axes. Each
+  // of these was chased to a cause and written up; they are here so a clean run reads as clean.
+  { sig: "source.items.*.flags.dnd5e.advancementOrigin",
+    note: "Which advancement is recorded as having granted an item. Travels with the cached-spell "
+      + "and duplicate-pairing causes above rather than being a cause of its own." },
+  { sig: "source.items.*.flags.dnd5e.advancementRoot",
+    note: "As `advancementOrigin` — the same item, seen from its root." },
+  { sig: "source.items.*.flags.dnd5e.sourceId",
+    note: "As `advancementOrigin`; appears when the two builds create a duplicate pair in opposite "
+      + "order, so the normaliser numbers them the other way round." },
+  { sig: "source.items.*.effects[]",
+    note: "An enchantment effect (\"Spell Changes\") on one build's copy of a duplicated spell — the "
+      + "Grave Domain / Spare the Dying case, where both builds hold both copies but attribute them "
+      + "to different features. Under investigation; not yet raised upstream." },
+  { sig: "source.actor.system.attributes.hp.value",
+    note: "Current hit points, with a per-level maximum-HP bonus in play (Dwarven Toughness, the "
+      + "Tough feat). Measured against `hp.max`, ours sits *at* maximum and the native reference "
+      + "ends above it, by exactly the bonus. The reference is the unreliable side here." },
+  { sig: "source.actor.system.details.race",
+    note: "Set from `RaceData._onCreate`, which dnd5e does not await, while the manager writes null "
+      + "concurrently — the same race as `system.details.background`. Ours is the correct value." },
+  { sig: "source.actor.system.traits.languages.value[]",
+    note: "A language the class grants and a background also offers. Our cross-source dedupe declines "
+      + "to spend the background's pick on it and reopens the slot; native spends it. Same languages "
+      + "either way — bookkeeping, and deliberately ours. See the Thieves' Cant section." },
+  { sig: "derived.traits.languages[]", note: "The languages above, seen from the derived side." },
+  { sig: "source.items.*.system.advancement.*.value.chosen[]",
+    note: "The recorded picks behind the language note above." },
+  { sig: "source.items.*.flags.dnd5e.cachedFor",
+    note: "The flag marking a Cast-activity cached spell — the copy the native build deletes at a "
+      + "later level. Travels with that cause." },
+  { sig: "source.items.*.system.advancement.*.value.added.*",
+    note: "Individual entries of the `value.added` map — the uuid sits in the key, so these are one "
+      + "row per item the cause touched rather than a cause of their own." },
+  { sig: "source.items.*.system.prepared",
+    note: "A cached spell sits at `prepared: 0`; this appears wherever one build holds that copy and "
+      + "the other does not. Travels with the cached-spell cause." },
+  { sig: "source.items.*.system.sourceItem",
+    note: "Which feature a duplicated spell is attributed to — the Grave Domain / Spare the Dying "
+      + "case. Both builds hold both copies; they disagree about which granted which." },
+  { sig: "source.items.*.flags.dnd5e.riders.effect",
+    note: "The partial form of the empty-riders flag the driver now clears on update. One item, and "
+      + "empty on both sides — see the riders note in the README." },
+  { sig: "decision.offered.Trait",
+    note: "A Trait pool one side offered and the other did not — reported rather than silently "
+      + "answered. Currently the expertise pools, where a tool key (thieves' tools on a 2014 Rogue) "
+      + "is legal on one path and not the other." }
 ];
 for ( const c of ranked ) c.known = KNOWN.find(k => k.sig === c.sig) ?? null;
 

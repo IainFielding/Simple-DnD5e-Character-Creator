@@ -80,6 +80,8 @@ node run.mjs --find "feat:Actor"      # find items by name (optionally type-pref
 node run.mjs --subclasses wizard      # subclasses for a class identifier
 node run.mjs --sidekicks              # assert Tasha's sidekicks are not offered as classes
 node run.mjs --sweep                  # every subclass in the world, at level 20 (see below)
+node run.mjs --sweep --axis species   # vary the species instead, on a fixed Wizard/Evoker
+node run.mjs --sweep --axis background  # vary the background, taking a feat at every ASI
 HEADED=1 node run.mjs                 # watch the native wizard being driven
 ```
 
@@ -740,6 +742,43 @@ the swap. Three details cost a run each to find:
 The 2014 Ranger is down to one row: `system.details.race`, which is the un-awaited `_onCreate` race
 documented for `system.details.background` below — the native side is the unreliable one.
 
+### Found by the species and feat axes
+
+**Optional class features can now be declined.** The driver seeds them (matching dnd5e's own
+pre-render seed) and records an `optionalGrantSteps` decision; the level-up wizard now has a screen
+backing it — `steps/optional-grant-step.mjs`. Independent items render as toggles; a replacement
+grant's base-and-alternatives render as one-of groups, because its items are alternatives rather than
+a list. It never blocks Next: a default is always applied, and the screen exists so a player can say
+no, which without it they could not do at all.
+
+**A per-level maximum-HP bonus leaves the *native* build above its own maximum.** Found independently
+by both axes — the Dwarf (Dwarven Toughness, +1/level) on the species axis, and every Tough-granting
+background (+2/level) on the feat axis — with the gap matching the bonus exactly in all four cases,
+at every level from 2 to 20.
+
+The direction is the whole finding, and it is not the one the diff suggests:
+
+```
+Dwarf, level 6:   hp.max = 44 (both)    native value = 45    creator value = 44
+```
+
+Ours sits *at* maximum; the reference ends above it. This was misdiagnosed twice before `hp.max` was
+measured — first as our bug because native was higher, then as a stale clone at seed time, with a fix
+whose arithmetic matched by coincidence. Instrumenting showed the per-level bonus was live at seed
+time all along. **A difference is not evidence of which side is wrong**; measure the invariant
+(`value <= max`) before deciding. Same lesson as `details.background` and the cached spells, learned
+again the hard way.
+
+Two generator gaps the feat axis exposed, both now answering `null` rather than failing a scenario:
+
+- **An exhausted pool is not a short one.** An Eberron background that *grants* the one proficiency it
+  also offers leaves nothing to pick. Neither side can choose, so both apply nothing and agree.
+- **An empty pool.** The 2024 Criminal ships a "Background Proficiencies" choice of 1 over no options
+  at all. Recorded as a note so the oddity stays visible.
+
+A pool genuinely *shorter* than its choice is still reported — that is content the generator cannot
+satisfy, and silence would hide it.
+
 ### The driver now fires `dnd5e.preAdvancementManagerRender`
 
 `AdvancementManager#render` fires this before processing, and content modules use it to **prune steps
@@ -793,20 +832,54 @@ it fails to settle; that found this in one run after two wrong guesses.
 
 ### The sweep, run to run
 
-92 subclasses at level 20, ~40 s each, about 70 minutes. `node report.mjs` groups the results into a
-ranked HTML/terminal report — a normalised signature per cause, so one root cause is one row rather
-than one row per item it touched.
+`node report.mjs` groups the results into a ranked HTML/terminal report — a normalised signature per
+cause, so one root cause is one row rather than one row per item it touched. `node report.mjs
+--expect 122` adds a progress tile and a self-refresh while a run is in flight, and
+`node watch-report.mjs` rebuilds the page until the run ends.
+
+**The 92-subclass era**, before Tasha's, at ~40 s a scenario:
 
 | | identical | differing | errored | rows | causes |
 | --- | --- | --- | --- | --- | --- |
 | First run | 0 | 91 | 1 | 514 | 23 |
 | After the fixes below | **91** | 1 | 0 | 5 | 3 |
 
-The one remaining difference is Artificer Battle Smith, and it is dnd5e's rather than ours — see
-below. Every cause in the report is now a documented one.
+**With Tasha's**, 122 subclasses one level at a time, ~70 s a scenario, about 2½ hours:
 
-`sweep-results-run1.jsonl` keeps the first run for comparison; `sweep-results-final.jsonl` is the
-current one.
+| | identical | differing | errored |
+| --- | --- | --- | --- |
+| Run 1 — Tasha's added | 75 | 47 | 0 |
+| Run 2 — after the creation-subclass and optional-grant fixes | 72 | 47 | 3 |
+| Run 3 — after the rest | **109** | 13 | **0** |
+
+Run 2 looks like a regression and is not: the fixes cleared 34 real rows while exposing three
+resolver hangs the previous errors had masked, and only the first diverging level is ever reported.
+Run 3 was checked scenario-by-scenario against run 2 — **no scenario regressed**, which is what
+sanctioned firing `preAdvancementManagerRender` across all 122.
+
+Of run 3's 13: **eight are upstream**, and the other five are decisions taken deliberately — three
+2014 Rogues carrying the Thieves' Cant bookkeeping, and two `source.book`/`riders` singletons.
+
+Archived per run: `sweep-results-tcoe-run{1,2,3}.jsonl`, and `sweep-results-{species,background}-l{6,20}.jsonl`
+for the axes.
+
+### The other two axes, run to run
+
+| Axis | Level | identical | differing | errored |
+| --- | --- | --- | --- | --- |
+| Species | 6 | 23 | 1 | 0 |
+| Species | 20 | **23** | 1 | 0 |
+| Background + feats | 6 | 41 | 13 | 1 |
+| Background + feats | 20 | **41** | 14 | **0** |
+
+**Depth changes almost nothing on either.** The species axis finds the same single difference at 6
+and at 20; not one background scenario moved between the two. Both axes' differences originate at
+level 1 in origin content shape, not in what happens later — so level 6 is the honest smoke test for
+them, and level 20 is confirmation rather than discovery.
+
+That is worth knowing in the other direction too: taking **seven** feats instead of two adds no
+divergence, so the feat-taking path itself is clean and what fails is the backgrounds' own
+advancement shapes.
 
 Two of the original 23 were the harness's own and are fixed (verified by re-running a five-subclass
 subset, which came back with no errors and no language rows):

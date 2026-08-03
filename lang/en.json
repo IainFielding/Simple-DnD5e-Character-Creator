@@ -143,6 +143,11 @@
           "label": "Spell",
           "prompt": "Choose the spellcasting ability for this spell."
         },
+        "optionalGrant": {
+          "label": "Optional Features",
+          "prompt": "Your game includes optional class features. Take the ones you want — you already have them all, so untick any you would rather not.",
+          "promptReplace": "This feature can be replaced by an alternative. Pick the version you want to use."
+        },
         "review": {
           "label": "Review",
           "hp": "+{gain} (new maximum {max})",

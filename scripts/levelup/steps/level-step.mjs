@@ -6,6 +6,7 @@ import { asiStep } from "./asi-step.mjs";
 import { choicesStep } from "./choices-step.mjs";
 import { traitStep } from "./trait-step.mjs";
 import { grantStep } from "./grant-step.mjs";
+import { optionalGrantStep } from "./optional-grant-step.mjs";
 
 /**
  * The decision components that can appear on a single level's screen, in display order: hit points
@@ -19,7 +20,7 @@ import { grantStep } from "./grant-step.mjs";
  * `level` arg is because ONE screen shows all decisions for one character level, and each component
  * contributes a block to it. levelStep() below is the real step; it just composes these components.
  */
-const COMPONENTS = [hpStep, subclassStep, asiStep, choicesStep, traitStep, grantStep];
+const COMPONENTS = [hpStep, subclassStep, asiStep, choicesStep, traitStep, grantStep, optionalGrantStep];
 
 /**
  * Route a step action to the component that owns it, by the action's prefix. The action names are
@@ -33,6 +34,7 @@ function routeFor(action) {
   if ( action.startsWith("asi") ) return asiStep;
   if ( action.startsWith("choice") ) return choicesStep;
   if ( action.startsWith("trait") ) return traitStep;
+  if ( action.startsWith("optionalGrant") ) return optionalGrantStep;
   if ( action.startsWith("grant") ) return grantStep;
   if ( action === "pick-subclass" ) return subclassStep;
   return null;

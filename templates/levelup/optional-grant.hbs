@@ -1,0 +1,51 @@
+{{!-- Level-up optional-class-feature block (inside level.hbs). Independent items render as toggles
+      (optionalGrantToggle); base/alternative pairs render as one-of groups (optionalGrantPick).
+      Data from optional-grant-step.mjs. --}}
+<section class="creator-levelup creator-levelup-optional-grant">
+  {{#each sections}}
+  <div class="creator-choice-section">
+    {{#unless collapsed}}
+    <header class="creator-choice-head">
+      <h2>{{title}}</h2>
+    </header>
+    {{/unless}}
+
+    {{#if hint}}<div class="creator-choice-hint">{{{hint}}}</div>{{/if}}
+    <p class="creator-choice-hint">{{prompt}}</p>
+
+    {{#if items}}
+    <ul class="creator-choice-grid creator-optional-grant-items">
+      {{#each items}}
+      <li>
+        <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="optionalGrantToggle"
+                data-index="{{../index}}" data-uuid="{{uuid}}"
+                data-tooltip="{{ccItemTooltip uuid}}">
+          {{#if img}}<img class="creator-choice-card-img" src="{{img}}" alt="">{{/if}}
+          <span class="creator-choice-card-name">{{name}}</span>
+          {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+        </button>
+      </li>
+      {{/each}}
+    </ul>
+    {{/if}}
+
+    {{#each groups}}
+    <ul class="creator-choice-grid creator-optional-grant-group">
+      {{#each options}}
+      <li>
+        <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}}"
+                data-action="stepAction" data-step-action="optionalGrantPick"
+                data-index="{{../../index}}" data-uuid="{{uuid}}" data-group="{{../members}}"
+                data-tooltip="{{ccItemTooltip uuid}}">
+          {{#if img}}<img class="creator-choice-card-img" src="{{img}}" alt="">{{/if}}
+          <span class="creator-choice-card-name">{{name}}</span>
+          {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+        </button>
+      </li>
+      {{/each}}
+    </ul>
+    {{/each}}
+  </div>
+  {{/each}}
+</section>
