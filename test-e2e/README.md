@@ -705,6 +705,92 @@ We were the outlier: our own level-up path already assumed the prefixed form (se
 `test/levelup-quota.test.mjs`). `expandToolPool` now keeps the category. Both Artificer subclasses
 drop to `riders` alone.
 
+### Third-party advancement types
+
+`isStepSupported` and `#ingestFlow` used to switch on the bare `advancement.type` string, so a type a
+module registered itself fell to `default` and was dropped. That is not a cosmetic failure: a
+third-party type is usually a *system* type with a different screen bolted on, and its `apply` and
+`reverse` are ones the driver already knows how to run.
+
+Tasha's `TCOEReplacementGrant` is exactly that. `insertReplacements` takes a plain `ItemGrant`
+already on a 2014 class, marks the replaced item `optional`, appends the alternatives, and changes
+the type string. The advancement still grants everything it always did — so a 2014 Ranger silently
+lost **Favored Enemy**, **Natural Explorer** and **Ranger Archetype**, for no reason but the name of
+its class.
+
+`LevelUpDriver.baseType` now resolves an unknown type to the nearest system type it subclasses,
+most specific first (`ItemChoice` extends `ItemGrant`, so order matters). Both the gate and the walk
+use it, or the gate would claim a step the walk then dropped.
+
+A replacement grant is *not* driven as a plain grant, though. Its items are alternatives, so seeding
+it hands the character both halves of every pair — Favored Enemy *and* Favored Foe. Not choosing
+means keeping the base, so that is what applies, and the decision is recorded for a screen to offer
+the swap. Three details cost a run each to find:
+
+- **The per-item `optional` flag is the rule, not the replacement map.** One base can map to several
+  items — Natural Explorer is swapped for Deft Explorer **and** Canny — while `replacements` records
+  only the first, so keying off the map leaks the rest in.
+- **The uuids are pre-v10** (`Compendium.<pack>.<id>`, no `.Item.` segment), the same shape the
+  Ranger's "Hunter's Prey" pool uses. They need normalising on the way *out* too, since `value.added`
+  records whatever it is handed.
+- **The native reference was empty here**, because `fillStep` could not drive Tasha's custom flow and
+  submitted it with nothing selected. Both sides applying nothing looked like a pass. `native.mjs`
+  now drives the replacement flow by the same base-or-unpaired rule, so the comparison is real.
+
+The 2014 Ranger is down to one row: `system.details.race`, which is the un-awaited `_onCreate` race
+documented for `system.details.background` below — the native side is the unreliable one.
+
+### The driver now fires `dnd5e.preAdvancementManagerRender`
+
+`AdvancementManager#render` fires this before processing, and content modules use it to **prune steps
+a character does not qualify for**. Our wizard replaces that render, so nothing ever fired it and
+every such step applied unconditionally.
+
+Tasha's grants a Ranger **Roving** at level 6 only if they took Deft Explorer at level 1, and enforces
+it by deleting the advancement in this hook. A Ranger who kept Natural Explorer was handed Roving
+anyway. It was invisible until the replacement-grant fix above, because only the first diverging
+level is reported and level 3 was already differing.
+
+Two details decide whether firing it works at all:
+
+- **Per step, not once up front.** Listeners read state the walk produces — Tasha's checks whether
+  Deft Explorer is in `value.added`, which is empty until level 1 has been processed. One call before
+  the walk prunes Roving for everyone, including the characters entitled to it.
+- **Re-sync `steps` afterwards.** The hook may *reassign* `manager.steps` rather than splice it
+  (Tasha's filters into a new array), and the driver captures its own reference in the constructor.
+  Without the re-sync the pruning is invisible to the loop it is meant to shorten.
+
+A listener returning `false` is logged; a listener that throws is caught, leaving the steps it would
+have pruned in place — which is the behaviour we had before firing this at all.
+
+Both 2014 Rangers are byte-identical after this.
+
+### Thieves' Cant, and who records a language
+
+**By design, and the creator is the better behaviour.** Three scenarios (every 2014 Rogue) report two
+rows:
+
+```
+background …9YuEhI3iqUxEfIOk.value.chosen[]   native: languages:exotic:cant   creator: <missing>
+class      …3GyyG2fRAwPbKK7n.value.chosen[]   native: <missing>              creator: languages:exotic:cant
+```
+
+The 2014 Rogue grants Thieves' Cant; the Acolyte's language choice also *offers* it. The native flow
+lets the background spend a pick on a language the class hands over free. The creator's cross-source
+dedupe drops that pick and reopens the slot, so a player picks something else and ends up with more
+languages. Both characters know the same languages — there is no `derived.traits.languages` row — so
+this is bookkeeping, not a character difference.
+
+The harness cannot fill the slot it reopens (the answer book memoises per advancement and will not
+answer twice), which is why it shows as a difference rather than as the creator having one language
+more. Left as-is deliberately: matching native here would mean wasting a player's pick.
+
+It also caused a **hang**, now fixed. The book answered `cant` on the first pass — before anything
+was selected to dedupe against — the resolver stripped it, and the memo put it straight back, forever.
+`distribute` now ignores greyed-out options, because filtering the pool the book is *shown* cannot
+help once the memo predates the narrowing. `answerChoices` also prints what moved on each pass when
+it fails to settle; that found this in one run after two wrong guesses.
+
 ### The sweep, run to run
 
 92 subclasses at level 20, ~40 s each, about 70 minutes. `node report.mjs` groups the results into a

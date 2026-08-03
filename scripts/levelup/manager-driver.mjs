@@ -196,6 +196,45 @@ export class LevelUpDriver {
   }
 
   /**
+   * The dnd5e advancement types this driver knows how to handle, most specific first.
+   *
+   * Order matters: several of these subclass one another in the system (`ItemChoice` extends
+   * `ItemGrant`), so the first match down this list is the narrowest correct answer.
+   */
+  static KNOWN_TYPES = ["HitPoints", "ItemChoice", "AbilityScoreImprovement", "Subclass",
+    "ScaleValue", "Size", "Trait", "ItemGrant"];
+
+  /**
+   * The type to treat an advancement as: its own, or the nearest system type it subclasses.
+   *
+   * A module may register an advancement type of its own. Switching on the bare type string then
+   * drops it — which is not a cosmetic failure, because a third-party type is usually a *system*
+   * type with a different screen bolted on, and its `apply`/`reverse` are the ones we already know
+   * how to drive.
+   *
+   * Tasha's `TCOEReplacementGrant` is exactly that: `insertReplacements` takes a plain `ItemGrant`
+   * already on a 2014 class, marks the replaced item optional, appends the replacements, and flips
+   * the type string. The advancement still grants everything it always did — the 2014 Ranger's
+   * level-3 grant still carries *Ranger Archetype* — so a character built past it silently lost a
+   * class feature for no reason other than the name of its class.
+   * @param {Advancement} adv
+   * @returns {string|null}
+   */
+  static baseType(adv) {
+    if ( !adv ) return null;
+    if ( this.KNOWN_TYPES.includes(adv.type) || (adv.type === "EmberKnowledge") ) return adv.type;
+    const types = dnd5e.documents?.advancement ?? {};
+    for ( const name of this.KNOWN_TYPES ) {
+      const cls = types[`${name}Advancement`];
+      if ( cls && (adv instanceof cls) ) {
+        log(`treating third-party advancement "${adv.type}" as ${name}`);
+        return name;
+      }
+    }
+    return adv.type;
+  }
+
+  /**
    * Whether a single step is supported without user choice beyond hit points. Mirrors each
    * advancement type's `automaticApplicationValue` structurally (so it stays in step with the
    * driver's async classification) and treats hit points as the one renderable type we own.
@@ -203,7 +242,7 @@ export class LevelUpDriver {
   static isStepSupported(step) {
     const adv = step.flow?.advancement;
     if ( !adv ) return true;                       // marker steps with no flow are inert
-    switch ( adv.type ) {
+    switch ( this.baseType(adv) ) {
       case "HitPoints":  return true;              // the hit-point decision the wizard presents
       case "ItemChoice": return true;              // a feature/spell choice the wizard presents
       case "AbilityScoreImprovement": return true; // the ASI / feat decision the wizard presents
@@ -239,12 +278,55 @@ export class LevelUpDriver {
    */
   async prepare() {
     while ( this.#step ) {
-      await this.#processStep(this.#step);
+      // Before each step, as the native manager does before each render — not once up front. The
+      // listeners read state the walk itself produces: Tasha's decides whether to prune the level-6
+      // Roving grant by checking whether Deft Explorer is in `value.added`, which is empty until
+      // level 1 has been processed. Firing once at the start would prune it for everyone.
+      this.#firePreRender();
+      const step = this.#step;
+      if ( !step ) break;                // a listener pruned everything that was left
+      await this.#processStep(step);
     }
     // Now the walk is over, the increases nobody decides go on top — in level order, after any
     // allocation the player will make. See {@link deferredAsi}.
     await this.#applyDeferredAsi();
     return this.hpSteps;
+  }
+
+  /**
+   * Give other modules the chance to prune this manager's steps before we walk it.
+   *
+   * `AdvancementManager#render` fires `dnd5e.preAdvancementManagerRender` before processing, and
+   * content modules use it to remove steps a character does not qualify for. Our wizard *replaces*
+   * that render, so nothing ever fired it and every such step applied unconditionally.
+   *
+   * The case that found this: Tasha's grants a Ranger **Roving** at level 6 only if they took Deft
+   * Explorer at level 1, and enforces it by deleting the advancement in this hook
+   * (`hideAdvancementsOnTab` / `hideAdvancementsInManager`). A Ranger who kept Natural Explorer was
+   * handed Roving anyway.
+   *
+   * Fired before **each** step, matching the native manager's per-render cadence, because listeners
+   * read state the walk itself produces — see the note at the call site.
+   *
+   * A listener may *reassign* `manager.steps` rather than splice it (Tasha's filters into a new
+   * array), so the driver's own reference is re-synced afterwards; without that the pruning would
+   * be invisible to the very loop it is meant to shorten.
+   * @returns {boolean}   False when a listener vetoed the walk.
+   */
+  #firePreRender() {
+    try {
+      const ok = Hooks.call("dnd5e.preAdvancementManagerRender", this.manager) !== false;
+      // Re-sync: `this.steps` is captured in the constructor, and a listener that filters into a
+      // fresh array would otherwise leave us walking the unpruned one.
+      if ( this.manager?.steps && (this.manager.steps !== this.steps) ) this.steps = this.manager.steps;
+      if ( !ok ) log("a module vetoed dnd5e.preAdvancementManagerRender");
+      return ok;
+    } catch ( err ) {
+      // A third-party listener throwing must not take the level-up with it — the steps it would
+      // have pruned simply stay, which is the behaviour we had before firing this at all.
+      log("dnd5e.preAdvancementManagerRender listener failed", err);
+      return true;
+    }
   }
 
   /**
@@ -326,7 +408,9 @@ export class LevelUpDriver {
    */
   async #ingestFlow(flow, step) {
     const adv = flow.advancement;
-    switch ( adv?.type ) {
+    // The same normalisation `isStepSupported` uses, or the two would disagree: the gate would claim
+    // a third-party advancement it recognised as an ItemGrant and then the walk would drop it.
+    switch ( this.constructor.baseType(adv) ) {
       case "HitPoints":
         // The original class's *first* level takes maximum hit points by rule, with nothing to
         // choose — the system applies it automatically (see HitPointsAdvancement
@@ -414,6 +498,48 @@ export class LevelUpDriver {
           this.grantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
           return;
         }
+        // A *replacement* grant — an ItemGrant subclass whose configuration carries a base→
+        // replacement map, so its items are alternatives rather than a list. Tasha's builds these by
+        // mutating a plain grant already on a 2014 class: the replaced item is marked optional, the
+        // alternative is appended, and the type string is changed.
+        //
+        // Seeding it like an ordinary grant would hand the character *both* halves of every pair —
+        // Favored Enemy and Favored Foe, Natural Explorer and Deft Explorer — which no edition
+        // gives. Not choosing means keeping the base, so that is the default applied here; the
+        // decision is recorded so a screen can offer the swap. The items outside any pair (the 2014
+        // Ranger's level-3 *Ranger Archetype*) are unconditional and land either way, which is the
+        // feature that went missing while this type was unrecognised entirely.
+        const replacements = adv.configuration?.replacements;
+        if ( replacements && !foundry.utils.isEmpty(replacements) ) {
+          // Keyed off each item's own `optional` flag, not off the replacement map: one base can map
+          // to *several* items (Tasha's swaps Natural Explorer for Deft Explorer **and** Canny) while
+          // the map records only the first, so the map alone leaks the rest in. Everything in a pair
+          // — base and alternatives alike — is flagged optional; everything outside one is not.
+          //
+          // The map's keys are stored without the `.Item.` segment, the same pre-v10 shape the
+          // Ranger's "Hunter's Prey" pool uses; Tasha's own flow re-inserts it, so we do too.
+          const withItem = uuid => {
+            const parts = String(uuid).split(".");
+            if ( parts[3] === "Item" ) return uuid;
+            parts.splice(3, 0, "Item");
+            return parts.join(".");
+          };
+          const bases = new Set(Object.keys(foundry.utils.flattenObject(replacements)).map(withItem));
+          // Normalised on the way out too, not just when matching: this content stores its item
+          // uuids in the same pre-v10 form, and `value.added` records whatever it is handed — so
+          // passing them through verbatim recorded a different uuid than the native flow does for
+          // the identical feature.
+          const keep = Array.from(adv.configuration?.items ?? [])
+            .map(i => (typeof i === "string") ? { uuid: i } : i)
+            .filter(i => i.uuid && (!i.optional || bases.has(withItem(i.uuid))))
+            .map(i => withItem(i.uuid));
+          if ( keep.length ) await adv.apply(flow.level, { selected: keep });
+          this.optionalGrantSteps.push({
+            level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item, replacements
+          });
+          return;
+        }
+
         // An *optional* grant — Tasha's optional class features are the case in the wild, injected
         // into every 2014-rules class by `dnd-tashas-cauldron`.
         //

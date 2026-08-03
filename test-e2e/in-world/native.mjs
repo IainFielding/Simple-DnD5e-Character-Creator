@@ -139,9 +139,51 @@ async function fillStep(step, book, consumed, manager) {
     case "AbilityScoreImprovement": return fillAsi(flow, answer);
     case "Subclass": return fillSubclass(flow, adv, answer, moved);
     default:
+      // A third-party ItemGrant subclass presenting base-vs-replacement pairs — Tasha's
+      // `TCOEReplacementGrant`, injected into every 2014-rules class. Left to itself the flow
+      // submits with nothing selected and applies *nothing*, so the native reference silently lost
+      // every feature on the advancement (a 2014 Ranger's Favored Enemy, Natural Explorer and
+      // Ranger Archetype). Choosing the base is what "the player did not take Tasha's alternative"
+      // means, and it is what the driver applies, so the two are comparable again.
+      if ( adv.configuration?.replacements && !foundry.utils.isEmpty(adv.configuration.replacements) ) {
+        return fillReplacementGrant(flow, adv, moved);
+      }
       // Nothing to answer, or a type this harness does not drive yet. Leave it as rendered and
       // let the manager apply whatever the flow defaults to.
       return;
+  }
+}
+
+/**
+ * A replacement grant: tick every item that is not an opt-in alternative.
+ *
+ * The flow renders one group per base→replacement pair plus the unpaired items. Everything in a pair
+ * carries `optional: true` in the configuration, and only the *base* of each pair is also a key of
+ * `configuration.replacements` — so "base or unpaired" is the same rule the driver applies.
+ */
+async function fillReplacementGrant(flow, adv, moved) {
+  const withItem = uuid => {
+    const parts = String(uuid).split(".");
+    if ( parts[3] === "Item" ) return uuid;
+    parts.splice(3, 0, "Item");
+    return parts.join(".");
+  };
+  const bases = new Set(Object.keys(foundry.utils.flattenObject(adv.configuration.replacements)).map(withItem));
+  const wanted = new Set(Array.from(adv.configuration.items ?? [])
+    .map(i => (typeof i === "string") ? { uuid: i } : i)
+    .filter(i => i.uuid && (!i.optional || bases.has(withItem(i.uuid))))
+    .map(i => withItem(i.uuid)));
+
+  const root = await flowElement(flow);
+  if ( moved?.() ) return;
+  for ( const input of root.querySelectorAll("input[type=checkbox], input[type=radio]") ) {
+    const uuid = withItem(input.value || input.name.split(".").slice(-1)[0]);
+    const want = wanted.has(uuid);
+    if ( input.checked !== want ) {
+      input.checked = want;
+      await change(input);
+      if ( moved?.() ) return;
+    }
   }
 }
 
