@@ -48,6 +48,13 @@
       <header class="creator-detail-head">
         <img class="creator-detail-img" src="{{detail.img}}" alt="">
         <h2>{{detail.name}}</h2>
+        {{!-- Provenance badge, as on the class and subclass panels: which book this came from.
+              Omitted when the item declares no sourcebook. --}}
+        {{#if detail.source}}
+        <span class="creator-detail-source" title="{{detail.source}}">
+          <i class="fa-solid fa-book" aria-hidden="true"></i>{{detail.source}}
+        </span>
+        {{/if}}
       </header>
       <div class="creator-detail-body">{{{detail.enriched}}}</div>
 

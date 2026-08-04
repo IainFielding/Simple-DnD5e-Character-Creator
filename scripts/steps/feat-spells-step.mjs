@@ -489,7 +489,13 @@ async function spellBrowser(state, grant, listId, spells, owned = new Set()) {
 
   let focused = null;
   const focus = list.find(s => s.uuid === state.focusedFeatSpellUuid);
-  if ( focus ) focused = { ...focus, description: await spells.description(focus.uuid) };
+  if ( focus ) {
+    focused = {
+      ...focus,
+      description: await spells.description(focus.uuid),
+      source: await spells.sourceBook(focus.uuid)
+    };
+  }
 
   const levelOptions = [...new Set(list.filter(s => s.level > 0).map(s => s.level))]
     .sort((a, b) => a - b)

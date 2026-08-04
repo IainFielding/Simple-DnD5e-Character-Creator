@@ -91,6 +91,12 @@
             {{#if focused.isRitual}} · {{localize "sogrom-dnd5e-character-creator.step.spells.ritual"}}{{/if}}
           </p>
         </div>
+        {{!-- Provenance badge, as on the class, species, background and subclass panels. --}}
+        {{#if focused.source}}
+        <span class="creator-detail-source" title="{{focused.source}}">
+          <i class="fa-solid fa-book" aria-hidden="true"></i>{{focused.source}}
+        </span>
+        {{/if}}
       </header>
 
       <button type="button" class="creator-btn {{#if focused.active}}creator-btn-danger{{else}}creator-btn-primary{{/if}}"

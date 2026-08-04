@@ -123,7 +123,8 @@ export const spellsStep = {
       focused = {
         ...focus,
         active: picked.has(focus.uuid),
-        description: await spells.description(focus.uuid)
+        description: await spells.description(focus.uuid),
+        source: await spells.sourceBook(focus.uuid)
       };
     }
 

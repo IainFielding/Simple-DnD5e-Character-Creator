@@ -59,7 +59,7 @@ export class SpellSource {
   #byLevelUp = new Map();
 
   /** spell uuid -> enriched-description promise, memoised (loaded on focus). */
-  #descriptions = new Map();
+  #descriptions = new Map();   // uuid -> promise of { enriched, source }
 
   /** maxSpellLevel -> promise of Map(uuid -> browser index entry), one browse shared by all classes. */
   #spellFetches = new Map();
@@ -261,14 +261,35 @@ export class SpellSource {
 
   /** Enriched description html for the focused spell, memoised. */
   async description(uuid) {
-    if ( !uuid ) return "";
+    return (await this.#detail(uuid)).enriched;
+  }
+
+  /**
+   * The sourcebook a spell came from (e.g. "Player's Handbook 2024"), for the detail panel's
+   * provenance badge — the same one the class, species, background and subclass panels carry.
+   * Empty when the spell declares no source.
+   *
+   * Shares {@link #detail}'s memo with {@link description}, so a focused spell resolves its document
+   * once and both readings come off that.
+   * @param {string} uuid
+   * @returns {Promise<string>}
+   */
+  async sourceBook(uuid) {
+    return (await this.#detail(uuid)).source;
+  }
+
+  /** Enriched description + sourcebook for one spell, resolved once and memoised. */
+  #detail(uuid) {
+    if ( !uuid ) return Promise.resolve({ enriched: "", source: "" });
     if ( !this.#descriptions.has(uuid) ) {
       const promise = (async () => {
         const doc = await fromUuid(uuid);
         const raw = doc?.system?.description?.value ?? "";
-        return raw
+        const enriched = raw
           ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, { relativeTo: doc, secrets: false })
           : "";
+        // dnd5e prepares `system.source.value` to the book name, falling back to the package title.
+        return { enriched, source: doc?.system?.source?.value ?? "" };
       })().catch(err => { this.#descriptions.delete(uuid); throw err; });
       this.#descriptions.set(uuid, promise);
     }

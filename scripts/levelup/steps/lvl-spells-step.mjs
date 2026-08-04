@@ -209,7 +209,13 @@ export const lvlSpellsStep = {
 
     let focused = null;
     const focus = list.find(s => s.uuid === state.focusedSpellUuid);
-    if ( focus ) focused = { ...focus, description: await spells.description(focus.uuid) };
+    if ( focus ) {
+      focused = {
+        ...focus,
+        description: await spells.description(focus.uuid),
+        source: await spells.sourceBook(focus.uuid)
+      };
+    }
 
     const toChip = s => ({ uuid: s.uuid, name: s.name, img: s.img });
     const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);

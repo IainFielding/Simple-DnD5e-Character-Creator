@@ -1575,6 +1575,7 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 /* When a row carries both a level badge and a selected tick, keep them side by side at the right. */
 .creator-pickrow-tag + .creator-pickrow-tick { margin-left: 0.4rem; }
 
+
 /* Level-up spell swaps (Phase 4b): a known spell offered as a swap-out candidate reads muted with a
    bookmark; once marked for replacement it strikes through and the arrows glow. */
 .levelup-spells-swaphint { margin: -0.35rem 0 0.75rem; color: var(--cc-muted); font-size: 0.82rem; line-height: 1.35; }
