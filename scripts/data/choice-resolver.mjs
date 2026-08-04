@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { advancementArray } from "./advancement-util.mjs";
+import { matchesRules } from "./source-index.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { phbWeaponIcon } from "./weapon-source.mjs";
@@ -97,6 +98,9 @@ export async function resolveChoices(state, source) {
   // offers it, so a skill from the species or background is a legitimate pick.
   const shared = {
     crossTaken, spellAbilityHint, ownedIds,
+    // The build's rules edition, set by the chosen class — the same scoping the origin grids use,
+    // needed here for pools that are scanned from the packs rather than authored on an advancement.
+    rules: classDef?.doc?.system?.source?.rules ?? null,
     expertiseSkillPool: proficientSkillKeys(defs),
     // The index itself, for the one requirement whose options are documents rather than keys: a
     // level-1 Subclass choice needs the subclass cards, and `SourceIndex.subclasses()` memoises
@@ -288,12 +292,12 @@ function collectTakenTraitKeys(defs) {
  */
 async function prepareRequirements(def, shared) {
   const { key: source, sel, owners } = def;
-  const { crossTaken, spellAbilityHint, ownedIds, expertiseSkillPool, index } = shared;
+  const { crossTaken, spellAbilityHint, ownedIds, expertiseSkillPool, index, rules } = shared;
   const reqs = [];
 
   for ( const { item: owner, ownerUuid } of owners ) {
     for ( const adv of advancementArray(owner) ) {
-      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds, index, ownerItem: owner });
+      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds, index, ownerItem: owner, rules });
     }
   }
 
@@ -367,7 +371,7 @@ async function decorateTraitIcons(options) {
 
 /** Parse a single advancement into zero or more requirements, appended to `reqs`. */
 async function parseAdvancementChoice(adv, ctx) {
-  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, index, ownerItem } = ctx;
+  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, index, ownerItem, rules } = ctx;
   let level = adv.level ?? 0;
   if ( level > 1 || adv.classRestriction === "secondary" ) return;
 
@@ -571,7 +575,7 @@ async function parseAdvancementChoice(adv, ctx) {
       options.push({ key: uuid, uuid, label: doc.name, img: doc.img, recommended: g.recommended });
     }
     if ( cfg.allowDrops && cfg.restriction?.subtype ) {
-      for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel) ) {
+      for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel, rules) ) {
         if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
         const g = gate({ items: opt.prereqItems });   // level already filtered by the scan
         if ( !g ) continue;
@@ -856,10 +860,10 @@ function toolPoolCategory(entry) {
  * @param {object} cfg              The ItemChoice advancement configuration.
  * @param {number|null} [maxLevel]  Highest prerequisite level to include; null disables the gate.
  */
-export async function findRestrictedItems(cfg, maxLevel = null) {
+export async function findRestrictedItems(cfg, maxLevel = null, rules = null) {
   const docType = cfg.type;
   const r = cfg.restriction ?? {};
-  const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}`;
+  const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}|${rules ?? ""}`;
   if ( restrictedCache.has(sig) ) return restrictedCache.get(sig);
 
   const enabled = getEnabledPacks();
@@ -872,7 +876,7 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
     if ( !pack.visible || !isUsableItemPack(pack, enabled) ) continue;
     try {
       const index = await pack.getIndex({
-        fields: ["type", "system.type.value", "system.type.subtype",
+        fields: ["type", "system.type.value", "system.type.subtype", "system.source.rules",
           "system.prerequisites.level", "system.prerequisites.items"]
       });
       for ( const e of index ) {
@@ -880,6 +884,10 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
         const ty = e.system?.type ?? {};
         if ( r.type && ty.value !== r.type ) continue;
         if ( r.subtype && ty.subtype !== r.subtype ) continue;
+        // Scoped to the build's rules edition. Without this a 2014 Ranger's fighting-style choice
+        // offered every fighting style in the world, 2024 ones included — the pool is scanned from
+        // the packs rather than authored on the advancement, so nothing else narrows it.
+        if ( !matchesRules(e.system?.source?.rules, rules) ) continue;
         if ( (maxLevel != null) && (Number(e.system?.prerequisites?.level ?? 0) > maxLevel) ) continue;
         const nk = nameKey(e.name);
         if ( seenNames.has(nk) ) continue;   // same feature shared across edition packs — keep one

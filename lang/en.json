@@ -315,6 +315,7 @@
         "selectedNone": "None chosen yet — pick from the list below.",
         "picked": "{count} spells",
         "noCaster": "This class has no spellcasting at level 1 — nothing to choose here.",
+        "notYet": "This class learns its first spells at 2nd level — nothing to choose yet. You'll pick them in the level-up wizard.",
         "empty": "No spells found for this class in the enabled compendiums.",
         "selectHint": "Pick a spell from the list to read it and add it to your character.",
         "concentration": "Concentration",

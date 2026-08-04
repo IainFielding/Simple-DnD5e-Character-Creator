@@ -1,5 +1,6 @@
 import { t } from "../../config.mjs";
 import { atLevel, advancementHint } from "../levelup-state.mjs";
+import { withItemSegment } from "../../data/advancement-util.mjs";
 
 /**
  * Optional class features — the items an `ItemGrant` marks as declinable, and the base-or-alternative
@@ -89,16 +90,13 @@ export const optionalGrantStep = {
  * Anything non-optional sits outside every group and is not offered as a choice at all.
  */
 function buildGroups(record, state) {
-  const withItem = uuid => {
-    const parts = String(uuid).split(".");
-    if ( parts[3] === "Item" ) return uuid;
-    parts.splice(3, 0, "Item");
-    return parts.join(".");
-  };
-  const bases = new Set(Object.keys(foundry.utils.flattenObject(record.replacements)).map(withItem));
+  // Every uuid normalised, because `state.options` is too — this content stores the pre-v10 shape
+  // and the two forms compare unequal, which showed a group's base as unselected and made clicking
+  // it a no-op.
+  const bases = new Set(Object.keys(foundry.utils.flattenObject(record.replacements)).map(withItemSegment));
   const configured = new Map(Array.from(record.advancement.configuration?.items ?? [])
     .map(i => (typeof i === "string") ? { uuid: i } : i)
-    .map(i => [withItem(i.uuid), i]));
+    .map(i => [withItemSegment(i.uuid), i]));
 
   const alternatives = state.options.filter(o => configured.get(o.uuid)?.optional && !bases.has(o.uuid));
   return [...bases].map(base => ({

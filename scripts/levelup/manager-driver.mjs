@@ -1,4 +1,5 @@
 import { log, levelUpHpRollToChat } from "../config.mjs";
+import { withItemSegment } from "../data/advancement-util.mjs";
 import { phbWeaponIcon } from "../data/weapon-source.mjs";
 
 /**
@@ -518,21 +519,15 @@ export class LevelUpDriver {
           //
           // The map's keys are stored without the `.Item.` segment, the same pre-v10 shape the
           // Ranger's "Hunter's Prey" pool uses; Tasha's own flow re-inserts it, so we do too.
-          const withItem = uuid => {
-            const parts = String(uuid).split(".");
-            if ( parts[3] === "Item" ) return uuid;
-            parts.splice(3, 0, "Item");
-            return parts.join(".");
-          };
-          const bases = new Set(Object.keys(foundry.utils.flattenObject(replacements)).map(withItem));
+          const bases = new Set(Object.keys(foundry.utils.flattenObject(replacements)).map(withItemSegment));
           // Normalised on the way out too, not just when matching: this content stores its item
           // uuids in the same pre-v10 form, and `value.added` records whatever it is handed — so
           // passing them through verbatim recorded a different uuid than the native flow does for
           // the identical feature.
           const keep = Array.from(adv.configuration?.items ?? [])
             .map(i => (typeof i === "string") ? { uuid: i } : i)
-            .filter(i => i.uuid && (!i.optional || bases.has(withItem(i.uuid))))
-            .map(i => withItem(i.uuid));
+            .filter(i => i.uuid && (!i.optional || bases.has(withItemSegment(i.uuid))))
+            .map(i => withItemSegment(i.uuid));
           if ( keep.length ) await adv.apply(flow.level, { selected: keep });
           this.optionalGrantSteps.push({
             level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item, replacements
@@ -1601,12 +1596,15 @@ export class LevelUpDriver {
    */
   optionalGrantState(record) {
     const adv = record.advancement;
-    const taken = new Set(Object.values(adv.value?.added ?? {}));
+    // Both sides normalised. This content stores its uuids in the pre-v10 shape while `value.added`
+    // records whatever `apply` was handed — so comparing them raw reported a taken item as untaken,
+    // which showed a replacement grant's *base* as unselected and made clicking it do nothing.
+    const taken = new Set(Object.values(adv.value?.added ?? {}).map(withItemSegment));
     return {
       options: Array.from(adv.configuration?.items ?? []).map(i => {
         const uuid = (typeof i === "string") ? i : i?.uuid;
-        return { uuid, selected: taken.has(uuid) };
-      }).filter(o => o.uuid)
+        return uuid ? { uuid: withItemSegment(uuid), selected: taken.has(withItemSegment(uuid)) } : null;
+      }).filter(Boolean)
     };
   }
 

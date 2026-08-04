@@ -60,6 +60,8 @@ Choose what your character *does*: fighter, wizard, rogue, and the rest. You'll 
 
 Starting above 1st level? If your GM allows it, pick a **Starting Level** here. You'll build level 1 in the creator, then finish the climb to your chosen level in the level-up wizard.
 
+Running both editions of the rules in one world? Your class choice sets which one you're playing, and everything after it follows suit — the Background, Species and subclass screens show only content from the same edition, so you can't accidentally end up with a mix. Pick a card and its detail panel names the book it came from.
+
 ![Setting ability scores](docs/screenshots/abilities.png)
 *Screenshot: setting ability scores.*
 
@@ -206,6 +208,11 @@ This module is designed to sit quietly alongside the rest of your world. Where a
 | Homebrew compendiums and content modules | Yes | Anything that follows the standard 5e item and advancement format is picked up automatically. Advancement types added by other modules are handled as whichever standard type they extend, rather than being skipped. |
 | Alternative character sheets (Tidy 5e Sheet and similar) | Yes | This module builds the character; your sheet module displays it. They don't overlap. |
 | Automation modules (Midi-QOL, DAE, and similar) | Yes | They act on characters during play, after this module has finished creating them. |
+
+**Running lots of content at once?** Two things happen automatically so the lists stay readable:
+
+- **The same content from two places is shown once.** The Player's Handbook module and the system's own SRD packs both ship the 2024 classes, species and backgrounds, so a world with both would otherwise show every one of them twice. The Player's Handbook copy is the one kept — it's the one with the official artwork. Genuinely different content that happens to share a name is always kept separate.
+- **Editions don't mix.** Choosing a class picks your edition, and the Background, Species and subclass screens then show only content from the same one. Change your mind and switch to a class from the other edition, and any origin choice that no longer fits is cleared so you can pick again.
 
 > **The short version:** the only module that changes what this one does is **Ember** (it takes over creation), and the only one you can't run alongside it is **Hero Mancer**. Everything else is free to run together.
 >
