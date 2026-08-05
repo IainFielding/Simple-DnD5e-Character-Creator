@@ -60,6 +60,8 @@ Choose what your character *does*: fighter, wizard, rogue, and the rest. You'll 
 
 Starting above 1st level? If your GM allows it, pick a **Starting Level** here. You'll build level 1 in the creator, then finish the climb to your chosen level in the level-up wizard.
 
+Running both editions of the rules in one world? Your class choice sets which one you're playing, and everything after it follows suit — the Background, Species and subclass screens show only content from the same edition, so you can't accidentally end up with a mix. Pick a card and its detail panel names the book it came from.
+
 ![Setting ability scores](docs/screenshots/abilities.png)
 *Screenshot: setting ability scores.*
 
@@ -136,6 +138,7 @@ The level-up wizard walks you through everything that new level brings, one scre
 - **Subclass.** When your class branches, choose the path that shapes the rest of your journey.
 - **Ability Scores or a Feat.** Spend your improvement on raising abilities, or take a feat instead.
 - **Features and Weapon Mastery.** Pick any new choices your class hands you.
+- **Optional Features.** If your game uses the optional class features from Tasha's Cauldron of Everything, this screen is where you take them or leave them — including the ones that *replace* an older feature, where you pick which version your character uses.
 - **Spells.** Casters choose their newly learned spells, and can swap out a spell they already know where the rules allow.
 - **Review.** See exactly what changed (new HP, features, spells, proficiency bonus, spell slots) before you apply it.
 
@@ -159,6 +162,7 @@ The creator works great straight out of the box, but a handful of settings let y
 - **Show launch button.** Show or hide the "Simple Character Builder" button in the Actors sidebar.
 - **Show Level Up button.** Show or hide the Level Up button on the character sheet header.
 - **Show Level Up in right-click menu.** Show or hide the right-click "Level Up" entry on characters in the sidebar.
+- **Debug logging.** Off by default, and set per person rather than for the whole world — it only affects your own browser console. Turn it on if you've been asked for details about a problem, then reproduce it and share what the console prints.
 
 ### Ability scores
 
@@ -199,9 +203,16 @@ This module is designed to sit quietly alongside the rest of your world. Where a
 | [Hero Mancer](https://foundryvtt.com/packages/hero-mancer) | No, incompatible | Hero Mancer replaces the 5e advancement engine rather than building on it, so the two modules cannot share the creation and level-up space. This is declared as a conflict in the manifest, and Foundry will warn you if both are enabled. Run one or the other. |
 | [D&D Player's Handbook (2024)](https://foundryvtt.com/packages/dnd-players-handbook) | Yes, enhanced | Fully supported as a content source, and its official artwork is used as the backdrop on the class, species, and background screens. |
 | Other official content modules (Artificer, Ravenloft, Forgotten Realms, and similar) | Yes | Their classes, species, backgrounds, spells, and equipment appear in the wizard like any other compendium content. |
-| Homebrew compendiums and content modules | Yes | Anything that follows the standard 5e item and advancement format is picked up automatically. |
+| [Tasha's Cauldron of Everything](https://foundryvtt.com/packages/dnd-tashas-cauldron) | Yes | Its subclasses build on the 2014 classes the system still ships. Its **optional class features** are offered on their own level-up screen, and its **replacement features** let you choose between the original and the Tasha's version. |
+| 2014-rules classes and subclasses | Yes | Supported alongside 2024 content in the same world. Classes that choose a subclass at 1st level (Cleric, Sorcerer, Warlock) get that choice during character creation rather than at level 3. |
+| Homebrew compendiums and content modules | Yes | Anything that follows the standard 5e item and advancement format is picked up automatically. Advancement types added by other modules are handled as whichever standard type they extend, rather than being skipped. |
 | Alternative character sheets (Tidy 5e Sheet and similar) | Yes | This module builds the character; your sheet module displays it. They don't overlap. |
 | Automation modules (Midi-QOL, DAE, and similar) | Yes | They act on characters during play, after this module has finished creating them. |
+
+**Running lots of content at once?** Two things happen automatically so the lists stay readable:
+
+- **The same content from two places is shown once.** The Player's Handbook module and the system's own SRD packs both ship the 2024 classes, species and backgrounds, so a world with both would otherwise show every one of them twice. The Player's Handbook copy is the one kept — it's the one with the official artwork. Genuinely different content that happens to share a name is always kept separate.
+- **Editions don't mix.** Choosing a class picks your edition, and the Background, Species and subclass screens then show only content from the same one. Change your mind and switch to a class from the other edition, and any origin choice that no longer fits is cleared so you can pick again.
 
 > **The short version:** the only module that changes what this one does is **Ember** (it takes over creation), and the only one you can't run alongside it is **Hero Mancer**. Everything else is free to run together.
 >

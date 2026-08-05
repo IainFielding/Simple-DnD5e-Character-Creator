@@ -26,7 +26,11 @@ export const subclassStep = {
 
     const sub = driver.subclassState(record);
     const identifier = record.advancement.item.identifier;
-    const cards = (await source.subclasses(identifier)).map(c => ({ ...c, selected: c.uuid === sub.uuid }));
+    // Scoped to the levelling class's own edition: a world can hold both, and a 2024 subclass grants
+    // its features on the 2024 progression. See `SourceIndex#subclasses`.
+    const rules = record.advancement.item.system?.source?.rules ?? null;
+    const cards = (await source.subclasses(identifier, { rules }))
+      .map(c => ({ ...c, selected: c.uuid === sub.uuid }));
     const detail = sub.uuid ? await source.detail(sub.uuid) : null;
     const groups = sub.uuid ? await source.advancementGroups(sub.uuid) : null;
 

@@ -10,8 +10,10 @@ import { log } from "../config.mjs";
  *
  * Tool items carry their category in `system.type.value` (matching the tool trait key,
  * e.g. "art"/"music") and their proficiency id in `system.type.baseItem` (e.g. "lute").
- * The proficiency key dnd5e applies is `tool:<baseItem>` — its Trait advancement pops the
- * last `:` segment to reach `system.tools.<id>.value`, so a category prefix isn't needed.
+ * A trait key is written with both — `tool:music:lute` — which is the form `Trait.actorValues`
+ * reports and `Trait.mixedChoices` expands a pool into. The last `:` segment alone is what reaches
+ * `system.tools.<id>.value`, so the category is redundant for *applying* a proficiency, but not for
+ * recognising one that is already there; see `expandToolPool` in `choice-resolver.mjs`.
  */
 
 /** Display icons for the three pickable tool categories. */

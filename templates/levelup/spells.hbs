@@ -94,6 +94,12 @@
             {{#if focused.isRitual}} · {{localize "sogrom-dnd5e-character-creator.levelup.step.spells.ritual"}}{{/if}}
           </p>
         </div>
+        {{!-- Provenance badge, as on the class, species, background and subclass panels. --}}
+        {{#if focused.source}}
+        <span class="creator-detail-source" title="{{focused.source}}">
+          <i class="fa-solid fa-book" aria-hidden="true"></i>{{focused.source}}
+        </span>
+        {{/if}}
       </header>
 
       {{#if focused.owned}}

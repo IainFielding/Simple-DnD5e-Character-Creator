@@ -49,7 +49,8 @@ export const SETTINGS = {
   levelUpHpRollToChat: "levelUpHpRollToChat",
   multiclass: "allowMulticlass",
   storeEnabled: "storeEnabled",
-  storeConfig: "storeConfig"
+  storeConfig: "storeConfig",
+  debug: "debugLogging"
 };
 
 // The fallback value for each setting, used when the world hasn't overridden it (and as
@@ -67,7 +68,8 @@ export const DEFAULTS = {
   storeConfig: {
     priceMultiplier: 1.0,
     inventory: null            // null = the factory default list; [] = deliberately emptied
-  }
+  },
+  debug: false
 };
 
 /**
@@ -251,8 +253,23 @@ export function abilityRollFormula() {
   return raw && Roll.validate(raw) ? raw : DEFAULTS.rollFormula;
 }
 
-/** Console logger namespaced to the module. */
+/**
+ * Console logger namespaced to the module, silent unless the player turns debug logging on.
+ *
+ * Most of the ~70 call sites sit in `catch` blocks: they are what a user enables when asked to
+ * reproduce a bug, not something a working game should print. A hard failure the player must know
+ * about is `console.error` and is deliberately not routed through here (see `main.mjs`'s system
+ * check), because that one has to survive the setting being off.
+ */
 export function log(...args) {
+  // Registered as the first statement of the `init` hook, so every ordinary caller is safe. A module
+  // that throws while importing could still reach this earlier, and `game.settings.get` raises on an
+  // unregistered key — silence is the right failure mode for a logger.
+  try {
+    if ( !game.settings.get(MODULE_ID, SETTINGS.debug) ) return;
+  } catch {
+    return;
+  }
   console.log(`${MODULE_ID} |`, ...args);
 }
 

@@ -1,38 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeTraitGrants, CreationChoiceProvider } from "../scripts/build/creation-advancement.mjs";
-import { sage } from "./fixtures/dnd5e-5.3.3.mjs";
-
-/**
- * `mergeTraitGrants` folds an advancement's automatic `configuration.grants` back together with the
- * player's recorded picks, de-duplicated — the driver surfaces a choice-bearing Trait without
- * applying its grants, so the headless path must fold them back in or they're lost.
- */
-describe("mergeTraitGrants", () => {
-  const languageAdv = sage.system.advancement.find(a => a._id === "pLGiyOjTP7nwuwTl");
-
-  it("unions automatic grants with the player's picks", () => {
-    const chosen = mergeTraitGrants(languageAdv, ["languages:standard:elvish", "languages:standard:dwarvish"]);
-    expect(chosen).toEqual([
-      "languages:standard:common",       // the automatic grant
-      "languages:standard:elvish",
-      "languages:standard:dwarvish"
-    ]);
-  });
-
-  it("de-duplicates a pick that repeats an automatic grant", () => {
-    const chosen = mergeTraitGrants(languageAdv, ["languages:standard:common", "languages:standard:orc"]);
-    expect(chosen).toEqual(["languages:standard:common", "languages:standard:orc"]);
-  });
-
-  it("returns just the grants when there are no picks", () => {
-    expect(mergeTraitGrants(languageAdv)).toEqual(["languages:standard:common"]);
-  });
-
-  it("returns just the picks for a grant-less advancement", () => {
-    expect(mergeTraitGrants({ configuration: { grants: [] } }, ["skills:arc"])).toEqual(["skills:arc"]);
-    expect(mergeTraitGrants(undefined, ["skills:his"])).toEqual(["skills:his"]);
-  });
-});
+import { CreationChoiceProvider } from "../scripts/build/creation-advancement.mjs";
 
 /**
  * `CreationChoiceProvider` answers the driver's decisions from the creator's recorded state. Each
@@ -47,7 +14,10 @@ describe("CreationChoiceProvider", () => {
         { type: "Trait", advId: "T1", selKey: "T1#0", source: "class" },
         { type: "Trait", advId: "T1", selKey: "T1#1", source: "class" },
         { type: "ItemChoice", advId: "IC1", selKey: "IC1", source: "class" },
-        { type: "SpellAbility", advId: "SA1", selKey: "SA1", source: "class" }
+        { type: "SpellAbility", advId: "SA1", selKey: "SA1", source: "class" },
+        // A 2014-rules class (Cleric, Sorcerer, Warlock) unlocks its subclass at level 1, so the
+        // pick is a creation decision rather than a level-up one.
+        { type: "Subclass", advId: "SC1", selKey: "SC1", source: "class" }
       ] },
       { key: "species", requirements: [
         { type: "Size", advId: "SZ1", selKey: "SZ1", source: "species" }
@@ -60,7 +30,8 @@ describe("CreationChoiceProvider", () => {
         "T1#0": ["skills:arc"],
         "T1#1": ["skills:his"],
         IC1: ["uuid-A", { uuid: "uuid-B" }],   // picks may be bare strings or {uuid} objects
-        SA1: ["int"]
+        SA1: ["int"],
+        SC1: ["Compendium.dnd5e.subclasses.Item.lifeDomain00000"]
       },
       species: { SZ1: ["sm"] },
       background: {}
@@ -75,9 +46,11 @@ describe("CreationChoiceProvider", () => {
     expect(provider.hp()).toBe("max");
   });
 
-  it("merges trait picks across every choice group with the advancement's grants", () => {
+  // The advancement's own `configuration.grants` are deliberately absent: the driver seeds them at
+  // ingest the way the native manager does, so the provider only answers the player's picks.
+  it("collects trait picks across every choice group, without re-adding the grants", () => {
     const keys = provider.traitKeys(rec("T1", { grants: ["skills:per"] }));
-    expect(keys).toEqual(["skills:per", "skills:arc", "skills:his"]);
+    expect(keys).toEqual(["skills:arc", "skills:his"]);
   });
 
   it("normalises ItemChoice picks (string or {uuid}) to uuid strings", () => {
@@ -100,8 +73,16 @@ describe("CreationChoiceProvider", () => {
     expect(provider.asi(rec("some-other-asi"))).toBeNull();
   });
 
-  it("never picks a subclass at level-1 creation", () => {
-    expect(provider.subclass()).toBeNull();
+  // Under the 2024 rules every class takes its subclass at level 3, so this always returned null and
+  // creation never handled it. The 2014 Cleric, Sorcerer and Warlock choose at level 1, and that
+  // assumption built them with no subclass at all — and none of the domain spells, armour
+  // proficiency or cantrips it carries.
+  it("returns the chosen subclass for a class that unlocks one at level 1", () => {
+    expect(provider.subclass(rec("SC1"))).toBe("Compendium.dnd5e.subclasses.Item.lifeDomain00000");
+  });
+
+  it("returns null when the class raises no subclass decision at level 1", () => {
+    expect(provider.subclass(rec("no-subclass-advancement"))).toBeNull();
   });
 
   it("returns empty for an advancement with no recorded requirement", () => {

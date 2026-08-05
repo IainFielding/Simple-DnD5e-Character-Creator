@@ -1,5 +1,6 @@
 import { t, log } from "../config.mjs";
 import { advancementArray } from "./advancement-util.mjs";
+import { matchesRules } from "./source-index.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { phbWeaponIcon } from "./weapon-source.mjs";
@@ -92,12 +93,27 @@ export async function resolveChoices(state, source) {
     ? { ability: classAbility, className: source.card(classDef.uuid)?.name ?? classDef.doc.name }
     : null;
 
+  // Everything computed across the whole build rather than per source. Expertise belongs here for
+  // the same reason the two above do: the rules scope it to the character, not to the class that
+  // offers it, so a skill from the species or background is a legitimate pick.
+  const shared = {
+    crossTaken, spellAbilityHint, ownedIds,
+    // The build's rules edition, set by the chosen class — the same scoping the origin grids use,
+    // needed here for pools that are scanned from the packs rather than authored on an advancement.
+    rules: classDef?.doc?.system?.source?.rules ?? null,
+    expertiseSkillPool: proficientSkillKeys(defs),
+    // The index itself, for the one requirement whose options are documents rather than keys: a
+    // level-1 Subclass choice needs the subclass cards, and `SourceIndex.subclasses()` memoises
+    // that scan for the whole session.
+    index: source
+  };
+
   const sources = [];
   for ( const d of defs ) {
     if ( !d.doc ) continue;
     let requirements = [];
     try {
-      requirements = await prepareRequirements(d, crossTaken, spellAbilityHint, ownedIds);
+      requirements = await prepareRequirements(d, shared);
     } catch ( err ) {
       log(`failed to resolve choices for ${d.key}`, err);
     }
@@ -165,6 +181,12 @@ export function choicesComplete(resolved) {
  * the Human "choose a feat" option, where the chosen feat (Crafter) carries its own tool
  * choice. Recurses through both, so a chosen feat's choices surface and feed the same dedupe
  * and apply paths as granted ones. `seen` guards against cycles; depth caps runaway nesting.
+ *
+ * A feature carrying no advancements of its own is still recorded — it just isn't recursed into.
+ * Those leaves matter to {@link collectOwnedIdentifiers}: every PHB fighting style lists the
+ * advancement-less "Fighting Style" *feature* as its item prerequisite, so dropping leaves left
+ * that identifier out of the owned set, gated out all four styles, and made the whole
+ * fighting-style choice vanish from a level-1 Fighter.
  * @param {Item} item
  * @param {object} sel  The source's recorded picks (`advChoices[source]`), to read ItemChoices.
  */
@@ -178,14 +200,24 @@ async function levelOneOwners(item, sel = {}, seen = new Set(), ownerUuid = null
       refs = Array.from(adv.configuration?.items ?? []).map(r => typeof r === "string" ? r : r?.uuid);
     } else if ( adv.type === "ItemChoice" ) {
       refs = itemChoicePicks(adv, sel);
+    } else if ( adv.type === "Subclass" ) {
+      // A 2014-rules Cleric, Sorcerer or Warlock chooses its subclass at level 1, so the subclass is
+      // part of the level-≤1 build and its own advancements (domain spells, heavy armour, an extra
+      // cantrip) are creation decisions. Recursing here is what surfaces them: without it the
+      // subclass item would be granted with none of what it brings. 2024 classes take theirs at
+      // level 3, where the `level > 1` guard above skips this entirely.
+      refs = Array.from(sel?.[adv._id] ?? []).map(p => typeof p === "string" ? p : p?.uuid).filter(Boolean);
     } else continue;
     for ( const uuid of refs ) {
       if ( !uuid || seen.has(uuid) ) continue;
       seen.add(uuid);
       const doc = await fromUuid(uuid).catch(() => null);
-      if ( doc && advancementArray(doc).length ) {
-        owners.push(...await levelOneOwners(doc, sel, seen, uuid, depth + 1));
-      }
+      if ( !doc ) continue;
+      // Recurse into a feature that brings advancements of its own; record one that doesn't as a
+      // leaf. A leaf contributes no requirements (there is nothing to walk) but does contribute
+      // its identifier — see the note above.
+      if ( advancementArray(doc).length ) owners.push(...await levelOneOwners(doc, sel, seen, uuid, depth + 1));
+      else owners.push({ item: doc, ownerUuid: uuid });
     }
   }
   return owners;
@@ -201,13 +233,20 @@ function itemChoicePicks(adv, sel) {
  * themselves plus their granted/chosen features (the pre-walked `def.owners`). These are the slugs
  * a feat's `system.prerequisites.items` is matched against, so an option requiring a feature the
  * build hasn't taken (a Warlock invocation needing Pact of the Blade) can be gated out.
+ *
+ * Completeness matters more here than anywhere else the owner list is used: a *missing* identifier
+ * doesn't merely hide one option, it can empty a whole pool and make the choice disappear (see the
+ * fighting-style note on {@link levelOneOwners}).
  * @param {{owners?: {item: Item}[]}[]} defs  Origin defs carrying their walked owner list.
  */
 function collectOwnedIdentifiers(defs) {
   const ids = new Set();
   for ( const d of defs ) {
     for ( const { item } of d.owners ?? [] ) {
-      if ( item?.identifier ) ids.add(item.identifier);
+      // `Item5e#identifier` falls back to a slug of the name, but a plain object read straight
+      // from a pack index has no such getter — take the stored identifier in that case.
+      const id = item?.identifier ?? item?.system?.identifier;
+      if ( id ) ids.add(id);
     }
   }
   return ids;
@@ -246,19 +285,19 @@ function collectTakenTraitKeys(defs) {
 /**
  * Parse one origin item's advancements (and its granted features') into requirements. Takes the
  * origin def prepared by {@link resolveChoices}, which already carries the source's pick bucket and
- * its walked owner list.
+ * its walked owner list, plus the values {@link resolveChoices} computes across the whole build.
  * @param {{key: string, sel: object, owners: {item: Item, ownerUuid: string|null}[]}} def
+ * @param {{crossTaken: object, spellAbilityHint: object|null, ownedIds: Set<string>,
+ *          expertiseSkillPool: object[]}} shared
  */
-async function prepareRequirements(def, crossTaken, spellAbilityHint, ownedIds) {
+async function prepareRequirements(def, shared) {
   const { key: source, sel, owners } = def;
+  const { crossTaken, spellAbilityHint, ownedIds, expertiseSkillPool, index, rules } = shared;
   const reqs = [];
-
-  // Skills this source grants — the only valid options for an Expertise choice.
-  const expertiseSkillPool = proficientSkillKeys(owners, sel);
 
   for ( const { item: owner, ownerUuid } of owners ) {
     for ( const adv of advancementArray(owner) ) {
-      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds });
+      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds, index, ownerItem: owner, rules });
     }
   }
 
@@ -270,20 +309,44 @@ async function prepareRequirements(def, crossTaken, spellAbilityHint, ownedIds) 
   return reqs;
 }
 
-/** The skill keys a source grants (fixed + current picks) — eligible Expertise options. */
-function proficientSkillKeys(owners, sel) {
-  const isSkill = k => typeof k === "string" && k.startsWith("skills:") && k !== "skills:*";
+/**
+ * Every skill the build makes the character proficient in — the eligible Expertise options.
+ *
+ * Expertise is scoped to the *character*, not to the source that offers it: the Rogue's advancement
+ * pools `skills:*` in `mode: "expertise"`, and dnd5e intersects that with the skills the actor
+ * actually holds. So a Rogue with a Sage background may take Expertise in Arcana, which the
+ * background granted. Reading only the offering source's own advancements (as this did) silently
+ * dropped every skill from the species and background, and the character came out with plain
+ * proficiency where the rules — and a natively-built character — give expertise.
+ *
+ * Walks all sources for the same reason {@link collectTakenTraitKeys} and
+ * {@link collectOwnedIdentifiers} do, and is computed once beside them.
+ *
+ * Expertise-mode advancements are skipped: their picks upgrade a proficiency rather than granting
+ * one, so they are not themselves candidates.
+ * @param {{sel?: object, owners?: {item: Item}[]}[]} defs
+ */
+function proficientSkillKeys(defs) {
+  // Skills *and* tools. The 2014 Rogue's Expertise is `count: 2` over a pool of
+  // `[tool:thief, skills:*]` — thieves' tools are a legitimate expertise pick by the rules — so a
+  // skills-only set cannot satisfy it. What keeps a 2024 Rogue (whose pool is `skills:*` alone) from
+  // being offered a tool is the pool intersection at the call site, not this filter.
+  const isProficiency = k => typeof k === "string"
+    && (k.startsWith("skills:") || k.startsWith("tool:")) && !k.endsWith(":*");
   const keys = new Set();
-  for ( const { item: owner } of owners ) {
-    for ( const adv of advancementArray(owner) ) {
-      if ( adv.type !== "Trait" || (adv.level ?? 0) > 1 ) continue;
-      if ( adv.classRestriction === "secondary" || adv.configuration?.mode === "expertise" ) continue;
-      for ( const g of adv.configuration?.grants ?? [] ) if ( isSkill(g) ) keys.add(g);
-      const choices = Array.from(adv.configuration?.choices ?? []);
-      for ( let ci = 0; ci < choices.length; ci++ ) {
-        const pool = Array.from(choices[ci].pool ?? []);
-        if ( !pool.some(k => typeof k === "string" && k.startsWith("skills:")) ) continue;
-        for ( const k of sel[`${adv._id}#${ci}`] ?? [] ) if ( isSkill(k) ) keys.add(k);
+  for ( const d of defs ) {
+    const sel = d.sel ?? {};
+    for ( const { item: owner } of d.owners ?? [] ) {
+      for ( const adv of advancementArray(owner) ) {
+        if ( adv.type !== "Trait" || (adv.level ?? 0) > 1 ) continue;
+        if ( adv.classRestriction === "secondary" || adv.configuration?.mode === "expertise" ) continue;
+        for ( const g of adv.configuration?.grants ?? [] ) if ( isProficiency(g) ) keys.add(g);
+        const choices = Array.from(adv.configuration?.choices ?? []);
+        for ( let ci = 0; ci < choices.length; ci++ ) {
+          const pool = Array.from(choices[ci].pool ?? []);
+          if ( !pool.some(k => typeof k === "string" && (k.startsWith("skills:") || k.startsWith("tool:"))) ) continue;
+          for ( const k of sel[`${adv._id}#${ci}`] ?? [] ) if ( isProficiency(k) ) keys.add(k);
+        }
       }
     }
   }
@@ -308,9 +371,31 @@ async function decorateTraitIcons(options) {
 
 /** Parse a single advancement into zero or more requirements, appended to `reqs`. */
 async function parseAdvancementChoice(adv, ctx) {
-  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint } = ctx;
+  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, index, ownerItem, rules } = ctx;
   let level = adv.level ?? 0;
   if ( level > 1 || adv.classRestriction === "secondary" ) return;
+
+  // Subclass: only reachable for a class that unlocks one at level ≤1 — the 2014-rules Cleric,
+  // Sorcerer and Warlock. Under the 2024 rules every class takes its subclass at level 3, so this
+  // never fires and creation had no reason to handle it; in a world holding 2014 classes it does,
+  // and without this the character was built with no subclass at all.
+  if ( adv.type === "Subclass" ) {
+    // From the owning item rather than `adv.item`: `advancementArray` also yields raw advancement
+    // *data* (no back-reference) when a document arrives un-prepared.
+    const identifier = ownerItem?.system?.identifier ?? ownerItem?.identifier;
+    // Scoped to the class's own edition — a 2014 Cleric must not be offered the 2024 domains, which
+    // grant their features on the 2024 progression. See `SourceIndex#subclasses`.
+    const rules = ownerItem?.system?.source?.rules ?? null;
+    const cards = identifier ? await index?.subclasses(identifier, { rules }) ?? [] : [];
+    if ( !cards.length ) return;
+    reqs.push(buildChoiceReq({
+      advId: adv._id, source, ownerUuid, type: "Subclass", level,
+      title: adv.title || t("advancement.subclass"), hint: adv.hint, count: 1,
+      options: cards.map(c => ({ key: c.uuid, label: c.name, img: c.img })),
+      sel, crossTaken
+    }));
+    return;
+  }
 
   // Size: a species offering a choice of token size (e.g. Small or Medium). A single
   // fixed size is not a decision, so only pools of more than one size become a requirement.
@@ -341,7 +426,18 @@ async function parseAdvancementChoice(adv, ctx) {
       const selKey = `${adv._id}#${ci}`;
 
       if ( isExpertise ) {
-        const options = expertiseSkillPool;
+        // dnd5e intersects an expertise pool with what the *character* is already proficient in, so
+        // `expertiseSkillPool` is the character side — but the advancement's own pool still decides
+        // what kind of proficiency is eligible. A 2024 Rogue pools `skills:*` and may take expertise
+        // in skills alone; the 2014 Rogue pools `[tool:thief, skills:*]` and may take it in thieves'
+        // tools too. Offering the character's whole proficiency set to both would hand a 2024 Rogue
+        // a tool the rules do not allow; offering only skills to both left the 2014 Rogue's second
+        // pick unfillable, and the resolver's fixed-point loop never settled.
+        // The module's own expansion, so a tool key is shaped the same way it is everywhere else
+        // (`expandToolPool` keeps the category prefix — see the tool-proficiency note in the e2e
+        // README, where flattening it broke `unfulfilledChoices`).
+        const expanded = new Set((await expandTraitPool(pool)).map(o => o.key));
+        const options = expertiseSkillPool.filter(o => expanded.has(o.key));
         const valid = new Set(options.map(o => o.key));
         if ( sel[selKey] ) sel[selKey] = sel[selKey].filter(k => valid.has(k));
         const req = buildChoiceReq({
@@ -479,7 +575,7 @@ async function parseAdvancementChoice(adv, ctx) {
       options.push({ key: uuid, uuid, label: doc.name, img: doc.img, recommended: g.recommended });
     }
     if ( cfg.allowDrops && cfg.restriction?.subtype ) {
-      for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel) ) {
+      for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel, rules) ) {
         if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
         const g = gate({ items: opt.prereqItems });   // level already filtered by the scan
         if ( !g ) continue;
@@ -512,6 +608,7 @@ export function choiceBlurb({ type, mode = "default", poolType = null, count = 1
   // Blocks that are inherently a single pick read as complete sentences on their own.
   if ( type === "Size" ) return t("choice.blurb.size");
   if ( type === "SpellAbility" ) return t("choice.blurb.spellAbility");
+  if ( type === "Subclass" ) return t("choice.blurb.subclass");
 
   let desc;
   if ( type === "ItemChoice" ) desc = t("choice.blurb.itemChoice");
@@ -694,9 +791,16 @@ async function expandTraitKeys(pool = []) {
  * Expand a tool-only Trait pool into concrete pick options from the compendium, handling both
  * whole-category wildcards (e.g. "tool:art:*" -> every Artisan's Tool) and pools of specific
  * named tools (e.g. the Crafter feat's eight "tool:art:carpenter"… keys -> just those eight).
- * Returns the options as `{key:"tool:<id>", label, img, uuid}` — dnd5e's Trait apply pops the
- * last `:` segment to reach `system.tools.<id>`, so the bare id key grants the proficiency
- * correctly. Returns null when the pool isn't a tool pool, so the generic expander handles it.
+ * Returns null when the pool isn't a tool pool, so the generic expander handles it.
+ *
+ * Keys keep their category — `tool:art:alchemist`, not `tool:alchemist`. The bare id also *applies*
+ * correctly (dnd5e's Trait apply pops the last `:` segment to reach `system.tools.<id>`), which is
+ * why this used to flatten them, but applying is not the only thing the system does with a recorded
+ * key. `Trait.actorValues` reports the character's existing tools in the prefixed form, and
+ * `unfulfilledChoices` matches `value.chosen` against pools expanded by `Trait.mixedChoices`, which
+ * is prefixed too — so a flattened key matches nothing, the fulfilled choice never gets spliced off
+ * `available`, and the pick shows as neither owned nor made. A tool chosen at creation then
+ * reappeared as pickable on a later level-up's tool screen.
  * @param {string[]} pool
  * @returns {Promise<{key:string,label:string,img?:string,uuid?:string}[]|null>}
  */
@@ -713,15 +817,17 @@ async function expandToolPool(pool) {
     if ( category && (wildcard || parts.length <= 2) ) {
       // Whole-category pick ("tool:art:*" or bare "tool:art") — every tool in the category.
       for ( const tool of await toolChoices(category) ) {
-        if ( tool.baseItem ) push({ key: `tool:${tool.baseItem}`, label: tool.name, img: tool.img, uuid: tool.uuid });
+        if ( tool.baseItem ) {
+          push({ key: `tool:${category}:${tool.baseItem}`, label: tool.name, img: tool.img, uuid: tool.uuid });
+        }
       }
     } else if ( category ) {
-      // A specific tool named within its category ("tool:art:carpenter") — just that one,
-      // keyed by its base item so it matches the category-expansion form and applies cleanly.
+      // A specific tool named within its category ("tool:art:carpenter") — just that one, keyed
+      // exactly as the pool named it so it matches the category expansion above.
       const id = parts[parts.length - 1];
       const match = (await toolChoices(category)).find(to => to.baseItem === id);
-      if ( match ) push({ key: `tool:${match.baseItem}`, label: match.name, img: match.img, uuid: match.uuid });
-      else push({ key: `tool:${id}`, label: traitKeyLabel(`tool:${id}`) });
+      if ( match ) push({ key: entry, label: match.name, img: match.img, uuid: match.uuid });
+      else push({ key: entry, label: traitKeyLabel(entry) });
     } else if ( wildcard ) {
       return null;                          // uncategorisable wildcard — defer to the generic expander
     } else {
@@ -754,10 +860,10 @@ function toolPoolCategory(entry) {
  * @param {object} cfg              The ItemChoice advancement configuration.
  * @param {number|null} [maxLevel]  Highest prerequisite level to include; null disables the gate.
  */
-export async function findRestrictedItems(cfg, maxLevel = null) {
+export async function findRestrictedItems(cfg, maxLevel = null, rules = null) {
   const docType = cfg.type;
   const r = cfg.restriction ?? {};
-  const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}`;
+  const sig = `${docType}|${r.type || ""}|${r.subtype || ""}|${maxLevel ?? ""}|${rules ?? ""}`;
   if ( restrictedCache.has(sig) ) return restrictedCache.get(sig);
 
   const enabled = getEnabledPacks();
@@ -770,7 +876,7 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
     if ( !pack.visible || !isUsableItemPack(pack, enabled) ) continue;
     try {
       const index = await pack.getIndex({
-        fields: ["type", "system.type.value", "system.type.subtype",
+        fields: ["type", "system.type.value", "system.type.subtype", "system.source.rules",
           "system.prerequisites.level", "system.prerequisites.items"]
       });
       for ( const e of index ) {
@@ -778,6 +884,10 @@ export async function findRestrictedItems(cfg, maxLevel = null) {
         const ty = e.system?.type ?? {};
         if ( r.type && ty.value !== r.type ) continue;
         if ( r.subtype && ty.subtype !== r.subtype ) continue;
+        // Scoped to the build's rules edition. Without this a 2014 Ranger's fighting-style choice
+        // offered every fighting style in the world, 2024 ones included — the pool is scanned from
+        // the packs rather than authored on the advancement, so nothing else narrows it.
+        if ( !matchesRules(e.system?.source?.rules, rules) ) continue;
         if ( (maxLevel != null) && (Number(e.system?.prerequisites?.level ?? 0) > maxLevel) ) continue;
         const nk = nameKey(e.name);
         if ( seenNames.has(nk) ) continue;   // same feature shared across edition packs — keep one

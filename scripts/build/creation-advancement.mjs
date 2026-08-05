@@ -51,20 +51,6 @@ export function buildCreationManager(actor, items) {
   return manager;
 }
 
-/**
- * The full key set a Trait advancement must apply: its automatic `configuration.grants` unioned with
- * the player's recorded picks, de-duplicated. The choice-bearing Trait is surfaced without applying
- * its grants (the wizard owns the choice), so folding the grants back in here keeps the committed
- * value complete.
- * @param {Advancement} adv
- * @param {string[]} recordedKeys
- * @returns {string[]}
- */
-export function mergeTraitGrants(adv, recordedKeys = []) {
-  const grants = Array.from(adv?.configuration?.grants ?? []);
-  return [...new Set([...grants, ...recordedKeys])];
-}
-
 /** A recorded pick may be a bare uuid/key string or a `{uuid}` object; normalise to the string. */
 function pickValue(p) {
   return (typeof p === "string") ? p : p?.uuid ?? null;
@@ -130,9 +116,19 @@ export class CreationChoiceProvider {
     return req ? this.#picks(req)[0] ?? null : null;
   }
 
-  /** Subclasses are chosen later (still interactively), never at level-1 creation. */
-  subclass() {
-    return null;
+  /**
+   * The chosen subclass uuid, for a class that unlocks one at level 1.
+   *
+   * Under the 2024 rules no class does, which is why this used to return null unconditionally. The
+   * 2014 Cleric, Sorcerer and Warlock all choose at level 1, and in a world holding those classes
+   * that assumption built characters with no subclass at all — and so without the domain spells,
+   * armour proficiency and cantrips the subclass carries. The resolver now raises the decision
+   * (`type: "Subclass"`) and this hands the pick to the driver's own `selectSubclass`, which
+   * synthesises the subclass's features exactly as the level-up path does.
+   */
+  subclass(rec) {
+    const req = this.#reqs(rec.advancement.id, "Subclass")[0];
+    return req ? this.#picks(req)[0] ?? null : null;
   }
 
   /**
@@ -147,11 +143,15 @@ export class CreationChoiceProvider {
     return this.#state.backgroundDeltas();
   }
 
-  /** The full trait key set to apply: recorded picks (across every choice group) ∪ automatic grants. */
+  /**
+   * The trait keys to apply: the player's recorded picks across every choice group of this
+   * advancement. The automatic `configuration.grants` are *not* folded in here — the driver seeds
+   * them at ingest exactly as the native manager does, so adding them again would be redundant.
+   */
   traitKeys(rec) {
     const keys = [];
     for ( const req of this.#reqs(rec.advancement.id, "Trait") ) keys.push(...this.#picks(req));
-    return mergeTraitGrants(rec.advancement, keys);
+    return keys;
   }
 
   /**
@@ -167,5 +167,19 @@ export class CreationChoiceProvider {
   choiceUuids(rec) {
     const req = this.#reqs(rec.advancement.id, "ItemChoice")[0];
     return req ? this.#picks(req) : [];
+  }
+
+  /**
+   * Which of an optional grant's items to keep, or `null` to leave the seeded default alone.
+   *
+   * The driver seeds these selected, as dnd5e's own manager does, so "no recorded decision" must
+   * mean "keep them" rather than "take none" — hence null rather than an empty array when the
+   * player has not visited the choice. An empty array is a real answer: decline all of them.
+   */
+  optionalGrant(rec) {
+    const req = this.#reqs(rec.advancement.id, "OptionalGrant")[0];
+    if ( !req ) return null;
+    const raw = this.#state.advChoices?.[req.source]?.[req.selKey];
+    return raw ? Array.from(raw).map(pickValue).filter(Boolean) : null;
   }
 }

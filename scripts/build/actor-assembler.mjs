@@ -46,6 +46,13 @@ export async function assembleActor(state, source, equipment) {
     const doc = docs[key];
     if ( !doc ) { log(`origin item not found: ${key}`); return; }
     const data = doc.toObject();
+    // Give the staged item its own id. `toObject()` hands back the compendium document's `_id`,
+    // so without this every creator-built character carried the *pack's* id for its class,
+    // species and background — colliding across characters and leaking into the
+    // `flags.dnd5e.advancementOrigin` of everything those items grant
+    // ("phbbgSage0000000.<advId>" instead of an actor-local id). The system does the same thing
+    // for a dropped item (`AdvancementManager.forNewItem` assigns a fresh id before staging).
+    data._id = foundry.utils.randomID();
     if ( data._stats ) data._stats.compendiumSource = doc.uuid;
     mutate?.(data);
     items.push(data);
@@ -76,6 +83,17 @@ export async function assembleActor(state, source, equipment) {
     await driver.autoResolve(new CreationChoiceProvider(resolved, state));
     await driver.commit();
     await actor.setFlag(MODULE_ID, "created", true);
+
+    // Start at full health. dnd5e's HitPoints advancement writes *current* HP by adding the hit
+    // die plus the Constitution modifier as it stands at the moment it applies — and in this walk
+    // that moment is during prepare(), before the background's ability increase has been
+    // allocated (the ASI is only surfaced there and assigned later, in autoResolve). A background
+    // that raises Constitution therefore left the character starting below its own maximum: max is
+    // derived and self-corrects, but the stored current value does not. Re-applying the hit-point
+    // decisions cannot fix it — reverse and apply both recompute from the *new* modifier, so the
+    // round trip is a no-op — and a freshly created character is at full health by definition.
+    const hp = actor.system.attributes?.hp;
+    if ( hp?.max ) await actor.update({ "system.attributes.hp.value": hp.max }, { render: false });
   }
 
   // Add the spells chosen on the Spells step, as prepared class spells.
@@ -114,22 +132,53 @@ async function applyFeatSpells(actor, state, source) {
     const sourceTag = `feat:${grant.featIdentifier}`;
 
     const data = [];
-    for ( const uuid of picks.cantrips ?? [] ) data.push(await buildFeatSpell(uuid, { ability, cantrip: true, feat, sourceTag }));
-    for ( const uuid of picks.spells ?? [] ) data.push(await buildFeatSpell(uuid, { ability, cantrip: false, feat, sourceTag }));
+    for ( const uuid of picks.cantrips ?? [] ) {
+      data.push(await buildFeatSpell(uuid, {
+        ability, cantrip: true, feat, sourceTag, spellConfig: grant.cantripSpellConfig
+      }));
+    }
+    for ( const uuid of picks.spells ?? [] ) {
+      data.push(await buildFeatSpell(uuid, {
+        ability, cantrip: false, feat, sourceTag, spellConfig: grant.spellSpellConfig
+      }));
+    }
     const clean = data.filter(Boolean);
     if ( clean.length ) await actor.createEmbeddedDocuments("Item", clean, { render: false });
   }
 }
 
-/** Build one feat spell's item data with the Magic Initiate casting configuration applied. */
-async function buildFeatSpell(uuid, { ability, cantrip, feat, sourceTag }) {
+/**
+ * Build one feat spell's item data with the Magic Initiate casting configuration applied.
+ *
+ * When the feat carries its own spell `ItemChoice` advancements (the dnd5e copy does; the
+ * PHB module's does not — see {@link module:steps/feat-spells-step}), the configuration is handed
+ * to the system's own `applySpellChanges`, which is the same call the advancement would have made.
+ * That matters for more than tidiness: as well as the ability, method and uses, it builds the
+ * **"(free casting)" forward activity** that is how the once-per-long-rest free cast is actually
+ * cast. Setting the uses counter by hand — as this used to — left the charge in place with no
+ * activity to spend it with.
+ *
+ * The hand-rolled block below remains for the advancement-less feat, where there is no
+ * configuration to borrow and the PHB's fixed Magic Initiate shape is all we have.
+ */
+async function buildFeatSpell(uuid, { ability, cantrip, feat, sourceTag, spellConfig }) {
   const doc = await fromUuid(uuid).catch(() => null);
   if ( !doc ) { log(`feat spell not found: ${uuid}`); return null; }
   const obj = doc.toObject();
   if ( obj._stats ) obj._stats.compendiumSource = uuid;
+  if ( feat ) foundry.utils.setProperty(obj, "flags.dnd5e.advancementOrigin", `${feat.id}.`);
+
+  if ( spellConfig?.applySpellChanges ) {
+    spellConfig.applySpellChanges(obj, { ability });
+    // `applySpellChanges` derives `sourceItem` from the advancement's own item, which is the feat
+    // — the same tag this module uses to group the spells on the sheet. Only set it ourselves if
+    // the config left it empty (a configuration with no method sets nothing).
+    if ( !obj.system?.sourceItem ) foundry.utils.setProperty(obj, "system.sourceItem", sourceTag);
+    return obj;
+  }
+
   foundry.utils.setProperty(obj, "system.ability", ability);
   foundry.utils.setProperty(obj, "system.sourceItem", sourceTag);
-  if ( feat ) foundry.utils.setProperty(obj, "flags.dnd5e.advancementOrigin", `${feat.id}.`);
   if ( !cantrip ) {
     // The level-1 spell is always prepared and castable once per long rest without a slot.
     foundry.utils.setProperty(obj, "system.method", "spell");

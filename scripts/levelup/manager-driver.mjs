@@ -1,4 +1,5 @@
 import { log, levelUpHpRollToChat } from "../config.mjs";
+import { withItemSegment } from "../data/advancement-util.mjs";
 import { phbWeaponIcon } from "../data/weapon-source.mjs";
 
 /**
@@ -72,6 +73,23 @@ export class LevelUpDriver {
   asiSteps = [];
 
   /**
+   * Ability-score improvements that raise no decision — a capstone's fixed `+4` (Primal Champion,
+   * Body and Mind), a half-feat's `+1`, or a point budget with a single legal target — as
+   * `{ level, advancement, key, points }`.
+   *
+   * Held back rather than applied where they are found, because {@link prepare} walks *every* level
+   * before any decision is answered. Applying a level-20 `+4 Strength` during that walk consumes the
+   * headroom the level-4 improvement is entitled to: the player's own points then clamp against the
+   * maximum and are silently discarded, and a Barbarian carried 1→20 finishes on 20 Strength where
+   * the rules — and the system's own wizard, which applies each level in turn — give 24.
+   *
+   * They are re-applied on top of the player's allocations by {@link #applyDeferredAsi}, and
+   * suspended again around every edit, so level order is preserved however the screens are visited.
+   * {@link asiState} discounts them so the budget on an ASI screen is the player's alone.
+   */
+  deferredAsi = [];
+
+  /**
    * The trait decisions, one per choice-bearing `Trait` advancement gained this level (Weapon
    * Mastery being the common one): `{ level, advancement, item }`. Like feature choices these are
    * left unpicked until the player selects in the UI, which applies straight to the clone via the
@@ -86,6 +104,16 @@ export class LevelUpDriver {
    * the choice can be cleanly reversed. See {@link resolveSubclass}.
    */
   subclassSteps = [];
+
+  /**
+   * The optional-grant decisions, one per `ItemGrant` advancement whose items the player may decline
+   * — in practice Tasha's optional class features, injected into every 2014-rules class.
+   *
+   * Seeded *selected* at ingest, because that is how the native manager presents them: dnd5e's
+   * `initial` apply grants every item not individually marked optional, so the screen opens with the
+   * boxes ticked and the player unticks what they do not want.
+   */
+  optionalGrantSteps = [];
 
   /**
    * The spell-grant decisions, one per `ItemGrant` advancement that grants a spell with a choosable
@@ -169,6 +197,45 @@ export class LevelUpDriver {
   }
 
   /**
+   * The dnd5e advancement types this driver knows how to handle, most specific first.
+   *
+   * Order matters: several of these subclass one another in the system (`ItemChoice` extends
+   * `ItemGrant`), so the first match down this list is the narrowest correct answer.
+   */
+  static KNOWN_TYPES = ["HitPoints", "ItemChoice", "AbilityScoreImprovement", "Subclass",
+    "ScaleValue", "Size", "Trait", "ItemGrant"];
+
+  /**
+   * The type to treat an advancement as: its own, or the nearest system type it subclasses.
+   *
+   * A module may register an advancement type of its own. Switching on the bare type string then
+   * drops it — which is not a cosmetic failure, because a third-party type is usually a *system*
+   * type with a different screen bolted on, and its `apply`/`reverse` are the ones we already know
+   * how to drive.
+   *
+   * Tasha's `TCOEReplacementGrant` is exactly that: `insertReplacements` takes a plain `ItemGrant`
+   * already on a 2014 class, marks the replaced item optional, appends the replacements, and flips
+   * the type string. The advancement still grants everything it always did — the 2014 Ranger's
+   * level-3 grant still carries *Ranger Archetype* — so a character built past it silently lost a
+   * class feature for no reason other than the name of its class.
+   * @param {Advancement} adv
+   * @returns {string|null}
+   */
+  static baseType(adv) {
+    if ( !adv ) return null;
+    if ( this.KNOWN_TYPES.includes(adv.type) || (adv.type === "EmberKnowledge") ) return adv.type;
+    const types = dnd5e.documents?.advancement ?? {};
+    for ( const name of this.KNOWN_TYPES ) {
+      const cls = types[`${name}Advancement`];
+      if ( cls && (adv instanceof cls) ) {
+        log(`treating third-party advancement "${adv.type}" as ${name}`);
+        return name;
+      }
+    }
+    return adv.type;
+  }
+
+  /**
    * Whether a single step is supported without user choice beyond hit points. Mirrors each
    * advancement type's `automaticApplicationValue` structurally (so it stays in step with the
    * driver's async classification) and treats hit points as the one renderable type we own.
@@ -176,7 +243,7 @@ export class LevelUpDriver {
   static isStepSupported(step) {
     const adv = step.flow?.advancement;
     if ( !adv ) return true;                       // marker steps with no flow are inert
-    switch ( adv.type ) {
+    switch ( this.baseType(adv) ) {
       case "HitPoints":  return true;              // the hit-point decision the wizard presents
       case "ItemChoice": return true;              // a feature/spell choice the wizard presents
       case "AbilityScoreImprovement": return true; // the ASI / feat decision the wizard presents
@@ -185,10 +252,11 @@ export class LevelUpDriver {
       case "Size":       return (adv.configuration?.sizes?.size ?? 0) <= 1;
       case "Trait":      return true;              // grants apply automatically; choices the wizard presents
       // Plain grants apply automatically; a spell grant with a choosable casting ability (a species
-      // lineage's Int/Wis/Cha spell at a class level) is presented as the ability picker. Only a
-      // truly *optional* grant (skippable config or optional items) is still beyond us.
-      case "ItemGrant":  return !(adv.configuration?.optional
-        || Array.from(adv.configuration?.items ?? []).some(i => i?.optional));
+      // lineage's Int/Wis/Cha spell at a class level) is presented as the ability picker; an
+      // *optional* grant (Tasha's optional class features) is seeded like the native manager seeds
+      // it and surfaced so the player can decline. Declining this used to hand the whole level-up
+      // back to dnd5e, which meant our wizard never appeared for a 2014 class in a Tasha's world.
+      case "ItemGrant":  return true;
       // Ember registers its own advancement type on background items (a culture/path granting
       // knowledge areas). It is pure grant — its `automaticApplicationValue()` returns the whole
       // grant list, so `#ingestFlow`'s default branch applies it with no screen of its own —
@@ -211,9 +279,93 @@ export class LevelUpDriver {
    */
   async prepare() {
     while ( this.#step ) {
-      await this.#processStep(this.#step);
+      // Before each step, as the native manager does before each render — not once up front. The
+      // listeners read state the walk itself produces: Tasha's decides whether to prune the level-6
+      // Roving grant by checking whether Deft Explorer is in `value.added`, which is empty until
+      // level 1 has been processed. Firing once at the start would prune it for everyone.
+      this.#firePreRender();
+      const step = this.#step;
+      if ( !step ) break;                // a listener pruned everything that was left
+      await this.#processStep(step);
     }
+    // Now the walk is over, the increases nobody decides go on top — in level order, after any
+    // allocation the player will make. See {@link deferredAsi}.
+    await this.#applyDeferredAsi();
     return this.hpSteps;
+  }
+
+  /**
+   * Give other modules the chance to prune this manager's steps before we walk it.
+   *
+   * `AdvancementManager#render` fires `dnd5e.preAdvancementManagerRender` before processing, and
+   * content modules use it to remove steps a character does not qualify for. Our wizard *replaces*
+   * that render, so nothing ever fired it and every such step applied unconditionally.
+   *
+   * The case that found this: Tasha's grants a Ranger **Roving** at level 6 only if they took Deft
+   * Explorer at level 1, and enforces it by deleting the advancement in this hook
+   * (`hideAdvancementsOnTab` / `hideAdvancementsInManager`). A Ranger who kept Natural Explorer was
+   * handed Roving anyway.
+   *
+   * Fired before **each** step, matching the native manager's per-render cadence, because listeners
+   * read state the walk itself produces — see the note at the call site.
+   *
+   * A listener may *reassign* `manager.steps` rather than splice it (Tasha's filters into a new
+   * array), so the driver's own reference is re-synced afterwards; without that the pruning would
+   * be invisible to the very loop it is meant to shorten.
+   * @returns {boolean}   False when a listener vetoed the walk.
+   */
+  #firePreRender() {
+    try {
+      const ok = Hooks.call("dnd5e.preAdvancementManagerRender", this.manager) !== false;
+      // Re-sync: `this.steps` is captured in the constructor, and a listener that filters into a
+      // fresh array would otherwise leave us walking the unpruned one.
+      if ( this.manager?.steps && (this.manager.steps !== this.steps) ) this.steps = this.manager.steps;
+      if ( !ok ) log("a module vetoed dnd5e.preAdvancementManagerRender");
+      return ok;
+    } catch ( err ) {
+      // A third-party listener throwing must not take the level-up with it — the steps it would
+      // have pruned simply stay, which is the behaviour we had before firing this at all.
+      log("dnd5e.preAdvancementManagerRender listener failed", err);
+      return true;
+    }
+  }
+
+  /**
+   * Apply every {@link deferredAsi} in level order, on top of whatever the point allocations
+   * currently hold. Idempotent: an already-applied increase is reversed first, so this can run
+   * again after any edit.
+   */
+  async #applyDeferredAsi() {
+    for ( const rec of [...this.deferredAsi].sort((a, b) => (a.level ?? 0) - (b.level ?? 0)) ) {
+      const adv = rec.advancement;
+      if ( adv.value?.type ) await adv.reverse(rec.level);
+      // `initial` is what applies the configuration's fixed part, exactly as the native manager
+      // pre-fills the screen this advancement would have rendered.
+      await adv.apply(rec.level, {}, { initial: true });
+      if ( rec.key ) await adv.apply(rec.level, { type: "asi", assignments: { [rec.key]: rec.points } });
+    }
+    if ( this.deferredAsi.length ) this.clone.reset();
+  }
+
+  /** Take the deferred increases back off the clone, so an allocation sees its true headroom. */
+  async #suspendDeferredAsi() {
+    for ( const rec of this.deferredAsi ) {
+      if ( rec.advancement.value?.type ) await rec.advancement.reverse(rec.level);
+    }
+    if ( this.deferredAsi.length ) this.clone.reset();
+  }
+
+  /**
+   * Run an ability-score edit against the scores as they stand *without* the increases nobody
+   * decides, then put those back. Without this a level-4 allocation made after the walk would be
+   * clamped by a level-20 capstone that has not happened yet.
+   * @param {() => Promise<*>} edit
+   */
+  async #withOwnHeadroom(edit) {
+    if ( !this.deferredAsi.length ) return edit();
+    await this.#suspendDeferredAsi();
+    try { return await edit(); }
+    finally { await this.#applyDeferredAsi(); }
   }
 
   /** Process the step at the cursor, then advance — mirrors one iteration of `#forward`. */
@@ -257,7 +409,9 @@ export class LevelUpDriver {
    */
   async #ingestFlow(flow, step) {
     const adv = flow.advancement;
-    switch ( adv?.type ) {
+    // The same normalisation `isStepSupported` uses, or the two would disagree: the gate would claim
+    // a third-party advancement it recognised as an ItemGrant and then the walk would drop it.
+    switch ( this.constructor.baseType(adv) ) {
       case "HitPoints":
         // The original class's *first* level takes maximum hit points by rule, with nothing to
         // choose — the system applies it automatically (see HitPointsAdvancement
@@ -265,43 +419,56 @@ export class LevelUpDriver {
         // headless creation) must not offer a roll there. A multiclass's first level is a real
         // decision, hence the original-class test rather than a bare `level === 1`.
         if ( (flow.level === 1) && adv.item?.isOriginalClass ) return adv.apply(flow.level, { 1: "max" });
-        // Otherwise always a player decision, even on a multi-level jump — the native flow would
-        // silently inherit a prior "avg" choice, but we want every gained level's hit points
-        // chosen here.
+        // Otherwise always a player decision, even on a multi-level jump. This is the one
+        // deliberate exception to {@link #seed}: the native pre-fill silently inherits a prior
+        // level's "avg" across a multi-level jump, and we want every gained level chosen here.
         return this.#recordHitPoints(flow);
       case "ItemChoice":
-        // Record the decision but leave it unselected; the wizard applies the picks later.
+        // Record the decision but leave it unselected; the wizard applies the picks later. The seed
+        // still runs — for a spell-granting choice it is what settles the casting ability the
+        // granted spells are configured with before anything is picked.
+        await this.#seed(flow);
         this.choiceSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       case "AbilityScoreImprovement": {
-        // A class ASI (points to spend) is a player decision; a feat's *fixed* increase (a
-        // half-feat's set +1) has no choice and must just apply, or the bonus is silently lost.
         const cfg = adv.configuration ?? {};
-        const fixed = cfg.fixed ?? {};
-        const hasFixed = Object.values(fixed).some(v => v);
-        const data = hasFixed ? { type: "asi", assignments: { ...fixed } } : { type: "asi" };
-        if ( (cfg.points ?? 0) > 0 ) {
-          // PHB-style single-stat half-feats (Actor's "+1 Cha") are data-modelled as 1 point with
-          // every other ability locked, not as a fixed bonus. When only one ability can take the
-          // whole budget the allocation is forced — apply it outright instead of surfacing a
-          // "choice" with nothing to choose.
-          const open = Object.keys(CONFIG.DND5E.abilities)
-            .filter(k => adv.canImprove(k) && !cfg.locked?.has?.(k));
-          if ( (open.length === 1) && ((cfg.cap ?? Infinity) >= cfg.points) ) {
-            data.assignments = { ...(data.assignments ?? {}) };
-            data.assignments[open[0]] = (data.assignments[open[0]] ?? 0) + cfg.points;
-          } else {
-            // Real points to distribute — surface the decision (its fixed part is pre-applied).
-            this.asiSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
-          }
+        const points = cfg.points ?? 0;
+        // PHB-style single-stat half-feats (Actor's "+1 Cha") are data-modelled as 1 point with
+        // every other ability locked, not as a fixed bonus. When only one ability can take the
+        // whole budget the allocation is forced — there is nothing to choose.
+        const open = Object.keys(CONFIG.DND5E.abilities)
+          .filter(k => adv.canImprove(k) && !cfg.locked?.has?.(k));
+        const forced = (open.length === 1) && ((cfg.cap ?? Infinity) >= points);
+
+        // Nothing for the player to decide: a fixed increase, or a forced allocation. Deferred
+        // rather than applied here — see {@link deferredAsi} for why the order matters.
+        if ( (points <= 0) || forced ) {
+          this.deferredAsi.push({
+            level: flow.level, advancement: adv, item: adv.item,
+            key: forced ? open[0] : null, points: forced ? points : 0
+          });
+          return;
         }
-        return adv.apply(flow.level, data);
+
+        // A real allocation. The seed applies the configuration's `fixed` part and settles
+        // `value.type`, exactly as the native screen arrives pre-filled; where the class also allows
+        // a feat it leaves the type unset (native renders both options and commits to neither) and
+        // our screen opens on the points view, so settle it — taking a feat reverses and re-applies.
+        await this.#seed(flow);
+        if ( !adv.value.type ) await adv.apply(flow.level, { type: "asi" });
+        this.asiSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        return;
       }
       case "Trait": {
         // A real choice (Weapon Mastery, a "choose a language", …) is surfaced for the player;
         // a pure grant (one forced option) applies straight away via its automatic value.
         const auto = await flow.getAutomaticApplicationValue();
         if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
+        // Seed the rest: `{ initial: true }` lands the advancement's automatic `grants` plus any
+        // pool that has collapsed to a single remaining option, and leaves the genuine picks open.
+        // Without it a mixed grant-and-choice Trait (Dragon's Tongue, which *grants* Draconic and
+        // *chooses* a second language) dropped its grants entirely on this path.
+        await this.#seed(flow);
         this.traitSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
@@ -320,18 +487,87 @@ export class LevelUpDriver {
         const auto = await flow.getAutomaticApplicationValue();
         if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
         if ( this.#isAbilityGrant(adv) ) {
+          // The seed grants the non-optional items and defaults the casting ability to the first the
+          // configuration allows, which is how the native screen arrives. Then re-point it at an
+          // ability a sibling grant on the same item already uses, so a species lineage that picks
+          // one ability at level 1 doesn't default its later spells to a different one.
+          await this.#seed(flow);
+          const ability = this.#defaultGrantAbility(adv);
+          if ( ability && (ability !== adv.value?.ability) ) {
+            await adv.apply(flow.level, { ability, selected: this.#grantUuids(adv) });
+          }
           this.grantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
-          return adv.apply(flow.level, { ability: this.#defaultGrantAbility(adv), selected: this.#grantUuids(adv) });
+          return;
         }
-        // An optional grant we don't re-skin; canDrive() would have rejected the level-up.
-        log("skipping unsupported optional ItemGrant", adv?.id);
+        // A *replacement* grant — an ItemGrant subclass whose configuration carries a base→
+        // replacement map, so its items are alternatives rather than a list. Tasha's builds these by
+        // mutating a plain grant already on a 2014 class: the replaced item is marked optional, the
+        // alternative is appended, and the type string is changed.
+        //
+        // Seeding it like an ordinary grant would hand the character *both* halves of every pair —
+        // Favored Enemy and Favored Foe, Natural Explorer and Deft Explorer — which no edition
+        // gives. Not choosing means keeping the base, so that is the default applied here; the
+        // decision is recorded so a screen can offer the swap. The items outside any pair (the 2014
+        // Ranger's level-3 *Ranger Archetype*) are unconditional and land either way, which is the
+        // feature that went missing while this type was unrecognised entirely.
+        const replacements = adv.configuration?.replacements;
+        if ( replacements && !foundry.utils.isEmpty(replacements) ) {
+          // Keyed off each item's own `optional` flag, not off the replacement map: one base can map
+          // to *several* items (Tasha's swaps Natural Explorer for Deft Explorer **and** Canny) while
+          // the map records only the first, so the map alone leaks the rest in. Everything in a pair
+          // — base and alternatives alike — is flagged optional; everything outside one is not.
+          //
+          // The map's keys are stored without the `.Item.` segment, the same pre-v10 shape the
+          // Ranger's "Hunter's Prey" pool uses; Tasha's own flow re-inserts it, so we do too.
+          const bases = new Set(Object.keys(foundry.utils.flattenObject(replacements)).map(withItemSegment));
+          // Normalised on the way out too, not just when matching: this content stores its item
+          // uuids in the same pre-v10 form, and `value.added` records whatever it is handed — so
+          // passing them through verbatim recorded a different uuid than the native flow does for
+          // the identical feature.
+          const keep = Array.from(adv.configuration?.items ?? [])
+            .map(i => (typeof i === "string") ? { uuid: i } : i)
+            .filter(i => i.uuid && (!i.optional || bases.has(withItemSegment(i.uuid))))
+            .map(i => withItemSegment(i.uuid));
+          if ( keep.length ) await adv.apply(flow.level, { selected: keep });
+          this.optionalGrantSteps.push({
+            level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item, replacements
+          });
+          return;
+        }
+
+        // An *optional* grant — Tasha's optional class features are the case in the wild, injected
+        // into every 2014-rules class by `dnd-tashas-cauldron`.
+        //
+        // These used to be skipped outright, on the reasoning that `canDrive()` had already declined
+        // the level-up. That left creation — which has no such gate — building characters missing
+        // everything the grant carries, and it misread what "optional" means to the system. dnd5e's
+        // own seed grants every item the grant does *not* individually mark optional
+        // (`ItemGrantAdvancement#apply` under `initial`), so on the native path an untouched optional
+        // grant arrives *applied*, not skipped. Seeding here is what makes the two agree, and it is
+        // the right default besides: the world only carries these at all because the GM turned them
+        // on, and the player can still decline in the wizard.
+        await this.#seed(flow);
+        this.optionalGrantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
       case "Size": {
         // A single fixed size applies automatically; a size *choice* (Small or Medium) is surfaced.
         // Only the headless creation path resolves it — the level-up claim gate rejects multi-size.
-        const auto = await flow.getAutomaticApplicationValue();
-        if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
+        //
+        // The size count is tested here rather than taken from `getAutomaticApplicationValue()`,
+        // because the system's SizeAdvancement compares the `sizes` *Set* against a number:
+        //   `if ( this.configuration.sizes > 1 ) return false;`
+        // That is never true, so it reports the first size as automatic even for a real choice —
+        // which silently forced every Small-or-Medium species (Human, Halfling, Gnome…) to Small
+        // and swallowed the player's pick. Testing `.size` keeps this in agreement with
+        // {@link isStepSupported}, which already gates on the count correctly.
+        if ( (adv.configuration?.sizes?.size ?? 0) <= 1 ) {
+          const auto = await flow.getAutomaticApplicationValue();
+          if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
+        }
+        // Seed the first configured size so the clone is never sizeless while the choice is open —
+        // the same fallback the native pre-fill leaves in place until the player picks.
+        await this.#seed(flow);
         this.sizeSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
@@ -343,6 +579,25 @@ export class LevelUpDriver {
         log("skipping unsupported renderable advancement", adv?.type);
       }
     }
+  }
+
+  /**
+   * Pre-fill a decision the way the native manager does before it renders the flow behind it.
+   *
+   * `AdvancementManager#render` applies `advancement.apply(level, {}, { initial: true })` to every
+   * interactive step before the player ever sees it. That single call is how a Trait's automatic
+   * grants, an ItemGrant's non-optional items, an ItemChoice's default casting ability and an ASI's
+   * fixed increase all land whether or not the screen is touched. We used to hand-roll a seed per
+   * type and had none at all for Trait, so a choice-bearing Trait's grants were silently dropped and
+   * the *same* decision left untouched produced different characters through the two paths.
+   * Deferring to the system's own `initial` keeps every type in step by construction.
+   *
+   * Hit points are the one deliberate exception — see the `HitPoints` case in {@link #ingestFlow}.
+   * @param {AdvancementFlow} flow
+   * @returns {Promise<void>}
+   */
+  #seed(flow) {
+    return flow.advancement.apply(flow.level, {}, { initial: true });
   }
 
   /** Seed a hit-point decision with its average and apply it so the clone stays valid. */
@@ -592,6 +847,12 @@ export class LevelUpDriver {
     for ( const c of adv.configuration.choices ?? [] ) for ( const k of c.pool ) poolKeys.add(k);
     const expanded = (await Trait.mixedChoices(poolKeys)).asSet();
 
+    // The advancement's automatic grants, which the ingest seed has already applied. They sit in
+    // `value.chosen` alongside the player's own picks and are indistinguishable there, so they are
+    // identified from the configuration and locked below — the native flow never offers a grant for
+    // removal, and letting one be un-toggled here would hand back a slot the rules never opened.
+    const granted = (await Trait.mixedChoices(new Set(adv.configuration.grants ?? []))).asSet();
+
     // `selected` = keys already taken on the clone (this advancement's picks plus any from earlier
     // levels); `available` = eligible but not yet taken. Scope both to this advancement's pool —
     // except this advancement's own picks, which always stay visible (and toggleable): a
@@ -620,8 +881,10 @@ export class LevelUpDriver {
     // picks (Weapon Mastery) we prefer the Player's Handbook item art when that pack is active,
     // matching the creator's grids, and fall back to the system's generic icon otherwise.
     const options = await Promise.all([...keys].map(async key => {
-      const isChosen = chosen.has(key);
-      const owned = !isChosen && selected.has(key);   // taken earlier — shown selected but locked
+      const isGrant = granted.has(key) && chosen.has(key);
+      const isChosen = chosen.has(key) && !isGrant;
+      // Shown selected but locked: granted outright by this advancement, or taken at an earlier one.
+      const owned = isGrant || (!isChosen && selected.has(key));
       const parts = key.split(":");
       const groupKey = parts.length > 2 ? parts.slice(0, -1).join(":") : parts[0];
       return {
@@ -649,6 +912,9 @@ export class LevelUpDriver {
   async toggleTrait(record, key) {
     const adv = record.advancement;
     const { chosen, full } = this.traitState(record);
+    // An automatic grant sits in `chosen` too (the ingest seed applies it), but it is not the
+    // player's to give back — removing it would free a slot the rules never opened.
+    if ( adv.configuration?.grants?.has?.(key) ) return;
     if ( chosen.has(key) ) await adv.reverse(record.level, { key });
     else if ( !full ) await adv.apply(record.level, { key });
     this.clone.reset();
@@ -754,7 +1020,11 @@ export class LevelUpDriver {
     for ( const [key, data] of Object.entries(CONFIG.DND5E.abilities) ) {
       if ( !adv.canImprove(key) ) continue;
       const abil = this.clone.system.abilities[key];
-      const sourceValue = this.clone.system._source.abilities[key]?.value ?? abil.value;
+      // Discount the increases nobody decides (a level-20 capstone's +4). They sit on the clone so
+      // Review shows the true score, but they are not this screen's to spend against — counting
+      // them would price the player out of points the rules give them. See {@link deferredAsi}.
+      const deferred = this.#deferredAsiBonus(key);
+      const sourceValue = (this.clone.system._source.abilities[key]?.value ?? abil.value) - deferred;
       const assignment = assignments[key] ?? 0;
       const fixed = fixedFor(key);
       const locked = isLocked(key);
@@ -775,6 +1045,11 @@ export class LevelUpDriver {
     }
 
     return { type: value.type ?? null, total, cap, assigned, available, abilities, feat: this.#asiFeat(adv), allowFeat: adv.allowFeat };
+  }
+
+  /** How much of an ability's current score comes from a {@link deferredAsi} rather than a choice. */
+  #deferredAsiBonus(key) {
+    return this.deferredAsi.reduce((n, r) => n + (r.advancement.value?.assignments?.[key] ?? 0), 0);
   }
 
   /** The chosen feat for an ASI decision, or null. */
@@ -834,9 +1109,11 @@ export class LevelUpDriver {
     assignments[key] = (assignments[key] ?? 0) + dir;
     if ( assignments[key] <= 0 ) delete assignments[key];
 
-    await adv.reverse(record.level);
-    await adv.apply(record.level, { type: "asi", assignments });
-    this.clone.reset();
+    return this.#withOwnHeadroom(async () => {
+      await adv.reverse(record.level);
+      await adv.apply(record.level, { type: "asi", assignments });
+      this.clone.reset();
+    });
   }
 
   /** The clone's chosen feat item for an ASI decision, or null. */
@@ -848,10 +1125,12 @@ export class LevelUpDriver {
   /** Switch an ASI decision back to the ability-improvement mode (clearing any chosen feat). */
   async useAsiAbilities(record) {
     const adv = record.advancement;
-    if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
-    if ( adv.value.type ) await adv.reverse(record.level);
-    await adv.apply(record.level, { type: "asi" });
-    this.clone.reset();
+    return this.#withOwnHeadroom(async () => {
+      if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
+      if ( adv.value.type ) await adv.reverse(record.level);
+      await adv.apply(record.level, { type: "asi" });
+      this.clone.reset();
+    });
   }
 
   /**
@@ -873,28 +1152,54 @@ export class LevelUpDriver {
 
     const uuid = await browser.selectOne({ filters, tab: "feats" }).catch(() => null);
     if ( !uuid ) return false;
+    return this.applyAsiFeat(record, uuid);
+  }
+
+  /**
+   * Take a specific feat for an ASI decision: grant it and fold in the feat's *own* advancements —
+   * so a half-feat's ability bonus actually applies, granted features and proficiencies land, and
+   * any sub-choice surfaces as a further decision.
+   *
+   * Split out from {@link chooseAsiFeat} so the decision can also be answered without a UI, which
+   * is what {@link autoResolve} needs to honour a `{ feat }` answer — the interactive path is just
+   * this preceded by the compendium browser.
+   * @param {object} record        One of {@link asiSteps}.
+   * @param {string} uuid          Source UUID of the feat to take.
+   * @param {object} [options]
+   * @param {boolean} [options.showMessage=true]   Warn the player when prerequisites fail. Off for
+   *   a headless resolve, where there is no one at the keyboard to read it.
+   * @returns {Promise<boolean>}   Whether the feat was taken.
+   */
+  async applyAsiFeat(record, uuid, { showMessage = true } = {}) {
     const item = await fromUuid(uuid).catch(() => null);
-    if ( !item ) return false;
-    if ( item.system.validatePrerequisites?.(this.clone, { showMessage: true }) !== true ) return false;
-
-    // Drop any previous feat's synthesised features, then the ASI value itself, before re-granting.
-    if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
-    if ( record.advancement.value.type ) await record.advancement.reverse(record.level);
-    await record.advancement.apply(record.level, { type: "feat", uuid });
-    this.clone.reset();
-
-    // Run the feat's own advancements (fixed ASI bonus, granted features, sub-choices).
-    const featItem = this.#asiFeatItem(record.advancement);
-    if ( featItem ) {
-      record.featSynth = await this.#ingestItemFeatures(featItem, 0);
-      // The feat's own advancements come off level-0 flows; surface any choices they reveal on the
-      // same screen as the granting ASI rather than a phantom "level 0" screen.
-      for ( const r of [...record.featSynth.choices, ...record.featSynth.asi, ...record.featSynth.traits, ...record.featSynth.grants] ) {
-        r.screenLevel = record.level;
-      }
+    if ( !item ) { log("ASI feat not found", uuid); return false; }
+    if ( item.system.validatePrerequisites?.(this.clone, { showMessage }) !== true ) {
+      log("ASI feat rejected by its own prerequisites", uuid);
+      return false;
     }
-    this.clone.reset();
-    return true;
+
+    // Suspended for the same reason an allocation is: the feat's own increase is deferred, and
+    // re-applying at the end puts every undecided increase back in level order.
+    return this.#withOwnHeadroom(async () => {
+      // Drop any previous feat's synthesised features, then the ASI value itself, before re-granting.
+      if ( record.featSynth ) { await this.#reverseSynth(record.featSynth); record.featSynth = null; }
+      if ( record.advancement.value.type ) await record.advancement.reverse(record.level);
+      await record.advancement.apply(record.level, { type: "feat", uuid });
+      this.clone.reset();
+
+      // Run the feat's own advancements (fixed ASI bonus, granted features, sub-choices).
+      const featItem = this.#asiFeatItem(record.advancement);
+      if ( featItem ) {
+        record.featSynth = await this.#ingestItemFeatures(featItem, 0);
+        // The feat's own advancements come off level-0 flows; surface any choices they reveal on the
+        // same screen as the granting ASI rather than a phantom "level 0" screen.
+        for ( const r of [...record.featSynth.choices, ...record.featSynth.asi, ...record.featSynth.traits, ...record.featSynth.grants] ) {
+          r.screenLevel = record.level;
+        }
+      }
+      this.clone.reset();
+      return true;
+    });
   }
 
   /* -------------------------------------------- */
@@ -919,6 +1224,10 @@ export class LevelUpDriver {
     const beforeGrants = this.grantSteps.length;
     const flows = [];
     await this.#ingestItemTree(item, maxLevel, flows, new Set([item.id]));
+    // A feature synthesised after the main walk — a subclass's, or a chosen feat's — can carry an
+    // increase nobody decides. Put the deferred set back so it lands here too, not only at the end
+    // of {@link prepare}; the re-apply is idempotent, so doing it twice costs nothing.
+    await this.#applyDeferredAsi();
     return {
       flows,
       choices: this.choiceSteps.slice(beforeChoices),
@@ -974,6 +1283,13 @@ export class LevelUpDriver {
     }
     if ( synth.choices?.length ) this.choiceSteps = this.choiceSteps.filter(c => !synth.choices.includes(c));
     if ( synth.asi?.length ) this.asiSteps = this.asiSteps.filter(a => !synth.asi.includes(a));
+    // A half-feat's fixed increase was deferred rather than applied, so dropping the feat has to
+    // drop its record too — otherwise the next re-apply would reach for an advancement that has
+    // been reversed off an item no longer on the clone.
+    if ( synth.flows?.length ) {
+      const gone = new Set(synth.flows.map(f => f.advancement));
+      this.deferredAsi = this.deferredAsi.filter(r => !gone.has(r.advancement));
+    }
     if ( synth.traits?.length ) this.traitSteps = this.traitSteps.filter(tr => !synth.traits.includes(tr));
     if ( synth.grants?.length ) this.grantSteps = this.grantSteps.filter(g => !synth.grants.includes(g));
     this.clone.reset();
@@ -1119,8 +1435,41 @@ export class LevelUpDriver {
    *    actually changed is written.
    *  - The four writes suppress their per-operation renders (each would re-render the open
    *    character sheet behind the wizard); the sheet is re-rendered once at the end instead.
+   *
+   * The wholesale `clone.toObject()` actor write looks like it should race the hooks this very
+   * `Promise.all` triggers — `SubclassData._onCreate` sets `attributes.spellcasting` from a
+   * deliberately un-awaited `actor.update` — and an earlier note here proposed writing only changed
+   * keys to avoid it. Measured, it does not: `Promise.all` starts the actor update first, so the
+   * hook's write always lands after and survives. The equivalence harness reported otherwise only
+   * because it read the actor before that un-awaited write arrived. Left as the faithful port.
    * @returns {Promise<Actor5e>}  The updated real actor.
    */
+  /**
+   * Whether an item still carries a rider list the system would have cleaned away.
+   *
+   * `flags.dnd5e.riders` records which of an item's activities and effects ride along with an
+   * enchantment. The system maintains it in `preUpdateActivities` (`data/item/templates/activities.mjs`),
+   * which recomputes it on every item update and deletes whatever ends up empty — the whole flag, or
+   * an individual empty list. Compendium packs ship items whose flag is already empty, and the
+   * *native* manager clears them for free because it re-writes every item the actor owns; skipping
+   * unchanged items (see {@link commit}) means ours never got the chance, so a creator-built
+   * character kept stale bookkeeping a natively-built one shed.
+   *
+   * Testing for it here rather than stripping the flag ourselves keeps the rule where it belongs:
+   * the item goes through a normal update, and the system's own hook decides what to remove. It
+   * costs one extra write per affected item, once — the clone reflects the actor next time round.
+   * @param {object} data   Item source data from the clone.
+   * @returns {boolean}
+   */
+  #hasStaleRiders(data) {
+    const riders = data?.flags?.dnd5e?.riders;
+    if ( riders === undefined ) return false;
+    if ( Array.isArray(riders) ) return !riders.length;
+    if ( !riders || (typeof riders !== "object") ) return false;
+    const lists = Object.values(riders);
+    return !lists.length || lists.some(v => Array.isArray(v) ? !v.length : !v);
+  }
+
   async commit() {
     const updates = this.clone.toObject();
     const items = updates.items;
@@ -1130,7 +1479,8 @@ export class LevelUpDriver {
       const existing = this.actor.items.get(item._id);
       if ( !existing ) obj.toCreate.push(item);
       else {
-        if ( !foundry.utils.equals(existing.toObject(), item) ) obj.toUpdate.push(item);
+        const changed = !foundry.utils.equals(existing.toObject(), item);
+        if ( changed || this.#hasStaleRiders(item) ) obj.toUpdate.push(item);
         obj.toDelete.findSplice(id => id === item._id);
       }
       return obj;
@@ -1170,12 +1520,32 @@ export class LevelUpDriver {
    * Types with no creation-time decision (`subclass` — subclasses come later, still interactive) or
    * that the provider defers (spell-type `ItemChoice`, owned by the feat-spells step and applied
    * after commit) are marked resolved and skipped.
+   *
+   * The provider answers one decision per method, each returning null to leave it alone:
+   * `hp(rec)` → `"avg" | "max" | number`; `size(rec)` → a size key; `grantAbility(rec)` → an
+   * ability key; `subclass(rec)` → a subclass uuid; `traitKeys(rec)` → the complete key set
+   * (grants ∪ picks); `defer(rec)`/`choiceUuids(rec)` for feature choices; and `asi(rec)` → either
+   * a per-ability allocation (`{int: 2}`) or `{ feat: uuid }` to take a feat instead — the same
+   * two modes the interactive ASI screen offers.
    * @param {import("../build/creation-advancement.mjs").CreationChoiceProvider} provider
    */
   async autoResolve(provider) {
     const done = new Set();
-    const drain = async (steps, resolve) => {
-      for ( const rec of [...steps] ) {
+    const drain = async (steps, resolve, { byLevel = false } = {}) => {
+      // Insertion order is the walk order for everything `prepare()` found, but a decision a
+      // subclass or feat *synthesised* is appended after the whole main walk — so a level-3 feature's
+      // choice lands behind a level-6 one. That only matters where one decision depends on another
+      // having already applied, which among these is traits: an expertise upgrade writes nothing
+      // unless the character is already proficient (`TraitAdvancement#apply` skips it when the
+      // current value is 0). A Rogue Phantom picking Expertise in a skill that the subclass's own
+      // level-3 feature grants would silently keep plain proficiency.
+      // A decision array is absent rather than empty on a driver assembled from partial state (the
+      // unit tests build one per decision type), so an added array must not break the others.
+      const list = steps ?? [];
+      const order = byLevel
+        ? [...list].sort((a, b) => ((a.screenLevel ?? a.level ?? 0) - (b.screenLevel ?? b.level ?? 0)))
+        : [...list];
+      for ( const rec of order ) {
         if ( done.has(rec) ) continue;
         done.add(rec);
         try { await resolve(rec); } catch ( err ) { log("headless resolve failed", err); }
@@ -1191,13 +1561,71 @@ export class LevelUpDriver {
       await drain(this.sizeSteps,     rec => { const k = provider.size(rec); return k ? this.applySize(rec, k) : null; });
       await drain(this.grantSteps,    rec => { const a = provider.grantAbility(rec); return a ? this.applyGrantAbility(rec, a) : null; });
       await drain(this.subclassSteps, rec => { const u = provider.subclass(rec); return u ? this.selectSubclass(rec, u) : null; });
-      await drain(this.asiSteps,      rec => { const a = provider.asi(rec); return a ? this.setAsi(rec, a) : null; });
-      await drain(this.traitSteps,    rec => { const keys = provider.traitKeys(rec); return keys.length ? this.applyTraitKeys(rec, keys) : null; });
+      // An optional grant arrives seeded (every item taken). A provider that says nothing leaves it
+      // that way — matching the native manager — so only an explicit answer changes anything, and
+      // `null` and `[]` have to stay distinguishable: the first means "no opinion", the second
+      // means "decline all of them".
+      await drain(this.optionalGrantSteps, rec => {
+        const uuids = provider.optionalGrant?.(rec);
+        return Array.isArray(uuids) ? this.setOptionalGrant(rec, uuids) : null;
+      });
+      // An ASI decision is answered either with a per-ability allocation or with a feat to take
+      // in its place — the two modes the interactive screen offers. A `{ feat }` answer routes to
+      // the same grant-and-synthesise path the UI uses, minus the compendium browser.
+      await drain(this.asiSteps,      rec => {
+        const a = provider.asi(rec);
+        if ( !a ) return null;
+        if ( typeof a.feat === "string" ) return this.applyAsiFeat(rec, a.feat, { showMessage: false });
+        return this.setAsi(rec, a);
+      });
+      await drain(this.traitSteps,
+        rec => { const keys = provider.traitKeys(rec); return keys.length ? this.applyTraitKeys(rec, keys) : null; },
+        { byLevel: true });
       await drain(this.choiceSteps,   async rec => {
         if ( provider.defer(rec) ) return;
         for ( const uuid of provider.choiceUuids(rec) ) await this.toggleChoice(rec, uuid);
       });
     }
+  }
+
+  /**
+   * The current state of an optional-grant decision: every item it offers, and whether each is
+   * currently taken. Read off `value.added` rather than remembered, so it stays true after a
+   * reverse/re-apply.
+   * @param {object} record   One of {@link optionalGrantSteps}.
+   */
+  optionalGrantState(record) {
+    const adv = record.advancement;
+    // Both sides normalised. This content stores its uuids in the pre-v10 shape while `value.added`
+    // records whatever `apply` was handed — so comparing them raw reported a taken item as untaken,
+    // which showed a replacement grant's *base* as unselected and made clicking it do nothing.
+    const taken = new Set(Object.values(adv.value?.added ?? {}).map(withItemSegment));
+    return {
+      options: Array.from(adv.configuration?.items ?? []).map(i => {
+        const uuid = (typeof i === "string") ? i : i?.uuid;
+        return uuid ? { uuid: withItemSegment(uuid), selected: taken.has(withItemSegment(uuid)) } : null;
+      }).filter(Boolean)
+    };
+  }
+
+  /**
+   * Set exactly which of an optional grant's items the character takes.
+   *
+   * Reverse-then-apply rather than an incremental toggle: `ItemGrantAdvancement#apply` only ever
+   * *adds* (it skips a uuid already in `value.added`), so there is no subtractive call to make and
+   * un-ticking a box has to go through a full reverse. Reversing deletes the granted items, which is
+   * exactly what declining one should do.
+   * @param {object} record     One of {@link optionalGrantSteps}.
+   * @param {string[]} uuids    The uuids to end up holding; anything else offered is dropped.
+   */
+  async setOptionalGrant(record, uuids) {
+    const adv = record.advancement;
+    const wanted = new Set(uuids);
+    const current = new Set(Object.values(adv.value?.added ?? {}));
+    if ( (wanted.size === current.size) && [...wanted].every(u => current.has(u)) ) return;
+    await adv.reverse(record.level);
+    if ( wanted.size ) await adv.apply(record.level, { selected: [...wanted] });
+    this.clone.reset();
   }
 
   /**
@@ -1219,9 +1647,11 @@ export class LevelUpDriver {
    */
   async setAsi(record, assignments) {
     const adv = record.advancement;
-    if ( adv.value.type ) await adv.reverse(record.level);
-    await adv.apply(record.level, { type: "asi", assignments });
-    this.clone.reset();
+    return this.#withOwnHeadroom(async () => {
+      if ( adv.value.type ) await adv.reverse(record.level);
+      await adv.apply(record.level, { type: "asi", assignments });
+      this.clone.reset();
+    });
   }
 
   /**

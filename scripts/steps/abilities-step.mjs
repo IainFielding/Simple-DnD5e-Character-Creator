@@ -1,4 +1,4 @@
-import { ABILITIES, MODULE_ID, abilityRollFormula, formatMod, pointBuyBudget, t } from "../config.mjs";
+import { ABILITIES, abilityRollFormula, formatMod, log, pointBuyBudget, t } from "../config.mjs";
 
 // D&D 5e offers three ways to set ability scores; this panel supports all three:
 //   point-buy       – spend a budget of points to raise scores from 8, each step costing more
@@ -232,7 +232,7 @@ async function showRolledDice(rolls) {
   try {
     await Promise.all(rolls.map(roll => game.dice3d.showForRoll(roll, game.user, true)));
   } catch ( err ) {
-    console.warn(`${MODULE_ID} | dice animation failed`, err);
+    log("dice animation failed", err);
   }
 }
 

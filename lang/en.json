@@ -143,6 +143,11 @@
           "label": "Spell",
           "prompt": "Choose the spellcasting ability for this spell."
         },
+        "optionalGrant": {
+          "label": "Optional Features",
+          "prompt": "Your game includes optional class features. Take the ones you want — you already have them all, so untick any you would rather not.",
+          "promptReplace": "This feature can be replaced by an alternative. Pick the version you want to use."
+        },
         "review": {
           "label": "Review",
           "hp": "+{gain} (new maximum {max})",
@@ -285,13 +290,13 @@
         "placeholder": {
           "alignment": "e.g. Chaotic Good",
           "faith": "Deity or philosophy",
-          "gender": "",
-          "eyes": "",
-          "hair": "",
-          "skin": "",
-          "height": "",
-          "weight": "",
-          "age": "",
+          "gender": "How do they identify?",
+          "eyes": "e.g. Hazel",
+          "hair": "e.g. Auburn, close-cropped",
+          "skin": "e.g. Deep bronze",
+          "height": "e.g. 5 ft 10 in",
+          "weight": "e.g. 165 lb",
+          "age": "e.g. 27",
           "trait": "How do they carry themselves?",
           "ideals": "What do they believe in?",
           "bonds": "Who or what matters to them?",
@@ -310,6 +315,7 @@
         "selectedNone": "None chosen yet — pick from the list below.",
         "picked": "{count} spells",
         "noCaster": "This class has no spellcasting at level 1 — nothing to choose here.",
+        "notYet": "This class learns its first spells at 2nd level — nothing to choose yet. You'll pick them in the level-up wizard.",
         "empty": "No spells found for this class in the enabled compendiums.",
         "selectHint": "Pick a spell from the list to read it and add it to your character.",
         "concentration": "Concentration",
@@ -425,11 +431,13 @@
         "trait": "Pick from the options below.",
         "size": "Your species can be more than one size — pick the token size your character uses.",
         "spellAbility": "Pick which ability score you use to cast this spell.",
+        "subclass": "Your class chooses its subclass at 1st level — pick the one your character follows.",
         "itemChoice": "Pick from the options below to add to your character."
       }
     },
     "advancement": {
       "size": "Size",
+      "subclass": "Subclass",
       "expertise": "Expertise",
       "chooseItems": "Choose a Feature",
       "spellAbility": "Spellcasting Ability",
@@ -524,6 +532,10 @@
         "name": "Starting-Gold Store",
         "label": "Configure Store",
         "hint": "Curate the store's shelves: drag items in from any compendium, set per-item prices, and hide or remove stock."
+      },
+      "debugLogging": {
+        "name": "Debug logging",
+        "hint": "Print this module's diagnostics to your browser console. Off by default; turn it on if you've been asked for details about a problem. Affects only you."
       }
     },
     "storeConfig": {

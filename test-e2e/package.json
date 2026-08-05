@@ -1,0 +1,18 @@
+{
+  "name": "sogrom-creator-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Local end-to-end harness: drives a real Foundry install to compare characters built by the dnd5e native advancement flow against the same characters built by the Simple Character Creator. Not tracked in git, not shipped.",
+  "scripts": {
+    "link-module": "node scripts/link-module.mjs",
+    "provision": "node provision.mjs",
+    "provision:base": "node provision.mjs playwright",
+    "provision:ember": "node provision.mjs playwright-ember",
+    "test": "node run.mjs playwright",
+    "test:ember": "node run.mjs playwright-ember",
+    "shell": "node shell.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

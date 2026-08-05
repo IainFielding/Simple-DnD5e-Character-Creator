@@ -11,3 +11,20 @@ Thumbs.db
 
 # Local governance / architecture docs — not part of the shipped module.
 governance/
+
+# End-to-end harness. The *source* is tracked: it drives a real Foundry install against real
+# content modules and is where a good deal of this module's advancement behaviour is verified.
+# It is never shipped — the release archive in `.github/workflows/main.yml` names its contents
+# explicitly rather than packaging the repo — so being tracked and being released are separate
+# questions. Three things stay out:
+#
+#   config.mjs  absolute paths to one machine's Foundry install and user data
+#   run output  the diffs and the generated report quote item descriptions verbatim, which for
+#               the content modules under test means text from paid packs; this repo is public
+#   bulk        each results file is ~2 MB
+#
+# `config.example.mjs` is tracked in its place; copy it to `config.mjs` and edit the paths.
+test-e2e/config.mjs
+test-e2e/*.log
+test-e2e/*.jsonl
+test-e2e/*.html

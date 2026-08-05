@@ -37,9 +37,17 @@ export const spellsStep = {
     return remain ? t("step.spells.hint", { count: remain }) : null;
   },
 
-  // The Spells step only applies to spellcasters; the rail greys it out otherwise.
+  // The Spells step only applies to spellcasters with something to choose; the rail greys it out
+  // otherwise.
+  //
+  // "Is a spellcaster" is not the same question as "has spells at 1st level". A half-caster declares
+  // spellcasting progression on the class item but learns nothing until 2nd — the 2014 Ranger and
+  // Paladin both do — so asking `isSpellcaster` alone put an empty spell list in front of every
+  // level-1 Ranger. The counts are the honest test.
   applicable(state) {
-    return state.spellInfo ? state.spellInfo.isSpellcaster : true;
+    if ( !state.spellInfo ) return true;
+    if ( !state.spellInfo.isSpellcaster ) return false;
+    return ((state.spellInfo.maxCantrips ?? 0) + (state.spellInfo.maxSpells ?? 0)) > 0;
   },
 
   /** Rail summary: how many spells are picked (cantrips + level-1). */
@@ -82,8 +90,17 @@ export const spellsStep = {
       maxCantrips: data.maxCantrips ?? 0,
       maxSpells: data.maxSpells ?? 0
     };
-    if ( !data.isSpellcaster ) {
-      return { isSpellcaster: false, hint: t("step.spells.noCaster") };
+    // "Not a caster" and "a caster with nothing to learn yet" both mean there is nothing to show, so
+    // both take the short message rather than an empty list. The second is the half-casters: a 2014
+    // Ranger or Paladin declares spellcasting progression on the class item but learns its first
+    // spell at 2nd level, and asking `isSpellcaster` alone dropped them into the normal list with no
+    // rows in it and no explanation.
+    const nothingToLearn = ((data.maxCantrips ?? 0) + (data.maxSpells ?? 0)) === 0;
+    if ( !data.isSpellcaster || nothingToLearn ) {
+      return {
+        isSpellcaster: false,
+        hint: t(data.isSpellcaster ? "step.spells.notYet" : "step.spells.noCaster")
+      };
     }
 
     const { cantrips, level1, maxCantrips, maxSpells } = data;
@@ -123,7 +140,8 @@ export const spellsStep = {
       focused = {
         ...focus,
         active: picked.has(focus.uuid),
-        description: await spells.description(focus.uuid)
+        description: await spells.description(focus.uuid),
+        source: await spells.sourceBook(focus.uuid)
       };
     }
 

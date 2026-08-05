@@ -16,7 +16,10 @@ export function recordLevel(record) {
  * @returns {object[]}
  */
 export function atLevel(records, level) {
-  return records.filter(r => recordLevel(r) === level);
+  // Tolerates an absent array: every level-screen component is asked about every level, and a state
+  // assembled from partial data (the block tests build one per decision type) simply has no array
+  // for the kinds it does not exercise. Adding a component should not break the others.
+  return (records ?? []).filter(r => recordLevel(r) === level);
 }
 
 /**
@@ -303,6 +306,11 @@ export class LevelUpState {
     return this.driver?.subclassSteps ?? [];
   }
 
+  /** The optional-class-feature decisions (Tasha's optional and replacement grants). */
+  get optionalGrantSteps() {
+    return this.driver?.optionalGrantSteps ?? [];
+  }
+
   /** The spell-grant ability decisions (a species lineage spell at a class level). */
   get grantSteps() {
     return this.driver?.grantSteps ?? [];
@@ -352,7 +360,8 @@ export class LevelUpState {
    */
   gainedLevels() {
     const levels = new Set();
-    for ( const arr of [this.hpSteps, this.asiSteps, this.subclassSteps, this.choiceSteps, this.traitSteps, this.grantSteps] ) {
+    for ( const arr of [this.hpSteps, this.asiSteps, this.subclassSteps, this.choiceSteps, this.traitSteps,
+      this.grantSteps, this.optionalGrantSteps] ) {
       for ( const record of arr ) levels.add(recordLevel(record));
     }
     return [...levels].sort((a, b) => a - b);

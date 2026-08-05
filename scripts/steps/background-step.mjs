@@ -77,7 +77,10 @@ export const backgroundStep = {
     // Tag each card with the abilities its increase can raise (space-joined, for the
     // client-side filter's `data-abilities`), drawn from the same cached ASI config the
     // aside panel uses. The ASI records are already warmed, so these resolve instantly.
-    const list = await Promise.all(source.backgrounds().map(async c => {
+    // Scoped to the chosen class's edition: class is the first step, so a 2014 class is already
+    // known here and must not be offered the 2024 backgrounds. See `SourceIndex#matchesRules`.
+    const cards = source.backgrounds({ rules: source.rulesOf(state.classUuid) });
+    const list = await Promise.all(cards.map(async c => {
       const asi = await source.abilityScoreIncrease(c.uuid);
       return { ...c, selected: c.uuid === selected, abilities: increasedAbilities(asi).join(" ") };
     }));
