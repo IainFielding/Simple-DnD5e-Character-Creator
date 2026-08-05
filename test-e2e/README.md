@@ -1036,12 +1036,37 @@ node run.mjs playwright-clean --probe-native "sweep:artificer/alchemist/Tasha's 
 ```
 
 **The native build drops Cast-activity cached spells at a later level.** Both divergences the first
-incremental shard found are this one cause:
+incremental shard found are this one cause, and the Tasha's sweep turned up three more subclasses
+with the same signature:
 
-| Subclass | Spell | Level | Upstream issue |
-| --- | --- | --- | --- |
-| Ranger Winter Walker | Hunter's Mark (Favored Enemy) | 5 | [premium-content#1704](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1704) |
-| Artificer Alchemist | Tasha's Bubbling Cauldron | 17 | [premium-content#1706](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1706) |
+| Subclass | Spell | Level | Copies | Upstream issue |
+| --- | --- | --- | --- | --- |
+| Ranger Winter Walker | Hunter's Mark (Favored Enemy) | 5 | 2 → 1 | [premium-content#1704](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1704) |
+| Artificer Alchemist | Tasha's Bubbling Cauldron | 17 | 1 → 0 | [premium-content#1706](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1706) |
+| **Warlock Undead Patron** (Ravenloft) | Mage Armor | 5 | **1 → 0** | [premium-content#1709](https://github.com/foundryvtt/foundryvtt-premium-content/issues/1709) |
+| Ranger Hollow Warden (Ravenloft) | Hunter's Mark | 5 | 2 → 1 | clean-room confirmed, not raised — same spell and level as #1704 |
+| Artificer Reanimator (Ravenloft) | Raise Dead | 17 | — | signature matches; **not probed** |
+| Sorcerer Shadow Sorcery (Ravenloft) | Summon Beast (×2) | 7 | — | **not covered by the 6.0 fix — see below** |
+
+The rows that reach **zero** copies are the ones that bite hardest: the character loses the cast
+button outright rather than losing a spare. Undead Patron and Alchemist are both in that group.
+
+**All five of the above are fixed in dnd5e 6.0**, confirmed by the maintainers. Nothing to do here —
+but **re-run the sweep after upgrading** rather than assuming, both to confirm they clear and because
+a change in this area could move other things. `module.json` still declares dnd5e 5.3.3 as its
+verified version, so that needs revisiting for a 6.0 world too.
+
+**Shadow Sorcery is the one to look at.** The maintainers' list covers the other five and not this,
+which is a reason to stop treating it as the same cause. Two things make it suspect on its own terms:
+its rows are *all* creator-only (no matching native-only row, unlike the genuine cached-spell drops),
+and this exact subclass has previous — it is the case that exposed the positional duplicate-pairing
+bug in `normalize.mjs`, fixed there with a content digest. So this may be that resurfacing, in the
+harness rather than in dnd5e. Probe it in the clean room before raising anything:
+
+```bash
+node run.mjs playwright-clean --probe-native "sweep:sorcerer/shadow-sorcery/Summon Beast" --level 8
+node run.mjs --compare-item "sweep:sorcerer/shadow-sorcery/Summon Beast" --level 7 --incremental
+```
 
 The shape of the diff reads as "the creator has a spare copy", and that reading is wrong. Count the
 copies on each side either side of the boundary and the direction reverses:
