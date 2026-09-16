@@ -195,6 +195,24 @@ export class CreatorState {
   storeBudgetCp = 0;
 
   /**
+   * The Magic Items step (a character starting above level 1): the d10 behind the bonus gold, rolled
+   * once and kept so a revisit or a change of level re-prices the gold instead of re-rolling it, and
+   * the free picks as uuid -> `{qty, name, img, rarity}`. The assembler grants both on Create.
+   */
+  magicShop = { d10: null, picks: {} };
+
+  /** Transient: set once the player has opened the Magic Items step. Persisted with the draft. */
+  magicShopVisited = false;
+
+  /** Transient Magic Items UI filters ("" = all). Not persisted. */
+  magicShopCategory = "";
+  magicShopSubtype = "";
+  magicShopRarity = "";
+
+  /** Transient Magic Items UI: the shelf sections the player has expanded. Collapsed by default. Not persisted. */
+  magicShopOpenGroups = [];
+
+  /**
    * A class spell list the player named themselves, when the caster's own could not be worked out
    * — see {@link module:data/spell-source.registeredClassLists}. Empty in every ordinary build:
    * only a caster whose list resolves to nothing ever asks.

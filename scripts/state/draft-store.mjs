@@ -81,10 +81,13 @@ const DRAFT_FIELDS = {
   featSpells: "object",
   equipment: "object",
   store: "object",
+  // The Magic Items step: the locked d10 and the free picks.
+  magicShop: "object",
   // The two optional steps' visited flags, so a restored draft doesn't ask the player to walk back
   // through Equipment and the Store to re-earn ticks they already had.
   equipmentVisited: "value",
   storeVisited: "value",
+  magicShopVisited: "value",
   // Whether they asked for a sheet PDF once the build finishes.
   exportPdf: "value"
 };

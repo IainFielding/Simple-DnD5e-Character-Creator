@@ -58,6 +58,8 @@ function filledState() {
   state.selectedCantrips = [{ uuid: "Compendium.dnd5e.spells.Item.firebolt", name: "Fire Bolt" }];
   state.advChoices.class = { "skills-0": ["arcana", "history"] };
   state.store.purchases = { "Compendium.dnd5e.items.Item.rope": { qty: 1, cp: 100 } };
+  state.magicShop = { d10: 7, picks: { "Compendium.dnd5e.items.Item.wand": { qty: 1, name: "Wand", img: "", rarity: "uncommon" } } };
+  state.magicShopVisited = true;
   state.exportPdf = true;
   return state;
 }
@@ -91,7 +93,7 @@ describe("what a draft carries", () => {
     state.spellInfo = { isSpellcaster: true };
     const snap = draftSnapshot(state);
     for ( const field of ["actor", "pickerFor", "spellSearch", "focusedSpellUuid", "choiceCache",
-      "spellInfo", "featSpellCache", "originAsi", "storeBudgetCp"] ) {
+      "spellInfo", "featSpellCache", "originAsi", "storeBudgetCp", "magicShopCategory", "magicShopRarity"] ) {
       expect(snap, field).not.toHaveProperty(field);
     }
   });
@@ -114,6 +116,10 @@ describe("what a draft carries", () => {
     expect(restored.manualScores.str).toBe(14);
     expect(restored.advChoices.class["skills-0"]).toEqual(["arcana", "history"]);
     expect(restored.exportPdf).toBe(true);
+    // The magic item roll is locked: a restored draft keeps the same d10, not a fresh one.
+    expect(restored.magicShop.d10).toBe(7);
+    expect(restored.magicShop.picks).toHaveProperty("Compendium.dnd5e.items.Item.wand");
+    expect(restored.magicShopVisited).toBe(true);
   });
 
   it("leaves fields the draft never carried at their defaults", async () => {

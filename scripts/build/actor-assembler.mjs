@@ -2,6 +2,7 @@ import { ABILITIES, MODULE_ID, log } from "../config.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { collectEquipment } from "../data/equipment-source.mjs";
 import { applyCartToCurrency, purchasedItems } from "../data/store-source.mjs";
+import { grantMagicItems } from "../data/magic-shop-source.mjs";
 import { spellMethodFor } from "../data/spell-source.mjs";
 import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
@@ -118,6 +119,10 @@ export async function assembleActor(state, source, equipment) {
 
   // Grant the starting equipment and currency chosen on the Choices step.
   if ( equipment ) await grantEquipment(actor, state, source, equipment);
+
+  // The Magic Items step: free magic items and bonus gold for a character starting above level 1.
+  // Its own call, because the equipment grant returns early when no equipment is loaded.
+  await grantMagicItems(actor, state);
 
   return actor;
 }

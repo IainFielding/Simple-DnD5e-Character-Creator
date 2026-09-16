@@ -1,0 +1,140 @@
+{{!--
+  The GM's Magic Item Shop window: the master toggle, then two tabs — the wealth table (gold and item
+  counts per level band, defaulting to the DMG) and the inventory (magic items dropped in from
+  compendiums, grouped by item type in collapsible sections, names in their rarity colour). Data,
+  drops and saving live in scripts/app/magic-shop-config.mjs; the Save button is Foundry's generic
+  form footer. Inputs other than `enabled` carry no `name` — they are read back by data attribute.
+  Everything sits inside ONE root element, as an ApplicationV2 part requires.
+--}}
+<div class="sogrom-magic-config-fields">
+<div class="form-group">
+  <label>{{localize "sogrom-dnd5e-character-creator.settings.magicShopEnabled.name"}}</label>
+  <div class="form-fields">
+    <input type="checkbox" name="enabled" {{#if enabled}}checked{{/if}}>
+  </div>
+  <p class="hint">{{localize "sogrom-dnd5e-character-creator.settings.magicShopEnabled.hint"}}</p>
+</div>
+
+<nav class="sheet-tabs tabs sogrom-magic-tabs" role="tablist">
+  <a class="item {{#if isTable}}active{{/if}}" data-action="switchTab" data-tab="table" role="tab"
+     aria-selected="{{#if isTable}}true{{else}}false{{/if}}">
+    <i class="fa-solid fa-coins"></i> {{localize "sogrom-dnd5e-character-creator.magicShopConfig.tabTable"}}
+  </a>
+  <a class="item {{#if isInventory}}active{{/if}}" data-action="switchTab" data-tab="inventory" role="tab"
+     aria-selected="{{#if isInventory}}true{{else}}false{{/if}}">
+    <i class="fa-solid fa-wand-sparkles"></i> {{localize "sogrom-dnd5e-character-creator.magicShopConfig.tabInventory"}}
+    <span class="sogrom-magic-tab-count">{{count}}</span>
+  </a>
+</nav>
+
+{{!-- Wealth table --}}
+<section class="sogrom-magic-panel" data-tab-panel="table" {{#unless isTable}}hidden{{/unless}}>
+  <p class="hint">{{localize "sogrom-dnd5e-character-creator.magicShopConfig.tableHint"}}</p>
+  <div class="sogrom-magic-table-scroll">
+    <table class="sogrom-magic-table">
+      <thead>
+        <tr>
+          <th>{{localize "sogrom-dnd5e-character-creator.magicShopConfig.colLevels"}}</th>
+          <th>{{localize "sogrom-dnd5e-character-creator.magicShopConfig.colBaseGp"}}</th>
+          <th>{{localize "sogrom-dnd5e-character-creator.magicShopConfig.colPerD10"}}</th>
+          <th>{{localize "sogrom-dnd5e-character-creator.magicShopConfig.colRange"}}</th>
+          {{#each rarities}}<th class="cc-rarity-text rarity-{{key}}">{{label}}</th>{{/each}}
+        </tr>
+      </thead>
+      <tbody>
+        {{#each bands}}
+        <tr>
+          <th scope="row">{{label}}</th>
+          <td><input type="number" min="0" step="1" data-band="{{key}}" data-field="baseGp" value="{{baseGp}}"
+                     aria-label="{{label}} — {{localize 'sogrom-dnd5e-character-creator.magicShopConfig.colBaseGp'}}"></td>
+          <td><input type="number" min="0" step="1" data-band="{{key}}" data-field="perD10Gp" value="{{perD10Gp}}"
+                     aria-label="{{label}} — {{localize 'sogrom-dnd5e-character-creator.magicShopConfig.colPerD10'}}"></td>
+          <td class="sogrom-magic-range" data-band-range="{{key}}">{{range}}</td>
+          {{#each allowance}}
+          <td><input type="number" min="0" step="1" data-band="{{../key}}" data-field="allowance.{{key}}" value="{{value}}"
+                     aria-label="{{../label}} — {{key}}"></td>
+          {{/each}}
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  <div class="sogrom-magic-table-actions">
+    <button type="button" data-action="resetTable">
+      <i class="fa-solid fa-rotate-left"></i> {{localize "sogrom-dnd5e-character-creator.magicShopConfig.reset.label"}}
+    </button>
+  </div>
+</section>
+
+{{!-- Inventory --}}
+<section class="sogrom-magic-panel sogrom-magic-inventory" data-tab-panel="inventory" {{#unless isInventory}}hidden{{/unless}}>
+  <div class="sogrom-store-inv-toolbar">
+    <label class="sogrom-store-inv-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" data-inv-search autocomplete="off" value="{{search}}"
+             placeholder="{{localize 'sogrom-dnd5e-character-creator.storeConfig.searchPlaceholder'}}"
+             aria-label="{{localize 'sogrom-dnd5e-character-creator.storeConfig.searchPlaceholder'}}">
+    </label>
+    {{#if rarityOptions.length}}
+    <select data-inv-rarity aria-label="{{localize 'sogrom-dnd5e-character-creator.step.magicShop.filterRarityAria'}}">
+      <option value="">{{localize "sogrom-dnd5e-character-creator.step.magicShop.allRarities"}}</option>
+      {{#each rarityOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+    </select>
+    {{/if}}
+    <span class="sogrom-store-inv-count" data-inv-count>{{localize "sogrom-dnd5e-character-creator.magicShopConfig.countLabel" count=count}}</span>
+    {{#if hasRows}}
+    <button type="button" data-action="clearInventory">
+      <i class="fa-solid fa-trash-can"></i> {{localize "sogrom-dnd5e-character-creator.magicShopConfig.clear.label"}}
+    </button>
+    {{/if}}
+  </div>
+  {{#if hasRows}}<p class="sogrom-magic-counts" data-inv-counts>{{countsLine}}</p>{{/if}}
+
+  <div class="sogrom-store-inv-scroll">
+    {{#if hasRows}}
+    {{#each groups}}
+    <details class="sogrom-magic-group" data-inv-group>
+      <summary>
+        <i class="fa-solid {{icon}}" aria-hidden="true"></i>
+        {{label}} <span class="sogrom-magic-group-count" data-group-count>{{count}}</span>
+      </summary>
+      <ul class="sogrom-magic-rows">
+        {{#each cards}}
+        <li class="sogrom-magic-row {{#if broken}}is-broken{{/if}}" data-uuid="{{uuid}}" data-name="{{name}}" data-rarity="{{rarity}}">
+          <img src="{{img}}" alt="" loading="lazy">
+          <span class="sogrom-magic-row-main">
+            <span class="sogrom-magic-row-name cc-rarity-text rarity-{{rarity}}" data-tooltip="{{ccItemTooltip link}}">{{name}}</span>
+            {{#if broken}}<i class="fa-solid fa-link-slash"
+               data-tooltip="{{localize 'sogrom-dnd5e-character-creator.magicShopConfig.brokenHint'}}"></i>{{/if}}
+            <span class="sogrom-store-inv-source">{{rarityLabel}} · {{sourceLabel}}</span>
+          </span>
+          <label class="sogrom-magic-row-hide">
+            <input type="checkbox" data-entry-hidden {{#if hidden}}checked{{/if}}>
+            {{localize "sogrom-dnd5e-character-creator.storeConfig.colHidden"}}
+          </label>
+          <button type="button" class="sogrom-store-inv-remove" data-action="removeEntry"
+                  data-tooltip="{{localize 'sogrom-dnd5e-character-creator.magicShopConfig.removeEntry'}}"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.magicShopConfig.removeEntry'}}">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </li>
+        {{/each}}
+      </ul>
+    </details>
+    {{/each}}
+    {{else}}
+    <div class="sogrom-store-inv-empty">
+      <i class="fa-solid fa-wand-sparkles"></i>
+      <p>{{localize "sogrom-dnd5e-character-creator.magicShopConfig.dropHint"}}</p>
+    </div>
+    {{/if}}
+  </div>
+
+  {{#if hasRows}}
+  <p class="hint sogrom-store-inv-drophint">
+    <i class="fa-solid fa-hand-pointer"></i>
+    {{localize "sogrom-dnd5e-character-creator.magicShopConfig.dropHint"}}
+  </p>
+  {{/if}}
+</section>
+</div>

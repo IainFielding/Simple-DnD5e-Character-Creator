@@ -1,5 +1,7 @@
 import { ABILITIES, formatMod, storeConfig, t } from "../config.mjs";
-import { cartSummary } from "../data/store-source.mjs";
+import { cartSummary, formatCp } from "../data/store-source.mjs";
+import { rarityLabel } from "../data/magic-shop.mjs";
+import { magicShopConfig, magicShopGrant, pickList } from "../data/magic-shop-source.mjs";
 import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
 import { advancementArray, advancementTitle} from "../data/advancement-util.mjs";
 import { resolveChoices, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
@@ -123,6 +125,20 @@ async function reviewEquipment(state, source, equipment) {
 function reviewPurchases(state) {
   if ( !storeConfig().enabled ) return null;
   return cartSummary(state.store?.purchases);
+}
+
+/**
+ * The Magic Items step for the summary: the free picks, coloured by rarity, and the bonus gold.
+ * Null when the step doesn't apply to this build.
+ * @returns {{items: object[], gold: string|null, hasItems: boolean}|null}
+ */
+function reviewMagicItems(state) {
+  const { tier, goldCp } = magicShopGrant(state, magicShopConfig());
+  if ( !tier ) return null;
+  const items = pickList(state).map(p => ({ ...p, count: p.qty > 1 ? p.qty : null, rarityLabel: rarityLabel(p.rarity) }));
+  const gold = (Number.isInteger(state.magicShop?.d10) && goldCp > 0) ? formatCp(goldCp) : null;
+  if ( !items.length && !gold ) return null;
+  return { items, gold, hasItems: items.length > 0 };
 }
 
 /* -------------------------------------------- */
@@ -318,6 +334,7 @@ export const reviewStep = {
       details: reviewDetails(state),
       pdf: pdfExportContext(state.exportPdf, "pdfExport.noteCreation"),
       purchases: reviewPurchases(state),
+      magicItems: reviewMagicItems(state),
       sections: await reviewSections(state, source, equipBySource, spells, featSpellsBySource)
     };
   }

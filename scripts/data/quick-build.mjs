@@ -64,6 +64,9 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
   state.equipmentVisited = false;
   state.store.purchases = {};
   state.storeVisited = false;
+  // The magic picks are the player's to make; the d10 is kept, since a re-run must not re-roll gold.
+  state.magicShop.picks = {};
+  state.magicShopVisited = false;
 
   // Ability scores: the standard array laid out in the class's priority order.
   assignStandardArray(state, profile.abilities);

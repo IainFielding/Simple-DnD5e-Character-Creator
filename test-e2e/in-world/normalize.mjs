@@ -133,8 +133,34 @@ function buildIdMap(items) {
     seen.set(identity, n);
     map.set(item._id, n > 1 ? `${identity}#${n}` : identity);
   }
+
+  // An effect an advancement *minted* onto an item has no stable id either. dnd5e 6.0's ModifyItem
+  // clones its enchantment onto every matching item the actor holds with `_id: randomID()`, and
+  // records that id in its own `value.modified[].effect` — so a Necromancer's Undead Thralls reported
+  // two rows per modified spell, both sides holding the identical effect. Its source effect plus the
+  // item it landed on is what it *is*; pack-shipped effects keep their pack ids and are not touched.
+  // Only the source's last segment is kept: an enchantment carried on the granting feature itself has
+  // an actor-relative source (`Actor.<id>.Item.<id>.ActiveEffect.<id>`), and its final id — the
+  // pack's id for that effect — is the one part that is the same in both builds.
+  for ( const item of items ) {
+    for ( const effect of item.effects ?? [] ) {
+      const origin = effect.flags?.dnd5e?.advancementOrigin;
+      if ( !origin || !ID_RE.test(effect._id ?? "") ) continue;
+      const source = String(effect.flags.dnd5e.sourceId ?? origin).split(".").at(-1);
+      map.set(effect._id, `effect:${source}@${map.get(item._id)}`);
+    }
+  }
   return map;
 }
+
+/**
+ * A compendium uuid in the pre-v10 form, `Compendium.<scope>.<pack>.<id>`, without the document
+ * type. Tasha's Cauldron stores its 2014 class-feature references this way, and from 4.0.0 its
+ * replacement grant hands them to `ItemGrantAdvancement#apply` verbatim, so native records
+ * `Compendium.dnd5e.classfeatures.<id>` where the driver records `….classfeatures.Item.<id>`. Both
+ * resolve to the same document; only the spelling differs.
+ */
+const LEGACY_UUID_RE = /^Compendium\.([^.]+)\.([^.]+)\.([a-zA-Z0-9]{16})$/;
 
 /**
  * Rewrite item ids in a string.
@@ -147,6 +173,10 @@ function buildIdMap(items) {
  */
 function rewriteString(value, idMap) {
   if ( idMap.has(value) ) return idMap.get(value);
+  // Every legacy reference in an actor's item data points at an Item — advancement grants and
+  // `flags.dnd5e.sourceId` are the places it occurs — so the canonical spelling is unambiguous.
+  const legacy = LEGACY_UUID_RE.exec(value);
+  if ( legacy ) return `Compendium.${legacy[1]}.${legacy[2]}.Item.${legacy[3]}`;
   if ( !value.includes(".") || (value.length > 80) ) return value;
   const parts = value.split(".");
   if ( parts.every(p => ID_RE.test(p) || (p === "")) ) {
