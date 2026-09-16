@@ -108,6 +108,30 @@ describe("classifyAsiFeats", () => {
     expect(options.map(o => o.uuid)).toEqual(["u1"]);
   });
 
+  it("locks Potent Dragonmark for a build without a dragonmark, though it declares no item prerequisite", () => {
+    // Its "Any Dragonmark Feat" is free text; Forge of the Artificer's own flow enforces it by
+    // refusing to submit. Offering it anyway handed a character a feat that did nothing.
+    const entries = [
+      entry({ uuid: "u1", name: "Potent Dragonmark", identifier: "potent-dragonmark", prereqLevel: 4 }),
+      entry({ uuid: "u2", name: "Alert" })
+    ];
+    const { options, lockedOptions } = classifyAsiFeats(entries, 4, new Set(["aberrant-dragonmark"]));
+    expect(options.map(o => o.uuid)).toEqual(["u2"]);
+    expect(lockedOptions.map(o => o.uuid)).toEqual(["u1"]);
+    expect(lockedOptions[0].lockReason).toContain("lockedPrereq");
+  });
+
+  it("offers and recommends Potent Dragonmark once the build holds a mark-* dragonmark", () => {
+    const entries = [
+      entry({ uuid: "u1", name: "Potent Dragonmark", identifier: "potent-dragonmark", prereqLevel: 4 }),
+      entry({ uuid: "u2", name: "Alert" })
+    ];
+    const { options, lockedOptions, groups } = classifyAsiFeats(entries, 4, new Set(["mark-of-making"]));
+    expect(lockedOptions).toEqual([]);
+    expect(options.find(o => o.uuid === "u1").recommended).toBe(true);
+    expect(groups[0].options.map(o => o.uuid)).toEqual(["u1"]);
+  });
+
   it("sorts both the pickable and locked lists alphabetically", () => {
     const entries = [
       entry({ uuid: "u1", name: "Ziplining" }),

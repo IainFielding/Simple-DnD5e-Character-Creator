@@ -539,14 +539,24 @@ export async function driveManager(manager, book, consumed) {
 
     const button = manager.element.querySelector("[data-action=next], [data-action=complete]");
     if ( !button ) throw new Error(`no next/complete button on step "${step.flow?.advancement?.title}"`);
+    const priorError = step.error;
     button.click();
 
-    // The manager either moves to another step or closes itself via `#complete`.
+    // The manager either moves to another step or closes itself via `#complete` — or the step
+    // refuses. A flow that throws an `Advancement.ERROR` while submitting leaves it on `step.error`
+    // and stays put; content uses that to enforce a prerequisite of its own (Potent Dragonmark's
+    // "No Dragonmark feat found!"). That will never advance, so report it now rather than after the
+    // full timeout, and lead with the content's own words.
+    const refused = () => (manager.step === step) && step.error && (step.error !== priorError);
     try {
-      await until(() => (manager.step !== step) || !manager.rendered,
+      await until(() => (manager.step !== step) || !manager.rendered || refused(),
         `step "${step.flow?.advancement?.title ?? step.type}" to advance`);
     } catch ( err ) {
       throw new Error(`${err.message}\n${describeStuckStep(manager, step)}`);
+    }
+    if ( refused() ) {
+      throw new Error(`step "${step.flow?.advancement?.title ?? step.type}" refused to advance: `
+        + `${step.error.message ?? step.error}\n${describeStuckStep(manager, step)}`);
     }
     if ( !manager.rendered ) break;
   }

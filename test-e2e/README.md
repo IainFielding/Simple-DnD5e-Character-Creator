@@ -30,6 +30,18 @@ Archived as `sweep-results-600-reference.jsonl`. **This is the 6.0.0 reference b
 full `_meta` header; every older baseline on this machine was taken on 5.3.3 and none is comparable to
 it (see *Baseline comparability* below).
 
+> **The sweep measured a 6.0.0 pre-release, and the baseline survives the real one.** dnd5e 6.0.0
+> shipped publicly on **2026-09-10**; what was installed and swept on 09-05 was the earlier
+> `release-6.0.0` build (source dated 09-04). Diffing the two trees: **29 source files changed, one
+> added (`documents/roll-table.mjs`), `system.json` identical, one language key added and none
+> removed, no new deprecations — and `packs/_source` byte-identical across all 4 871 files.** Since
+> the sweep compares *content the packs supply*, no scenario's expected output moved: **this baseline
+> stands for the shipped release.** Only one changed file touches the path we drive —
+> `AdvancementManager##synthesizeSteps` now raises a retained flow as an automatic `restore` step
+> instead of a fresh `forward` one; the driver's port was updated to match (`manager-driver.mjs`,
+> covered by `test/levelup-synth.test.mjs`). The rest are chat cards, effects, tokens, the welcome
+> screen, journal CSS hooks and two `error`/`err` typo fixes in the manager's own catch blocks.
+
 ### The result
 
 | | first run (before fixes) | **re-run, 2026-09-05 12:14** |
@@ -394,7 +406,7 @@ will run somewhere else, so those globals have to be declared for the file carry
 
 Bringing the harness into scope immediately found one real defect, now fixed — see below.
 
-### The feat axis: two bugs fixed, still not usable
+### The feat axis: three bugs fixed
 
 `no-unused-private-class-members` flagged `#asiFeats` in `in-world/answers.mjs` as stored and never
 read, and the field being unread *was* the bug. The flag travelled correctly from `sweep.mjs`
@@ -413,18 +425,68 @@ that a background increase offers none. It does not — a 2024 background's "+2/
 *"the ASI screen … offers no feat browser"*. Now defers to the system's own `advancement.allowFeat`
 (`item.type === "class"` plus the `allowFeats` setting) instead of re-deriving the rule.
 
-> **The axis still does not complete, and should not be trusted yet.** With both fixes in,
-> `--sweep --axis background --shard 1/20 --jump` errors 3/3 with *timed out waiting for step
-> "Potent Dragonmark" to advance* — systematic, not the one-in-ten flake below, since every
-> character takes the first entry of the same uuid-sorted list. That feat passes
-> `loadGeneralFeats`'s filter legitimately (no `prerequisites.items`) but carries **its own
-> advancement**, which `native.mjs`'s generic step driver cannot advance.
->
-> This is the territory the axis exists to reach — "nothing a feat *brings* is compared" — and the
-> first feat it ever tried brings something the adapter cannot drive. Resolving it means either
-> teaching `fillStep` that advancement type, or excluding such feats from the pool. Until then the
-> axis reports errors rather than results. Start with
-> `node run.mjs --find "Potent Dragonmark"` then `--ids <uuid>`.
+A **third** sat behind that, and was misread for a month. The axis errored on almost every
+scenario with *timed out waiting for step "Potent Dragonmark" to advance* (13 of the first 15 on the
+6.0.2 sweep, all 10 Arcana Unleashed backgrounds among them). The note here blamed an advancement
+type `fillStep` could not drive. The stuck step's own `step.error` said otherwise:
+
+> *No Dragonmark feat found! The Potent Dragonmark feat cannot be taken unless character has an
+> existing dragonmark.*
+
+Potent Dragonmark (Forge of the Artificer) is a *general* feat whose only structured prerequisite is
+`level: 4`. Its real one, "Any Dragonmark Feat", is free text in `system.requirements`, and the
+module enforces it in its `PotentDragonmark` flow, which throws on submit unless the actor holds a
+`dragonmark` feat whose identifier starts `mark-`. It sorts first by uuid, so every character took
+it, and every character without a dragonmark stranded natively. The House \* Heirs have one, got
+past, and FAILed instead, which is where the creator bugs were:
+
+- **The creator dropped the advancement.** `PotentDragonmarkAdvancement` extends the base
+  `Advancement`, whose `automaticApplicationValue` is `false`, so `#ingestFlow`'s default branch
+  skipped it and a dragonmarked character never got their Spells of the Mark. The driver now handles
+  the type by name (`PASSTHROUGH_TYPES`, beside Ember's) and applies it.
+- **The creator offered the feat to everyone.** `classifyAsiFeats` gated on level and
+  `prerequisites.items` only. `CONTENT_FEAT_PREREQS` in `choice-resolver.mjs` now holds prerequisites
+  content enforces elsewhere, keyed by feat identifier. The picker locks the feat and
+  `applyAsiFeat` refuses it for a headless resolve.
+
+On the harness side, `answers.mjs`'s `CONTENT_GATES` skips a feat whose advancement carries a gate
+the character fails. It is written from the content module's flow, deliberately not imported from
+the creator, so native stays the oracle. `driveManager` also now fails at once when a step sets a
+new `step.error` and stays put, leading with the content's own message, instead of timing out 15
+seconds later.
+
+**If the axis strands on a step again, read `step.error` in the stuck-step dump first.** A content
+module refusing a pick looks exactly like a step the adapter cannot drive.
+
+### The feat axis: what was behind the errors (2026-09-17)
+
+With the errors gone, every scenario FAILed on the same four causes. Two were creator bugs, two
+were harness bugs, and one of the harness bugs was hiding one of the creator bugs.
+
+- **The book memoised on `advId@level`, and advancement ids are not unique across items.** Every
+  Heroes of Faerûn feat carries its half-ASI as `v1EPmPE0rI7wlOYj`, and every feat's advancements run
+  at level 0. So Cold Caster's `{int: 1}` was handed to Fairy Trickster, Purple Dragon Commandant and
+  Street Justice, all of which lock Intelligence. The memo key now includes the owning item's
+  identifier (`memoKey` in `answers.mjs`). Overrides are still keyed by bare advancement id.
+- **The creator's headless `setAsi` applied points to locked abilities.** The native flow drops
+  locked keys from its form, and the interactive steppers never offer them. `setAsi` now keeps only
+  a locked ability's fixed part. This is what turned the memo collision into Int 15 vs 18.
+- **Cold Caster's casting ability was never asked in the creator.** Its grant item is `optional`,
+  so the driver routed it to the optional-grant branch only, and the seeded first ability (Int)
+  stuck while native asked. An optional spell grant with more than one allowed ability now also
+  records a `grantSteps` decision, and gets the ability picker on the feat's screen.
+  `applyGrantAbility` re-points the ability without re-selecting items, so a declined item stays
+  declined. A substituted spell takes the chosen ability too (`featSubstituteData`).
+- **A generated trait pick could collide with another origin's grant.** Native adds species before
+  background, so the Human's Skillful is answered while House Orien Heir's granted Acrobatics has not
+  landed yet. The creator resolves the whole build at once and never offers a key another origin
+  grants (`collectTakenTraitKeys`), so it refused the pick. `AnswerBook` now takes the scenario's
+  `origins` and excludes those keys the same way. Both characters had the same skills either way;
+  only where the pick was recorded differed.
+
+`source.book` (finding 2 above) is also gone from the diff. `normaliseSourceBook` drops an item's
+`book` when it is empty or equals the placeholder `SourceField.prepareData` invents for that item's
+pack, which is exactly the value the warm-up pollutes. A `book` naming anything else still compares.
 
 > **Baselines taken before this are not comparable.** Every archived
 > `sweep-results-background-*.jsonl` predates the fix and was recorded without feats. Re-take the

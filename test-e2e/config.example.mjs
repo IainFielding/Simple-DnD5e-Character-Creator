@@ -50,13 +50,18 @@ export const BASE_MODULES = [
   // Tasha's Cauldron of Everything — 30 subclasses across 13 classes, plus the Artificer and the
   // five sidekick classes. The sweep's only 2014-rules content, built onto the 2014 classes the
   // system still ships; it also injects optional features into every 2014 class in the world.
-  "dnd-tashas-cauldron"
+  "dnd-tashas-cauldron",
+  // Arcana Unleashed — 8 subclasses (2024 rules, no classes of their own, so they build onto the PHB
+  // classes), 10 backgrounds and 37 feats. The first content to use dnd5e 6.0's ModifyItem advancement.
+  "dnd-arcana-unleashed",
+  // Operation Deadfall — equipment only; enabled so its items are in the world's pools.
+  "dnd-deadfall"
 ];
 
 /** The system the test worlds run, and the version this harness was written against. */
 export const SYSTEM = "dnd5e";
-export const SYSTEM_VERSION = "6.0.0";
-export const CORE_VERSION = "14.367";
+export const SYSTEM_VERSION = "6.0.2";
+export const CORE_VERSION = "14.368";
 
 /**
  * The two test worlds. `id` doubles as the directory name under `Data/worlds`.

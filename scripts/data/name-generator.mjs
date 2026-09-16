@@ -33,15 +33,31 @@ function styleAliases() {
 }
 
 /**
- * Resolve a species identifier to a style key that exists in the (merged) tables.
- * Unknown or empty identifiers — and aliases pointing at a missing style — resolve
+ * Fold a species identifier *or* display name into a lookup key: lowercase, apostrophes
+ * dropped, every other run of non-alphanumerics collapsed to a single hyphen. Species
+ * that ship without a `system.identifier` — every Ravenloft lineage does — can then be
+ * matched on their name instead ("Elf, Drow" -> "elf-drow", "Kithkin, Shadowmoor" ->
+ * "kithkin-shadowmoor"), which is why callers may pass either.
+ * @param {string} [value]
+ * @returns {string}
+ */
+function slugify(value) {
+  return String(value ?? "").trim().toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Resolve a species identifier (or name) to a style key that exists in the (merged)
+ * tables. Unknown or empty inputs — and aliases pointing at a missing style — resolve
  * to "default", so the generator always has a pool to draw from.
  * @param {string} [identifier]
  * @returns {string}
  */
 export function styleForSpecies(identifier) {
   const tables = styleTables();
-  const key = String(identifier ?? "").trim().toLowerCase();
+  const key = slugify(identifier);
   const style = styleAliases()[key] ?? (tables[key] ? key : "default");
   return tables[style] ? style : "default";
 }

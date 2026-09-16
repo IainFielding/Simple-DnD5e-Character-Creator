@@ -7,6 +7,8 @@ import { warmSources } from "./data/source-cache.mjs";
 import { registerLevelUp, triggerLevelUp, canLevelUp } from "./levelup/intercept.mjs";
 import { registerXpNotice } from "./levelup/xp-notice.mjs";
 import { StoreConfigApp } from "./app/store-config.mjs";
+import { MagicShopConfigApp } from "./app/magic-shop-config.mjs";
+import { magicShopSource } from "./data/magic-shop-source.mjs";
 import { HouseRulesApp } from "./app/house-rules.mjs";
 import { LevelUpOptionsApp } from "./app/levelup-options.mjs";
 import { watchForeignWindows } from "./app/takeover.mjs";
@@ -234,6 +236,24 @@ function registerSettings() {
     hint: t("settings.storeConfigMenu.hint"),
     icon: "fa-solid fa-shop",
     type: StoreConfigApp,
+    restricted: true
+  });
+  // The Magic Item Shop: free magic items and bonus gold for a character starting above level 1.
+  // Same shape as the store — a hidden toggle and a hidden object, edited through one menu. Saving
+  // the object drops the players' cached shelf, so the next visit to the step reads the new stock.
+  game.settings.register(MODULE_ID, SETTINGS.magicShopEnabled, {
+    scope: "world", config: false, type: Boolean, default: DEFAULTS.magicShopEnabled
+  });
+  game.settings.register(MODULE_ID, SETTINGS.magicShopConfig, {
+    scope: "world", config: false, type: Object, default: DEFAULTS.magicShopConfig,
+    onChange: () => magicShopSource.clear()
+  });
+  game.settings.registerMenu(MODULE_ID, "magicShopConfigMenu", {
+    name: t("settings.magicShopConfigMenu.name"),
+    label: t("settings.magicShopConfigMenu.label"),
+    hint: t("settings.magicShopConfigMenu.hint"),
+    icon: "fa-solid fa-wand-sparkles",
+    type: MagicShopConfigApp,
     restricted: true
   });
   // The one `client` setting: what this module prints to *your* console is your business, not a

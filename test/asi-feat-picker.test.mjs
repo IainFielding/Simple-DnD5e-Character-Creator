@@ -193,6 +193,19 @@ describe("the inline ASI feat picker", () => {
     expect(lockedOptions.map(o => o.name)).toEqual(["Harper Teamwork"]);
   });
 
+  it("carries a feat's identifier through the scan, so a content-enforced prerequisite can gate it", async () => {
+    // Potent Dragonmark declares only a level; its "Any Dragonmark Feat" is enforced by the content's
+    // own flow. The scan must keep the identifier or the gate has nothing to key off.
+    game.packs = [fakePack([
+      { type: "feat", name: "Potent Dragonmark", img: "i1", uuid: "u1",
+        system: { type: { value: "feat", subtype: "general" }, identifier: "potent-dragonmark", prerequisites: { level: 4 } } }
+    ])];
+
+    const driver = makeDriver({ level: 4 });
+    expect((await driver.asiFeatOptions(asiRecord())).lockedOptions.map(o => o.uuid)).toEqual(["u1"]);
+    expect((await driver.asiFeatOptions(asiRecord(["mark-of-sentinel"]))).options.map(o => o.uuid)).toEqual(["u1"]);
+  });
+
   it("keeps the better-ranked copy of a feat two packages both publish, prerequisites and all", async () => {
     // The same feat, republished. The system's SRD copy declares no prerequisite; the book's copy
     // carries the real one. Whichever is indexed first, the book's must win — otherwise the gate

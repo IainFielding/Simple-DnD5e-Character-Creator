@@ -710,6 +710,35 @@ export function evalItemPrereq(prereqItems, owned) {
 }
 
 /**
+ * Feat prerequisites that content enforces somewhere other than `system.prerequisites`, keyed by the
+ * feat's identifier. Each test takes the same owned-identifier set {@link evalItemPrereq} does.
+ *
+ * **Potent Dragonmark** (Forge of the Artificer) is a *general* feat whose only structured
+ * prerequisite is level 4; "Any Dragonmark Feat" lives in the free-text `system.requirements`. The
+ * module enforces it in its `PotentDragonmark` advancement flow, which throws on submit unless the
+ * actor holds a dragonmark feat whose identifier starts `mark-` — so natively the level-up refuses to
+ * advance, while we offered the feat to everyone and granted a feat that did nothing. The `mark-`
+ * prefix is the flow's own test, and is also why an *Aberrant* Dragonmark does not qualify.
+ * @type {Record<string, (owned: Set<string>) => boolean>}
+ */
+export const CONTENT_FEAT_PREREQS = {
+  "potent-dragonmark": owned => [...(owned ?? [])].some(id => String(id).startsWith("mark-"))
+};
+
+/**
+ * Evaluate a feat's content-enforced prerequisite ({@link CONTENT_FEAT_PREREQS}), in the same shape as
+ * {@link evalItemPrereq} so the two combine.
+ * @param {string} identifier   The feat's `system.identifier`.
+ * @param {Set<string>} owned   Identifier slugs the build grants.
+ * @returns {{hasReq: boolean, met: boolean}}
+ */
+export function evalContentPrereq(identifier, owned) {
+  const test = identifier ? CONTENT_FEAT_PREREQS[identifier] : null;
+  if ( !test ) return { hasReq: false, met: true };
+  return { hasReq: true, met: !!test(owned) };
+}
+
+/**
  * Split feat/invocation options into a leading "Recommended" panel (those the build specifically
  * unlocks — an item prerequisite it satisfies) and an "Other" panel for the rest. Returns null when
  * nothing is recommended, so the choice renders as a single ungrouped grid as before.
@@ -1014,7 +1043,8 @@ async function addFeatAbilities(entries) {
  * test dnd5e's own ASI flow applies to a dropped item, and the same one {@link findRestrictedItems}
  * already applies via an advancement's `restriction.type`.
  * @param {number} level   The character's level, used only to decide whether epic boons are excluded.
- * @returns {Promise<{uuid: string, name: string, img: string, prereqLevel: number, prereqItems: string[]}[]>}
+ * @returns {Promise<{uuid: string, name: string, img: string, identifier: string, prereqLevel: number,
+ *   prereqItems: string[]}[]>}
  */
 export async function findAsiFeats(level) {
   const excluded = new Set(["origin", "fightingStyle"]);
@@ -1029,7 +1059,7 @@ export async function findAsiFeats(level) {
     if ( !pack.visible || !isUsableItemPack(pack, enabled) ) continue;
     try {
       const index = await pack.getIndex({
-        fields: ["type", "system.type.value", "system.type.subtype",
+        fields: ["type", "system.type.value", "system.type.subtype", "system.identifier",
           "system.prerequisites.level", "system.prerequisites.items"]
       });
       for ( const e of index ) {
@@ -1048,6 +1078,7 @@ export async function findAsiFeats(level) {
         if ( !preferredCopy(byName, nk, e.uuid) ) continue;
         byName.set(nk, {
           uuid: e.uuid, name: e.name, img: e.img,
+          identifier: e.system?.identifier ?? "",
           prereqLevel: Number(e.system?.prerequisites?.level ?? 0),
           prereqItems: Array.from(e.system?.prerequisites?.items ?? [])
         });
@@ -1067,8 +1098,8 @@ export async function findAsiFeats(level) {
  * grouped into a "Recommended"/"Other" panel via {@link groupRecommended} when the build unlocked any of
  * them — and a locked "coming later" list, each carrying the reason it's locked. Pure (no compendium
  * access), so it is unit-testable on its own.
- * @param {{uuid: string, name: string, img: string, prereqLevel: number, prereqItems: string[],
- *   abilities: string[]}[]} entries
+ * @param {{uuid: string, name: string, img: string, identifier?: string, prereqLevel: number,
+ *   prereqItems: string[], abilities: string[]}[]} entries
  * @param {number} level              The character's current level.
  * @param {Set<string>} owned         Identifier slugs the build already grants (see {@link evalItemPrereq}).
  * @param {Set<string>} [takenNames]  Lowercased names of non-repeatable feats the build already holds —
@@ -1083,7 +1114,12 @@ export function classifyAsiFeats(entries, level, owned, takenNames = new Set()) 
   for ( const e of entries ) {
     if ( takenNames.has(e.name.trim().toLowerCase()) ) continue;
     const levelLocked = e.prereqLevel > level;
-    const { hasReq, met } = evalItemPrereq(e.prereqItems, owned);
+    const item = evalItemPrereq(e.prereqItems, owned);
+    // A content-enforced prerequisite gates and recommends exactly like an item prerequisite — see
+    // {@link CONTENT_FEAT_PREREQS}.
+    const content = evalContentPrereq(e.identifier, owned);
+    const hasReq = item.hasReq || content.hasReq;
+    const met = item.met && content.met;
     // `abilities` rides along on both lists so the picker's "increases" filter can act on a card
     // without re-reading anything — see {@link addFeatAbilities}.
     if ( !levelLocked && (!hasReq || met) ) {

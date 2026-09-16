@@ -573,11 +573,13 @@ export async function featSubstituteData(state) {
     const cfg = grant.spell ?? {};
     // Mirror what the ItemGrant would have applied to the spell it replaces: the same preparation
     // mode (2 = always prepared, which is what these feats grant), the same casting method, and the
-    // same ability. The ability list can offer several — Cold Caster's "the ability increased by
-    // this feat" — and the first allowed is the default the native grant flow also lands on.
+    // same ability. The ability list can offer several — Cold Caster's Intelligence, Wisdom or
+    // Charisma — and the player picks one on the feat's own screen, which the grant records as
+    // `value.ability`. Only without that does the first allowed apply, the native grant's default.
     foundry.utils.setProperty(obj, "system.prepared", Number(cfg.prepared ?? 1));
     foundry.utils.setProperty(obj, "system.method", cfg.method || "spell");
-    const ability = Array.from(cfg.ability ?? [])[0];
+    const chosen = state.driver?.clone?.items?.get(grant.featId)?.advancement?.byId?.[grant.advId]?.value?.ability;
+    const ability = chosen ?? Array.from(cfg.ability ?? [])[0];
     if ( ability ) foundry.utils.setProperty(obj, "system.ability", ability);
     foundry.utils.setProperty(obj, "system.sourceItem", `feat:${grant.featIdentifier || grant.featId}`);
     data.push(obj);

@@ -190,6 +190,8 @@ export const SETTINGS = {
   bannedAlignments: "bannedAlignments",
   storeEnabled: "storeEnabled",
   storeConfig: "storeConfig",
+  magicShopEnabled: "magicShopEnabled",
+  magicShopConfig: "magicShopConfig",
   debug: "debugLogging"
 };
 
@@ -220,6 +222,12 @@ export const DEFAULTS = {
   storeConfig: {
     priceMultiplier: 1.0,
     inventory: null            // null = the factory default list; [] = deliberately emptied
+  },
+  // Off by default: it changes a higher-level character's starting wealth, which a table opts into.
+  magicShopEnabled: false,
+  magicShopConfig: {
+    inventory: [],
+    wealthTable: null          // null = the DMG table; see data/magic-shop.mjs
   },
   debug: false
 };

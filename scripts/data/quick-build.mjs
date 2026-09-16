@@ -64,6 +64,9 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
   state.equipmentVisited = false;
   state.store.purchases = {};
   state.storeVisited = false;
+  // The magic picks are the player's to make; the d10 is kept, since a re-run must not re-roll gold.
+  state.magicShop.picks = {};
+  state.magicShopVisited = false;
 
   // Ability scores: the standard array laid out in the class's priority order.
   assignStandardArray(state, profile.abilities);
@@ -90,7 +93,10 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
 
   // Name: rolled in the chosen species' style (the generator falls back to a generic pool).
   await attempt("name", () => {
-    const name = generateName(source.card(state.speciesUuid)?.identifier);
+    // Some species ship without an identifier (every Ravenloft lineage does), so fall
+    // back to the name — the generator folds either into the same style key.
+    const species = source.card(state.speciesUuid);
+    const name = generateName(species?.identifier || species?.name);
     if ( name ) state.details.name = name;
   });
 

@@ -1,0 +1,227 @@
+import { t, log } from "../config.mjs";
+import { formatCp } from "../data/store-source.mjs";
+import { sectionKey, groupCards, itemTypeLabel, subtypeLabel } from "../data/shelf-sections.mjs";
+import {
+  RARITIES, rarityRank, rarityLabel, countPicks, canPick, withinAllowance, slotsSummary,
+  highestSlotRank, bonusGoldCp
+} from "../data/magic-shop.mjs";
+import {
+  magicShopConfig, magicShopTier, magicShopSource, ensureMagicShopRoll, pickList
+} from "../data/magic-shop-source.mjs";
+
+/**
+ * The Magic Items step: for a character starting above level 1, the bonus gold and free magic
+ * items the (GM-overridable) DMG table grants. It sits after the Store, and its gold goes straight
+ * to the purse on Create rather than into the Store's budget.
+ *
+ * The d10 is rolled once, on the first render, and stored. The picks are free: a slot takes its own
+ * rarity or anything lower, so the shelf shows every rarity up to the rarest slot the tier has, and
+ * a row can be added only while it would still fit.
+ *
+ * The shelf is loaded lazily — see {@link module:data/magic-shop-source.MagicShopSource}. Until it
+ * is ready the step renders a percentage and re-renders itself when the load lands.
+ */
+
+/** The step id, also used to tell whether the player is still on this step when a load finishes. */
+const STEP_ID = "magicShop";
+
+export const magicShopStep = {
+  id: STEP_ID,
+  icon: "fa-solid fa-wand-sparkles",
+  labelKey: "step.magicShop.label",
+  template: "steps/magic-shop",
+
+  // Only a build climbing past level 1 with the GM's shop switched on sees this step at all.
+  hideWhenInapplicable: true,
+
+  applicable(state) {
+    return !!magicShopTier(state);
+  },
+
+  isComplete(state) {
+    const tier = magicShopTier(state);
+    if ( !tier ) return true;
+    if ( !withinAllowance(countPicks(state.magicShop?.picks), tier.allowance) ) return false;
+    return !!state.magicShopVisited;
+  },
+
+  onEnter(state) {
+    state.magicShopVisited = true;
+  },
+
+  incompleteHint(state) {
+    const tier = magicShopTier(state);
+    if ( tier && !withinAllowance(countPicks(state.magicShop?.picks), tier.allowance) ) {
+      return t("step.magicShop.overAllowance");
+    }
+    return null;
+  },
+
+  /** Rail summary: how many items are picked and the gold. */
+  summary(state) {
+    const tier = magicShopTier(state);
+    if ( !tier ) return "";
+    const count = pickList(state).reduce((n, p) => n + p.qty, 0);
+    const goldCp = Number.isInteger(state.magicShop?.d10) ? bonusGoldCp(tier, state.magicShop.d10) : 0;
+    if ( !count && !goldCp ) return "";
+    return t("step.magicShop.summary", { count, gold: formatCp(goldCp) });
+  },
+
+  async handle(action, el, { state }) {
+    const picks = state.magicShop.picks;
+    if ( action === "magic-add" ) {
+      const tier = magicShopTier(state);
+      const uuid = el.dataset.uuid;
+      const rarity = el.dataset.rarity;
+      if ( !tier || !uuid || !canPick(countPicks(picks), rarity, tier.allowance) ) return;
+      const pick = picks[uuid] ??= { qty: 0, name: el.dataset.name ?? "", img: el.dataset.img ?? "", rarity };
+      pick.qty += 1;
+      return;
+    }
+    if ( action === "magic-remove" ) {
+      const pick = picks[el.dataset.uuid];
+      if ( !pick ) return;
+      pick.qty -= 1;
+      if ( pick.qty <= 0 ) delete picks[el.dataset.uuid];
+      return;
+    }
+    if ( action === "magic-clear" ) {
+      state.magicShop.picks = {};
+      return;
+    }
+    if ( action === "magic-category" ) {
+      state.magicShopCategory = el.value ?? "";
+      state.magicShopSubtype = "";   // subtype keys only mean anything inside their category
+      return;
+    }
+    if ( action === "magic-subtype" ) {
+      state.magicShopSubtype = el.value ?? "";
+      return;
+    }
+    if ( action === "magic-rarity" ) {
+      state.magicShopRarity = el.value ?? "";
+      return;
+    }
+    if ( action === "magic-group" ) {
+      const key = el.dataset.group;
+      const open = new Set(state.magicShopOpenGroups ?? []);
+      if ( open.has(key) ) open.delete(key);
+      else open.add(key);
+      state.magicShopOpenGroups = [...open];
+    }
+  },
+
+  async context({ state, app }) {
+    const config = magicShopConfig();
+    const tier = magicShopTier(state, config);
+    if ( !tier ) return { unavailable: true };
+
+    const d10 = await ensureMagicShopRoll(state);
+    const counts = countPicks(state.magicShop.picks);
+    const aside = asideContext(state, tier, d10, counts);
+
+    const topRank = highestSlotRank(tier.allowance);
+    if ( topRank < 0 ) return { ...aside, noItems: true };
+
+    // Lazy load: the first visit resolves the stock behind a percentage, then re-renders. The whole
+    // visible inventory is loaded, not just this tier's rarities, so changing level never reloads.
+    const entries = config.inventory.filter(e => !e.hidden);
+    const stock = magicShopSource.peek(entries);
+    if ( !stock ) {
+      magicShopSource.load(entries, pct => {
+        const node = app?.element?.querySelector("[data-magic-progress]");
+        if ( node ) node.textContent = t("step.magicShop.loading", { percent: pct });
+      }).then(() => {
+        if ( app?.rendered && (app._activeStep?.id === STEP_ID) ) app.render();
+      }).catch(err => {
+        log("magic shop stock failed to load", err);
+        ui.notifications?.error(t("step.magicShop.loadFailed"));
+      });
+      return { ...aside, loading: true, loadingLabel: t("step.magicShop.loading", { percent: magicShopSource.percent }) };
+    }
+
+    const eligible = stock.filter(e => rarityRank(e.rarity) <= topRank);
+
+    // Filters: category and subtype exactly as the Store offers them, plus rarity.
+    const category = state.magicShopCategory ?? "";
+    const categories = [...new Set(eligible.map(e => e.type))].sort()
+      .map(type => ({ value: type, label: itemTypeLabel(type), selected: type === category }));
+    const subtype = category ? (state.magicShopSubtype ?? "") : "";
+    const subtypes = !category ? [] : [...new Set(eligible.filter(e => e.type === category).map(e => e.subtype))]
+      .filter(Boolean)
+      .map(key => ({ value: key, label: subtypeLabel(category, key), selected: key === subtype }))
+      .sort((a, b) => a.label.localeCompare(b.label, game.i18n.lang));
+    const rarity = state.magicShopRarity ?? "";
+    const rarities = RARITIES.slice(0, topRank + 1)
+      .filter(r => eligible.some(e => e.rarity === r))
+      .map(r => ({ value: r, label: rarityLabel(r), selected: r === rarity }));
+
+    const picks = state.magicShop.picks;
+    const cards = eligible
+      .filter(e => (!category || e.type === category) && (!subtype || e.subtype === subtype)
+        && (!rarity || e.rarity === rarity))
+      .map(e => {
+        const qty = picks[e.uuid]?.qty ?? 0;
+        return {
+          uuid: e.uuid, link: e.link ?? e.uuid, name: e.name, img: e.img, rarity: e.rarity,
+          rarityLabel: rarityLabel(e.rarity),
+          section: sectionKey(e),
+          typeLabel: itemTypeLabel(e.type),
+          qty, picked: qty > 0,
+          canAdd: canPick(counts, e.rarity, tier.allowance)
+        };
+      });
+
+    // Every section starts collapsed so a long shop scrolls as a short list of headings. A filter that
+    // narrows the shelf to a single section opens it, since there is nothing else to scroll past.
+    const openGroups = new Set(state.magicShopOpenGroups ?? []);
+    const grouped = groupCards(cards, key => {
+      if ( key === "armor" ) return t("step.store.armorHeading");
+      if ( key === "game" ) return t("step.store.gamingHeading");
+      if ( key === "music" ) return t("step.store.instrumentHeading");
+      return itemTypeLabel(key);
+    });
+    const groups = grouped.map(g => ({
+      ...g,
+      count: g.cards.length,
+      pickedCount: g.cards.reduce((n, c) => n + c.qty, 0),
+      open: (grouped.length === 1) || openGroups.has(g.key)
+    }));
+
+    return {
+      ...aside,
+      intro: t("step.magicShop.intro"),
+      groups,
+      hasGoods: cards.length > 0,
+      stockEmpty: eligible.length === 0,
+      count: cards.length,
+      categories,
+      hasCategories: categories.length > 1,
+      subtypes,
+      hasSubtypes: subtypes.length > 1,
+      rarities,
+      hasRarities: rarities.length > 1
+    };
+  }
+};
+
+/** The right-hand column: the gold roll, the slot chips and the picks. Needs no stock. */
+function asideContext(state, tier, d10, counts) {
+  const goldCp = bonusGoldCp(tier, d10);
+  const hasGold = (tier.baseGp > 0) || (tier.perD10Gp > 0);
+  const picks = pickList(state).map(p => ({ ...p, multi: p.qty > 1, rarityLabel: rarityLabel(p.rarity) }));
+  const slots = slotsSummary(counts, tier.allowance).map(s => ({ ...s, label: rarityLabel(s.rarity) }));
+  const fits = withinAllowance(counts, tier.allowance);
+  return {
+    tierLabel: t("step.magicShop.tier", { from: tier.from, to: tier.to }),
+    hasGold,
+    d10,
+    goldFormula: t("step.magicShop.goldFormula", { base: tier.baseGp, die: d10, per: tier.perD10Gp }),
+    gold: formatCp(goldCp),
+    slots,
+    hasSlots: slots.length > 0,
+    picks,
+    hasPicks: picks.length > 0,
+    overAllowance: !fits
+  };
+}

@@ -7,6 +7,7 @@ import { choicesStep } from "./choices-step.mjs";
 import { featSpellsStep } from "./feat-spells-step.mjs";
 import { equipmentStep } from "./equipment-step.mjs";
 import { storeStep } from "./store-step.mjs";
+import { magicShopStep } from "./magic-shop-step.mjs";
 import { reviewStep } from "./review-step.mjs";
 
 /**
@@ -41,6 +42,10 @@ export const STEPS = [
   // The Store must follow Equipment: its budget is the currency the finished equipment
   // choice yields. Hidden (like Feat-Spells) until the GM enables it and gold exists.
   storeStep,
+  // Magic Items: a character starting above level 1 takes its bonus gold and free magic items here.
+  // Hidden unless the GM enabled it and the target level has a band. Its gold goes to the purse, not
+  // the Store budget, so it follows the Store.
+  magicShopStep,
   reviewStep
 ];
 

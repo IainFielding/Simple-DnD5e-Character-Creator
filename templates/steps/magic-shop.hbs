@@ -1,0 +1,194 @@
+{{!--
+  The Magic Items step: free magic items and bonus gold for a character starting above level 1.
+  Laid out like the Store — a searchable, filterable shelf grouped by item type on the left, and on
+  the right the gold roll, the rarity slots and the picks. Item names wear their rarity colour
+  (`cc-rarity-text rarity-*`). Data from magic-shop-step.mjs context(); +/− fire magic-add /
+  magic-remove, the selects re-render via data-step-change, and the search box filters rows
+  client-side via data-creator-search (the shell's store filter, which keys off the store classes).
+  While the stock is still loading, `loading` shows the percentage in [data-magic-progress], which
+  the step writes to directly as the load advances.
+--}}
+<section class="creator-store creator-magic-shop">
+  {{#if unavailable}}
+  <div class="creator-pick-empty">
+    <i class="fa-solid fa-wand-sparkles"></i>
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.magicShop.label"}}</h2>
+  </div>
+  {{else}}
+  <div class="creator-store-main">
+    {{#if loading}}
+    <div class="creator-loading creator-magic-loading">
+      <i class="fa-solid fa-wand-sparkles fa-beat-fade"></i>
+      <p data-magic-progress aria-live="polite">{{loadingLabel}}</p>
+    </div>
+    {{else if noItems}}
+    <div class="creator-pick-empty">
+      <i class="fa-solid fa-coins"></i>
+      <p>{{localize "sogrom-dnd5e-character-creator.step.magicShop.goldOnly"}}</p>
+    </div>
+    {{else}}
+    <p class="creator-store-intro">{{intro}}</p>
+
+    <div class="creator-toolbar creator-toolbar--stacked">
+      <div class="creator-store-filter-row">
+        <label class="creator-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" data-creator-search autocomplete="off"
+                 aria-label="{{localize 'sogrom-dnd5e-character-creator.common.search'}}"
+                 placeholder="{{localize 'sogrom-dnd5e-character-creator.common.search'}}">
+        </label>
+        {{#if hasCategories}}
+        <label class="creator-spell-filter">
+          <i class="fa-solid fa-filter"></i>
+          <select data-step-change="magic-category"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.filterCategoryAria'}}">
+            <option value="">{{localize "sogrom-dnd5e-character-creator.step.store.allCategories"}}</option>
+            {{#each categories}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        {{/if}}
+        {{#if hasSubtypes}}
+        <label class="creator-spell-filter">
+          <i class="fa-solid fa-filter"></i>
+          <select data-step-change="magic-subtype"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.filterSubtypeAria'}}">
+            <option value="">{{localize "sogrom-dnd5e-character-creator.step.store.allSubtypes"}}</option>
+            {{#each subtypes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        {{/if}}
+        {{#if hasRarities}}
+        <label class="creator-spell-filter">
+          <i class="fa-solid fa-gem"></i>
+          <select data-step-change="magic-rarity"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.step.magicShop.filterRarityAria'}}">
+            <option value="">{{localize "sogrom-dnd5e-character-creator.step.magicShop.allRarities"}}</option>
+            {{#each rarities}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        {{/if}}
+      </div>
+      <span class="creator-count" data-creator-count aria-live="polite" aria-atomic="true"
+      >{{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}</span>
+    </div>
+
+    <div class="creator-store-shelf">
+      {{#each groups}}
+      <section class="creator-store-group creator-magic-group {{#if open}}is-open{{/if}}">
+        <h3 class="creator-store-section">
+          <button type="button" class="creator-magic-group-toggle" data-action="stepAction"
+                  data-step-action="magic-group" data-group="{{key}}"
+                  aria-expanded="{{#if open}}true{{else}}false{{/if}}" aria-controls="creator-magic-group-{{key}}">
+            <i class="fa-solid fa-chevron-right creator-magic-group-chevron" aria-hidden="true"></i>
+            <i class="fa-solid {{icon}}" aria-hidden="true"></i>
+            <span>{{label}}</span>
+            <span class="creator-magic-group-count">{{count}}</span>
+            {{#if pickedCount}}<span class="creator-magic-group-picked"><i class="fa-solid fa-check" aria-hidden="true"></i> {{pickedCount}}</span>{{/if}}
+          </button>
+        </h3>
+        <ul class="creator-store-list" id="creator-magic-group-{{key}}">
+          {{#each cards}}
+          <li class="creator-store-row {{#if picked}}is-in-cart{{/if}} {{#unless canAdd}}is-unaffordable{{/unless}}"
+              data-name="{{name}}">
+            <img class="creator-store-row-img" src="{{img}}" alt="" data-tooltip="{{ccItemTooltip link}}">
+            <div class="creator-store-row-main">
+              <a class="content-link cc-rarity-text rarity-{{rarity}}" data-uuid="{{link}}" data-link
+                 data-tooltip="{{ccItemTooltip link}}">{{name}}</a>
+              <span class="creator-store-row-type">{{rarityLabel}} · {{typeLabel}}</span>
+            </div>
+            <div class="creator-store-qty">
+              <button type="button" class="creator-store-qty-btn" data-action="stepAction"
+                      data-step-action="magic-remove" data-uuid="{{uuid}}"
+                      {{#unless picked}}disabled{{/unless}}
+                      aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.removeOne'}}">
+                <i class="fa-solid fa-minus"></i>
+              </button>
+              <span class="creator-store-qty-count">{{qty}}</span>
+              <button type="button" class="creator-store-qty-btn" data-action="stepAction"
+                      data-step-action="magic-add" data-uuid="{{uuid}}" data-rarity="{{rarity}}"
+                      data-name="{{name}}" data-img="{{img}}"
+                      {{#unless canAdd}}disabled{{/unless}}
+                      aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.addOne'}}">
+                <i class="fa-solid fa-plus"></i>
+              </button>
+            </div>
+          </li>
+          {{/each}}
+        </ul>
+      </section>
+      {{/each}}
+
+      {{#unless hasGoods}}
+      <p class="creator-empty">{{#if stockEmpty}}{{localize "sogrom-dnd5e-character-creator.step.magicShop.empty"}}{{else}}{{localize "sogrom-dnd5e-character-creator.common.noResultsFilters"}}{{/if}}</p>
+      {{/unless}}
+    </div>
+    {{/if}}
+  </div>
+
+  <!-- Right column: the gold roll, the rarity slots and the picks -->
+  <aside class="creator-store-cart creator-magic-aside">
+    <h2 class="creator-store-cart-head">
+      <i class="fa-solid fa-wand-sparkles"></i>
+      {{tierLabel}}
+    </h2>
+
+    <div class="creator-store-cart-list">
+      {{#if hasSlots}}
+      <ul class="creator-magic-slots" aria-label="{{localize 'sogrom-dnd5e-character-creator.step.magicShop.slotsAria'}}">
+        {{#each slots}}
+        <li class="creator-magic-slot {{#if full}}is-full{{/if}}">
+          <span class="cc-rarity-text rarity-{{rarity}}">{{label}}</span>
+          <span class="creator-magic-slot-count">{{used}}/{{allowed}}</span>
+        </li>
+        {{/each}}
+      </ul>
+      <p class="creator-magic-slots-hint">{{localize "sogrom-dnd5e-character-creator.step.magicShop.downgradeHint"}}</p>
+      {{/if}}
+
+      {{#if hasPicks}}
+      <ul class="creator-store-cart-rows">
+        {{#each picks}}
+        <li class="creator-store-cart-row">
+          <img src="{{img}}" alt="" data-tooltip="{{ccItemTooltip link}}">
+          <span class="creator-store-cart-name"><a class="content-link cc-rarity-text rarity-{{rarity}}" data-uuid="{{link}}" data-link
+                data-tooltip="{{ccItemTooltip link}}">{{name}}</a>{{#if multi}} ×{{qty}}{{/if}}</span>
+          <button type="button" class="creator-store-qty-btn" data-action="stepAction"
+                  data-step-action="magic-remove" data-uuid="{{uuid}}"
+                  aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.removeOne'}}">
+            <i class="fa-solid fa-minus"></i>
+          </button>
+        </li>
+        {{/each}}
+      </ul>
+      <button type="button" class="creator-btn creator-store-clear" data-action="stepAction" data-step-action="magic-clear">
+        <i class="fa-solid fa-trash-can"></i> {{localize "sogrom-dnd5e-character-creator.step.magicShop.clear"}}
+      </button>
+      {{else if hasSlots}}
+      <p class="creator-store-cart-empty">{{localize "sogrom-dnd5e-character-creator.step.magicShop.picksEmpty"}}</p>
+      {{/if}}
+    </div>
+
+    {{#if overAllowance}}
+    <p class="creator-store-warning">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      {{localize "sogrom-dnd5e-character-creator.step.magicShop.overAllowance"}}
+    </p>
+    {{/if}}
+
+    {{#if hasGold}}
+    <dl class="creator-store-totals">
+      <div class="creator-magic-roll">
+        <dt>{{localize "sogrom-dnd5e-character-creator.step.magicShop.goldLabel"}}</dt>
+        <dd>
+          <span class="creator-magic-die" data-tooltip="{{localize 'sogrom-dnd5e-character-creator.step.magicShop.dieHint'}}">
+            <i class="fa-solid fa-dice-d10" aria-hidden="true"></i> {{d10}}
+          </span>
+        </dd>
+      </div>
+      <div><dt>{{goldFormula}}</dt><dd></dd></div>
+      <div class="creator-store-remaining"><dt>{{localize "sogrom-dnd5e-character-creator.step.magicShop.goldTotal"}}</dt><dd><i class="fa-solid fa-coins"></i> {{gold}}</dd></div>
+    </dl>
+    {{/if}}
+  </aside>
+  {{/if}}
+</section>

@@ -690,6 +690,8 @@ export class CreatorShell extends CreatorShellBase {
     }
     this.#updateNoResults(needle);
     this.#updateVisibleCount();
+    // Collapsible shelves (the Magic Items step) open every section while a search is typed.
+    this.element.querySelector(".creator-store-shelf")?.classList.toggle("is-filtering", !!needle);
     this.#updateStoreGroups(needle);
   }
 

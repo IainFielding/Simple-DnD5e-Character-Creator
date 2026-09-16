@@ -558,6 +558,28 @@
         "instrumentHeading": "Musical Instruments",
         "grantedHeading": "From your class & background"
       },
+      "magicShop": {
+        "label": "Magic Items",
+        "intro": "Starting above 1st level, you begin with a few magic items. Choose them free of charge within the rarity slots on the right. A slot can also hold an item of a lower rarity.",
+        "loading": "Loading magic items… {percent}%",
+        "loadFailed": "The magic items could not be loaded. Leave the step and come back to try again.",
+        "tier": "Levels {from}–{to}",
+        "goldLabel": "Bonus gold roll",
+        "goldFormula": "{base} gp + {die} × {per} gp",
+        "goldTotal": "Bonus gold",
+        "dieHint": "Rolled once when you first opened this step. It stays the same if you come back or change your starting level.",
+        "slotsAria": "Magic item slots by rarity",
+        "downgradeHint": "A slot holds its own rarity or anything lower.",
+        "picksEmpty": "No magic items chosen yet. Pick from the shelves.",
+        "clear": "Clear Picks",
+        "overAllowance": "You have more magic items than your starting level allows. Remove some.",
+        "summary": "{count} item(s) · {gold}",
+        "empty": "The magic item shop has nothing you can choose. Ask your GM to stock it.",
+        "goldOnly": "Your starting level grants bonus gold but no magic items.",
+        "allRarities": "All rarities",
+        "filterRarityAria": "Filter by rarity",
+        "reviewHeading": "Magic Items"
+      },
       "review": {
         "label": "Review",
         "labelNamed": "Review {name}",
@@ -748,6 +770,15 @@
         "label": "Configure Store",
         "hint": "Curate the store's shelves: drag items in from any compendium, set per-item prices, and hide or remove stock."
       },
+      "magicShopEnabled": {
+        "name": "Enable the magic item shop",
+        "hint": "Adds a Magic Items step for characters starting above 1st level. It rolls their bonus gold and lets them pick free magic items by rarity, using the wealth table below."
+      },
+      "magicShopConfigMenu": {
+        "name": "Magic Item Shop",
+        "label": "Configure Magic Items",
+        "hint": "Set the starting wealth table (defaults to the DMG) and stock magic items by dragging in items, compendium folders or whole compendiums."
+      },
       "debugLogging": {
         "name": "Debug logging",
         "hint": "Print this module's diagnostics to your browser console. Off by default; turn it on if you've been asked for details about a problem. Affects only you."
@@ -800,6 +831,51 @@
         "hint": "Replace the inventory with the factory default stock (nothing is saved until you Save Changes).",
         "title": "Reset store inventory?",
         "body": "This replaces the current inventory — including your price overrides — with the factory default stock. Nothing is written until you press Save Changes."
+      },
+      "save": "Save Changes"
+    },
+    "magicShopConfig": {
+      "title": "Magic Item Shop",
+      "tabTable": "Wealth Table",
+      "tabInventory": "Inventory",
+      "tableHint": "What a character starting above 1st level receives, per level band: bonus gold of base + 1d10 × per-die gp, and how many magic items of each rarity they may pick. Defaults to the Dungeon Master's Guide.",
+      "colLevels": "Levels",
+      "colBaseGp": "Base gp",
+      "colPerD10": "gp per d10",
+      "colRange": "Gold range",
+      "band": "Levels {from}–{to}",
+      "range": "{min}–{max} gp",
+      "rangeFixed": "{gp} gp",
+      "reset": {
+        "label": "Reset to DMG",
+        "title": "Reset the wealth table?",
+        "body": "This puts the Dungeon Master's Guide values back in every band. Nothing is saved until you press Save Changes."
+      },
+      "countLabel": "{count} item(s)",
+      "removeEntry": "Remove from the shop",
+      "brokenHint": "This item can no longer be found (its source module may be disabled). Players won't see it. Remove the row or restore the source.",
+      "dropHint": "Drag magic items, compendium folders (subfolders included) or whole compendiums anywhere onto this window. Only items with a rarity are added.",
+      "reading": "Reading the dropped folder…",
+      "dropNotItem": "Only items, item folders and item compendiums can be dropped here.",
+      "dropNotItemFolder": "That isn't a folder or compendium of items.",
+      "dropNotPhysical": "{name} isn't a physical item, so it can't be stocked.",
+      "dropMundane": "{name} has no rarity, so it isn't a magic item.",
+      "dropDuplicate": "{name} is already in the shop.",
+      "dropNothingNew": "Nothing new to add from {name}: {duplicates} already listed, {mundane} without a rarity.",
+      "full": "The shop is full ({max} items). Remove some before adding more.",
+      "dropFolderTitle": "Add magic items",
+      "dropFolderBody": "Add <strong>{count}</strong> magic item(s) from {name}?",
+      "skippedDuplicates": "{count} already listed",
+      "skippedMundane": "{count} without a rarity",
+      "skippedOther": "{count} non-physical",
+      "skippedUnbased": "{count} template(s) or described-only item(s) with no base item to go on",
+      "shellsExpanded": "Includes {count} item(s) with a description but no weapon or armour stats (such as \"Weapon (any sword)\"), each made from every base item its description names.",
+      "templatesExpanded": "Includes {count} Dungeon Master's Guide template(s), each expanded into one item per enchantment and base item (for example Wand of the War Mage, +1, +2 and +3).",
+      "skippedFull": "{count} over the {max}-item limit",
+      "clear": {
+        "label": "Clear All",
+        "title": "Clear the magic item shop?",
+        "body": "Remove all {count} item(s) from the shop? Nothing is saved until you press Save Changes."
       },
       "save": "Save Changes"
     },
