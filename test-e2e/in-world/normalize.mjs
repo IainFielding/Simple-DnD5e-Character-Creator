@@ -286,6 +286,32 @@ function normaliseEffectChanges(item) {
   }
 }
 
+/**
+ * Drop an item's `system.source.book` when it holds nothing but dnd5e's own placeholder for the pack.
+ *
+ * `SourceField.prepareData` invents an empty `book` from the pack's `sourceBook` flag or its module's
+ * single `sourceBooks` entry, and dnd5e's Compendium Browser runs it over the pack's *cached* index
+ * entries in place. The creator's warm-up reaches that browser, so the first scenario to touch a pack
+ * compares a native item with no `book` against a creator item carrying the placeholder, and every
+ * later scenario sees both polluted and agrees. Iain's call (README, "source.book") was not to raise
+ * it: the placeholder is what dnd5e displays for that pack either way.
+ *
+ * Only the placeholder is dropped. A `book` naming anything else is real data and still compares.
+ * @param {object} item   A rewritten item entry, mutated in place.
+ * @param {string|null} uuid   The item's compendium source.
+ */
+function normaliseSourceBook(item, uuid) {
+  const source = item?.system?.source;
+  if ( !source || !("book" in source) ) return;
+  if ( !source.book ) { delete source.book; return; }
+  if ( !uuid ) return;
+  try {
+    const probe = { book: "" };
+    dnd5e.dataModels.shared.SourceField.prepareData.call(probe, uuid);
+    if ( probe.bookPlaceholder && (source.book === probe.bookPlaceholder) ) delete source.book;
+  } catch { /* not a compendium uuid the system can resolve — leave the field alone */ }
+}
+
 /* -------------------------------------------- */
 
 /**
@@ -302,6 +328,7 @@ export function sourceSnapshot(actor) {
     const entry = rewrite(item, idMap, DROP_ITEM);
     normaliseActivities(entry);
     normaliseEffectChanges(entry);
+    normaliseSourceBook(entry, item._stats?.compendiumSource ?? item.flags?.core?.sourceId ?? null);
     // The module under test stamps its own flags; they are bookkeeping, not advancement output.
     if ( entry.flags ) delete entry.flags[MODULE_FLAG];
 

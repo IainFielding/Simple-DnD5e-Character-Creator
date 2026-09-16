@@ -440,7 +440,8 @@ function optionalGrantFlow(item, level = 0) {
     item,
     configuration: {
       items: [{ uuid, optional: true }],
-      spell: { ability: ["int", "wis", "cha"], method: "spell", prepared: 2 }
+      // A Set, as the system's data model prepares it — the driver reads `.size`.
+      spell: { ability: new Set(["int", "wis", "cha"]), method: "spell", prepared: 2 }
     },
     value: { added: {} },
     reversed: [],
@@ -505,6 +506,53 @@ describe("a feat whose grant the player may decline", () => {
 
     await w.driver.toggleChoice(w.record, w.uuid);
     expect(w.driver.optionalGrantSteps).toHaveLength(0);
+  });
+
+  it("also surfaces the spell's casting ability as a decision on the same screen", async () => {
+    // Cold Caster lets Ray of Frost be cast with Intelligence, Wisdom or Charisma. Native asks; the
+    // driver used to route the grant to the optional-grant branch only, so the seeded first ability
+    // stuck and nobody was asked.
+    const w = makeOptionalGrantWorld();
+    await w.driver.toggleChoice(w.record, w.uuid);
+
+    expect(w.driver.grantSteps).toHaveLength(1);
+    expect(w.driver.grantSteps[0].advancement).toBe(w.grant.advancement);
+    expect(w.driver.grantSteps[0].screenLevel).toBe(4);
+
+    await w.driver.toggleChoice(w.record, w.uuid);
+    expect(w.driver.grantSteps).toHaveLength(0);
+  });
+
+  it("changes the ability without re-taking an item the player declined", async () => {
+    const w = makeOptionalGrantWorld();
+    await w.driver.toggleChoice(w.record, w.uuid);
+    const calls = [];
+    w.grant.advancement.apply = async (level, data) => { calls.push(data); };
+
+    await w.driver.applyGrantAbility(w.driver.grantSteps[0], "cha");
+    expect(calls).toEqual([{ ability: "cha", selected: [] }]);
+  });
+});
+
+/* -------------------------------------------- */
+/*  Locked abilities on a headless ASI          */
+/* -------------------------------------------- */
+
+describe("setAsi on a half-feat that locks abilities", () => {
+  it("drops a point aimed at a locked ability, keeping any fixed part", async () => {
+    // Street Justice locks everything but Strength and Dexterity. Handed `{int: 1}`, the native form
+    // drops the locked key; the headless path applied it.
+    const clone = { items: makeItems([]), reset: () => {} };
+    const driver = new LevelUpDriver(makeManager({ steps: [], clone, flowsByItem: new Map() }));
+    const applied = [];
+    const adv = {
+      configuration: { points: 1, cap: 1, fixed: { con: 1 }, locked: new Set(["con", "int", "wis", "cha"]) },
+      value: {},
+      async reverse() {},
+      async apply(level, data) { applied.push(data); }
+    };
+    await driver.setAsi({ level: 0, advancement: adv }, { int: 1, con: 3, str: 1 });
+    expect(applied).toEqual([{ type: "asi", assignments: { con: 1, str: 1 } }]);
   });
 });
 

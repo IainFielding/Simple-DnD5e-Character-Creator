@@ -1,8 +1,8 @@
-import { log, levelUpHpRollToChat } from "../config.mjs";
+import { log, levelUpHpRollToChat, t } from "../config.mjs";
 import { withItemSegment, addedEntries } from "../data/advancement-util.mjs";
 import { phbWeaponIcon } from "../data/weapon-source.mjs";
 import { bg3TraitIcon } from "../data/bg3-icons.mjs";
-import { findAsiFeats, classifyAsiFeats } from "../data/choice-resolver.mjs";
+import { findAsiFeats, classifyAsiFeats, evalContentPrereq } from "../data/choice-resolver.mjs";
 
 /**
  * Drives a native dnd5e {@link AdvancementManager} from the outside.
@@ -218,6 +218,12 @@ export class LevelUpDriver {
     "ScaleValue", "Size", "Trait", "ItemGrant"];
 
   /**
+   * Third-party advancement types that subclass no system type but that the driver handles by name.
+   * Each is inert in a world without the module that registers it: the type never appears.
+   */
+  static PASSTHROUGH_TYPES = ["EmberKnowledge", "PotentDragonmark"];
+
+  /**
    * The type to treat an advancement as: its own, or the nearest system type it subclasses.
    *
    * A module may register an advancement type of its own. Switching on the bare type string then
@@ -235,7 +241,7 @@ export class LevelUpDriver {
    */
   static baseType(adv) {
     if ( !adv ) return null;
-    if ( this.KNOWN_TYPES.includes(adv.type) || (adv.type === "EmberKnowledge") ) return adv.type;
+    if ( this.KNOWN_TYPES.includes(adv.type) || this.PASSTHROUGH_TYPES.includes(adv.type) ) return adv.type;
     const types = dnd5e.documents?.advancement ?? {};
     for ( const name of this.KNOWN_TYPES ) {
       const cls = types[`${name}Advancement`];
@@ -275,8 +281,22 @@ export class LevelUpDriver {
       // but it still has to pass this gate, or the Ember hand-off would fall through to the
       // native manager. The case is inert in a world without Ember: the type never appears.
       case "EmberKnowledge": return true;
+      // Forge of the Artificer's Potent Dragonmark: a screen that only previews the spells it adds,
+      // with nothing to choose — see `#ingestFlow`.
+      case "PotentDragonmark": return true;
       default:           return false;             // (no renderable types left)
     }
+  }
+
+  /**
+   * Whether an actor holds a dragonmark that Potent Dragonmark can build on — the exact test the
+   * module's own flow makes (`PotentDragonmarkFlow#dragonmark`) before it lets the step submit.
+   * @param {Actor5e} actor
+   * @returns {boolean}
+   */
+  static #hasDragonmark(actor) {
+    return (actor?.itemTypes?.feat ?? []).some(i => (i.system?.type?.value === "feat")
+      && (i.system?.type?.subtype === "dragonmark") && String(i.identifier ?? "").startsWith("mark-"));
   }
 
   /* -------------------------------------------- */
@@ -560,6 +580,13 @@ export class LevelUpDriver {
         // on, and the player can still decline in the wizard.
         await this.#seed(flow);
         this.optionalGrantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        // An optional grant can *also* let the player choose the spell's casting ability — Cold
+        // Caster's Ray of Frost may be cast with Intelligence, Wisdom or Charisma. The native screen
+        // asks both questions at once; here the ability is its own decision, so it gets the same
+        // picker as any other ability grant instead of silently keeping the seeded first choice.
+        if ( (adv.configuration?.spell?.ability?.size ?? 0) > 1 ) {
+          this.grantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        }
         return;
       }
       case "Size": {
@@ -583,6 +610,22 @@ export class LevelUpDriver {
         this.sizeSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
+      case "PotentDragonmark":
+        // Forge of the Artificer's feat advancement. It subclasses the base `Advancement`, whose
+        // `automaticApplicationValue` is `false`, so the default branch below skipped it — and a
+        // dragonmarked character who took the feat never got their Spells of the Mark. Its flow has
+        // no inputs: submitting it calls `apply(level, formData)` with nothing in the data, and
+        // `apply` reads the actor's dragonmark spell lists itself.
+        //
+        // The flow also refuses to submit without a qualifying dragonmark (a `mark-*` dragonmark
+        // feat), which is the feat's real prerequisite. The picker gates on it
+        // (`CONTENT_FEAT_PREREQS`), so reaching here without one means the feat came in by some other
+        // route; applying would be a no-op anyway, so say so rather than pretend.
+        if ( !LevelUpDriver.#hasDragonmark(adv.actor) ) {
+          log("Potent Dragonmark without a dragonmark feat — nothing to apply", adv.item?.name);
+          return;
+        }
+        return adv.apply(flow.level, {});
       default: {
         const auto = await flow.getAutomaticApplicationValue();
         if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
@@ -1003,7 +1046,11 @@ export class LevelUpDriver {
   async applyGrantAbility(record, ability) {
     const adv = record.advancement;
     if ( !adv.configuration?.spell?.ability?.has?.(ability) ) return;
-    await adv.apply(record.level, { ability, selected: this.#grantUuids(adv) });
+    // `apply` re-points the spells already granted in place, so re-selecting is only a convenience.
+    // For a grant with optional items it would be wrong — it would take back an item the player
+    // declined — so there the ability is changed alone.
+    const selected = this.#isAbilityGrant(adv) ? this.#grantUuids(adv) : [];
+    await adv.apply(record.level, { ability, selected });
     this.clone.reset();
   }
 
@@ -1239,6 +1286,15 @@ export class LevelUpDriver {
     if ( !item ) { log("ASI feat not found", uuid); return false; }
     if ( item.system.validatePrerequisites?.(this.clone, { showMessage }) !== true ) {
       log("ASI feat rejected by its own prerequisites", uuid);
+      return false;
+    }
+    // `validatePrerequisites` reads only the structured level/items fields. A prerequisite the
+    // content enforces elsewhere (Potent Dragonmark's) has to be checked here, or a headless resolve
+    // takes a feat the native level-up refuses to advance past.
+    const owned = new Set(this.clone.identifiedItems?.keys?.() ?? []);
+    if ( !evalContentPrereq(item.system?.identifier ?? item.identifier, owned).met ) {
+      if ( showMessage ) globalThis.ui?.notifications?.warn(t("levelup.step.asi.lockedPrereq"));
+      log("ASI feat rejected by its content-enforced prerequisite", uuid);
       return false;
     }
 
@@ -1816,9 +1872,19 @@ export class LevelUpDriver {
    */
   async setAsi(record, assignments) {
     const adv = record.advancement;
+    // A locked ability takes nothing beyond its fixed part, whatever the caller asked for. The native
+    // flow drops locked keys from the submitted form outright, and the interactive steppers never
+    // offer them; only this headless path could put a point there. It did: Street Justice locks
+    // Intelligence, was handed `{int: 1}`, and the creator applied it where native applied nothing.
+    const cfg = adv.configuration ?? {};
+    const allowed = {};
+    for ( const [key, value] of Object.entries(assignments ?? {}) ) {
+      const v = cfg.locked?.has?.(key) ? Math.min(Number(value) || 0, cfg.fixed?.[key] ?? 0) : value;
+      if ( v ) allowed[key] = v;
+    }
     return this.#withOwnHeadroom(async () => {
       if ( adv.value.type ) await adv.reverse(record.level);
-      await adv.apply(record.level, { type: "asi", assignments });
+      await adv.apply(record.level, { type: "asi", assignments: allowed });
       this.clone.reset();
     });
   }

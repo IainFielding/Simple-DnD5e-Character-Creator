@@ -100,7 +100,7 @@ function generateSize(adv) {
  * this source already made you proficient in". So the asker's own rendered list, where it has one,
  * narrows each group; the memo then carries the result to the other side.
  */
-async function generateTrait(adv, offered) {
+async function generateTrait(adv, offered, reserved = new Set()) {
   const Trait = dnd5e.documents.Trait;
   const cfg = adv.configuration ?? {};
   const groups = Array.from(cfg.choices ?? []);
@@ -109,6 +109,16 @@ async function generateTrait(adv, offered) {
   if ( !groups.length ) return { answer: null, note: "grants only, nothing to choose" };
 
   const granted = (await Trait.mixedChoices(new Set(cfg.grants ?? []))).asSet();
+  // Keys *another* origin grants outright, in this advancement's mode. The creator resolves the whole
+  // build at once and never offers them (`collectTakenTraitKeys`); the native build adds species
+  // before background, so a species pick is asked while the background's grants have not landed.
+  // Answering with one handed the creator a pick it refuses: House Orien Heir grants Acrobatics, the
+  // Human's Skillful was answered Acrobatics, and each side recorded it on a different item.
+  const mode = cfg.mode || "default";
+  for ( const entry of reserved ) {
+    const [m, key] = entry.split("|");
+    if ( (m === mode) && !(cfg.grants ?? new Set()).has?.(key) ) granted.add(key);
+  }
   const taken = new Set(adv.value?.chosen ?? []);
   const available = new Set((await offered?.()) ?? []);
   const picks = [];
@@ -275,20 +285,53 @@ async function loadGeneralFeats() {
   const out = [];
   for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
     const index = await pack.getIndex({ fields: ["system.type.value", "system.type.subtype",
-      "system.prerequisites.level", "system.prerequisites.items", "system.prerequisites.repeatable"] });
+      "system.prerequisites.level", "system.prerequisites.items", "system.prerequisites.repeatable",
+      "system.advancement"] });
     for ( const e of index ) {
       if ( (e.type !== "feat") || (e.system?.type?.value !== "feat") ) continue;
       if ( e.system?.type?.subtype !== "general" ) continue;
       if ( Array.from(e.system?.prerequisites?.items ?? []).length ) continue;
+      const advancement = e.system?.advancement ?? [];
       out.push({
         uuid: e.uuid, name: e.name,
         level: e.system?.prerequisites?.level ?? 0,
-        repeatable: !!e.system?.prerequisites?.repeatable
+        repeatable: !!e.system?.prerequisites?.repeatable,
+        // Source data stores advancement as an array, a prepared document as a map; take either.
+        advTypes: new Set((Array.isArray(advancement) ? advancement : Object.values(advancement))
+          .map(a => a?.type).filter(Boolean))
       });
     }
   }
   generalFeats = out.sort((a, b) => a.uuid.localeCompare(b.uuid));
   return generalFeats;
+}
+
+/**
+ * Prerequisites that content enforces inside an advancement **flow** rather than in
+ * `system.prerequisites`, keyed by advancement type. A feat carrying one of these types is only
+ * taken when its gate passes for the character.
+ *
+ * Written from the content module's own flow, deliberately *not* imported from the creator's
+ * `CONTENT_FEAT_PREREQS`: the native side is the oracle here, and a book that borrowed the creator's
+ * gate would mark its own homework.
+ *
+ * **PotentDragonmark** (Forge of the Artificer): `PotentDragonmarkFlow#_updateObject` throws unless
+ * the actor holds a `dragonmark` feat whose identifier starts `mark-`. Its feat, Potent Dragonmark,
+ * declares only `level: 4` — "Any Dragonmark Feat" is free text — so it passed the filter above and,
+ * sorting first by uuid, was the feat every character took. Every character without a dragonmark
+ * then stranded natively on *"No Dragonmark feat found!"*: 13 of the first 15 background scenarios
+ * on the 6.0.2 sweep. Earlier notes put that down to a type the step driver could not drive; the
+ * step's own error said otherwise.
+ * @type {Record<string, (actor: Actor5e) => boolean>}
+ */
+const CONTENT_GATES = {
+  PotentDragonmark: actor => (actor?.itemTypes?.feat ?? []).some(i => (i.system?.type?.value === "feat")
+    && (i.system?.type?.subtype === "dragonmark") && String(i.identifier ?? "").startsWith("mark-"))
+};
+
+/** Whether every content gate a feat's advancements carry passes for this actor. */
+function passesContentGates(feat, actor) {
+  return [...feat.advTypes].every(type => !CONTENT_GATES[type] || CONTENT_GATES[type](actor));
 }
 
 /**
@@ -298,7 +341,8 @@ async function loadGeneralFeats() {
  * feat is ever taken and nothing a feat *brings* (its own ASI, its grants, its spell choices) is
  * compared. This answers each ASI with the first eligible general feat not already held, walking
  * further down one stable uuid-sorted list at each successive ASI so a character taking five of them
- * takes five different ones.
+ * takes five different ones. "Eligible" includes the content-enforced gates in {@link CONTENT_GATES},
+ * so a dragonmarked character still takes Potent Dragonmark and everyone else skips it.
  * @param {Advancement} adv
  * @param {number} level   The character level the decision is raised at.
  */
@@ -318,7 +362,8 @@ async function generateAsiFeat(adv, level) {
   const feats = await loadGeneralFeats();
   const held = new Set(adv.actor?.items?.map(i => i._stats?.compendiumSource ?? i.flags?.dnd5e?.sourceId) ?? []);
   const characterLevel = level || adv.actor?.system?.details?.level || 0;
-  const pick = feats.find(f => (f.level <= characterLevel) && (f.repeatable || !held.has(f.uuid)));
+  const pick = feats.find(f => (f.level <= characterLevel) && (f.repeatable || !held.has(f.uuid))
+    && passesContentGates(f, adv.actor));
   if ( !pick ) return { missing: `no general feat is takeable at level ${characterLevel}` };
   return { answer: { feat: pick.uuid } };
 }
@@ -363,12 +408,12 @@ function generateAsi(adv) {
  *                                       against a character (see {@link generateTrait}).
  * @returns {Promise<{answer?: *, missing?: string, note?: string}>}
  */
-async function generate(adv, level, { offered, asiFeats = false } = {}) {
+async function generate(adv, level, { offered, asiFeats = false, reserved } = {}) {
   if ( isDeferred(adv) ) return { answer: null, note: "deferred to the creator's feat-spells step" };
   switch ( adv?.type ) {
     case "HitPoints": return { answer: "avg" };   // never "roll" — a die is not an equivalence test
     case "Size": return generateSize(adv);
-    case "Trait": return generateTrait(adv, offered);
+    case "Trait": return generateTrait(adv, offered, reserved);
     case "ItemChoice": return generateItemChoice(adv, level, offered);
     case "ItemGrant": return generateGrantAbility(adv);
     case "AbilityScoreImprovement": return asiFeats ? generateAsiFeat(adv, level) : generateAsi(adv);
@@ -384,6 +429,23 @@ async function generate(adv, level, { offered, asiFeats = false } = {}) {
 }
 
 /* -------------------------------------------- */
+
+/**
+ * The memo key for one decision: the owning item, the advancement id and the level.
+ *
+ * The item is part of it because advancement ids are **not** unique across items. Content built
+ * from a template reuses them: every Heroes of Faerûn feat carries its half-ASI as
+ * `v1EPmPE0rI7wlOYj`, and every feat's advancements run at level 0. Keyed on `advId@level` alone,
+ * the first such feat's answer was handed to every later one — Cold Caster's `{int: 1}` reached
+ * Street Justice, which locks Intelligence, so native applied nothing and the creator applied the
+ * point anyway. The identifier is what both builds agree on; the item's id is minted per actor.
+ * @param {Advancement} adv
+ * @param {number} level
+ */
+function memoKey(adv, level) {
+  const item = adv?.item?.identifier || adv?.item?.name || "";
+  return `${item}:${adv?.id}@${level}`;
+}
 
 export class AnswerBook {
 
@@ -421,10 +483,40 @@ export class AnswerBook {
    * @param {object} [options.overrides]   The scenario's `answers` table.
    * @param {boolean} [options.generate]   Generate an answer for anything the table does not cover.
    */
-  constructor({ overrides = {}, generate = false, asiFeats = false } = {}) {
+  constructor({ overrides = {}, generate = false, asiFeats = false, origins = [] } = {}) {
     this.#overrides = overrides ?? {};
     this.#generate = generate;
     this.#asiFeats = asiFeats;
+    this.#origins = (origins ?? []).filter(Boolean);
+  }
+
+  /** @type {string[]} The scenario's species, background and class uuids. */
+  #origins;
+
+  /** @type {Promise<Set<string>>|null} `mode|key` for every trait an origin grants at level 0–1. */
+  #reserved = null;
+
+  /**
+   * Every trait key an origin grants outright at creation, as `mode|key` — the same set, in the same
+   * shape, the creator's `collectTakenTraitKeys` builds and hides from every other choice. See
+   * {@link generateTrait} for why the generator has to know it before the native build has applied it.
+   * Only the origin documents themselves are read, not features they grant; no installed content
+   * grants a proficiency that way at level 1 where it also collides with another origin's choice.
+   */
+  #reservedKeys() {
+    this.#reserved ??= (async () => {
+      const out = new Set();
+      for ( const uuid of this.#origins ) {
+        const doc = await fromUuid(uuid).catch(() => null);
+        for ( const adv of Object.values(doc?.advancement?.byId ?? {}) ) {
+          if ( (adv.type !== "Trait") || ((adv.level ?? 0) > 1) ) continue;
+          const mode = adv.configuration?.mode || "default";
+          for ( const key of adv.configuration?.grants ?? [] ) out.add(`${mode}|${key}`);
+        }
+      }
+      return out;
+    })();
+    return this.#reserved;
   }
 
   /* -------------------------------------------- */
@@ -456,7 +548,7 @@ export class AnswerBook {
    */
   async answer(adv, level, { asker, offered } = {}) {
     if ( !adv?.id ) return undefined;
-    const key = `${adv.id}@${level}`;
+    const key = memoKey(adv, level);
 
     let entry = this.#memo.get(key);
     if ( !entry ) {
@@ -472,7 +564,9 @@ export class AnswerBook {
         entry.answer = override;
         entry.source = "override";
       } else if ( this.#generate ) {
-        const result = await generate(adv, level, { offered, asiFeats: this.#asiFeats });
+        const result = await generate(adv, level, {
+          offered, asiFeats: this.#asiFeats, reserved: await this.#reservedKeys()
+        });
         entry.answer = result.answer;
         entry.missing = result.missing ?? null;
         entry.note = result.note ?? null;
@@ -500,7 +594,7 @@ export class AnswerBook {
    * @param {string} [asker]
    */
   peek(adv, level, asker) {
-    const entry = this.#memo.get(`${adv?.id}@${level}`);
+    const entry = this.#memo.get(memoKey(adv, level));
     if ( !entry ) return undefined;
     if ( asker && !entry.askedBy.includes(asker) ) entry.askedBy.push(asker);
     return entry.answer;
