@@ -151,7 +151,10 @@ export const detailsStep = {
       // re-rendering, which would rebuild and flicker the portrait/token images on the left.
       case "generateName": {
         // "auto" follows the chosen species; an explicit style key overrides it.
-        const speciesId = source?.card(state.speciesUuid)?.identifier;
+        // Some species ship without an identifier (every Ravenloft lineage does), so fall
+        // back to the name — the generator folds either into the same style key.
+        const speciesCard = source?.card(state.speciesUuid);
+        const speciesId = speciesCard?.identifier || speciesCard?.name;
         const style = (state.nameStyle && state.nameStyle !== "auto") ? state.nameStyle : speciesId;
         // "any" passes no gender, so the generator draws from both pools at random.
         const gender = state.nameGender === "any" ? "" : state.nameGender;
