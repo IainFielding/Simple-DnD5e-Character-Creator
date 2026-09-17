@@ -29,43 +29,108 @@ import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended } fr
  * `restriction.list` names the list(s) as `class:<id>`; `restriction.level` fixes the spell level —
  * 0 for cantrips, 1 for first-level spells, and on up: {@link SpellSource#forSpellList} indexes the
  * list by level, so a feature offering a choice of 2nd-level Cleric spells draws from the same
- * place a Blessed Warrior does. Anything the system allows that *isn't* a level ("available", or a
- * blank) has no bucket to draw from, so it yields nothing here and the block falls back to whatever
- * the authored pool and drop-scan provide.
+ * place a Blessed Warrior does.
+ *
+ * `restriction.level` can also be **"available"** or **"availableNoCantrips"**: any spell the
+ * character has slots for, from 0 or 1 up to the highest slot level. Arcana Unleashed's Savant
+ * features ("add two Conjuration spells to your spellbook, then one more at each new slot level") are
+ * all this shape. With no branch for it the list came back empty, the block was marked exhausted and
+ * counted as complete, and the Savant pick was silently skipped. Anything else that is not a level
+ * yields nothing, leaving the block to the authored pool and drop-scan.
  * @param {object} cfg                                          The advancement configuration.
  * @param {import("../../data/spell-source.mjs").SpellSource} spells
+ * @param {object} [record]   The decision record, for the slot level an "available" restriction needs.
  * @returns {Promise<Map<string, {name: string, img: string}>>}  uuid -> option metadata.
  */
-async function spellListOptions(cfg, spells) {
+async function spellListOptions(cfg, spells, record = null) {
   const out = new Map();
   const raw = cfg.restriction?.level;
-  const level = Number(raw);
   const lists = Array.from(cfg.restriction?.list ?? []).map(l => String(l).replace(/^class:/, ""));
   if ( !lists.length ) return out;
   if ( !spells ) {
     log("spell choice: no spell source on this session, so its class list can't be offered");
     return out;
   }
-  if ( !Number.isInteger(level) || (level < 0) || (level > 9) ) {
-    log(`spell choice: no list pool for restriction level "${raw}"`);
-    return out;
+  let levels;
+  if ( (raw === "available") || (raw === "availableNoCantrips") ) {
+    const max = record ? maxSpellSlotLevel(record) : 0;
+    const min = raw === "availableNoCantrips" ? 1 : 0;
+    levels = max >= min ? Array.from({ length: max - min + 1 }, (_, i) => min + i) : [];
+  } else {
+    const level = Number(raw);
+    if ( !Number.isInteger(level) || (level < 0) || (level > 9) ) {
+      log(`spell choice: no list pool for restriction level "${raw}"`);
+      return out;
+    }
+    levels = [level];
   }
+  if ( !levels.length ) return out;
+  // `restriction.school` narrows the list to the named schools, as dnd5e's own flow filters its browser
+  // and rejects a pick outside them (`ItemChoiceAdvancement#_validateItemType`). Arcana Unleashed's
+  // Savants shipped without it, naming the school only in their hint text — raised upstream as
+  // foundryvtt-premium-content#1748 — so this is honoured the moment the data carries it.
+  const schools = new Set(cfg.restriction?.school ?? []);
   // Fetch the level-≤1 payload whenever the restriction allows it, and pick the bucket out of it:
   // that is the key the session warm-up already fills for the Magic Initiate lists
   // (cleric/druid/wizard), so a Blessed Warrior or Druidic Warrior pick reads a warm cache instead
   // of opening a second, level-0-only one. Only a choice above 1st level pays for its own load.
-  const fetchLevel = Math.max(1, level);
+  const fetchLevel = Math.max(1, ...levels);
   for ( const listId of lists ) {
     try {
       const { byLevel } = await spells.forSpellList(listId, fetchLevel);
-      for ( const spell of (byLevel?.[level] ?? []) ) {
-        if ( spell?.uuid ) out.set(spell.uuid, { name: spell.name, img: spell.img });
+      for ( const spell of levels.flatMap(l => byLevel?.[l] ?? []) ) {
+        if ( !spell?.uuid ) continue;
+        if ( schools.size && !schools.has(spell.schoolKey) ) continue;
+        out.set(spell.uuid, { name: spell.name, img: spell.img });
       }
     } catch ( err ) {
       log(`spell choice: failed to load the "${listId}" list`, err);
     }
   }
   return out;
+}
+
+/**
+ * The highest spell-slot level a decision's character has, the bound an "available" spell
+ * restriction uses. The same arithmetic as dnd5e's `ItemChoiceFlow#_maxSpellSlotLevel`, with one
+ * difference that matters here.
+ *
+ * The native manager levels its clone one step at a time, so the actor it reads is at the decision's
+ * level. The driver walks the whole jump first, so its clone is already at the target level: a
+ * 1→5 Wizard reading the actor would offer 3rd-level spells to the level-3 Savant pick, whose own text
+ * caps it at 2nd. So with a single spellcasting class, its levels are capped at the decision's level
+ * and the slots computed from that. With several classes there is no telling which one the feature
+ * belongs to, and the actor's own slots are used, as the native flow does for a non-class item.
+ * @param {object} record   A choice decision record.
+ * @returns {number}
+ */
+function maxSpellSlotLevel(record) {
+  const adv = record.advancement;
+  const Actor5e = globalThis.CONFIG?.Actor?.documentClass;
+  const slotsFor = (cls, spellcasting) => {
+    const progression = Object.fromEntries(Object.keys(CONFIG.DND5E.spellcasting ?? {}).map(k => [k, 0]));
+    const maxSpellLevel = Object.keys(CONFIG.DND5E.spellLevels ?? {}).length - 1;
+    const spells = Object.fromEntries(Array.from({ length: Math.max(0, maxSpellLevel) }, (_, i) => [`spell${i + 1}`, {}]));
+    Actor5e.computeClassProgression(progression, cls, { spellcasting });
+    Actor5e.prepareSpellcastingSlots(spells, spellcasting.type, progression);
+    return spells;
+  };
+
+  let spells;
+  try {
+    if ( adv.item?.spellcasting?.type && Actor5e ) spells = slotsFor(adv.item, adv.item.spellcasting);
+    else {
+      const casters = Object.values(adv.actor?.classes ?? {}).filter(c => c.spellcasting?.type);
+      if ( (casters.length === 1) && record.level && Actor5e ) {
+        const sc = casters[0].spellcasting;
+        spells = slotsFor(casters[0], { ...sc, levels: Math.min(sc.levels ?? record.level, record.level) });
+      } else spells = adv.actor?.system?.spells ?? {};
+    }
+  } catch ( err ) {
+    log("spell choice: could not compute the available slot level", err);
+    spells = adv.actor?.system?.spells ?? {};
+  }
+  return Object.values(spells).reduce((slot, s) => (s?.max ? Math.max(slot, s.level || -1) : slot), 0);
 }
 
 async function buildOptions(record, st, spells) {
@@ -98,7 +163,7 @@ async function buildOptions(record, st, spells) {
   // A spell choice draws on a class spell list, not the (empty) authored pool. Same `meta` channel:
   // the entries carry their own name/img, so no option needs a separate `fromUuid`.
   if ( cfg.type === "spell" ) {
-    for ( const [uuid, entry] of await spellListOptions(cfg, spells) ) meta.set(uuid, entry);
+    for ( const [uuid, entry] of await spellListOptions(cfg, spells, record) ) meta.set(uuid, entry);
   }
 
   const uuids = [...new Set([...pool, ...extraPriors, ...meta.keys()])];

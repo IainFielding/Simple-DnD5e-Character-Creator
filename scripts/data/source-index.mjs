@@ -346,7 +346,16 @@ export class SourceIndex {
     // (`warmAll`'s document load replaces the polluted cache entries), so the write that reaches
     // the actor happens during the build itself and is still open. Do not read this comment as
     // having closed that.
-    const safe = doc.clone({}, { keepId: true });
+    //
+    // Built from `toObject()` rather than `doc.clone()`, with the advancements left out. A compendium
+    // clone keeps its pack, so dnd5e fires `dnd5e.initializeItemSource` on it, and a clone's source
+    // hands `system.advancement` over as an id-keyed object. Tasha's Cauldron's `insertReplacements`
+    // calls `.values()` on that for a 2014 class and throws, one console error per 2014 class every
+    // time the creator warmed. The panel reads no advancement, and with none present Tasha's returns
+    // at its own "no advancements" guard. The pack and id are kept, so relative links still resolve.
+    const data = doc.toObject();
+    if ( data.system && ("advancement" in data.system) ) data.system.advancement = [];
+    const safe = new doc.constructor(data, { parent: doc.parent, pack: doc.pack, strict: false });
 
     const raw = safe.system?.description?.value ?? "";
     const enriched = await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, {

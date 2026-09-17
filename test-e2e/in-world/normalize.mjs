@@ -122,11 +122,26 @@ function contentKey(value) {
 function buildIdMap(items) {
   const seen = new Map();
   const map = new Map();
+  // Which advancement granted a duplicate, spelled in terms both builds share. Content alone cannot
+  // tell two copies of one feat apart when they are byte-identical — an Inquisitive background grants
+  // Alert and a Human's Versatile can also take it — and `contentKey` drops `flags`, where the only
+  // distinguishing field lives. The raw `advancementOrigin` is `<actor item id>.<advancement id>`, and
+  // the item id is minted per actor, so the granting item is named by its own identity instead.
+  const byId = new Map(items.map(i => [i._id, i]));
+  const originOf = item => {
+    const origin = item.flags?.dnd5e?.advancementOrigin;
+    if ( !origin ) return "";
+    const [itemId, ...rest] = String(origin).split(".");
+    const owner = byId.get(itemId);
+    return owner ? `${itemIdentity(owner)}.${rest.join(".")}` : String(origin);
+  };
   // Identity first so numbering does not depend on creation order, then content so a duplicate
-  // always takes the same number as its counterpart in the other build.
+  // always takes the same number as its counterpart in the other build, then the granting
+  // advancement for duplicates whose content is identical.
   const ordered = [...items]
-    .map(item => ({ item, identity: itemIdentity(item), content: contentKey(item) }))
-    .sort((a, b) => a.identity.localeCompare(b.identity) || a.content.localeCompare(b.content));
+    .map(item => ({ item, identity: itemIdentity(item), content: contentKey(item), origin: originOf(item) }))
+    .sort((a, b) => a.identity.localeCompare(b.identity) || a.content.localeCompare(b.content)
+      || a.origin.localeCompare(b.origin));
 
   for ( const { item, identity } of ordered ) {
     const n = (seen.get(identity) ?? 0) + 1;
@@ -357,6 +372,16 @@ export function sourceSnapshot(actor) {
   // world, so this is a restatement of the name `DROP_ACTOR` already drops — it would otherwise
   // report one row on every scenario, saying nothing about advancement output.
   delete actorData.system?.identifier;
+
+  // Current hit points above the character's own maximum are clamped to it. A per-level max-HP bonus
+  // (Tough's +2, Dwarven Toughness's +1) leaves the *native* build above its maximum at every level
+  // from 2 — the README's "per-level maximum-HP bonus" finding, measured against `hp.max` rather than
+  // guessed from the direction of the diff. The creator sits at the maximum, and `derived.hp.max`
+  // already agrees, so the stored overshoot was the whole difference (Flaming Fist Mercenary: 206 vs
+  // 204). Only the overshoot is removed: a build *below* its maximum still compares.
+  const hp = actorData.system?.attributes?.hp;
+  const max = actor.system?.attributes?.hp?.max;
+  if ( hp && Number.isFinite(max) && Number.isFinite(hp.value) && (hp.value > max) ) hp.value = max;
 
   return { actor: actorData, items };
 }

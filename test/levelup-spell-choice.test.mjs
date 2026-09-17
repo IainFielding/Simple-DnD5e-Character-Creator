@@ -128,7 +128,7 @@ describe("level-up spell choice (Blessed Warrior)", () => {
 
   it("yields no list options for a restriction level with no bucket to draw from", async () => {
     const { state, driver } = blessedWarrior();
-    state.choiceSteps[0].advancement.configuration.restriction.level = "available";
+    state.choiceSteps[0].advancement.configuration.restriction.level = "any";
     const data = await choicesStep.sectionsAt({ state, driver, spells: spellsStub }, 2);
     expect(data[0].sections[0].options).toEqual([]);
     expect(spellsStub.calls).toEqual([]);
@@ -138,5 +138,107 @@ describe("level-up spell choice (Blessed Warrior)", () => {
     const { state, driver } = blessedWarrior();
     const data = await choicesStep.sectionsAt({ state, driver, spells: null }, 2);
     expect(data[0].sections[0].options).toEqual([]);
+  });
+});
+
+/**
+ * Arcana Unleashed's **Savant** features (Conjuration, Enchantment, Necromancy, Transmutation): a spell
+ * `ItemChoice` restricted to `level: "availableNoCantrips"` — any Wizard spell of a level the character
+ * has slots for. The block used to draw nothing for that restriction, be marked exhausted, and count as
+ * complete, so the pick was silently skipped.
+ */
+describe("level-up spell choice restricted to available slot levels (Savant)", () => {
+  const WIZARD = {
+    0: [{ uuid: "u.firebolt", name: "Fire Bolt", img: "f", schoolKey: "evo" }],
+    1: [{ uuid: "u.shield", name: "Shield", img: "s", schoolKey: "abj" },
+      { uuid: "u.findfamiliar", name: "Find Familiar", img: "ff", schoolKey: "con" }],
+    2: [{ uuid: "u.mistystep", name: "Misty Step", img: "m", schoolKey: "con" }],
+    3: [{ uuid: "u.fireball", name: "Fireball", img: "b", schoolKey: "evo" }]
+  };
+  const wizardStub = {
+    calls: [],
+    async forSpellList(classId, maxLevel) {
+      this.calls.push([classId, maxLevel]);
+      const byLevel = Object.fromEntries(Object.entries(WIZARD).filter(([l]) => Number(l) <= maxLevel));
+      return { cantrips: byLevel[0] ?? [], level1: byLevel[1] ?? [], byLevel };
+    }
+  };
+
+  /** A leveled-caster stand-in: 1st-level slots from class level 1, 2nd from 3, 3rd from 5. */
+  const Actor5e = {
+    computeClassProgression(progression, cls, { spellcasting }) { progression.leveled += spellcasting.levels; },
+    prepareSpellcastingSlots(spells, type, progression) {
+      const top = Math.min(9, Math.ceil(progression.leveled / 2));
+      for ( let l = 1; l <= top; l++ ) spells[`spell${l}`] = { level: l, max: 1 };
+    }
+  };
+
+  function savant({ level = 3, classes, actorSpells = {}, restriction = "availableNoCantrips" } = {}) {
+    const record = {
+      level, screenLevel: level,
+      advancement: {
+        title: "Conjuration Savant",
+        item: { spellcasting: null },
+        actor: { classes, system: { spells: actorSpells } },
+        configuration: {
+          allowDrops: true, choices: { 3: { count: 2 } }, pool: [],
+          restriction: { list: ["class:wizard"], level: restriction }, type: "spell"
+        }
+      }
+    };
+    const st = { current: 0, max: 2, full: false, selected: new Set(), replaceable: false, replacing: null, priorEntries: [] };
+    const state = { choiceSteps: [record], driver: { choiceState: () => st } };
+    return { record, state, driver: state.driver };
+  }
+
+  beforeEach(() => {
+    wizardStub.calls = [];
+    globalThis.CONFIG = {
+      Actor: { documentClass: Actor5e },
+      DND5E: {
+        spellcasting: { leveled: {} },
+        spellLevels: { 0: "Cantrip", 1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th", 6: "6th", 7: "7th", 8: "8th", 9: "9th" }
+      }
+    };
+  });
+
+  const wizard = levels => ({ wizard: { spellcasting: { type: "leveled", progression: "full", levels } } });
+
+  it("offers every non-cantrip spell up to the highest slot level, and marks the block open", async () => {
+    const { record, state, driver } = savant({ level: 3, classes: wizard(3) });
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Find Familiar", "Misty Step", "Shield"]);
+    expect(record.exhausted).toBe(false);
+    expect(choicesStep.isCompleteAt(state, 3)).toBe(false);
+  });
+
+  it("caps the slot level at the decision's own level when the clone is already further on", async () => {
+    // A 1→5 jump: the clone's Wizard is level 5, but the level-3 pick may not reach 3rd-level spells.
+    const { state, driver } = savant({ level: 3, classes: wizard(5) });
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).not.toContain("Fireball");
+  });
+
+  it("includes cantrips for a plain \"available\" restriction", async () => {
+    const { state, driver } = savant({ level: 3, classes: wizard(3), restriction: "available" });
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).toContain("Fire Bolt");
+  });
+
+  it("falls back to the actor's own slots when more than one class casts", async () => {
+    const classes = { ...wizard(3), cleric: { spellcasting: { type: "leveled", progression: "full", levels: 2 } } };
+    const actorSpells = { spell1: { level: 1, max: 4 }, spell2: { level: 2, max: 3 }, spell3: { level: 3, max: 2 } };
+    const { state, driver } = savant({ level: 3, classes, actorSpells });
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Find Familiar", "Fireball", "Misty Step", "Shield"]);
+  });
+
+  it("narrows to the schools a restriction names, once the data carries them", async () => {
+    // foundryvtt-premium-content#1748: the Savants name their school only in hint text. A feature
+    // updated to carry `restriction.school` is honoured the way dnd5e's own flow honours it.
+    const { record, state, driver } = savant({ level: 3, classes: wizard(3) });
+    record.advancement.configuration.restriction.school = new Set(["con"]);
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Find Familiar", "Misty Step"]);
   });
 });

@@ -179,7 +179,7 @@ async function generateTrait(adv, offered, reserved = new Set()) {
  * A drop-restricted pool (the Artificer's "Replicate Magic Item") carries no authored options at
  * all; those come from the same compendium scan the creator uses.
  */
-async function generateItemChoice(adv, level, offered) {
+async function generateItemChoice(adv, level, offered, reserved = new Set()) {
   const cfg = adv.configuration ?? {};
   const count = cfg.choices?.[level]?.count ?? 0;
   const ability = sorted(cfg.spell?.ability ?? [])[0] ?? null;
@@ -232,7 +232,17 @@ async function generateItemChoice(adv, level, offered) {
     }
   }
 
-  const uuids = sorted(candidates).slice(0, count);
+  // A non-repeatable feat another origin grants is not a legal pick, and the creator does not offer
+  // it. Native asks before the background's grant has landed, so its rendered pool still lists it:
+  // a Human's Versatile was answered Alert while the Criminal background grants Alert, building two
+  // copies natively and a refused pick in the creator.
+  const uuids = [];
+  for ( const uuid of sorted(candidates) ) {
+    if ( uuids.length >= count ) break;
+    const name = (await fromUuid(uuid).catch(() => null))?.name?.trim().toLowerCase();
+    if ( name && reserved.has(`feat|${name}`) ) continue;
+    uuids.push(uuid);
+  }
   if ( uuids.length < count ) {
     return { missing: `"${adv.title}" has ${uuids.length} eligible option(s) for a choice of ${count} at level ${level}` };
   }
@@ -414,7 +424,7 @@ async function generate(adv, level, { offered, asiFeats = false, reserved } = {}
     case "HitPoints": return { answer: "avg" };   // never "roll" — a die is not an equivalence test
     case "Size": return generateSize(adv);
     case "Trait": return generateTrait(adv, offered, reserved);
-    case "ItemChoice": return generateItemChoice(adv, level, offered);
+    case "ItemChoice": return generateItemChoice(adv, level, offered, reserved);
     case "ItemGrant": return generateGrantAbility(adv);
     case "AbilityScoreImprovement": return asiFeats ? generateAsiFeat(adv, level) : generateAsi(adv);
     case "Subclass":
@@ -500,20 +510,37 @@ export class AnswerBook {
    * Every trait key an origin grants outright at creation, as `mode|key` — the same set, in the same
    * shape, the creator's `collectTakenTraitKeys` builds and hides from every other choice. See
    * {@link generateTrait} for why the generator has to know it before the native build has applied it.
-   * Only the origin documents themselves are read, not features they grant; no installed content
-   * grants a proficiency that way at level 1 where it also collides with another origin's choice.
+   * Features an origin *grants* at level 0–1 are walked too, as the creator walks them
+   * (`levelOneOwners`): Dragon Cultist grants Cult of the Dragon Initiate, whose Dragon's Tongue grants
+   * Draconic, and the background's own language choice was answered Draconic before that landed.
+   * Only fixed grants are followed; an `ItemChoice` pick is not known until it is answered.
    */
   #reservedKeys() {
     this.#reserved ??= (async () => {
       const out = new Set();
-      for ( const uuid of this.#origins ) {
+      const seen = new Set();
+      const walk = async (uuid, depth) => {
+        if ( !uuid || seen.has(uuid) || (depth > 3) ) return;
+        seen.add(uuid);
         const doc = await fromUuid(uuid).catch(() => null);
-        for ( const adv of Object.values(doc?.advancement?.byId ?? {}) ) {
-          if ( (adv.type !== "Trait") || ((adv.level ?? 0) > 1) ) continue;
-          const mode = adv.configuration?.mode || "default";
-          for ( const key of adv.configuration?.grants ?? [] ) out.add(`${mode}|${key}`);
+        // A granted non-repeatable feat is reserved too, as `feat|<name>`: no feat choice may take it
+        // again (the creator's `collectGrantedFeatNames`). The origins themselves are not feats.
+        if ( (depth > 0) && (doc?.type === "feat") && !doc.system?.prerequisites?.repeatable ) {
+          out.add(`feat|${doc.name.trim().toLowerCase()}`);
         }
-      }
+        for ( const adv of Object.values(doc?.advancement?.byId ?? {}) ) {
+          if ( (adv.level ?? 0) > 1 ) continue;
+          if ( adv.type === "Trait" ) {
+            const mode = adv.configuration?.mode || "default";
+            for ( const key of adv.configuration?.grants ?? [] ) out.add(`${mode}|${key}`);
+          } else if ( (adv.type === "ItemGrant") && !adv.configuration?.optional ) {
+            for ( const entry of adv.configuration?.items ?? [] ) {
+              if ( !entry?.optional ) await walk(entry?.uuid ?? entry, depth + 1);
+            }
+          }
+        }
+      };
+      for ( const uuid of this.#origins ) await walk(uuid, 0);
       return out;
     })();
     return this.#reserved;

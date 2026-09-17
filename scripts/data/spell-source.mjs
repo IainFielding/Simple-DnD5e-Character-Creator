@@ -734,6 +734,8 @@ export function buildSpellFromEntry(entry) {
     img: entry.img || "icons/svg/daze.svg",
     level,
     school: CONFIG.DND5E?.spellSchools?.[schoolKey]?.label ?? schoolKey,
+    // The raw key too, for matching an advancement's `restriction.school` — the label is translated.
+    schoolKey,
     components: [hasProp("vocal") && "V", hasProp("somatic") && "S", hasProp("material") && "M"]
       .filter(Boolean).join(", "),
     isConcentration: hasProp("concentration"),
