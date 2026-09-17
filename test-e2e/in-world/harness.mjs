@@ -1049,6 +1049,99 @@ export async function probeInterceptLevelUp({ to = 3 } = {}) {
   }
 }
 
+/**
+ * A spell `ItemChoice` restricted to "available" slot levels, rendered by the real level-up choices
+ * step — the Arcana Unleashed Savant features.
+ *
+ * The sweep cannot see these. `AnswerBook#isDeferred` treats every spell-type choice as the creator's
+ * feat-spells step's business, so both builds apply nothing and agree — which is how the Savant pick
+ * being silently skipped (its option list came back empty and the block counted as complete) went
+ * unnoticed. This builds a Savant Wizard to level 1 through the creator, levels it with the real
+ * `LevelUpShell`, and reports what the choices step actually offers at each level, then takes the
+ * first `count` options and checks the spells landed.
+ * @param {object} [options]
+ * @param {string} [options.match]   Substring of the sweep scenario id to use.
+ * @param {number} [options.to]      Level to climb to.
+ */
+export async function probeSpellChoice({ match = "conjur", to = 5, jump = false } = {}) {
+  const { LevelUpDriver } = await import(
+    "/modules/sogrom-dnd5e-character-creator/scripts/levelup/manager-driver.mjs");
+  const { choicesStep } = await import(
+    "/modules/sogrom-dnd5e-character-creator/scripts/levelup/steps/choices-step.mjs");
+  const { ScenarioChoiceProvider } = await import(`./provider.mjs${BUST}`);
+
+  const scenario = (await getSweep(to, true)).scenarios.find(s => s.id.startsWith("sweep:wizard/") && s.id.includes(match));
+  if ( !scenario ) throw new Error(`no wizard sweep scenario matches "${match}"`);
+  await cleanup();
+
+  let actor = null;
+  try {
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: true, origins: scenarioOrigins(scenario) });
+    actor = await buildCreator({ ...scenario, name: `${PREFIX}spell-choice [creator]`, targetLevel: 1 },
+      { book, unofferable: [] });
+
+    // Driven the way the creator adapter levels a character (`creator.mjs#resolveWith`), not through
+    // `LevelUpShell#_finish`: that returns silently unless every step is complete, and a Wizard's own
+    // spell-learning step is not one this probe fills. The choices step is still the real one.
+    const spells = new SpellSource();
+    const trace = [];
+    // `jump` takes 1→`to` in one manager, as the builder does: the driver's clone is then already at
+    // the target level when the level-3 pick is rendered, which is what the slot-level cap is for.
+    const stride = jump ? (to - 1) : 1;
+    for ( let lvl = 1 + stride; lvl <= to; lvl += stride ) {
+      const step = { want: lvl, levelBefore: actor.system?.details?.level ?? null, spellChoices: [] };
+      try {
+        const classItem = actor.items.find(i => i.type === "class");
+        const manager = dnd5e.applications.advancement.AdvancementManager.forLevelChange(actor, classItem.id, stride);
+        manager._sogromLevelUp = true;
+        const driver = new LevelUpDriver(manager);
+        await driver.prepare();
+        // Everything but the spell choices, from the book (the subclass pick included).
+        const records = [...driver.hpSteps, ...driver.subclassSteps, ...driver.asiSteps, ...driver.traitSteps,
+          ...driver.choiceSteps, ...driver.grantSteps];
+        for ( const rec of records ) await book.answer(rec.advancement, rec.level, { asker: "creator" });
+        await driver.autoResolve(new ScenarioChoiceProvider(book));
+        for ( const rec of driver.choiceSteps ) await book.answer(rec.advancement, rec.level, { asker: "creator" });
+
+        const ctx = { state: { choiceSteps: driver.choiceSteps, driver }, driver, spells };
+        for ( const record of ctx.state.choiceSteps.filter(r => r.advancement?.configuration?.type === "spell") ) {
+          const screen = record.screenLevel ?? record.level;
+          const blocks = await choicesStep.sectionsAt(ctx, screen) ?? [];
+          const section = blocks.flatMap(b => b.sections).find(s => s.index === ctx.state.choiceSteps.indexOf(record));
+          const st = ctx.driver.choiceState(record);
+          const entry = {
+            title: record.advancement.title, level: record.level, restriction: record.advancement.configuration.restriction?.level,
+            max: st.max, offered: section?.options?.length ?? 0, exhausted: !!record.exhausted,
+            spellLevels: [...new Set(await Promise.all((section?.options ?? []).map(async o => (await fromUuid(o.uuid))?.system?.level)))].sort(),
+            // What the data restricts to, and what was actually offered — equal once #1748 is fixed.
+            restrictedSchools: [...(record.advancement.configuration.restriction?.school ?? [])],
+            offeredSchools: [...new Set(await Promise.all((section?.options ?? []).map(async o => (await fromUuid(o.uuid))?.system?.school)))].sort()
+          };
+          for ( const o of (section?.options ?? []).filter(o => !o.owned && !o.disabled).slice(0, st.max - st.current) ) {
+            await ctx.driver.toggleChoice(record, o.uuid);
+          }
+          entry.pickedAfter = ctx.driver.choiceState(record).current;
+          step.spellChoices.push(entry);
+        }
+        await driver.commit();
+        await new Promise(r => setTimeout(r, 500));
+      } catch ( err ) {
+        step.error = `${err.name}: ${err.message}`;
+      }
+      step.levelAfter = actor.system?.details?.level ?? null;
+      trace.push(step);
+    }
+    return {
+      scenario: scenario.id,
+      level: actor.system?.details?.level ?? null,
+      wizardSpells: actor.itemTypes.spell.map(s => `${s.name} (${s.system.level})`).sort(),
+      trace
+    };
+  } finally {
+    await cleanup();
+  }
+}
+
 export async function probeBookOrdering() {
   const pack = game.packs.get("dnd5e.classes");
   if ( !pack ) throw new Error("dnd5e.classes pack not found");

@@ -96,6 +96,10 @@ try {
     }), null, 2));
   } else if ( flag("probe-intercept") ) {
     console.log(JSON.stringify(await harness("probeInterceptLevelUp", { to: Number(value("level") ?? 3) }), null, 2));
+  } else if ( flag("probe-spell-choice") ) {
+    console.log(JSON.stringify(await harness("probeSpellChoice", {
+      match: value("probe-spell-choice") || undefined, to: Number(value("level") ?? 5), jump: flag("jump")
+    }), null, 2));
   } else if ( flag("probe-bookorder") ) {
     console.log(JSON.stringify(await harness("probeBookOrdering"), null, 2));
   } else if ( flag("probe-minbook") ) {

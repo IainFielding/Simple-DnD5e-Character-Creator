@@ -101,6 +101,9 @@ export async function resolveChoices(state, source) {
   // hidden when the build doesn't satisfy it, and promoted to a "recommended" panel when it does.
   const ownedIds = collectOwnedIdentifiers(defs);
 
+  // Non-repeatable feats another origin already grants, which no feat choice may offer again.
+  const grantedFeats = await collectGrantedFeatNames(defs);
+
   // The chosen class's spellcasting ability (and its display name). When a *granted* spell
   // from any origin (species/background) lets the player pick which ability casts it, the
   // class's ability is the recommended pick — so they can align innate casting with the
@@ -115,7 +118,7 @@ export async function resolveChoices(state, source) {
   // the same reason the two above do: the rules scope it to the character, not to the class that
   // offers it, so a skill from the species or background is a legitimate pick.
   const shared = {
-    crossTaken, spellAbilityHint, ownedIds,
+    crossTaken, spellAbilityHint, ownedIds, grantedFeats,
     // The build's rules edition, set by the chosen class — the same scoping the origin grids use,
     // needed here for pools that are scanned from the packs rather than authored on an advancement.
     rules: classDef?.doc?.system?.source?.rules ?? null,
@@ -271,6 +274,43 @@ function collectOwnedIdentifiers(defs) {
 }
 
 /**
+ * Lowercased names of every non-repeatable feat an origin *grants outright* at level 0–1.
+ *
+ * The 2024 rules let a feat be taken once unless its text says "Repeatable". A Criminal or an
+ * Inquisitive background grants Alert, and a Human's Versatile picks any origin feat — so without
+ * this the creator offered Alert again and built a character holding two copies. Native dnd5e lets
+ * it through only by accident of order (the species' pick is made before the background's grant
+ * lands); the creator resolves the whole build at once and can simply not offer it, as it already
+ * does for a skill another origin grants ({@link collectTakenTraitKeys}).
+ *
+ * Only `ItemGrant` items count, and only the non-optional ones: a pick made in another `ItemChoice`
+ * is a choice the player can still change, so hiding options on its account would make two choices
+ * each lock the other. Matched by **name**, not uuid, because the same feat ships in several packs
+ * and a restriction-scanned pool may list a different copy than the one granted.
+ * @param {{owners?: {item: Item}[]}[]} defs
+ * @param {(uuid: string) => Promise<Item|null>} [resolve]   Injected for tests.
+ * @returns {Promise<Set<string>>}
+ */
+export async function collectGrantedFeatNames(defs, resolve = uuid => fromUuid(uuid)) {
+  const names = new Set();
+  for ( const d of defs ) {
+    for ( const { item: owner } of d.owners ?? [] ) {
+      for ( const adv of advancementArray(owner) ) {
+        if ( (adv.type !== "ItemGrant") || ((adv.level ?? 0) > 1) || adv.configuration?.optional ) continue;
+        for ( const ref of Array.from(adv.configuration?.items ?? []) ) {
+          if ( (typeof ref === "object") && ref?.optional ) continue;
+          const uuid = typeof ref === "string" ? ref : ref?.uuid;
+          const doc = uuid ? await Promise.resolve(resolve(uuid)).catch(() => null) : null;
+          if ( (doc?.type !== "feat") || doc.system?.prerequisites?.repeatable ) continue;
+          if ( doc.name ) names.add(doc.name.trim().toLowerCase());
+        }
+      }
+    }
+  }
+  return names;
+}
+
+/**
  * Gather every trait proficiency/language already acquired across all sources so a key
  * taken once can be greyed out elsewhere. Keys are namespaced `mode|key` so distinct
  * mechanics that reuse keys (weapon mastery vs proficiency) stay independent. Returns the
@@ -310,12 +350,15 @@ function collectTakenTraitKeys(defs) {
  */
 async function prepareRequirements(def, shared) {
   const { key: source, sel, owners } = def;
-  const { crossTaken, spellAbilityHint, ownedIds, expertiseSkillPool, index, rules } = shared;
+  const { crossTaken, spellAbilityHint, ownedIds, grantedFeats, expertiseSkillPool, index, rules } = shared;
   const reqs = [];
 
   for ( const { item: owner, ownerUuid } of owners ) {
     for ( const adv of advancementArray(owner) ) {
-      await parseAdvancementChoice(adv, { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds, index, ownerItem: owner, rules });
+      await parseAdvancementChoice(adv, {
+        source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, owned: ownedIds,
+        grantedFeats, index, ownerItem: owner, rules
+      });
     }
   }
 
@@ -584,11 +627,17 @@ async function parseAdvancementChoice(adv, ctx) {
     // with a different UUID. Dedupe by name too so those don't double up.
     const seenNames = new Set();
     const nameKey = n => (n ?? "").trim().toLowerCase();
+    // A non-repeatable feat another origin grants is not a legal pick — see
+    // {@link collectGrantedFeatNames}. A pick of one, made before the granting origin was chosen, is
+    // dropped below so the slot reopens, as a trait pick another source now grants already is.
+    const granted = ctx.grantedFeats ?? new Set();
+    const dropped = new Set();
     for ( const p of Array.from(cfg.pool ?? []) ) {
       const uuid = typeof p === "string" ? p : p?.uuid;
       if ( !uuid || seen.has(uuid) ) continue;
       const doc = await fromUuid(uuid).catch(() => null);
       if ( !doc ) continue;
+      if ( granted.has(nameKey(doc.name)) ) { dropped.add(uuid); dropped.add(doc.uuid); continue; }
       const g = gate(doc.system?.prerequisites);
       if ( !g ) continue;
       seen.add(uuid);
@@ -598,12 +647,17 @@ async function parseAdvancementChoice(adv, ctx) {
     if ( cfg.allowDrops && cfg.restriction?.subtype ) {
       for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel, rules) ) {
         if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
+        if ( granted.has(nameKey(opt.label)) ) { dropped.add(opt.key); dropped.add(opt.uuid); continue; }
         const g = gate({ items: opt.prereqItems });   // level already filtered by the scan
         if ( !g ) continue;
         seen.add(opt.key);
         seenNames.add(nameKey(opt.label));
         options.push({ key: opt.key, uuid: opt.uuid, label: opt.label, img: opt.img, recommended: g.recommended });
       }
+    }
+    const pickKey = k => (typeof k === "string" ? k : k?.uuid);
+    if ( dropped.size && sel[adv._id]?.some(k => dropped.has(pickKey(k))) ) {
+      sel[adv._id] = sel[adv._id].filter(k => !dropped.has(pickKey(k)));
     }
     if ( !options.length ) return;
     options.sort((a, b) => a.label.localeCompare(b.label, game.i18n.lang));

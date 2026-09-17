@@ -484,6 +484,62 @@ were harness bugs, and one of the harness bugs was hiding one of the creator bug
   `origins` and excludes those keys the same way. Both characters had the same skills either way;
   only where the pick was recorded differed.
 
+The first full run with those fixes came out **65 identical / 6 differing / 0 errored of 71**
+(`sweep-results-602-background-pre-dupfeat.jsonl`). The six were three more causes:
+
+- **A non-repeatable feat taken twice.** Criminal and Inquisitive grant Alert, and the Human's
+  Versatile was answered Alert. The 2024 rules allow a feat once unless it says "Repeatable", and
+  Alert does not. Native allowed the duplicate only because the species' pick is made before the
+  background's grant lands. **Creator change:** `collectGrantedFeatNames` in `choice-resolver.mjs`
+  hides a non-repeatable feat another origin grants outright from every origin feat choice, matched
+  by name because the same feat ships in several packs, and drops a stale pick of one. The generator
+  reserves the same names (`feat|<name>` in `#reservedKeys`). The diff itself was only numbering:
+  `buildIdMap` ordered byte-identical duplicates by creation order, so it now tie-breaks on the
+  granting advancement, named by the granting item's identity.
+- **A reserved trait granted one level down.** Dragon Cultist grants the Cult of the Dragon Initiate
+  feat, whose Dragon's Tongue grants Draconic, and the background's own language choice was answered
+  Draconic. `#reservedKeys` now follows non-optional level 0–1 `ItemGrant`s, as the creator's
+  `levelOneOwners` does.
+- **Native current HP above its own maximum** (Tough: Flaming Fist Mercenary, Rashemi Wanderer,
+  Farmer). This is the known dnd5e behaviour recorded under "Found by the species and feat axes". The
+  source snapshot now clamps `hp.value` to `hp.max`; a build *below* its maximum still compares.
+
+All six PASS on rerun.
+
+**Tasha's console error, found on the way.** Opening the creator in a world with Tasha's logged
+`Error thrown in hooked function 'insertReplacements' … advancementList.values is not a function`.
+The detail-panel warm-up (`SourceIndex#resolveDetail`) called `doc.clone()` on cached compendium
+documents. A clone keeps its pack, so dnd5e fires `dnd5e.initializeItemSource` on it, and the clone's
+source hands `system.advancement` over as an id-keyed object, on which Tasha's `findContainingGrant`
+calls `.values()`. The panel now builds its copy from `toObject()` with the advancements emptied,
+keeping the pack and id, so Tasha's returns at its own "no advancements" guard. Measured with
+`--probe-warmsources --console`: 2 errors on the old line, 0 on the new. The Tasha's bug itself is
+theirs (the same file handles the object shape correctly thirty lines later).
+
+**Savant spell choices were skipped, and the sweep cannot see them (2026-09-17, reported by Iain).**
+Arcana Unleashed's Conjuration, Enchantment, Necromancy and Transmutation Savant features are spell
+`ItemChoice`s restricted to `level: "availableNoCantrips"`: any Wizard spell of a level the character
+has slots for. The level-up choices step only understood a numeric restriction level, so it offered
+nothing, marked the block exhausted and counted it complete. `spellListOptions` now reads
+`available`/`availableNoCantrips` as every level from 0 or 1 up to the highest slot. The slot level is
+computed at the decision's own level for a single-class caster, so a 1→5 jump still caps the level-3
+pick at 2nd-level spells.
+
+`--probe-spell-choice <id-substring> --level N [--jump]` verifies it in the world:
+
+```
+Conjurer, 1→5 in one jump
+  level 3 Savant: 109 offered, spell levels 1–2, picked 2
+  level 5 Savant: 167 offered, spell levels 1–3, picked 1
+  actor: Absorb Elements (1), Acid Arrow (2), Aganazzar's Scorcher (2)
+```
+
+**The sweep's blind spot.** `AnswerBook#isDeferred` defers *every* spell-type `ItemChoice` to the
+creator's feat-spells step, which only exists for level-≤1 origin choices. So both builds apply
+nothing to a level-up spell choice (Savant, Blessed Warrior) and report identical. The school in the
+Savant hint ("from the Conjuration school") is text only, so neither native nor the creator enforces
+it.
+
 `source.book` (finding 2 above) is also gone from the diff. `normaliseSourceBook` drops an item's
 `book` when it is empty or equals the placeholder `SourceField.prepareData` invents for that item's
 pack, which is exactly the value the warm-up pollutes. A `book` naming anything else still compares.

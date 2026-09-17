@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  choicesComplete, traitChoiceTitle, evalItemPrereq, groupRecommended
+  choicesComplete, traitChoiceTitle, evalItemPrereq, groupRecommended, collectGrantedFeatNames
 } from "../scripts/data/choice-resolver.mjs";
 import { advancementArray } from "../scripts/data/advancement-util.mjs";
 import { fighter, sage } from "./fixtures/dnd5e-5.3.3.mjs";
@@ -172,5 +172,47 @@ describe("groupRecommended", () => {
     expect(groups).toHaveLength(2);
     expect(groups[0].options.map(o => o.key)).toEqual(["unlocked"]);
     expect(groups[1].options.map(o => o.key)).toEqual(["plain"]);
+  });
+});
+
+/**
+ * A non-repeatable feat an origin grants is not offered again by any feat choice. Criminal and
+ * Inquisitive grant Alert; a Human's Versatile picks any origin feat, and used to offer Alert too.
+ */
+describe("collectGrantedFeatNames", () => {
+  const feat = (name, repeatable = false) => ({ type: "feat", name, system: { prerequisites: { repeatable } } });
+  const docs = {
+    "u.alert": feat("Alert"),
+    "u.skilled": feat("Skilled", true),
+    "u.darkvision": { type: "feat", name: "Darkvision", system: { prerequisites: {} } },
+    "u.club": { type: "weapon", name: "Club", system: {} }
+  };
+  const resolve = async uuid => docs[uuid] ?? null;
+  const grant = (items, extra = {}) => ({ type: "ItemGrant", level: 0, configuration: { items, ...extra } });
+  const def = advancement => ({ owners: [{ item: { system: { advancement } } }] });
+
+  it("names the non-repeatable feats granted at level 0-1", async () => {
+    const names = await collectGrantedFeatNames([def([grant([{ uuid: "u.alert" }, { uuid: "u.club" }])])], resolve);
+    expect([...names]).toEqual(["alert"]);
+  });
+
+  it("leaves out a repeatable feat, an optional item, an optional grant and a later level", async () => {
+    const names = await collectGrantedFeatNames([
+      def([grant([{ uuid: "u.skilled" }])]),
+      def([grant([{ uuid: "u.alert", optional: true }])]),
+      def([grant([{ uuid: "u.alert" }], { optional: true })]),
+      def([{ ...grant([{ uuid: "u.alert" }]), level: 4 }])
+    ], resolve);
+    expect(names.size).toBe(0);
+  });
+
+  it("does not count an ItemChoice pick, which the player can still change", async () => {
+    const names = await collectGrantedFeatNames([def([{ type: "ItemChoice", level: 0, configuration: { pool: ["u.alert"] } }])], resolve);
+    expect(names.size).toBe(0);
+  });
+
+  it("counts a non-repeatable species trait granted as a feat item", async () => {
+    const names = await collectGrantedFeatNames([def([grant(["u.darkvision"])])], resolve);
+    expect([...names]).toEqual(["darkvision"]);
   });
 });
