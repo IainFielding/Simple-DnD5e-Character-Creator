@@ -95,6 +95,11 @@
               <a class="content-link cc-rarity-text rarity-{{rarity}}" data-uuid="{{link}}" data-link
                  data-tooltip="{{ccItemTooltip link}}">{{name}}</a>
               <span class="creator-store-row-type">{{rarityLabel}} · {{typeLabel}}</span>
+              {{#if warningLabel}}
+              <span class="creator-magic-warning" data-tooltip="{{warningTip}}">
+                <i class="fa-solid fa-triangle-exclamation"></i> {{warningLabel}}
+              </span>
+              {{/if}}
             </div>
             <div class="creator-store-qty">
               <button type="button" class="creator-store-qty-btn" data-action="stepAction"

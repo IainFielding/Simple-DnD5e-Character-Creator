@@ -11,6 +11,7 @@ import { applyLevelUpSpells, spellChanges, featSubstituteData } from "./steps/lv
 import { reconcileGrantedSpells } from "../build/spell-reconcile.mjs";
 import { captureLevelUpSummary, postLevelUpSummary, postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
+import { grantMagicItems } from "../data/magic-shop-source.mjs";
 import { stageEmberGear, abandonEmberCreation } from "./ember-creation.mjs";
 
 /**
@@ -527,6 +528,20 @@ export class LevelUpShell extends CreatorShellBase {
       } catch ( err ) {
         log("feat spell substitute failed", err);
         ui.notifications?.error(t("levelup.notify.spellsFailed"));
+      }
+    }
+
+    // The free magic items and bonus gold a creation climb picked on the Magic Items step, written
+    // once the levels themselves have landed — so the character that receives them is the one the
+    // allowance was measured against. Ordinary level-ups carry no creation state and grant nothing.
+    if ( !ember && this.state.creationState ) {
+      try {
+        await grantMagicItems(actor, this.state.creationState);
+      } catch ( err ) {
+        // Non-fatal, like the gear grant above: the levels are the important part, and an item can
+        // be added on the sheet.
+        log("magic item grant failed", err);
+        ui.notifications?.error(t("levelup.notify.magicItemsFailed"));
       }
     }
 

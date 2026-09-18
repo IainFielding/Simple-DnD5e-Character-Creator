@@ -4597,6 +4597,15 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-store-row .content-link i { display: none; }
 .creator-store-row .content-link:hover { color: var(--cc-gold); }
 .creator-store-row-type { color: var(--cc-muted); font-size: 0.72rem; }
+/* Why the character can't make proper use of a magic item — no proficiency, or not enough Strength.
+   A note, not a block: the item is still pickable, so this is coloured as a caution rather than an
+   error and sits under the name where the eye already is. */
+.creator-magic-warning {
+  display: block;
+  color: var(--cc-danger);
+  font-size: 0.72rem;
+}
+.creator-magic-warning i { margin-right: 0.2rem; }
 /* Right-aligned inside a ~380px track, so it still forms a scannable column of prices down each
    section without being flung to the far side of the window. Tabular figures so those columns
    line up digit for digit. */

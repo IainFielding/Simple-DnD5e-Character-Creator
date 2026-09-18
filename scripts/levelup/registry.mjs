@@ -2,6 +2,7 @@ import { levelStep } from "./steps/level-step.mjs";
 import { lvlClassStep } from "./steps/lvl-class-step.mjs";
 import { lvlReviewStep } from "./steps/lvl-review-step.mjs";
 import { lvlSpellsStep } from "./steps/lvl-spells-step.mjs";
+import { lvlMagicShopStep } from "./steps/lvl-magic-shop-step.mjs";
 import { emberEquipmentStep, emberStoreStep, emberStoreEnabled } from "./ember-creation.mjs";
 
 /**
@@ -36,6 +37,10 @@ export function buildSteps(state) {
   if ( state.emberCreation ) steps.push(emberEquipmentStep);
   if ( emberStoreEnabled(state) ) steps.push(emberStoreStep);
   if ( state.hasSpellStep() ) steps.push(lvlSpellsStep);
+  // The bonus gold and free magic items a character starting above level 1 is owed — last, because
+  // it is the only step that wants the finished character: what it can use depends on the
+  // proficiencies and ability scores every screen before it just granted. A creation climb only.
+  if ( lvlMagicShopStep.applicable(state) ) steps.push(lvlMagicShopStep);
   steps.push(lvlReviewStep);
   return steps;
 }

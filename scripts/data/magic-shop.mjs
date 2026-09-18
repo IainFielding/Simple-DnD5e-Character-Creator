@@ -375,3 +375,49 @@ export function countByRarity(entries) {
   for ( const e of entries ?? [] ) if ( counts[e?.rarity] !== undefined ) counts[e.rarity]++;
   return counts;
 }
+
+/* -------------------------------------------- */
+/*  Usability                                   */
+/* -------------------------------------------- */
+
+/**
+ * Whether a character can make proper use of a shelf item, and why not.
+ *
+ * Two things stop a magic weapon or suit of armour being the prize it looks like: proficiency, which
+ * a class or origin has to grant, and armour's Strength requirement, which plate and splint carry.
+ * Neither prevents the pick — a player may want an item for a later level, or for someone else at the
+ * table — so this only reports; the shelf shows it as a badge.
+ *
+ * The proficiency test mirrors the system's own (`EquipmentData#proficiencyMultiplier` and
+ * `WeaponData#proficiencyMultiplier`): the item's category maps to a proficiency key, and the
+ * character qualifies by holding that key *or* the specific base item ("longsword" for an Elf).
+ * Anything that is not a weapon or armour needs no proficiency at all.
+ * @param {{type: string, subtype: string, baseItem?: string, strength?: number|null}} entry
+ * @param {{armorProf: Set<string>, weaponProf: Set<string>, strength: number}} character
+ * @param {{armor: Record<string, string|boolean>, weapon: Record<string, string|boolean>}} maps
+ *   The system's `armorProficienciesMap` / `weaponProficienciesMap`.
+ * @returns {{proficient: boolean, needsStrength: number|null}}
+ */
+export function itemUsability(entry, character, maps = {}) {
+  const out = { proficient: true, needsStrength: null };
+  if ( !entry || !character ) return out;
+  const subtype = entry.subtype ?? "";
+  const baseItem = entry.baseItem ?? "";
+
+  if ( entry.type === "weapon" ) {
+    const key = maps.weapon?.[subtype];
+    // "natural" maps to true: a creature's own attacks need no training. An unmapped category is
+    // treated the same way rather than reported — the system only warns about what it knows.
+    if ( key === undefined || key === true ) out.proficient = true;
+    else out.proficient = character.weaponProf.has(key) || (!!baseItem && character.weaponProf.has(baseItem));
+  } else if ( entry.type === "equipment" ) {
+    const key = maps.armor?.[subtype];
+    // Clothing and trinkets map to `true` — worn, not armour.
+    if ( key === undefined || key === true ) out.proficient = true;
+    else out.proficient = character.armorProf.has(key) || (!!baseItem && character.armorProf.has(baseItem));
+
+    const needed = Number(entry.strength) || 0;
+    if ( needed > 0 && (Number(character.strength) || 0) < needed ) out.needsStrength = needed;
+  }
+  return out;
+}

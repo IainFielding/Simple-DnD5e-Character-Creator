@@ -3,10 +3,11 @@ import { formatCp } from "../data/store-source.mjs";
 import { sectionKey, groupCards, itemTypeLabel, subtypeLabel } from "../data/shelf-sections.mjs";
 import {
   RARITIES, rarityRank, rarityLabel, countPicks, canPick, withinAllowance, slotsSummary,
-  highestSlotRank, bonusGoldCp
+  highestSlotRank, bonusGoldCp, itemUsability
 } from "../data/magic-shop.mjs";
 import {
-  magicShopConfig, magicShopTier, magicShopSource, ensureMagicShopRoll, pickList
+  magicShopConfig, magicShopTier, magicShopSource, ensureMagicShopRoll, pickList,
+  usabilityProfile, proficiencyMaps
 } from "../data/magic-shop-source.mjs";
 
 /**
@@ -111,7 +112,7 @@ export const magicShopStep = {
     }
   },
 
-  async context({ state, app }) {
+  async context({ state, app, actor = null }) {
     const config = magicShopConfig();
     const tier = magicShopTier(state, config);
     if ( !tier ) return { unavailable: true };
@@ -156,19 +157,32 @@ export const magicShopStep = {
       .filter(r => eligible.some(e => e.rarity === r))
       .map(r => ({ value: r, label: rarityLabel(r), selected: r === rarity }));
 
+    // What the character can actually use. Nothing is hidden or blocked — a player may well want an
+    // item for a later level, or for someone else at the table — but an item they cannot use says so
+    // on its card, which is the difference between a considered pick and a wasted one.
+    const profile = usabilityProfile(actor);
+    const maps = profile ? proficiencyMaps() : null;
+
     const picks = state.magicShop.picks;
     const cards = eligible
       .filter(e => (!category || e.type === category) && (!subtype || e.subtype === subtype)
         && (!rarity || e.rarity === rarity))
       .map(e => {
         const qty = picks[e.uuid]?.qty ?? 0;
+        const use = profile ? itemUsability(e, profile, maps) : null;
+        const warnings = [];
+        if ( use && !use.proficient ) warnings.push(t("step.magicShop.notProficient"));
+        if ( use?.needsStrength ) warnings.push(t("step.magicShop.needsStrength", { score: use.needsStrength }));
         return {
           uuid: e.uuid, link: e.link ?? e.uuid, name: e.name, img: e.img, rarity: e.rarity,
           rarityLabel: rarityLabel(e.rarity),
           section: sectionKey(e),
           typeLabel: itemTypeLabel(e.type),
           qty, picked: qty > 0,
-          canAdd: canPick(counts, e.rarity, tier.allowance)
+          canAdd: canPick(counts, e.rarity, tier.allowance),
+          warnings,
+          warningLabel: warnings.join(" · "),
+          warningTip: warnings.length ? t("step.magicShop.usableTip") : null
         };
       });
 

@@ -1,7 +1,9 @@
 import { ABILITIES, formatMod, t, log, storeConfig } from "../../config.mjs";
 import { advancementTitle } from "../../data/advancement-util.mjs";
 import { summarizeEquipment } from "../../data/equipment-source.mjs";
-import { cartSummary } from "../../data/store-source.mjs";
+import { cartSummary, formatCp } from "../../data/store-source.mjs";
+import { rarityLabel } from "../../data/magic-shop.mjs";
+import { magicShopConfig, magicShopGrant, pickList } from "../../data/magic-shop-source.mjs";
 import { pdfExportContext } from "../../build/pdf-export.mjs";
 
 /**
@@ -172,6 +174,22 @@ async function reviewEquipment(state, source, equipment) {
 function reviewPurchases(state) {
   if ( !state.emberCreation || !storeConfig().enabled ) return null;
   return cartSummary(state.store?.purchases);
+}
+
+/**
+ * The Magic Items step for the summary: the free picks, coloured by rarity, and the bonus gold.
+ * Null for an ordinary level-up, and for a creation climb the step had nothing to offer.
+ * @param {object|null} state  The creator state a creation climb carries.
+ * @returns {{items: object[], gold: string|null, hasItems: boolean}|null}
+ */
+function reviewMagicItems(state) {
+  if ( !state ) return null;
+  const { tier, goldCp } = magicShopGrant(state, magicShopConfig());
+  if ( !tier ) return null;
+  const items = pickList(state).map(p => ({ ...p, count: p.qty > 1 ? p.qty : null, rarityLabel: rarityLabel(p.rarity) }));
+  const gold = (Number.isInteger(state.magicShop?.d10) && goldCp > 0) ? formatCp(goldCp) : null;
+  if ( !items.length && !gold ) return null;
+  return { items, gold, hasItems: items.length > 0 };
 }
 
 /* -------------------------------------------- */
@@ -410,6 +428,9 @@ export const lvlReviewStep = {
         };
       }),
       purchases: reviewPurchases(state),
+      // The Magic Items step's picks and bonus gold — a creation climb only, and only once that
+      // step has something to show.
+      magicItems: reviewMagicItems(state.creationState),
       // No switch in the Ember hand-off: our Apply isn't the end of that build — Ember finishes
       // the character afterwards — so a sheet printed here would be of a character still a step
       // from done. The same reason the hand-off posts no chat card.

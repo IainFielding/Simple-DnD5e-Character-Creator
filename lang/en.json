@@ -158,6 +158,7 @@
       "notify": {
         "applyFailed": "Level-up could not be applied. See the console for details.",
         "emberGearFailed": "Starting equipment and spells could not be prepared. The rest of the character was applied — add them from the sheet.",
+        "magicItemsFailed": "The chosen magic items could not be added. The levels themselves were applied — add the items from the sheet.",
         "spellsFailed": "The chosen spells could not be added. The level-up itself was applied — add them from the sheet.",
         "takeoverFailed": "The level-up could not be prepared. The character was not changed — try again or use the system's own level-up.",
         "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow."
@@ -569,6 +570,9 @@
         "goldTotal": "Bonus gold",
         "dieHint": "Rolled once when you first opened this step. It stays the same if you come back or change your starting level.",
         "slotsAria": "Magic item slots by rarity",
+        "notProficient": "Not proficient",
+        "needsStrength": "Needs Strength {score}",
+        "usableTip": "You can still choose this — the note is only so you know what it costs you to use it.",
         "downgradeHint": "A slot holds its own rarity or anything lower.",
         "picksEmpty": "No magic items chosen yet. Pick from the shelves.",
         "clear": "Clear Picks",

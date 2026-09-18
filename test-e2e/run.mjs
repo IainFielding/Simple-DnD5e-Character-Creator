@@ -100,6 +100,12 @@ try {
     console.log(JSON.stringify(await harness("probeSpellChoice", {
       match: value("probe-spell-choice") || undefined, to: Number(value("level") ?? 5), jump: flag("jump")
     }), null, 2));
+  } else if ( flag("probe-magic-climb") ) {
+    console.log(JSON.stringify(await harness("probeMagicShopClimb", {
+      match: value("probe-magic-climb") || undefined, to: Number(value("level") ?? 5)
+    }), null, 2));
+  } else if ( flag("probe-magic-shop") ) {
+    console.log(JSON.stringify(await harness("probeMagicShopStep", { level: Number(value("level") ?? 5) }), null, 2));
   } else if ( flag("probe-bookorder") ) {
     console.log(JSON.stringify(await harness("probeBookOrdering"), null, 2));
   } else if ( flag("probe-minbook") ) {

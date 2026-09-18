@@ -1142,6 +1142,199 @@ export async function probeSpellChoice({ match = "conjur", to = 5, jump = false 
   }
 }
 
+/**
+ * Render the Magic Items step the way the level-up wizard does, and report what it produced — or the
+ * error that stopped it.
+ *
+ * The step moved from the creation rail to the end of a creation climb, and the wizard reports a
+ * failure to render as "the level-up could not be prepared", which says nothing about the cause. This
+ * calls the step directly against a stand-in for the state a climb carries, so an exception surfaces
+ * with its stack instead.
+ * @param {object} [options]
+ * @param {number} [options.level]   The level the character was created at.
+ */
+export async function probeMagicShopStep({ level = 5 } = {}) {
+  const MODULE = "/modules/sogrom-dnd5e-character-creator/scripts";
+  const { lvlMagicShopStep } = await import(`${MODULE}/levelup/steps/lvl-magic-shop-step.mjs`);
+  const { magicShopConfig, magicShopTier, magicShopSource } = await import(`${MODULE}/data/magic-shop-source.mjs`);
+  const { buildSteps } = await import(`${MODULE}/levelup/registry.mjs`);
+
+  const config = magicShopConfig();
+  const creationState = { targetLevel: level, magicShop: { d10: null, picks: {} } };
+  const out = {
+    enabled: config.enabled,
+    inventory: config.inventory.length,
+    tier: !!magicShopTier(creationState, config),
+    applicable: null, railIds: null, context: null, error: null
+  };
+
+  // A stand-in for the climb's state: enough for the step and for `buildSteps` to place it.
+  const actor = game.actors.find(a => a.type === "character") ?? null;
+  const state = {
+    creationState,
+    driver: { clone: actor },
+    needsClassChoice: false,
+    gainedLevels: () => [level],
+    hasSpellStep: () => false,
+    isMulticlassed: false,
+    emberCreation: false,
+    classItem: null
+  };
+
+  try {
+    out.applicable = lvlMagicShopStep.applicable(state);
+    out.railIds = buildSteps(state).map(s => s.id);
+    // Two passes: the first kicks off the lazy stock load, the second renders the shelf itself.
+    await lvlMagicShopStep.context({ state, app: null });
+    if ( !magicShopSource.peek(config.inventory.filter(e => !e.hidden)) ) {
+      await magicShopSource.load(config.inventory.filter(e => !e.hidden));
+    }
+    const ctx = await lvlMagicShopStep.context({ state, app: null });
+    out.context = {
+      keys: Object.keys(ctx).sort(),
+      unavailable: !!ctx.unavailable,
+      loading: !!ctx.loading,
+      noItems: !!ctx.noItems,
+      stockEmpty: !!ctx.stockEmpty,
+      count: ctx.count ?? null,
+      groups: ctx.groups?.length ?? 0,
+      warned: (ctx.groups ?? []).flatMap(g => g.cards).filter(c => c.warningLabel).length,
+      sample: (ctx.groups ?? []).flatMap(g => g.cards).slice(0, 5)
+        .map(c => `${c.name} [${c.rarityLabel}]${c.warningLabel ? ` ⚠ ${c.warningLabel}` : ""}`)
+    };
+  } catch ( err ) {
+    out.error = `${err.name}: ${err.message}\n${err.stack ?? ""}`.slice(0, 2000);
+  }
+  return out;
+}
+
+/**
+ * Drive the real creation climb to its Magic Items step and watch what the window does.
+ *
+ * `probeMagicShopStep` calls the step on its own; this goes through `launchLevelUpTo` and the real
+ * `LevelUpShell`, answers the level screens from the book, navigates to the shop and waits for the
+ * lazy stock load — recording, at each point, whether the window is still open, which step it is on,
+ * how many shelf rows the DOM holds, and any error or rejection raised meanwhile.
+ * @param {object} [options]
+ * @param {string} [options.match]  Substring of the sweep scenario id for the class to build.
+ * @param {number} [options.to]     Starting level to climb to.
+ */
+export async function probeMagicShopClimb({ match = "fighter/champion", to = 5 } = {}) {
+  const MODULE = "/modules/sogrom-dnd5e-character-creator/scripts";
+  const { launchLevelUpTo } = await import(`${MODULE}/levelup/intercept.mjs`);
+  const { CreatorState } = await import(`${MODULE}/state/creator-state.mjs`);
+  const { ScenarioChoiceProvider } = await import(`./provider.mjs${BUST}`);
+
+  const scenario = (await getSweep(to, true)).scenarios.find(s => s.id.includes(match));
+  if ( !scenario ) throw new Error(`no sweep scenario matches "${match}"`);
+  await cleanup();
+
+  const errors = [];
+  const onError = ev => errors.push(`error: ${ev.message ?? ev.error?.message}`);
+  const onRejection = ev => errors.push(`rejection: ${ev.reason?.message ?? ev.reason}`);
+  window.addEventListener("error", onError);
+  window.addEventListener("unhandledrejection", onRejection);
+  const origLog = console.error;
+  console.error = (...args) => { errors.push(`console.error: ${args.map(a => a?.message ?? String(a)).join(" ").slice(0, 300)}`); origLog(...args); };
+  // Who closes the window, and whether building its context throws — the two ways it can vanish
+  // without the console saying anything.
+  const { LevelUpShell } = await import(`${MODULE}/levelup/levelup-shell.mjs`);
+  const origClose = LevelUpShell.prototype.close;
+  const origPrepare = LevelUpShell.prototype._prepareContext;
+  const origRenderHTML = LevelUpShell.prototype._renderHTML;
+  const stackOf = e => String(e?.stack ?? "").split("\n").slice(0, 8).map(s => s.trim()).join(" | ");
+  LevelUpShell.prototype.close = function(options) {
+    errors.push(`close(${JSON.stringify(options ?? {})}) from: ${stackOf(new Error())}`);
+    return origClose.call(this, options);
+  };
+  LevelUpShell.prototype._prepareContext = async function(...args) {
+    try { return await origPrepare.apply(this, args); } catch ( err ) {
+      errors.push(`_prepareContext threw ${err?.name}: ${err?.message} :: ${stackOf(err)}`);
+      throw err;
+    }
+  };
+  LevelUpShell.prototype._renderHTML = async function(...args) {
+    try { return await origRenderHTML.apply(this, args); } catch ( err ) {
+      errors.push(`_renderHTML threw ${err?.name}: ${err?.message} :: ${stackOf(err)}`);
+      throw err;
+    }
+  };
+
+  const trace = [];
+  const findShell = () => [...(foundry.applications.instances?.values() ?? [])]
+    .find(a => a.constructor?.name === "LevelUpShell") ?? null;
+  const snap = (label, shell) => trace.push({
+    label,
+    open: !!shell?.rendered,
+    step: shell?._activeStep?.id ?? null,
+    stepIndex: shell?._stepIndex ?? null,
+    stepCount: shell?._stepCount ?? null,
+    rows: shell?.element?.querySelectorAll(".creator-store-row").length ?? 0,
+    loadingText: shell?.element?.querySelector("[data-magic-progress]")?.textContent ?? null,
+    errors: errors.length,
+    // Everything open, in case the window is there under another name.
+    apps: [...(foundry.applications.instances?.values() ?? [])].map(a => `${a.constructor?.name}#${a.id}:${a.rendered ? "open" : "closed"}`),
+    levelupDom: !!document.getElementById("sogrom-levelup"),
+    notifications: (ui.notifications?.queue ?? []).map(n => n.message ?? String(n)).slice(-3)
+  });
+
+  let actor = null;
+  try {
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: true, origins: scenarioOrigins(scenario) });
+    actor = await buildCreator({ ...scenario, name: `${PREFIX}magic-climb [creator]`, targetLevel: 1 },
+      { book, unofferable: [] });
+
+    const creationState = new CreatorState();
+    creationState.targetLevel = to;
+    const launched = await launchLevelUpTo(actor, to, { creationState });
+    await new Promise(r => setTimeout(r, 2500));
+    let shell = findShell();
+    snap(`launched=${launched}`, shell);
+    if ( !shell ) return { scenario: scenario.id, trace, errors };
+
+    await shell.state.driver.autoResolve(new ScenarioChoiceProvider(book));
+    await shell.render();
+    await new Promise(r => setTimeout(r, 800));
+    snap("after autoResolve", shell);
+
+    // Walk forward with the real Next, step by step, until the shop or the end.
+    for ( let i = 0; i < 12; i++ ) {
+      shell = findShell();
+      if ( !shell?.rendered || (shell._activeStep?.id === "magicShop") ) break;
+      shell._navNext();
+      await new Promise(r => setTimeout(r, 1200));
+      snap(`after next #${i + 1}`, findShell());
+    }
+
+    // Let the lazy stock load land and the step re-render itself.
+    for ( let i = 0; i < 10; i++ ) {
+      await new Promise(r => setTimeout(r, 1500));
+      shell = findShell();
+      snap(`waiting #${i + 1}`, shell);
+      if ( !shell?.rendered || shell.element?.querySelector(".creator-store-row") ) break;
+    }
+
+    // One add, the first real interaction.
+    shell = findShell();
+    const add = shell?.element?.querySelector("[data-step-action='magic-add']:not([disabled])");
+    if ( add ) {
+      add.click();
+      await new Promise(r => setTimeout(r, 1500));
+      snap("after one add", findShell());
+    }
+    return { scenario: scenario.id, trace, errors };
+  } finally {
+    window.removeEventListener("error", onError);
+    window.removeEventListener("unhandledrejection", onRejection);
+    console.error = origLog;
+    LevelUpShell.prototype.close = origClose;
+    LevelUpShell.prototype._prepareContext = origPrepare;
+    LevelUpShell.prototype._renderHTML = origRenderHTML;
+    try { await findShell()?.close({ force: true }); } catch { /* already gone */ }
+    await cleanup();
+  }
+}
+
 export async function probeBookOrdering() {
   const pack = game.packs.get("dnd5e.classes");
   if ( !pack ) throw new Error("dnd5e.classes pack not found");

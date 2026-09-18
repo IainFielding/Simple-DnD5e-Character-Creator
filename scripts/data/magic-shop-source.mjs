@@ -59,7 +59,10 @@ export function magicShopTier(state, config = magicShopConfig()) {
 
 /** Index fields the shelf needs beyond name/img/type, which every index carries. */
 // Both rarity shapes: dnd5e 6.0.2 migrated `rarity` into a `rarities` set, and packs may hold either.
-const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container"];
+// `system.strength` is armour's minimum Strength score, and `system.type` carries the category and
+// base item — between them, what the shelf needs to say whether the character can use an item.
+const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container",
+  "system.strength"];
 
 /**
  * Split a uuid into where it lives. `Compendium.<pkg>.<pack>.Item.<id>` names a pack;
@@ -170,6 +173,45 @@ export class MagicShopSource {
     return pending.promise;
   }
 
+  /**
+   * Fill in the base item and Strength requirement of every template or shell variant on the shelf.
+   *
+   * A variant's row is built from its *template* — "+1 Plate Armor" is the Plate the enchantment went
+   * on — so the two fields that decide whether the character can use it live on the base instead. The
+   * bases are read the same way the stock is, one index per pack, and a base that cannot be read
+   * simply leaves the fields empty: the row then reports on its category alone, which is what it did
+   * before these fields existed.
+   * @param {object[]} stock  Rows, mutated in place.
+   */
+  async #fillVariantBases(stock) {
+    const wanted = stock.filter(s => s.baseUuid);
+    if ( !wanted.length ) return;
+    const byPack = new Map();
+    for ( const row of wanted ) {
+      const where = locateUuid(row.baseUuid);
+      if ( !where ) continue;
+      const key = where.pack ?? "";
+      if ( !byPack.has(key) ) byPack.set(key, []);
+      byPack.get(key).push({ row, id: where.id });
+    }
+    for ( const [pack, rows] of byPack ) {
+      let lookup = null;
+      if ( pack ) {
+        try {
+          lookup = await this.#packIndex(pack);
+        } catch ( err ) {
+          log(`magic shop could not read the bases in ${pack}`, err);
+        }
+      }
+      for ( const { row, id } of rows ) {
+        const base = pack ? lookup?.get?.(id) : this.#worldItem(id);
+        if ( !base ) continue;
+        row.baseItem = base.system?.type?.baseItem ?? "";
+        row.strength = base.system?.strength ?? null;
+      }
+    }
+  }
+
   async #resolve(entries, report) {
     const total = entries.length;
     const groups = new Map();
@@ -196,7 +238,7 @@ export class MagicShopSource {
         const found = pack ? lookup?.get?.(id) : this.#worldItem(id);
         if ( !found ) continue;
         // A variant is its own item, not its template: only the template's art is borrowed.
-        const variant = !!parseVariant(entry.uuid);
+        const variant = parseVariant(entry.uuid);
         stock.push({
           uuid: entry.uuid,
           link: linkUuid(entry.uuid),
@@ -204,12 +246,18 @@ export class MagicShopSource {
           img: found.img || "icons/svg/item-bag.svg",
           type: variant ? entry.type : (found.type || entry.type),
           subtype: variant ? entry.subtype : (found.system?.type?.value ?? entry.subtype),
-          rarity: variant ? entry.rarity : (itemRarity(found) || entry.rarity)
+          rarity: variant ? entry.rarity : (itemRarity(found) || entry.rarity),
+          // What {@link itemUsability} reads. A variant takes these from the base it is built on
+          // rather than from the template, which is filled in below.
+          baseItem: variant ? "" : (found.system?.type?.baseItem ?? ""),
+          strength: variant ? null : (found.system?.strength ?? null),
+          baseUuid: variant?.base ?? null
         });
       }
       done += group.length;
       report(Math.floor((done / total) * 100));
     }
+    await this.#fillVariantBases(stock);
     const lang = globalThis.game?.i18n?.lang;
     return stock
       .filter(s => RARITIES.includes(s.rarity))
@@ -401,6 +449,35 @@ async function basePool() {
 /** Index entries with their uuid filled in (older cores leave it off the index). */
 function withUuids(pack, index) {
   return [...index].map(e => (e.uuid ? e : { ...e, uuid: pack.getUuid?.(e._id) ?? `Compendium.${pack.collection}.Item.${e._id}` }));
+}
+
+/* -------------------------------------------- */
+/*  Usability                                   */
+/* -------------------------------------------- */
+
+/**
+ * What {@link itemUsability} needs to know about the character: the proficiencies they hold and
+ * their Strength. Read off whichever actor the step was given — during a creation climb that is the
+ * driver's clone, which already carries everything the levels just granted.
+ * @param {Actor5e|null} actor
+ * @returns {{armorProf: Set<string>, weaponProf: Set<string>, strength: number}|null}
+ */
+export function usabilityProfile(actor) {
+  if ( !actor ) return null;
+  const traits = actor.system?.traits ?? {};
+  return {
+    armorProf: new Set(traits.armorProf?.value ?? []),
+    weaponProf: new Set(traits.weaponProf?.value ?? []),
+    strength: Number(actor.system?.abilities?.str?.value ?? 0)
+  };
+}
+
+/** The system's category → proficiency-key maps, as {@link itemUsability} expects them. */
+export function proficiencyMaps() {
+  return {
+    armor: CONFIG.DND5E?.armorProficienciesMap ?? {},
+    weapon: CONFIG.DND5E?.weaponProficienciesMap ?? {}
+  };
 }
 
 /* -------------------------------------------- */
