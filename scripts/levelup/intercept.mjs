@@ -42,7 +42,10 @@ export function registerLevelUp() {
     tpl("levelup/grant.hbs"),
     tpl("levelup/optional-grant.hbs"),
     tpl("levelup/review.hbs"),
-    tpl("levelup/spells.hbs")
+    tpl("levelup/spells.hbs"),
+    // The creator's Magic Items step, shown only at the end of a creation climb. It is no longer in
+    // the creator's own STEPS, so main.mjs's preload (built from that list) no longer registers it.
+    tpl("steps/magic-shop.hbs")
   ]);
 
   Hooks.on("dnd5e.preAdvancementManagerRender", onPreAdvancementManagerRender);
@@ -82,6 +85,10 @@ function onPreAdvancementManagerRender(manager) {
     return false;
   }
 
+  // Refused outright rather than left to the native flow, which would add the class regardless.
+  // Nothing is lost: a dropped class is only created when its manager completes, so a manager
+  // that never renders leaves the actor exactly as it was.
+  if ( multiclassBlocked(manager) ) return false;
   if ( !shouldTakeOver(manager) ) return;
 
   manager._sogromLevelUp = true;
@@ -89,6 +96,25 @@ function onPreAdvancementManagerRender(manager) {
   // without awaiting it and suppress the native UI straight away.
   launchLevelUp(manager);
   return false;
+}
+
+/**
+ * Whether this manager adds a class the actor may not take under the `"prereq"` multiclass mode —
+ * and if so, say why. The wizard's own picker never offers an ineligible class, but a class item
+ * dragged onto the sheet arrives here unchecked. It is checked apart from {@link shouldTakeOver}
+ * because the answer differs: a level-up we merely can't drive goes to the native flow, while a
+ * class the world's rule forbids must not be added by any flow.
+ * @param {AdvancementManager} manager
+ * @returns {boolean}
+ */
+function multiclassBlocked(manager) {
+  if ( multiclassMode() !== "prereq" ) return false;
+  const classItem = manager.steps.find(s => s.class)?.class?.item;
+  if ( !classItem || manager.actor.items.get(classItem.id) ) return false;
+  const blockers = multiclassBlockers(manager.actor, classItem);
+  if ( !blockers.length ) return false;
+  ui.notifications?.warn(t("levelup.multiclass.blocked", { reasons: formatBlockers(blockers) }));
+  return true;
 }
 
 /**
@@ -103,18 +129,6 @@ function shouldTakeOver(manager) {
   if ( !manager?.actor?.isOwner ) return false;
   const mode = multiclassMode();
   if ( !LevelUpDriver.canDrive(manager, { allowNewClass: mode !== "off" }) ) return false;
-
-  // A new-class claim under the "prereq" mode must meet the written multiclass prerequisites.
-  // The wizard's own picker never offers an ineligible class, but a class item dragged onto
-  // the sheet arrives here unchecked — warn and stand down, leaving the native flow to run.
-  const classItem = manager.steps.find(s => s.class)?.class?.item;
-  if ( (mode === "prereq") && classItem && !manager.actor.items.get(classItem.id) ) {
-    const blockers = multiclassBlockers(manager.actor, classItem);
-    if ( blockers.length ) {
-      ui.notifications?.warn(t("levelup.multiclass.blocked", { reasons: formatBlockers(blockers) }));
-      return false;
-    }
-  }
 
   // The last gate, and the polite one: a listener returning false means we decline this level-up
   // and the *native* dnd5e wizard renders in our place — the player is never left with nothing.
@@ -439,6 +453,7 @@ export async function launchLevelUpTo(actor, target, { creationState = null } = 
  * @param {AdvancementManager} manager
  */
 function driveManager(manager) {
+  if ( multiclassBlocked(manager) ) return;
   if ( !shouldTakeOver(manager) ) {
     ui.notifications?.warn(t("levelup.notify.choicesUnsupported"));
     return;
