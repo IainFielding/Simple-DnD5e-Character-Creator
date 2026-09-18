@@ -219,6 +219,22 @@ describe("level-up spell choice restricted to available slot levels (Savant)", (
     expect(data[0].sections[0].options.map(o => o.name)).not.toContain("Fireball");
   });
 
+  it("caps the slot level for a choice owned by the class item itself", async () => {
+    // The class item casts, so its own spellcasting is read — still at the clone's level 5.
+    const { record, state, driver } = savant({ level: 3, classes: wizard(5) });
+    record.advancement.item = wizard(5).wizard;
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Find Familiar", "Misty Step", "Shield"]);
+  });
+
+  it("caps the slot level for a choice owned by an embedded subclass", async () => {
+    // dnd5e's subclass `spellcasting` getter reports the parent class's levels (5 on the clone).
+    const { record, state, driver } = savant({ level: 3, classes: wizard(5) });
+    record.advancement.item = { type: "subclass", spellcasting: { type: "leveled", progression: "full", levels: 5 } };
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Find Familiar", "Misty Step", "Shield"]);
+  });
+
   it("includes cantrips for a plain \"available\" restriction", async () => {
     const { state, driver } = savant({ level: 3, classes: wizard(3), restriction: "available" });
     const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);

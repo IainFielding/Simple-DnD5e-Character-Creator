@@ -116,14 +116,19 @@ function maxSpellSlotLevel(record) {
     return spells;
   };
 
+  // Cap a class's spellcasting levels at the decision's level (see above). A record without a level
+  // (a class-linked granted feature keyed at 0) has nothing to cap against and reads as-is.
+  const capped = sc => (record.level ? { ...sc, levels: Math.min(sc.levels ?? record.level, record.level) } : sc);
+
   let spells;
   try {
-    if ( adv.item?.spellcasting?.type && Actor5e ) spells = slotsFor(adv.item, adv.item.spellcasting);
+    // The advancement's own item casts: a class, or a subclass through dnd5e's `spellcasting` getter,
+    // whose `levels` are the parent class's — at the target level on the driver's clone, so capped too.
+    if ( adv.item?.spellcasting?.type && Actor5e ) spells = slotsFor(adv.item, capped(adv.item.spellcasting));
     else {
       const casters = Object.values(adv.actor?.classes ?? {}).filter(c => c.spellcasting?.type);
       if ( (casters.length === 1) && record.level && Actor5e ) {
-        const sc = casters[0].spellcasting;
-        spells = slotsFor(casters[0], { ...sc, levels: Math.min(sc.levels ?? record.level, record.level) });
+        spells = slotsFor(casters[0], capped(casters[0].spellcasting));
       } else spells = adv.actor?.system?.spells ?? {};
     }
   } catch ( err ) {
