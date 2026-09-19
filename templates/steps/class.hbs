@@ -23,15 +23,22 @@
 
         It carries a chevron, so it reads as a disclosure — and now says so: aria-expanded tells
         a screen reader whether the list it controls is open, and aria-controls names it. The
-        chevron alone told sighted users something no assistive technology could hear. --}}
-  {{#if hasSelection}}
+        chevron alone told sighted users something no assistive technology could hear.
+
+        Rendered whether or not a class is chosen, so the bar — and the Read the Rules link on it —
+        is part of the page from the first paint rather than popping in on the first pick. With
+        nothing chosen the switcher shows a placeholder; the drawer is already open beneath it. --}}
   <div class="creator-work-bar">
     <button type="button" class="creator-work-switch"
             data-action="openPicker"
             aria-expanded="{{#if drawerOpen}}true{{else}}false{{/if}}"
             aria-controls="creator-picker-drawer">
+      {{#if hasSelection}}
       <img class="creator-work-switch-img" src="{{detail.img}}" alt="">
       <span>{{detail.name}}</span>
+      {{else}}
+      <span class="creator-work-switch-placeholder">{{localize "sogrom-dnd5e-character-creator.step.class.switchPlaceholder"}}</span>
+      {{/if}}
       <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
     </button>
     <span class="creator-work-bar-note">
@@ -39,7 +46,6 @@
     </span>
     {{> "modules/sogrom-dnd5e-character-creator/templates/parts/rules-link.hbs" this}}
   </div>
-  {{/if}}
 
   {{!-- Left column: the class list, and the chosen class's page under it. --}}
   <div class="creator-work-body">

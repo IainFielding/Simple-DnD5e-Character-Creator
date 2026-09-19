@@ -390,6 +390,7 @@
       "class": {
         "label": "Class & Abilities",
         "hint": "Choose a class to continue.",
+        "switchPlaceholder": "Choose a Class",
       "filterEditionAria": "Filter by rules edition",
       "filterAllEditions": "Both editions",
       "filterEdition": "{year} rules",

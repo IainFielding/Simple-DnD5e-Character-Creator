@@ -1537,6 +1537,7 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .creator-work-switch:hover { filter: brightness(1.15); }
 .creator-work-switch i { font-size: 0.6rem; color: var(--cc-muted); }
+.creator-work-switch-placeholder { color: var(--cc-muted); font-style: italic; }
 .creator-work-switch-img {
   flex: 0 0 20px;
   width: 20px;
