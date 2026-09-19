@@ -3,7 +3,7 @@ import { formatCp } from "../data/store-source.mjs";
 import { sectionKey, groupCards, itemTypeLabel, subtypeLabel } from "../data/shelf-sections.mjs";
 import {
   RARITIES, rarityRank, rarityLabel, countPicks, canPick, withinAllowance, slotsSummary,
-  highestSlotRank, bonusGoldCp, goldRange, itemUsability
+  highestSlotRank, bonusGoldCp, goldRange, itemUsability, unmetAttunement
 } from "../data/magic-shop.mjs";
 import {
   magicShopConfig, magicShopTier, magicShopSource, ensureMagicShopRoll, goldNeedsRoll, goldRolled, pickList,
@@ -184,6 +184,8 @@ export const magicShopStep = {
         const warnings = [];
         if ( use && !use.proficient ) warnings.push(t("step.magicShop.notProficient"));
         if ( use?.needsStrength ) warnings.push(t("step.magicShop.needsStrength", { score: use.needsStrength }));
+        const attuneWho = profile ? unmetAttunement(e.attunement, profile, maps.known) : null;
+        if ( attuneWho ) warnings.push(t("step.magicShop.attunementBy", { who: attuneWho }));
         return {
           uuid: e.uuid, link: e.link ?? e.uuid, name: e.name, img: e.img, rarity: e.rarity,
           rarityLabel: rarityLabel(e.rarity),

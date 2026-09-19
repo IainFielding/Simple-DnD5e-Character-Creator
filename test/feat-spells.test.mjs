@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { originSpecifiedClasses, lockedAbility } from "../scripts/steps/feat-spells-step.mjs";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { originSpecifiedClasses, lockedAbility, resolveFeatSpells } from "../scripts/steps/feat-spells-step.mjs";
 
 /**
  * `originSpecifiedClasses` pins a Magic Initiate to the class its origin names, even though the 2024
@@ -64,5 +64,36 @@ describe("lockedAbility", () => {
 
   it("ignores classes it doesn't map", () => {
     expect(lockedAbility(["bard"], allowed)).toBeNull();
+  });
+});
+
+/**
+ * A feat's spell choice can be limited to a school — Arcana Unleashed's Arcane Undertaker (granted by
+ * the Covenant of the Grave Recruit background) teaches "one Cleric or Wizard cantrip … from the
+ * Necromancy school". The grant carries the limit per slot type so the browser offers only those.
+ */
+describe("resolveFeatSpells — school limits", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("carries restriction.school onto the grant, per slot type", async () => {
+    const feat = {
+      type: "feat", name: "Arcane Undertaker", system: { identifier: "arcane-undertaker", advancement: [{
+        type: "ItemChoice",
+        configuration: {
+          type: "spell", choices: { 0: { count: 1 } }, spell: { ability: ["int", "wis", "cha"] },
+          restriction: { list: ["class:cleric", "class:wizard"], level: "0", school: ["nec"] }
+        }
+      }] }
+    };
+    const background = { system: { description: { value: "" }, advancement: [{
+      type: "ItemGrant", configuration: { items: [{ uuid: "Feat.undertaker" }] }
+    }] } };
+    vi.stubGlobal("fromUuid", async uuid => ({ "Bg.grave": background, "Feat.undertaker": feat })[uuid] ?? null);
+
+    const [grant] = await resolveFeatSpells({ backgroundUuid: "Bg.grave", advChoices: {} });
+    expect(grant.classList).toEqual(["cleric", "wizard"]);
+    expect(grant.cantripCount).toBe(1);
+    expect(grant.cantripSchools).toEqual(["nec"]);
+    expect(grant.spellSchools).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 import { MODULE_ID, SETTINGS, levelUpEnabled, log } from "../config.mjs";
 import {
   RARITIES, normalizeRarity, itemRarity, sanitizeMagicEntry, sanitizeWealthTable, tierFor, tierGrantsAnything,
-  descendantFolderIds, filterMagicIndex, countPicks, withinAllowance, bonusGoldCp
+  descendantFolderIds, filterMagicIndex, countPicks, withinAllowance, bonusGoldCp, attunementRestriction
 } from "./magic-shop.mjs";
 import { createItemData } from "./item-factory.mjs";
 import {
@@ -61,8 +61,11 @@ export function magicShopTier(state, config = magicShopConfig()) {
 // Both rarity shapes: dnd5e 6.0.2 migrated `rarity` into a `rarities` set, and packs may hold either.
 // `system.strength` is armour's minimum Strength score, and `system.type` carries the category and
 // base item — between them, what the shelf needs to say whether the character can use an item.
+// The description is read for one phrase, who the item's attunement is limited to ("Requires
+// Attunement by a Bard"), which dnd5e keeps nowhere else. It is the heaviest field here, paid once per
+// session on the first visit; only the parsed phrase is kept on the stock row.
 const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container",
-  "system.strength"];
+  "system.strength", "system.description.value"];
 
 /**
  * Split a uuid into where it lives. `Compendium.<pkg>.<pack>.Item.<id>` names a pack;
@@ -251,6 +254,8 @@ export class MagicShopSource {
           // rather than from the template, which is filled in below.
           baseItem: variant ? "" : (found.system?.type?.baseItem ?? ""),
           strength: variant ? null : (found.system?.strength ?? null),
+          // A variant's limit is its template's: the enchantment is what is attuned to, not the base.
+          attunement: attunementRestriction(found.system?.description?.value),
           baseUuid: variant?.base ?? null
         });
       }
@@ -278,11 +283,11 @@ function folderLink(folder) {
 }
 
 /**
- * Index fields a drop reads. The description is what marks a DMG template, and the properties what
- * marks a template from elsewhere, so both are read here — but only here, never on the player's shelf.
+ * Index fields a drop reads. The description is what marks a DMG template (the shelf reads it too, for
+ * the attunement limit), and the properties what marks a template from elsewhere — those only here.
  */
 const DROP_INDEX_FIELDS = [
-  ...INDEX_FIELDS, "system.properties", "system.description.value",
+  ...INDEX_FIELDS, "system.properties",
   // What tells a shell (see magic-templates.mjs#isShell) from a finished weapon or armour.
   "system.damage.base", "system.armor.value"
 ];
@@ -459,24 +464,55 @@ function withUuids(pack, index) {
  * What {@link itemUsability} needs to know about the character: the proficiencies they hold and
  * their Strength. Read off whichever actor the step was given — during a creation climb that is the
  * driver's clone, which already carries everything the levels just granted.
+ *
+ * Also who the character is, for {@link unmetAttunement}: their classes and species (identifier and
+ * lower-cased name both, so a limit matches either), and whether any class casts. "Spellcaster" is
+ * read as the rules define it, a Spellcasting or Pact Magic feature — a class or subclass with a
+ * progression, so an Eldritch Knight counts and a Fighter with Magic Initiate does not.
  * @param {Actor5e|null} actor
- * @returns {{armorProf: Set<string>, weaponProf: Set<string>, strength: number}|null}
+ * @returns {{armorProf: Set<string>, weaponProf: Set<string>, strength: number,
+ *   classes: Set<string>, species: Set<string>, spellcaster: boolean}|null}
  */
 export function usabilityProfile(actor) {
   if ( !actor ) return null;
   const traits = actor.system?.traits ?? {};
+  const classes = Object.values(actor.classes ?? {});
+  const species = actor.itemTypes?.race ?? [];
+  const keys = items => new Set(items.flatMap(i => [i.identifier ?? i.system?.identifier, i.name?.toLowerCase()]).filter(Boolean));
   return {
     armorProf: new Set(traits.armorProf?.value ?? []),
     weaponProf: new Set(traits.weaponProf?.value ?? []),
-    strength: Number(actor.system?.abilities?.str?.value ?? 0)
+    strength: Number(actor.system?.abilities?.str?.value ?? 0),
+    classes: keys(classes),
+    species: keys(species),
+    spellcaster: classes.some(c => {
+      const progression = c.spellcasting?.progression ?? c.system?.spellcasting?.progression;
+      return !!progression && (progression !== "none");
+    })
   };
 }
 
-/** The system's category → proficiency-key maps, as {@link itemUsability} expects them. */
+/**
+ * The system's category → proficiency-key maps, as {@link itemUsability} expects them, and every
+ * class and species it knows, as {@link unmetAttunement} expects them.
+ */
 export function proficiencyMaps() {
+  // dnd5e's item registries: identifier → name for every class and species in the world and its packs.
+  const lookup = registry => {
+    const map = new Map();
+    for ( const [id, name] of Object.entries(registry?.choices ?? {}) ) {
+      map.set(id.toLowerCase(), id);
+      if ( name ) map.set(String(name).toLowerCase(), id);
+    }
+    return map;
+  };
   return {
     armor: CONFIG.DND5E?.armorProficienciesMap ?? {},
-    weapon: CONFIG.DND5E?.weaponProficienciesMap ?? {}
+    weapon: CONFIG.DND5E?.weaponProficienciesMap ?? {},
+    known: {
+      classes: lookup(globalThis.dnd5e?.registry?.classes),
+      species: lookup(globalThis.dnd5e?.registry?.species)
+    }
   };
 }
 

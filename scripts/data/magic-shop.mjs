@@ -421,3 +421,64 @@ export function itemUsability(entry, character, maps = {}) {
   }
   return out;
 }
+
+/**
+ * Who an item's attunement is limited to, read from its description: "Requires Attunement by a Bard",
+ * "by a Sorcerer, Warlock, or Wizard", "by a Spellcaster". dnd5e has no structured field for this —
+ * `system.attunement` only says whether attunement is required — so the prose is the only source.
+ *
+ * Enricher links are reduced to their label first, so "by a Dwarf or a Creature Attuned to a
+ * @UUID[…]{Belt of Dwarvenkind}" reads as the words a player sees.
+ * @param {string} html  The item's description.
+ * @returns {{who: string, names: string[]}|null}  The phrase as written ("a Bard") and its names,
+ *   lower-cased with the articles dropped (["bard"]); null when the item names no one.
+ */
+export function attunementRestriction(html) {
+  if ( !html ) return null;
+  const text = String(html)
+    .replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (_, label) => label ?? "")
+    // A tag ends the phrase: the headline is often a paragraph of its own, and the text after it is not
+    // part of who may attune.
+    .replace(/<[^>]+>/g, "|")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ");
+  const match = text.match(/requires attunement by ([^).;:|]+)/i);
+  if ( !match ) return null;
+  const who = match[1].trim();
+  const names = who.split(/,|\bor\b|\band\b/i)
+    .map(s => s.trim().replace(/^(?:an?|the)\s+/i, "").toLowerCase())
+    .filter(Boolean);
+  return names.length ? { who, names } : null;
+}
+
+/**
+ * Whether the character is one of the creatures an item's attunement is limited to — the attunement
+ * counterpart of {@link itemUsability}, and like it a note, never a block.
+ *
+ * Only a limit this can fully judge is reported. Every name must be "spellcaster" or a class or species
+ * the system knows; one it cannot place ("a Creature of the Weapon's Choice", "a Creature Attuned to a
+ * Belt of Dwarvenkind", an alignment) makes the whole limit undecidable, and an item the character might
+ * well qualify for is better left unmarked than wrongly marked.
+ * @param {{who: string, names: string[]}|null} restriction  From {@link attunementRestriction}.
+ * @param {{classes?: Set<string>, species?: Set<string>, spellcaster?: boolean}} character
+ *   Class and species identifiers *and* lower-cased names the character holds.
+ * @param {{classes?: Map<string, string>, species?: Map<string, string>}} known
+ *   Every class and species the system knows, lower-cased name (and identifier) → identifier.
+ * @returns {string|null}  The phrase to show ("a Bard") when the character is none of them, else null.
+ */
+export function unmetAttunement(restriction, character, known = {}) {
+  if ( !restriction?.names?.length || !character ) return null;
+  let met = false;
+  for ( const name of restriction.names ) {
+    if ( name === "spellcaster" ) {
+      met ||= !!character.spellcaster;
+      continue;
+    }
+    const cls = known.classes?.get(name);
+    const species = known.species?.get(name);
+    if ( !cls && !species ) return null;
+    if ( cls && (character.classes?.has(cls) || character.classes?.has(name)) ) met = true;
+    if ( species && (character.species?.has(species) || character.species?.has(name)) ) met = true;
+  }
+  return met ? null : restriction.who;
+}

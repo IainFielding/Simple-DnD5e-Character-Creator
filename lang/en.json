@@ -595,6 +595,7 @@
         "slotsAria": "Magic item slots by rarity",
         "notProficient": "Not proficient",
         "needsStrength": "Needs Strength {score}",
+        "attunementBy": "Attunement by {who}",
         "usableTip": "You can still choose this — the note is only so you know what it costs you to use it.",
         "downgradeHint": "A slot holds its own rarity or anything lower.",
         "picksEmpty": "No magic items chosen yet. Pick from the shelves.",
