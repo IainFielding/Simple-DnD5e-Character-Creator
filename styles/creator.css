@@ -3029,6 +3029,23 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .creator-spell-granted .creator-spell-group-label { color: var(--cc-muted); }
 .creator-spell-granted .creator-spell-group-label i { margin-right: 0.3rem; }
+/* Level-up: the spells the character already has, under the tally. A high-level caster can
+   know thirty-odd spells, so the panel shrinks and scrolls rather than pushing the tally and
+   the focused spell out of the column. */
+.creator-spell-known {
+  flex: 0 1 auto;
+  min-height: 4rem;
+  overflow-y: auto;
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px dashed var(--cc-line);
+  border-radius: var(--cc-radius);
+}
+.creator-spell-known .creator-spell-selected-label { color: var(--cc-muted); }
 /* Picked spells, grouped by level so cantrips and 1st-level spells read apart. */
 .creator-spell-groups { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.5rem; }
 .creator-spell-group { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.6rem; }

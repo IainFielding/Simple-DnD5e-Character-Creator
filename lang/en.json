@@ -310,6 +310,7 @@
           "remove": "Forget Spell",
           "selected": "Learning",
           "selectedNone": "Nothing chosen yet.",
+          "known": "Already Known",
           "selectHint": "Pick a spell from the list to read it, then learn it.",
           "filterAllLevels": "All levels",
           "filterAllSchools": "All schools",

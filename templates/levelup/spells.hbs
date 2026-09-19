@@ -149,6 +149,27 @@
       <span class="creator-spell-selected-empty">{{localize "sogrom-dnd5e-character-creator.levelup.step.spells.selectedNone"}}</span>
       {{/if}}
     </div>
+
+    {{!-- Everything the character already has, by level, so a new pick can be weighed against it —
+          synergies, overlaps, a second concentration spell. Reference only; nothing here is clickable
+          beyond the usual chip tooltip and sheet link. --}}
+    {{#if knownGroups.length}}
+    <div class="creator-spell-known">
+      <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.spells.known"}}</span>
+      <div class="creator-spell-groups">
+        {{#each knownGroups}}
+        <div class="creator-spell-group">
+          <span class="creator-spell-group-label">{{label}}</span>
+          <ul class="creator-spell-chips">
+            {{#each spells}}
+            <li><a class="content-link creator-spell-chip" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
   </div>
 
   {{else if featGrants.length}}
