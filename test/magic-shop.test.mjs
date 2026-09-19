@@ -6,7 +6,7 @@ import {
   sanitizeMagicEntry, sanitizeWealthTable, slotsSummary, tierFor, tierGrantsAnything, withinAllowance
 } from "../scripts/data/magic-shop.mjs";
 import {
-  MagicShopSource, locateUuid, magicShopConfig, magicShopGrant, magicShopTier
+  MagicShopSource, ensureMagicShopRoll, grantMagicItems, locateUuid, magicShopConfig, magicShopGrant, magicShopTier
 } from "../scripts/data/magic-shop-source.mjs";
 import { MODULE_ID, SETTINGS } from "../scripts/config.mjs";
 
@@ -246,5 +246,40 @@ describe("the step's gate and grant", () => {
     expect(grant.goldCp).toBe((500 + 100) * 100);
     state.targetLevel = 3;
     expect(magicShopGrant(state).items).toEqual([]);
+  });
+
+  it("rolls the d10 once when two renders race for it", async () => {
+    // Both calls land before the first roll resolves; the later one must not roll again and win.
+    let evaluations = 0;
+    let release;
+    const gate = new Promise(r => { release = r; });
+    const totals = [3, 9];
+    globalThis.Roll = class { async evaluate() { const total = totals[evaluations++]; await gate; return { total }; } };
+    const state = { targetLevel: 5 };
+    const first = ensureMagicShopRoll(state);
+    const second = ensureMagicShopRoll(state);
+    release();
+    expect(await Promise.all([first, second])).toEqual([3, 3]);
+    expect(evaluations).toBe(1);
+    expect(state.magicShop.d10).toBe(3);
+  });
+
+  it("rolls again for a state whose roll failed, rather than caching the failure", async () => {
+    let fail = true;
+    globalThis.Roll = class { async evaluate() { if ( fail ) throw new Error("no dice"); return { total: 6 }; } };
+    const state = { targetLevel: 5 };
+    await expect(ensureMagicShopRoll(state)).rejects.toThrow("no dice");
+    fail = false;
+    expect(await ensureMagicShopRoll(state)).toBe(6);
+  });
+
+  it("reports what it granted, so the chat card can show the roll behind the gold", async () => {
+    enable();
+    let update = null;
+    const actor = { system: { currency: { gp: 15 } }, update: async data => { update = data; } };
+    const state = { targetLevel: 5, magicShop: { d10: 7, picks: {} } };
+    expect(await grantMagicItems(actor, state)).toEqual({ d10: 7, baseGp: 500, perD10Gp: 25, gp: 675, items: [] });
+    expect(update).toEqual({ "system.currency.gp": 690 });
+    expect(await grantMagicItems(actor, { targetLevel: 1 })).toBeNull();
   });
 });

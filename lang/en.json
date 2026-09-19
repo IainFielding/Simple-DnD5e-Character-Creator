@@ -346,7 +346,12 @@
         "background": "Background",
         "subclass": "Subclass",
         "hitPoints": "Hit Points",
-        "armourClass": "Armour Class"
+        "armourClass": "Armour Class",
+        "bonusGold": "Bonus Gold",
+        "bonusGoldValue": "{gp} gp (d10 rolled {die}: {base} gp + {die} × {per} gp)",
+        "bonusGoldFlat": "{gp} gp",
+        "magicItems": "Magic Items",
+        "magicItemQty": "{name} ×{qty}"
       },
       "levelup": {
         "heading": "Level up",
@@ -567,8 +572,13 @@
         "tier": "Levels {from}–{to}",
         "goldLabel": "Bonus gold roll",
         "goldFormula": "{base} gp + {die} × {per} gp",
+        "goldFormulaUnrolled": "{base} gp + d10 × {per} gp",
+        "goldRange": "{min}–{max} gp",
+        "roll": "Roll",
+        "rollHint": "Roll a d10 for your bonus gold. The result is locked once rolled and shown on your character's chat card.",
+        "rollFirst": "Roll for your bonus gold.",
         "goldTotal": "Bonus gold",
-        "dieHint": "Rolled once when you first opened this step. It stays the same if you come back or change your starting level.",
+        "dieHint": "Rolled once and locked. It stays the same if you come back or change your starting level.",
         "slotsAria": "Magic item slots by rarity",
         "notProficient": "Not proficient",
         "needsStrength": "Needs Strength {score}",

@@ -1,5 +1,5 @@
 import { magicShopStep } from "../../steps/magic-shop-step.mjs";
-import { magicShopTier } from "../../data/magic-shop-source.mjs";
+import { goldRolled, magicShopTier } from "../../data/magic-shop-source.mjs";
 import { countPicks, withinAllowance } from "../../data/magic-shop.mjs";
 
 /**
@@ -38,15 +38,16 @@ export const lvlMagicShopStep = {
   },
 
   /**
-   * Complete unless the picks no longer fit the allowance. The creation step also required the step
-   * to have been visited; the level-up shell never fires `onEnter`, so that condition could never
-   * become true here.
+   * Complete once the gold is rolled and the picks fit the allowance. The creation step also
+   * required the step to have been visited; the level-up shell never fires `onEnter`, so that
+   * condition could never become true here. The roll can't be skipped the same way: it is the
+   * player's to make, on screen, so Apply waits for it.
    */
   isComplete(state) {
     const from = creation(state);
     const tier = from ? magicShopTier(from) : null;
     if ( !tier ) return true;
-    return withinAllowance(countPicks(from.magicShop?.picks), tier.allowance);
+    return withinAllowance(countPicks(from.magicShop?.picks), tier.allowance) && goldRolled(from, tier);
   },
 
   onEnter(state) {

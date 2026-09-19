@@ -182,14 +182,24 @@
 
     {{#if hasGold}}
     <dl class="creator-store-totals">
+      {{#if rollable}}
       <div class="creator-magic-roll">
         <dt>{{localize "sogrom-dnd5e-character-creator.step.magicShop.goldLabel"}}</dt>
         <dd>
+          {{#if rolled}}
           <span class="creator-magic-die" data-tooltip="{{localize 'sogrom-dnd5e-character-creator.step.magicShop.dieHint'}}">
             <i class="fa-solid fa-dice-d10" aria-hidden="true"></i> {{d10}}
           </span>
+          {{else}}
+          {{!-- The player's roll, like a hit-point roll: seen, animated by Dice So Nice, then locked. --}}
+          <button type="button" class="creator-magic-roll-btn" data-action="stepAction" data-step-action="magic-roll"
+                  data-tooltip="{{localize 'sogrom-dnd5e-character-creator.step.magicShop.rollHint'}}">
+            <i class="fa-solid fa-dice-d10" aria-hidden="true"></i> {{localize "sogrom-dnd5e-character-creator.step.magicShop.roll"}}
+          </button>
+          {{/if}}
         </dd>
       </div>
+      {{/if}}
       <div><dt>{{goldFormula}}</dt><dd></dd></div>
       <div class="creator-store-remaining"><dt>{{localize "sogrom-dnd5e-character-creator.step.magicShop.goldTotal"}}</dt><dd><i class="fa-solid fa-coins"></i> {{gold}}</dd></div>
     </dl>

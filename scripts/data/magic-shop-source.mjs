@@ -507,27 +507,78 @@ export function magicShopGrant(state, config = magicShopConfig()) {
 }
 
 /**
- * Roll the step's d10 if it hasn't been rolled. Stored on the state, so it survives revisits and a
- * restored draft, and a change of level re-prices the gold rather than re-rolling it.
+ * Whether a tier's bonus gold depends on the d10. A tier with a flat amount (or no gold at all) has
+ * nothing to roll, so the step neither shows the button nor waits for it.
+ * @param {object|null} tier
  */
-export async function ensureMagicShopRoll(state) {
+export function goldNeedsRoll(tier) {
+  return (Number(tier?.perD10Gp) || 0) > 0;
+}
+
+/**
+ * Whether a state's bonus gold is settled: rolled, or a tier with nothing to roll. The step gates on
+ * it, and the review and rail show the gold only once it holds.
+ * @param {object} state
+ * @param {object|null} tier
+ */
+export function goldRolled(state, tier) {
+  return !goldNeedsRoll(tier) || Number.isInteger(state?.magicShop?.d10);
+}
+
+/**
+ * The roll in flight for a state, so a double-click (or two renders) before the first result lands
+ * shares one d10 instead of rolling twice with the later one winning. Kept off the state itself
+ * because the state is written to drafts, and a promise has no business in one.
+ * @type {WeakMap<object, Promise<number>>}
+ */
+const pendingRolls = new WeakMap();
+
+/**
+ * Roll the step's bonus-gold d10 if it hasn't been rolled. The player rolls it from the step, like a
+ * hit-point roll, so the throw is seen (Dice So Nice animates it when installed) and the result is
+ * then locked: stored on the state, it survives revisits and a restored draft, and a change of level
+ * re-prices the gold rather than re-rolling it.
+ * @param {object} state
+ * @param {object} [options]
+ * @param {boolean} [options.animate=true]  Show the Dice So Nice throw. Off only for the grant's
+ *   backstop, which Apply's completion gate means should never actually roll.
+ * @returns {Promise<number>}
+ */
+export async function ensureMagicShopRoll(state, { animate = true } = {}) {
   if ( !state.magicShop ) state.magicShop = { d10: null, picks: {} };
   if ( Number.isInteger(state.magicShop.d10) ) return state.magicShop.d10;
-  const roll = await new Roll("1d10").evaluate();
-  state.magicShop.d10 = Math.min(10, Math.max(1, Math.floor(Number(roll.total) || 1)));
-  return state.magicShop.d10;
+  let pending = pendingRolls.get(state);
+  if ( !pending ) {
+    pending = (async () => {
+      const roll = await new Roll("1d10").evaluate();
+      // Await the animation so the number appears as the die settles, as the hit-point roll does.
+      if ( animate && game.dice3d ) {
+        try { await game.dice3d.showForRoll(roll, game.user, true); } catch ( err ) { log("dice animation failed", err); }
+      }
+      state.magicShop.d10 = Math.min(10, Math.max(1, Math.floor(Number(roll.total) || 1)));
+      return state.magicShop.d10;
+    })().finally(() => pendingRolls.delete(state));
+    pendingRolls.set(state, pending);
+  }
+  return pending;
 }
 
 /**
  * Give the actor its picked magic items and the bonus gold. Separate from the equipment grant,
  * which returns early when no class or background equipment is loaded.
+ *
+ * Returns what was granted, as plain data, so the creation chat card can put the d10 and the picks
+ * on the record: a GM auditing a 2,500 gp swing needs to see the roll behind it.
  * @param {Actor5e} actor
  * @param {object} state
+ * @returns {Promise<{d10: number, baseGp: number, perD10Gp: number, gp: number,
+ *   items: {name: string, uuid: string, qty: number}[]}|null>}  Null when the step didn't apply.
  */
 export async function grantMagicItems(actor, state) {
   const config = magicShopConfig();
-  if ( !magicShopTier(state, config) ) return;
-  await ensureMagicShopRoll(state);
+  const tier = magicShopTier(state, config);
+  if ( !tier ) return null;
+  const d10 = goldNeedsRoll(tier) ? await ensureMagicShopRoll(state, { animate: false }) : 0;
   const { items, goldCp } = magicShopGrant(state, config);
 
   const data = [];
@@ -541,6 +592,11 @@ export async function grantMagicItems(actor, state) {
   if ( gp > 0 ) {
     await actor.update({ "system.currency.gp": (actor.system?.currency?.gp ?? 0) + gp }, { render: false });
   }
+
+  return {
+    d10, baseGp: tier.baseGp, perD10Gp: tier.perD10Gp, gp,
+    items: items.map(p => ({ name: p.name, uuid: p.link, qty: p.qty }))
+  };
 }
 
 /**

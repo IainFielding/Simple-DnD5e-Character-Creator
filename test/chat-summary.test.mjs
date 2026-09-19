@@ -175,6 +175,36 @@ describe("creation summary", () => {
     ChatMessage.create = async () => { throw new Error("no chat log"); };
     await expect(postCreationSummary(makeActor(items))).resolves.toBeUndefined();
   });
+
+  it("puts the Magic Items step's roll and picks on the record", async () => {
+    // The bonus gold is a d10 rolled inside the creator; without this a GM cannot audit it.
+    await postCreationSummary(makeActor(items), { magicShop: {
+      d10: 7, baseGp: 500, perD10Gp: 100, gp: 1200,
+      items: [
+        { name: "Cloak of Protection", uuid: "Compendium.dnd5e.items.Item.cloak", qty: 1 },
+        { name: "Potion of Healing", uuid: "Compendium.dnd5e.items.Item.potion", qty: 2 }
+      ]
+    } });
+    const ctx = postedContext();
+    const gold = ctx.rows.find(r => r.label.includes("bonusGold"));
+    expect(gold.value).toContain("chat.creation.bonusGoldValue");
+    expect(JSON.parse(gold.value.slice(gold.value.indexOf("{")))).toEqual({ gp: 1200, die: 7, base: 500, per: 100 });
+    const picks = ctx.rows.find(r => r.label.includes("magicItems")).items;
+    expect(picks[0]).toEqual({ name: "Cloak of Protection", uuid: "Compendium.dnd5e.items.Item.cloak" });
+    expect(picks[1].name).toContain("\"qty\":2");
+    expect(picks[1].uuid).toBe("Compendium.dnd5e.items.Item.potion");
+  });
+
+  it("shows a flat bonus without a die when the tier rolled nothing", async () => {
+    await postCreationSummary(makeActor(items), { magicShop: { d10: 0, baseGp: 300, perD10Gp: 0, gp: 300, items: [] } });
+    const gold = postedContext().rows.find(r => r.label.includes("bonusGold"));
+    expect(gold.value).toContain("chat.creation.bonusGoldFlat");
+  });
+
+  it("adds no magic-item rows when the step didn't apply", async () => {
+    await postCreationSummary(makeActor(items), { magicShop: null });
+    expect(postedContext().rows.some(r => /bonusGold|magicItems/.test(r.label))).toBe(false);
+  });
 });
 
 /* -------------------------------------------- */

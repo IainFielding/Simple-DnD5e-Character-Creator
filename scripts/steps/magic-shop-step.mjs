@@ -3,10 +3,10 @@ import { formatCp } from "../data/store-source.mjs";
 import { sectionKey, groupCards, itemTypeLabel, subtypeLabel } from "../data/shelf-sections.mjs";
 import {
   RARITIES, rarityRank, rarityLabel, countPicks, canPick, withinAllowance, slotsSummary,
-  highestSlotRank, bonusGoldCp, itemUsability
+  highestSlotRank, bonusGoldCp, goldRange, itemUsability
 } from "../data/magic-shop.mjs";
 import {
-  magicShopConfig, magicShopTier, magicShopSource, ensureMagicShopRoll, pickList,
+  magicShopConfig, magicShopTier, magicShopSource, ensureMagicShopRoll, goldNeedsRoll, goldRolled, pickList,
   usabilityProfile, proficiencyMaps
 } from "../data/magic-shop-source.mjs";
 
@@ -15,7 +15,9 @@ import {
  * items the (GM-overridable) DMG table grants. It sits after the Store, and its gold goes straight
  * to the purse on Create rather than into the Store's budget.
  *
- * The d10 is rolled once, on the first render, and stored. The picks are free: a slot takes its own
+ * The bonus-gold d10 is the player's to roll, from a button in the gold panel, like a hit-point roll:
+ * the throw is seen (Dice So Nice animates it), the result is locked once rolled, and the step is not
+ * complete until it has been. The creation chat card then records the roll. The picks are free: a slot takes its own
  * rarity or anything lower, so the shelf shows every rarity up to the rarest slot the tier has, and
  * a row can be added only while it would still fit.
  *
@@ -43,6 +45,7 @@ export const magicShopStep = {
     const tier = magicShopTier(state);
     if ( !tier ) return true;
     if ( !withinAllowance(countPicks(state.magicShop?.picks), tier.allowance) ) return false;
+    if ( !goldRolled(state, tier) ) return false;
     return !!state.magicShopVisited;
   },
 
@@ -55,6 +58,7 @@ export const magicShopStep = {
     if ( tier && !withinAllowance(countPicks(state.magicShop?.picks), tier.allowance) ) {
       return t("step.magicShop.overAllowance");
     }
+    if ( tier && !goldRolled(state, tier) ) return t("step.magicShop.rollFirst");
     return null;
   },
 
@@ -63,13 +67,19 @@ export const magicShopStep = {
     const tier = magicShopTier(state);
     if ( !tier ) return "";
     const count = pickList(state).reduce((n, p) => n + p.qty, 0);
-    const goldCp = Number.isInteger(state.magicShop?.d10) ? bonusGoldCp(tier, state.magicShop.d10) : 0;
+    const goldCp = goldRolled(state, tier) ? bonusGoldCp(tier, state.magicShop?.d10 ?? 0) : 0;
     if ( !count && !goldCp ) return "";
     return t("step.magicShop.summary", { count, gold: formatCp(goldCp) });
   },
 
   async handle(action, el, { state }) {
+    state.magicShop ??= { d10: null, picks: {} };
     const picks = state.magicShop.picks;
+    if ( action === "magic-roll" ) {
+      if ( !goldNeedsRoll(magicShopTier(state)) ) return false;
+      await ensureMagicShopRoll(state);
+      return;
+    }
     if ( action === "magic-add" ) {
       const tier = magicShopTier(state);
       const uuid = el.dataset.uuid;
@@ -117,7 +127,8 @@ export const magicShopStep = {
     const tier = magicShopTier(state, config);
     if ( !tier ) return { unavailable: true };
 
-    const d10 = await ensureMagicShopRoll(state);
+    state.magicShop ??= { d10: null, picks: {} };
+    const d10 = Number.isInteger(state.magicShop.d10) ? state.magicShop.d10 : null;
     const counts = countPicks(state.magicShop.picks);
     const aside = asideContext(state, tier, d10, counts);
 
@@ -221,17 +232,24 @@ export const magicShopStep = {
 
 /** The right-hand column: the gold roll, the slot chips and the picks. Needs no stock. */
 function asideContext(state, tier, d10, counts) {
-  const goldCp = bonusGoldCp(tier, d10);
-  const hasGold = (tier.baseGp > 0) || (tier.perD10Gp > 0);
+  const rollable = goldNeedsRoll(tier);
+  const rolled = !rollable || (d10 !== null);
+  const goldCp = rolled ? bonusGoldCp(tier, d10 ?? 0) : 0;
+  const hasGold = (tier.baseGp > 0) || rollable;
+  const range = goldRange(tier);
   const picks = pickList(state).map(p => ({ ...p, multi: p.qty > 1, rarityLabel: rarityLabel(p.rarity) }));
   const slots = slotsSummary(counts, tier.allowance).map(s => ({ ...s, label: rarityLabel(s.rarity) }));
   const fits = withinAllowance(counts, tier.allowance);
   return {
     tierLabel: t("step.magicShop.tier", { from: tier.from, to: tier.to }),
     hasGold,
+    rollable,
+    rolled,
     d10,
-    goldFormula: t("step.magicShop.goldFormula", { base: tier.baseGp, die: d10, per: tier.perD10Gp }),
-    gold: formatCp(goldCp),
+    goldFormula: rolled
+      ? t("step.magicShop.goldFormula", { base: tier.baseGp, die: d10 ?? 0, per: tier.perD10Gp })
+      : t("step.magicShop.goldFormulaUnrolled", { base: tier.baseGp, per: tier.perD10Gp }),
+    gold: rolled ? formatCp(goldCp) : t("step.magicShop.goldRange", { min: range.min, max: range.max }),
     slots,
     hasSlots: slots.length > 0,
     picks,

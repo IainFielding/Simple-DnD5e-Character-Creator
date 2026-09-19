@@ -3,7 +3,7 @@ import { advancementTitle } from "../../data/advancement-util.mjs";
 import { summarizeEquipment } from "../../data/equipment-source.mjs";
 import { cartSummary, formatCp } from "../../data/store-source.mjs";
 import { rarityLabel } from "../../data/magic-shop.mjs";
-import { magicShopConfig, magicShopGrant, pickList } from "../../data/magic-shop-source.mjs";
+import { goldRolled, magicShopConfig, magicShopGrant, pickList } from "../../data/magic-shop-source.mjs";
 import { pdfExportContext } from "../../build/pdf-export.mjs";
 
 /**
@@ -187,7 +187,7 @@ function reviewMagicItems(state) {
   const { tier, goldCp } = magicShopGrant(state, magicShopConfig());
   if ( !tier ) return null;
   const items = pickList(state).map(p => ({ ...p, count: p.qty > 1 ? p.qty : null, rarityLabel: rarityLabel(p.rarity) }));
-  const gold = (Number.isInteger(state.magicShop?.d10) && goldCp > 0) ? formatCp(goldCp) : null;
+  const gold = (goldRolled(state, tier) && goldCp > 0) ? formatCp(goldCp) : null;
   if ( !items.length && !gold ) return null;
   return { items, gold, hasItems: items.length > 0 };
 }

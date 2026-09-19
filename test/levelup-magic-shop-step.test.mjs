@@ -14,8 +14,8 @@ import { lvlMagicShopStep } from "../scripts/levelup/steps/lvl-magic-shop-step.m
  */
 
 /** A level-up state as a creation climb presents one. */
-const climbing = ({ targetLevel = 5, picks = {} } = {}) => ({
-  creationState: { targetLevel, magicShop: { d10: 4, picks } },
+const climbing = ({ targetLevel = 5, picks = {}, d10 = 4 } = {}) => ({
+  creationState: { targetLevel, magicShop: { d10, picks } },
   driver: { clone: { system: {} } }
 });
 
@@ -57,5 +57,35 @@ describe("the Magic Items step on the level-up rail", () => {
 
   it("is complete for an ordinary level-up, which has no picks to make", () => {
     expect(lvlMagicShopStep.isComplete({ driver: {} })).toBe(true);
+  });
+
+  it("blocks Apply until the player has rolled for the bonus gold", () => {
+    expect(lvlMagicShopStep.isComplete(climbing({ d10: null }))).toBe(false);
+    expect(lvlMagicShopStep.incompleteHint(climbing({ d10: null }))).toContain("rollFirst");
+  });
+
+  it("renders the shelf without rolling — the roll is the player's to make", async () => {
+    const state = climbing({ d10: null });
+    const ctx = await lvlMagicShopStep.context({ state, app: null });
+    expect(state.creationState.magicShop.d10).toBeNull();
+    expect(ctx).toMatchObject({ rollable: true, rolled: false, d10: null });
+  });
+
+  it("rolls on the button, shows the throw through Dice So Nice, and locks the result", async () => {
+    const thrown = [];
+    game.dice3d = { showForRoll: async roll => { thrown.push(roll); } };
+    const state = climbing({ d10: null });
+    await lvlMagicShopStep.handle("magic-roll", { dataset: {} }, { state });
+    expect(state.creationState.magicShop.d10).toBe(10);    // the shim's Roll always totals 10
+    expect(thrown).toHaveLength(1);
+    // A second press is a no-op: the result is locked.
+    await lvlMagicShopStep.handle("magic-roll", { dataset: {} }, { state });
+    expect(thrown).toHaveLength(1);
+    expect(lvlMagicShopStep.isComplete(state)).toBe(true);
+  });
+
+  it("asks for no roll when the tier has no d10 in it", () => {
+    // The DMG's levels 2–4 band grants an item but no gold, so there is nothing to roll.
+    expect(lvlMagicShopStep.isComplete(climbing({ targetLevel: 3, d10: null }))).toBe(true);
   });
 });

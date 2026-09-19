@@ -536,7 +536,8 @@ export class LevelUpShell extends CreatorShellBase {
     // allowance was measured against. Ordinary level-ups carry no creation state and grant nothing.
     if ( !ember && this.state.creationState ) {
       try {
-        await grantMagicItems(actor, this.state.creationState);
+        // Kept for the creation card, which puts the roll and the picks on the record.
+        this.state.magicShopGrant = await grantMagicItems(actor, this.state.creationState);
       } catch ( err ) {
         // Non-fatal, like the gear grant above: the levels are the important part, and an item can
         // be added on the sheet.
@@ -574,7 +575,7 @@ export class LevelUpShell extends CreatorShellBase {
       fireHook(HOOKS.characterCreated, {
         actor, state: this.state.creationState, targetLevel: actor?.system?.details?.level ?? this.state.toLevel
       });
-      await postCreationSummary(actor);
+      await postCreationSummary(actor, { magicShop: this.state.magicShopGrant });
     } else if ( this.state.announce === "levelup" ) {
       fireHook(HOOKS.levelUpApplied, {
         actor, state: this.state, fromLevel: this.state.fromLevel, toLevel: this.state.toLevel, summary

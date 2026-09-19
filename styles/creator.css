@@ -4955,6 +4955,21 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-magic-slot.is-full { opacity: 0.6; }
 .creator-magic-slots-hint { margin: 0.3rem 0 0.4rem; color: var(--cc-muted); font-size: 0.72rem; }
 .creator-magic-die { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; }
+/* The bonus-gold roll, before it is made: a small button in the gold panel, styled like the HP roll. */
+.creator-magic-roll-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: auto;
+  padding: 0.2rem 0.7rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-gold-bright);
+  font-weight: 600;
+  cursor: pointer;
+}
+.creator-magic-roll-btn:hover { border-color: var(--cc-select); background: var(--cc-select-soft); }
 
 /* The GM's Magic Item Shop window: Foundry chrome, like the store window above. */
 .sogrom-magic-config-fields {
