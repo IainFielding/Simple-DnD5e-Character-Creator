@@ -1,7 +1,7 @@
 import { MODULE_ID, SETTINGS, levelUpEnabled, log } from "../config.mjs";
 import {
   RARITIES, normalizeRarity, itemRarity, sanitizeMagicEntry, sanitizeWealthTable, tierFor, tierGrantsAnything,
-  descendantFolderIds, filterMagicIndex, countPicks, withinAllowance, bonusGoldCp
+  descendantFolderIds, filterMagicIndex, countPicks, withinAllowance, bonusGoldCp, attunementRestriction
 } from "./magic-shop.mjs";
 import { createItemData } from "./item-factory.mjs";
 import {
@@ -59,7 +59,13 @@ export function magicShopTier(state, config = magicShopConfig()) {
 
 /** Index fields the shelf needs beyond name/img/type, which every index carries. */
 // Both rarity shapes: dnd5e 6.0.2 migrated `rarity` into a `rarities` set, and packs may hold either.
-const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container"];
+// `system.strength` is armour's minimum Strength score, and `system.type` carries the category and
+// base item — between them, what the shelf needs to say whether the character can use an item.
+// The description is read for one phrase, who the item's attunement is limited to ("Requires
+// Attunement by a Bard"), which dnd5e keeps nowhere else. It is the heaviest field here, paid once per
+// session on the first visit; only the parsed phrase is kept on the stock row.
+const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container",
+  "system.strength", "system.description.value"];
 
 /**
  * Split a uuid into where it lives. `Compendium.<pkg>.<pack>.Item.<id>` names a pack;
@@ -170,6 +176,45 @@ export class MagicShopSource {
     return pending.promise;
   }
 
+  /**
+   * Fill in the base item and Strength requirement of every template or shell variant on the shelf.
+   *
+   * A variant's row is built from its *template* — "+1 Plate Armor" is the Plate the enchantment went
+   * on — so the two fields that decide whether the character can use it live on the base instead. The
+   * bases are read the same way the stock is, one index per pack, and a base that cannot be read
+   * simply leaves the fields empty: the row then reports on its category alone, which is what it did
+   * before these fields existed.
+   * @param {object[]} stock  Rows, mutated in place.
+   */
+  async #fillVariantBases(stock) {
+    const wanted = stock.filter(s => s.baseUuid);
+    if ( !wanted.length ) return;
+    const byPack = new Map();
+    for ( const row of wanted ) {
+      const where = locateUuid(row.baseUuid);
+      if ( !where ) continue;
+      const key = where.pack ?? "";
+      if ( !byPack.has(key) ) byPack.set(key, []);
+      byPack.get(key).push({ row, id: where.id });
+    }
+    for ( const [pack, rows] of byPack ) {
+      let lookup = null;
+      if ( pack ) {
+        try {
+          lookup = await this.#packIndex(pack);
+        } catch ( err ) {
+          log(`magic shop could not read the bases in ${pack}`, err);
+        }
+      }
+      for ( const { row, id } of rows ) {
+        const base = pack ? lookup?.get?.(id) : this.#worldItem(id);
+        if ( !base ) continue;
+        row.baseItem = base.system?.type?.baseItem ?? "";
+        row.strength = base.system?.strength ?? null;
+      }
+    }
+  }
+
   async #resolve(entries, report) {
     const total = entries.length;
     const groups = new Map();
@@ -196,7 +241,7 @@ export class MagicShopSource {
         const found = pack ? lookup?.get?.(id) : this.#worldItem(id);
         if ( !found ) continue;
         // A variant is its own item, not its template: only the template's art is borrowed.
-        const variant = !!parseVariant(entry.uuid);
+        const variant = parseVariant(entry.uuid);
         stock.push({
           uuid: entry.uuid,
           link: linkUuid(entry.uuid),
@@ -204,12 +249,20 @@ export class MagicShopSource {
           img: found.img || "icons/svg/item-bag.svg",
           type: variant ? entry.type : (found.type || entry.type),
           subtype: variant ? entry.subtype : (found.system?.type?.value ?? entry.subtype),
-          rarity: variant ? entry.rarity : (itemRarity(found) || entry.rarity)
+          rarity: variant ? entry.rarity : (itemRarity(found) || entry.rarity),
+          // What {@link itemUsability} reads. A variant takes these from the base it is built on
+          // rather than from the template, which is filled in below.
+          baseItem: variant ? "" : (found.system?.type?.baseItem ?? ""),
+          strength: variant ? null : (found.system?.strength ?? null),
+          // A variant's limit is its template's: the enchantment is what is attuned to, not the base.
+          attunement: attunementRestriction(found.system?.description?.value),
+          baseUuid: variant?.base ?? null
         });
       }
       done += group.length;
       report(Math.floor((done / total) * 100));
     }
+    await this.#fillVariantBases(stock);
     const lang = globalThis.game?.i18n?.lang;
     return stock
       .filter(s => RARITIES.includes(s.rarity))
@@ -230,11 +283,11 @@ function folderLink(folder) {
 }
 
 /**
- * Index fields a drop reads. The description is what marks a DMG template, and the properties what
- * marks a template from elsewhere, so both are read here — but only here, never on the player's shelf.
+ * Index fields a drop reads. The description is what marks a DMG template (the shelf reads it too, for
+ * the attunement limit), and the properties what marks a template from elsewhere — those only here.
  */
 const DROP_INDEX_FIELDS = [
-  ...INDEX_FIELDS, "system.properties", "system.description.value",
+  ...INDEX_FIELDS, "system.properties",
   // What tells a shell (see magic-templates.mjs#isShell) from a finished weapon or armour.
   "system.damage.base", "system.armor.value"
 ];
@@ -404,6 +457,66 @@ function withUuids(pack, index) {
 }
 
 /* -------------------------------------------- */
+/*  Usability                                   */
+/* -------------------------------------------- */
+
+/**
+ * What {@link itemUsability} needs to know about the character: the proficiencies they hold and
+ * their Strength. Read off whichever actor the step was given — during a creation climb that is the
+ * driver's clone, which already carries everything the levels just granted.
+ *
+ * Also who the character is, for {@link unmetAttunement}: their classes and species (identifier and
+ * lower-cased name both, so a limit matches either), and whether any class casts. "Spellcaster" is
+ * read as the rules define it, a Spellcasting or Pact Magic feature — a class or subclass with a
+ * progression, so an Eldritch Knight counts and a Fighter with Magic Initiate does not.
+ * @param {Actor5e|null} actor
+ * @returns {{armorProf: Set<string>, weaponProf: Set<string>, strength: number,
+ *   classes: Set<string>, species: Set<string>, spellcaster: boolean}|null}
+ */
+export function usabilityProfile(actor) {
+  if ( !actor ) return null;
+  const traits = actor.system?.traits ?? {};
+  const classes = Object.values(actor.classes ?? {});
+  const species = actor.itemTypes?.race ?? [];
+  const keys = items => new Set(items.flatMap(i => [i.identifier ?? i.system?.identifier, i.name?.toLowerCase()]).filter(Boolean));
+  return {
+    armorProf: new Set(traits.armorProf?.value ?? []),
+    weaponProf: new Set(traits.weaponProf?.value ?? []),
+    strength: Number(actor.system?.abilities?.str?.value ?? 0),
+    classes: keys(classes),
+    species: keys(species),
+    spellcaster: classes.some(c => {
+      const progression = c.spellcasting?.progression ?? c.system?.spellcasting?.progression;
+      return !!progression && (progression !== "none");
+    })
+  };
+}
+
+/**
+ * The system's category → proficiency-key maps, as {@link itemUsability} expects them, and every
+ * class and species it knows, as {@link unmetAttunement} expects them.
+ */
+export function proficiencyMaps() {
+  // dnd5e's item registries: identifier → name for every class and species in the world and its packs.
+  const lookup = registry => {
+    const map = new Map();
+    for ( const [id, name] of Object.entries(registry?.choices ?? {}) ) {
+      map.set(id.toLowerCase(), id);
+      if ( name ) map.set(String(name).toLowerCase(), id);
+    }
+    return map;
+  };
+  return {
+    armor: CONFIG.DND5E?.armorProficienciesMap ?? {},
+    weapon: CONFIG.DND5E?.weaponProficienciesMap ?? {},
+    known: {
+      classes: lookup(globalThis.dnd5e?.registry?.classes),
+      species: lookup(globalThis.dnd5e?.registry?.species)
+    }
+  };
+}
+
+/* -------------------------------------------- */
 /*  Review and grant                            */
 /* -------------------------------------------- */
 
@@ -430,27 +543,78 @@ export function magicShopGrant(state, config = magicShopConfig()) {
 }
 
 /**
- * Roll the step's d10 if it hasn't been rolled. Stored on the state, so it survives revisits and a
- * restored draft, and a change of level re-prices the gold rather than re-rolling it.
+ * Whether a tier's bonus gold depends on the d10. A tier with a flat amount (or no gold at all) has
+ * nothing to roll, so the step neither shows the button nor waits for it.
+ * @param {object|null} tier
  */
-export async function ensureMagicShopRoll(state) {
+export function goldNeedsRoll(tier) {
+  return (Number(tier?.perD10Gp) || 0) > 0;
+}
+
+/**
+ * Whether a state's bonus gold is settled: rolled, or a tier with nothing to roll. The step gates on
+ * it, and the review and rail show the gold only once it holds.
+ * @param {object} state
+ * @param {object|null} tier
+ */
+export function goldRolled(state, tier) {
+  return !goldNeedsRoll(tier) || Number.isInteger(state?.magicShop?.d10);
+}
+
+/**
+ * The roll in flight for a state, so a double-click (or two renders) before the first result lands
+ * shares one d10 instead of rolling twice with the later one winning. Kept off the state itself
+ * because the state is written to drafts, and a promise has no business in one.
+ * @type {WeakMap<object, Promise<number>>}
+ */
+const pendingRolls = new WeakMap();
+
+/**
+ * Roll the step's bonus-gold d10 if it hasn't been rolled. The player rolls it from the step, like a
+ * hit-point roll, so the throw is seen (Dice So Nice animates it when installed) and the result is
+ * then locked: stored on the state, it survives revisits and a restored draft, and a change of level
+ * re-prices the gold rather than re-rolling it.
+ * @param {object} state
+ * @param {object} [options]
+ * @param {boolean} [options.animate=true]  Show the Dice So Nice throw. Off only for the grant's
+ *   backstop, which Apply's completion gate means should never actually roll.
+ * @returns {Promise<number>}
+ */
+export async function ensureMagicShopRoll(state, { animate = true } = {}) {
   if ( !state.magicShop ) state.magicShop = { d10: null, picks: {} };
   if ( Number.isInteger(state.magicShop.d10) ) return state.magicShop.d10;
-  const roll = await new Roll("1d10").evaluate();
-  state.magicShop.d10 = Math.min(10, Math.max(1, Math.floor(Number(roll.total) || 1)));
-  return state.magicShop.d10;
+  let pending = pendingRolls.get(state);
+  if ( !pending ) {
+    pending = (async () => {
+      const roll = await new Roll("1d10").evaluate();
+      // Await the animation so the number appears as the die settles, as the hit-point roll does.
+      if ( animate && game.dice3d ) {
+        try { await game.dice3d.showForRoll(roll, game.user, true); } catch ( err ) { log("dice animation failed", err); }
+      }
+      state.magicShop.d10 = Math.min(10, Math.max(1, Math.floor(Number(roll.total) || 1)));
+      return state.magicShop.d10;
+    })().finally(() => pendingRolls.delete(state));
+    pendingRolls.set(state, pending);
+  }
+  return pending;
 }
 
 /**
  * Give the actor its picked magic items and the bonus gold. Separate from the equipment grant,
  * which returns early when no class or background equipment is loaded.
+ *
+ * Returns what was granted, as plain data, so the creation chat card can put the d10 and the picks
+ * on the record: a GM auditing a 2,500 gp swing needs to see the roll behind it.
  * @param {Actor5e} actor
  * @param {object} state
+ * @returns {Promise<{d10: number, baseGp: number, perD10Gp: number, gp: number,
+ *   items: {name: string, uuid: string, qty: number}[]}|null>}  Null when the step didn't apply.
  */
 export async function grantMagicItems(actor, state) {
   const config = magicShopConfig();
-  if ( !magicShopTier(state, config) ) return;
-  await ensureMagicShopRoll(state);
+  const tier = magicShopTier(state, config);
+  if ( !tier ) return null;
+  const d10 = goldNeedsRoll(tier) ? await ensureMagicShopRoll(state, { animate: false }) : 0;
   const { items, goldCp } = magicShopGrant(state, config);
 
   const data = [];
@@ -464,6 +628,11 @@ export async function grantMagicItems(actor, state) {
   if ( gp > 0 ) {
     await actor.update({ "system.currency.gp": (actor.system?.currency?.gp ?? 0) + gp }, { render: false });
   }
+
+  return {
+    d10, baseGp: tier.baseGp, perD10Gp: tier.perD10Gp, gp,
+    items: items.map(p => ({ name: p.name, uuid: p.link, qty: p.qty }))
+  };
 }
 
 /**

@@ -12,11 +12,93 @@ packs under test.
 Copy `config.example.mjs` to `config.mjs` and edit the paths before the setup steps below.
 
 > **Where to start.** *Master findings* below is the authoritative record of what this harness
-> currently says. Everything from **Historical reference** onward is kept for the reasoning and the
-> mechanisms it documents, not as a statement of current state — where the two disagree, this section
-> wins.
+> currently says. The 6.0.0 findings after it are kept because the later ones build on them; where
+> the two disagree, the newer section wins. Everything from **Historical reference** onward is kept for
+> the reasoning and the mechanisms it documents, not as a statement of current state.
 
-## Master findings — dnd5e 6.0.0, 2026-09-05
+## Master findings — dnd5e 6.0.3, 2026-09-19
+
+Foundry **14.368**, dnd5e **6.0.3**, Tasha's Cauldron **4.0.0**, with Arcana Unleashed and Operation
+Deadfall at **1.0.1** (both updated 2026-09-19, mid-way through the day's runs). The subclass sweep is
+now **131** scenarios; the Arcana Unleashed subclasses are among them.
+
+### The result
+
+| Suite | System | Result | Archive |
+| --- | --- | --- | --- |
+| Subclass axis, incremental, level 20 | 6.0.3 | **131 / 131 identical, 0 errored** — the first sweep with no difference at all | `sweep-results-603-subclass-final.jsonl` |
+| Arcana Unleashed 1.0.1 subclasses, re-swept after the update | 6.0.3 | **8 / 8 identical** | `sweep-results-603-au101-subclass.jsonl` |
+| 2014 Tasha's Rangers and Clerics, level 5 (after the creation optional-feature change) | 6.0.3 | **6 / 6 identical** | `sweep-results-603-optional-2014-l5.jsonl` |
+| Background axis, level 20 | 6.0.2 | **71 / 71 identical** | `sweep-results-602-background-final.jsonl` |
+| Species axis, level 20 | 6.0.2 | 22 / 24 — Changeling (`source.book`), Dwarf (`hp.value`), both known | `sweep-results-602-species.jsonl` |
+| Base suite | 6.0.3 | **7 / 8** — only the known level-4 half-feat `decision.raised` remains | `base-suite-603-featspells.log` |
+| Ember | 6.0.2 | **3 / 3 identical** | `ember-6.0.2.log` |
+| `--hooks` | 6.0.2 | **7 / 7** | `hooks-6.0.2.log` |
+| Granted always-prepared spells, sidekicks | 6.0.2 | pass | `granted-spells-6.0.2.log`, `sidekicks-6.0.2.log` |
+
+The first full 6.0.3 sweep (started 11:47) stopped at 122 of 131 when the content modules updated;
+all 122 were identical. The remaining nine were finished with `--resume` in the afternoon, on the tree
+that also carries the creation optional-feature change, so **the final file is spliced** from two code
+states and `baselines.mjs` will say so. The nine are mostly 2014 SRD subclasses, which are exactly the
+builds that change reaches, so they measure the newer code: all nine identical. The Arcana Unleashed
+rows in this file predate the 1.0.1 update; the row below re-sweeps them.
+
+**The background axis is usable now.** Every earlier section calls it blocked by *Potent Dragonmark*;
+the seven layered causes behind that were fixed on 2026-09-16/17 (see *The feat axis: what was behind
+the errors*), and the 6.0.2 run completes clean.
+
+### Where the 6.0.0 differences went
+
+| 6.0.0 cause | Now |
+| --- | --- |
+| 2014 Ranger replacement grant (Tasha's 3.0.0) | **Closed by Tasha's 4.0.0** (premium-content#1738). All three 2014 Rangers identical since 6.0.2. |
+| Cast-activity cached spell dropped at a later level (#1704, #1706, #1709; Hollow Warden, Reanimator, Shadow Sorcery, Grave Domain) | **Closed by dnd5e 6.0.** All identical since 6.0.2, and re-confirmed in the clean room on 6.0.3: native keeps both Spare the Dying copies through level 6 (`probe-grave-603.log`) and both Summon Beast copies through level 8 (`probe-shadow-603.log`). Grave Domain was never ours. |
+| Pack first-touch `source.book` | Not seen in the 6.0.3 subclass run, but still present on 6.0.2 (Changeling, the base suite). The mechanism in finding 2 below is unchanged, so read its absence as run order, not a fix. |
+| 2014 Rogue Thieves' Cant (by design) | Phantom and Soulknife identical on 6.0.3; Thief (dnd5e) identical too. Not investigated why the rows went. |
+| Non-empty `riders.effect` on TCoE Alchemist | Identical on 6.0.3. |
+
+### Found and fixed on 2026-09-19
+
+- **The creation takeover double-walk.** The morning's first sweep had 37 of 131 differing, every
+  2014 class at level 1: with the multiclass setting on, our own takeover claimed the creator's
+  headless creation manager and ran a second driver over the same clone. `LevelUpDriver`'s
+  constructor now marks every manager it walks as ours.
+- **Spell choices the answer book now answers.** Teaching the harness to answer spell `ItemChoice`s
+  (instead of deferring them) found list-less choices offering nothing. The second full run
+  (`sweep-results-603-spellchoice-run2.jsonl`) then showed 4 differences: Transmuter (level 3), TCoE
+  Alchemist (level 4), and both Fiend Warlocks (levels 15 and 17, `decision` rows). Transmuter,
+  Alchemist and the 2024 Fiend Patron are identical in the final run; so is the 2014 Fiend, in the resumed tail.
+
+### The Magic Initiate difference was ours
+
+`human-wizard-sage-featspells` carried 11 rows from the first 6.0.0 run on, and they were read as
+known. They were a creator bug: the feat-spells page created its picks as loose spells, so the feat's
+spell `ItemChoice` never recorded them in `value.added`, and the spells lacked `sourceId`, a full
+`advancementOrigin` and `advancementRoot`. It surfaced in play as a level-up that could not replace a
+feat cantrip (Arcana Unleashed's Arcane Warrior showed "0 of 0"). `applyFeatSpells` now records them
+as `Advancement#createItemData` and the ItemChoice flow do, and the scenario is identical on 6.0.3.
+Human Fighter (Sage)'s 9 `source.book` rows are also gone from this run, which is run order (finding 2).
+
+### Arcana Unleashed 1.0.1
+
+The update adds `restriction.school` to every school-bound spell choice: the four Savants, the
+"Mastered *School*" boons and the new Arcane Undertaker origin feat. `--probe-spell-choice conjurer
+--level 5` restricts to and offers only `con` at levels 3 and 5 (`au101-probe.log`), which is the
+level-up filter agreeing with dnd5e's on real data. The creation feat-spells page honours it too, but
+that is unit-tested only: the sweep never takes Arcane Undertaker.
+
+### Open, in priority order
+
+1. **Creation optional class features have no harness coverage beyond the default.** The Choices step
+   now offers Tasha's optional and replacement features at level 1. The sweeps above prove the default
+   (keep everything; keep the 2014 base of each pair) is unchanged, but the answer book never declines
+   or swaps, so the swap path is covered only by `test/optional-grant-creation.test.mjs` and the
+   driver's level-up path it shares.
+2. Species, background, base suite, Ember and `--hooks` were last run on 6.0.2. dnd5e 6.0.2 → 6.0.3 is
+   a patch release and was checked by hand, but a re-run would make this table one version.
+3. `describeDrift` still does not compare system versions (6.0.0 open item 5).
+
+## Master findings — dnd5e 6.0.0, 2026-09-05 (superseded by 6.0.3 above)
 
 The first full sweep on dnd5e **6.0.0**, run on this machine (Foundry 14.367, packaged 6.0.0 system
 installed through the setup UI — *not* the source build the historical 6.0.0 section was measured on).
@@ -442,8 +524,10 @@ past, and FAILed instead, which is where the creator bugs were:
 
 - **The creator dropped the advancement.** `PotentDragonmarkAdvancement` extends the base
   `Advancement`, whose `automaticApplicationValue` is `false`, so `#ingestFlow`'s default branch
-  skipped it and a dragonmarked character never got their Spells of the Mark. The driver now handles
-  the type by name (`PASSTHROUGH_TYPES`, beside Ember's) and applies it.
+  skipped it and a dragonmarked character never got their Spells of the Mark. The driver first handled
+  the type by name; since 2026-09-19 no third-party type is named at all — an unrecognised
+  non-automatic advancement is committed as its untouched native screen would be (`nativeSteps`)
+  and its own flow is mounted in the level screen.
 - **The creator offered the feat to everyone.** `classifyAsiFeats` gated on level and
   `prerequisites.items` only. `CONTENT_FEAT_PREREQS` in `choice-resolver.mjs` now holds prerequisites
   content enforces elsewhere, keyed by feat identifier. The picker locks the feat and
@@ -534,11 +618,34 @@ Conjurer, 1→5 in one jump
   actor: Absorb Elements (1), Acid Arrow (2), Aganazzar's Scorcher (2)
 ```
 
-**The sweep's blind spot.** `AnswerBook#isDeferred` defers *every* spell-type `ItemChoice` to the
-creator's feat-spells step, which only exists for level-≤1 origin choices. So both builds apply
-nothing to a level-up spell choice (Savant, Blessed Warrior) and report identical. The school in the
-Savant hint ("from the Conjuration school") is text only, so neither native nor the creator enforces
-it.
+**The sweep's blind spot, closed 2026-09-19.** `AnswerBook#isDeferred` used to defer *every*
+spell-type `ItemChoice` to the creator's feat-spells step, which only exists for creation. So both
+builds applied nothing to a level-up spell choice (Savant, Blessed Warrior) and reported identical.
+Three changes close it:
+
+- **Deferral is by phase, not by type.** Every ask carries `phase: "creation" | "levelup"`. Only
+  creation defers a spell choice. A feat's advancements sit at level 0 wherever the feat came from, so
+  the level can't tell the two phases apart.
+- **The pool comes from dnd5e, not from either screen.** `generateSpellChoice` reads the spell-list
+  registry, the restriction's level and school, and, for `available`, the native flow's own
+  `_maxSpellSlotLevel()`, which the native adapter passes along because it asks first. It skips spells
+  already held (by name) and prefers the PHB copy of a spell that exists twice. Building the pool from
+  the creator's screen instead would have left an empty screen answering nothing, blind again.
+- **The creator side is held to what its screen offers.** `autoResolve` applies picks through
+  `toggleChoice`, which takes any uuid. `creator.mjs#checkSpellOffers` therefore renders every spell
+  choice through the real `choicesStep` afterwards. Each pick not on that list is reported as a
+  `decision.offered.ItemChoice.*` difference and unticked, as a player could not have made it.
+
+Negative check: with the Savant bug put back temporarily (`spellListOptions` returning nothing for
+`available`), the Conjurer at level 5 fails at level 3 with native offering *Air Bubble, Cloud of
+Daggers*, the creator offering nothing, and the spells missing. With the fix in place it passes to
+level 7, all three Savant picks applied on both sides.
+
+The school in the Savant hint ("from the Conjuration school") is still text only in the data, so
+neither side enforces it. Both honour `restriction.school` as soon as the data carries it.
+
+> **Baselines taken before 2026-09-19 are not comparable.** Every level-up spell choice was answered
+> with nothing before this change and is answered with picks after it.
 
 `source.book` (finding 2 above) is also gone from the diff. `normaliseSourceBook` drops an item's
 `book` when it is empty or equals the placeholder `SourceField.prepareData` invents for that item's
@@ -606,6 +713,7 @@ node run.mjs --subclasses wizard      # subclasses for a class identifier
 node run.mjs --sidekicks              # assert Tasha's sidekicks are not offered as classes
 node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
 node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
+node run.mjs --repair                 # skipped-choice builds, repaired, against the full build
 node run.mjs --sweep                  # every subclass in the world, at level 20 (see below)
 node run.mjs --sweep --axis species   # vary the species instead, on a fixed Wizard/Evoker
 node run.mjs --sweep --axis background  # vary the background, taking a feat at every ASI
@@ -2382,3 +2490,29 @@ rather than waiting the full timeout for a form an automatic step will never pai
 none of `languages:standard:elvish` or its neighbours. The six hand-written scenarios name those
 keys literally, so they cannot run there — which is why every scenario now declares a `world` and the
 base world is the default. Anything naming specific content is portable only to the world holding it.
+
+## Repair this level: an assertion against the full build
+
+```
+node run.mjs --repair
+```
+
+"Repair skipped choices" (`scripts/levelup/repair.mjs`) re-runs one class level's unanswered
+decisions through the level-up shell. dnd5e never blocks Next on an unmade choice, so the check
+reproduces that with a *broken* native build, where chosen decisions are answered `null`, and a
+*reference* native build with everything answered. Then:
+
+1. `repairTargets` must find the skipped decisions, and only those;
+2. each gap level is repaired through the real `LevelUpDriver`, answered from the reference's own
+   answer book;
+3. the repaired character must match the reference exactly, with nothing left to repair.
+
+The cases (`in-world/repair.mjs`) cover a PHB Champion missing its Fighting Style, subclass and first
+ASI; a Conjurer missing its subclass, so the Savant choice only appears with the repair; the same
+Champion shape on the 2014 SRD class with Tasha's options; and a lone skipped ASI. A last case goes
+through the real front door. It checks that the sheet's wrench is present, opens the real
+`LevelUpShell` (title, and the rail `level-N, review`), applies with `_finish`, and then checks that
+the character is whole, its level unchanged, the wrench gone, and the hooks heard were
+`levelUpStarted → levelUpApplied` carrying `state.repairLevel`.
+
+**First run, 2026-09-19: 5/5.**

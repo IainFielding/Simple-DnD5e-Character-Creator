@@ -242,6 +242,18 @@ export class LevelUpState {
   exportPdf = false;
 
   /**
+   * The class level this session repairs, or null for an ordinary level-up. A repair finishes the
+   * decisions an already-applied level left unanswered (see {@link module:levelup/repair}): the
+   * character's level does not change, so the window says which level it is fixing rather than which
+   * it is reaching, and no chat card is posted for it.
+   * @type {number|null}
+   */
+  repairLevel = null;
+
+  /** Whether `levelUpStarted` has been announced for this session (see the Class step). */
+  startAnnounced = false;
+
+  /**
    * @param {Actor5e} actor
    * @param {import("./manager-driver.mjs").LevelUpDriver|null} [driver]  Prepared driver, or null
    *   to open on the Class step and adopt one later.
@@ -252,9 +264,11 @@ export class LevelUpState {
    *   posts on Apply; defaults by flow (see {@link announce}).
    * @param {import("../state/creator-state.mjs").CreatorState} [options.creationState]  See
    *   {@link creationState}.
+   * @param {number|null} [options.repairLevel]  This session repairs that class level; see
+   *   {@link repairLevel}.
    */
   constructor(actor, driver = null, {
-    chooseClass = false, emberCreation = false, announce = null, creationState = null
+    chooseClass = false, emberCreation = false, announce = null, creationState = null, repairLevel = null
   } = {}) {
     this.actor = actor;
     this.fromLevel = actor.system?.details?.level ?? 0;
@@ -266,7 +280,9 @@ export class LevelUpState {
     // The Ember hand-off announces nothing by default: Ember's builder finishes the character
     // *after* our Apply (it owns the final write and the sheet swap), so a card posted here could
     // describe a character that is still a step from done. Ember owns that moment, not us.
-    this.announce = announce ?? (emberCreation ? "none" : "levelup");
+    this.repairLevel = repairLevel;
+    // A repair gains no level, so there is no level-up to announce.
+    this.announce = announce ?? ((emberCreation || repairLevel) ? "none" : "levelup");
     if ( driver ) this.adoptDriver(driver);
   }
 
@@ -386,7 +402,23 @@ export class LevelUpState {
    * @returns {boolean}
    */
   hasSpellStep() {
+    // A repair gains no level, so a caster's spare capacity is not this session's business — it would
+    // otherwise surface a spell step (and its swap) on every repair of a caster with an unfilled
+    // slot. The one exception is a repair that *makes* the class a caster: a subclass chosen late,
+    // such as an Eldritch Knight, whose new cantrips and spells are part of the missed level.
+    if ( this.repairLevel && !this.repairAddsSpellcasting() ) return false;
     return this.spellPlan().hasDelta || this.featSpells.length > 0;
+  }
+
+  /**
+   * Whether this repair turns the repaired class into a caster, judged by whether the real actor casts
+   * for it and the clone now does.
+   * @returns {boolean}
+   */
+  repairAddsSpellcasting() {
+    if ( !this.driver || !this.classItem ) return false;
+    return !computeSpellPlan(this.actor, this.actor.items.get(this.classItem.id) ?? null).isSpellcaster
+      && computeSpellPlan(this.driver.clone, this.driver.clone.items.get(this.classItem.id) ?? null).isSpellcaster;
   }
 
   /**
@@ -440,6 +472,11 @@ export class LevelUpState {
     return this.driver?.grantSteps ?? [];
   }
 
+  /** Third-party advancements the wizard presents through their own flow (see LevelUpDriver#nativeSteps). */
+  get nativeSteps() {
+    return this.driver?.nativeSteps ?? [];
+  }
+
   /**
    * Whether the player has actually made a decision yet — used by the shell to decide if closing
    * before Apply deserves a "discard this level-up?" confirmation. Pre-seeded defaults (average
@@ -485,7 +522,7 @@ export class LevelUpState {
   gainedLevels() {
     const levels = new Set();
     for ( const arr of [this.hpSteps, this.asiSteps, this.subclassSteps, this.choiceSteps, this.traitSteps,
-      this.grantSteps, this.optionalGrantSteps] ) {
+      this.grantSteps, this.optionalGrantSteps, this.nativeSteps] ) {
       for ( const record of arr ) levels.add(recordLevel(record));
     }
     return [...levels].sort((a, b) => a - b);

@@ -242,13 +242,25 @@ function magicInitiateGrant(featDoc, originDoc, sourceKey, featUuid) {
     // The advancement's own spell configuration, kept per slot type so the assembler can hand the
     // created spell to the system's `applySpellChanges` rather than re-deriving the casting setup.
     let cantripSpellConfig = null, spellSpellConfig = null;
+    // `restriction.school`, per slot type — Arcana Unleashed's Arcane Undertaker offers a Cleric or
+    // Wizard cantrip "from the Necromancy school". Empty means any school.
+    let cantripSchools = [], spellSchools = [];
+    // Which advancement, at which of its levels, each slot type answers — so the assembler can record
+    // the created spells in that advancement's `value.added` as the native flow does. Without it the
+    // feat never learns what was picked, and a later level-up has nothing to offer for replacement.
+    let cantripAdv = null, spellAdv = null;
     for ( const adv of spellAdvs ) {
       const cfg = adv.configuration;
       const choiceLevel = Object.keys(cfg.choices ?? {}).map(Number).filter(l => l <= 1).sort((a, b) => a - b)[0] ?? 0;
       const count = Number(cfg.choices?.[choiceLevel]?.count ?? cfg.choices?.[choiceLevel] ?? 0);
       const restrictLevel = Number(cfg.restriction?.level ?? 0);
-      if ( restrictLevel === 0 ) { cantripCount = count; cantripSpellConfig = cfg.spell ?? null; }
-      else { spellCount = count; spellLevel = restrictLevel; spellSpellConfig = cfg.spell ?? null; }
+      const schools = Array.from(cfg.restriction?.school ?? []);
+      const slot = { id: adv._id ?? adv.id, level: choiceLevel };
+      if ( restrictLevel === 0 ) {
+        cantripCount = count; cantripSpellConfig = cfg.spell ?? null; cantripSchools = schools; cantripAdv = slot;
+      } else {
+        spellCount = count; spellLevel = restrictLevel; spellSpellConfig = cfg.spell ?? null; spellSchools = schools; spellAdv = slot;
+      }
       for ( const c of Array.from(cfg.restriction?.list ?? []) ) classList.add(String(c).replace(/^class:/, ""));
       for ( const a of Array.from(cfg.spell?.ability ?? []) ) abilityKeys.add(a);
     }
@@ -265,7 +277,9 @@ function magicInitiateGrant(featDoc, originDoc, sourceKey, featUuid) {
       classList: finalList,
       abilityKeys: locked ? [locked] : allowed,
       cantripCount, spellCount, spellLevel,
-      cantripSpellConfig, spellSpellConfig
+      cantripSpellConfig, spellSpellConfig,
+      cantripSchools, spellSchools,
+      cantripAdv, spellAdv
     };
   }
 
@@ -529,7 +543,8 @@ async function spellBrowser(state, grant, listId, spells, owned = new Set()) {
   if ( tab === "spells" && grant.spellCount === 0 ) tab = "cantrips";
   const isCantrips = tab === "cantrips";
 
-  const pool = isCantrips ? cantrips : level1;
+  const schools = new Set((isCantrips ? grant.cantripSchools : grant.spellSchools) ?? []);
+  const pool = (isCantrips ? cantrips : level1).filter(s => !schools.size || schools.has(s.schoolKey));
   const budget = isCantrips ? grant.cantripCount : grant.spellCount;
   const chosen = picked(state, grant, isCantrips ? 0 : 1);
   const chosenSet = new Set(chosen);

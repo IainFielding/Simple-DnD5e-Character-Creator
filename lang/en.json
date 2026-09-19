@@ -135,7 +135,16 @@
     "levelup": {
       "window": {
         "title": "Level Up — {name} (Level {level})",
-        "emberTitle": "Finish {name} — Level 1"
+        "emberTitle": "Finish {name} — Level 1",
+        "repairTitle": "Repair {class} {level} — {name}"
+      },
+      "repair": {
+        "button": "Repair skipped choices",
+        "dialogTitle": "Repair a level",
+        "prompt": "These levels have choices that were never made. Pick one to finish it; nothing you already chose is changed.",
+        "option": "{class} {level} — {titles}",
+        "nothing": "There is nothing left to repair on that level.",
+        "failed": "The repair could not be prepared. Nothing on the character was changed."
       },
       "nav": {
         "apply": "Apply Level-Up",
@@ -158,6 +167,7 @@
       "notify": {
         "applyFailed": "Level-up could not be applied. See the console for details.",
         "emberGearFailed": "Starting equipment and spells could not be prepared. The rest of the character was applied — add them from the sheet.",
+        "magicItemsFailed": "The chosen magic items could not be added. The levels themselves were applied — add the items from the sheet.",
         "spellsFailed": "The chosen spells could not be added. The level-up itself was applied — add them from the sheet.",
         "takeoverFailed": "The level-up could not be prepared. The character was not changed — try again or use the system's own level-up.",
         "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow."
@@ -243,6 +253,10 @@
           "label": "Spell",
           "prompt": "Choose the spellcasting ability for this spell."
         },
+        "native": {
+          "label": "Feature",
+          "unavailable": "This feature has already been applied. Its own screen could not be shown here."
+        },
         "optionalGrant": {
           "label": "Optional Features",
           "prompt": "Your game includes optional class features. Take the ones you want — you already have them all, so untick any you would rather not.",
@@ -296,6 +310,7 @@
           "remove": "Forget Spell",
           "selected": "Learning",
           "selectedNone": "Nothing chosen yet.",
+          "known": "Already Known",
           "selectHint": "Pick a spell from the list to read it, then learn it.",
           "filterAllLevels": "All levels",
           "filterAllSchools": "All schools",
@@ -345,7 +360,12 @@
         "background": "Background",
         "subclass": "Subclass",
         "hitPoints": "Hit Points",
-        "armourClass": "Armour Class"
+        "armourClass": "Armour Class",
+        "bonusGold": "Bonus Gold",
+        "bonusGoldValue": "{gp} gp (d10 rolled {die}: {base} gp + {die} × {per} gp)",
+        "bonusGoldFlat": "{gp} gp",
+        "magicItems": "Magic Items",
+        "magicItemQty": "{name} ×{qty}"
       },
       "levelup": {
         "heading": "Level up",
@@ -371,6 +391,7 @@
       "class": {
         "label": "Class & Abilities",
         "hint": "Choose a class to continue.",
+        "switchPlaceholder": "Choose a Class",
       "filterEditionAria": "Filter by rules edition",
       "filterAllEditions": "Both editions",
       "filterEdition": "{year} rules",
@@ -566,9 +587,18 @@
         "tier": "Levels {from}–{to}",
         "goldLabel": "Bonus gold roll",
         "goldFormula": "{base} gp + {die} × {per} gp",
+        "goldFormulaUnrolled": "{base} gp + d10 × {per} gp",
+        "goldRange": "{min}–{max} gp",
+        "roll": "Roll",
+        "rollHint": "Roll a d10 for your bonus gold. The result is locked once rolled and shown on your character's chat card.",
+        "rollFirst": "Roll for your bonus gold.",
         "goldTotal": "Bonus gold",
-        "dieHint": "Rolled once when you first opened this step. It stays the same if you come back or change your starting level.",
+        "dieHint": "Rolled once and locked. It stays the same if you come back or change your starting level.",
         "slotsAria": "Magic item slots by rarity",
+        "notProficient": "Not proficient",
+        "needsStrength": "Needs Strength {score}",
+        "attunementBy": "Attunement by {who}",
+        "usableTip": "You can still choose this — the note is only so you know what it costs you to use it.",
         "downgradeHint": "A slot holds its own rarity or anything lower.",
         "picksEmpty": "No magic items chosen yet. Pick from the shelves.",
         "clear": "Clear Picks",
@@ -627,6 +657,13 @@
       }
     },
     "choice": {
+      "optionalGrant": {
+        "title": "Optional Class Features",
+        "status": "Optional",
+        "prompt": "Your game includes optional class features. You have them all already; click one to give it up.",
+        "promptReplace": "This feature can be swapped for an alternative. Pick the version you want.",
+        "insteadOf": "{feature}, or its alternative"
+      },
       "chooseOne": "Choose one",
       "chooseCount": "Choose {count}",
       "recommendedAbility": "Matches your {class}'s spellcasting ability",

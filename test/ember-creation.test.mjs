@@ -148,8 +148,16 @@ describe("the claim gate on Ember's step set", () => {
 
   it("stands down when the hand-off carries a choice the wizard can't present", () => {
     const steps = emberSteps();
-    steps.push({ type: "forward", level: 0, flow: { advancement: { type: "SomethingNew", configuration: {} }, level: 0 } });
+    const sizes = new Set(["sm", "med"]);
+    steps.push({ type: "forward", level: 0, flow: { advancement: { type: "Size", configuration: { sizes } }, level: 0 } });
     expect(LevelUpDriver.canDrive(managerWithSteps(steps), { allowNewClass: true })).toBe(false);
+  });
+
+  it("still drives the hand-off when it carries an advancement type another module registered", () => {
+    // Presented through that module's own flow rather than declined — see levelup-native-flow.test.mjs.
+    const steps = emberSteps();
+    steps.push({ type: "forward", level: 0, flow: { advancement: { type: "SomethingNew", configuration: {} }, level: 0 } });
+    expect(LevelUpDriver.canDrive(managerWithSteps(steps), { allowNewClass: true })).toBe(true);
   });
 });
 

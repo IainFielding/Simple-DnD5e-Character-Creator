@@ -1537,6 +1537,7 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .creator-work-switch:hover { filter: brightness(1.15); }
 .creator-work-switch i { font-size: 0.6rem; color: var(--cc-muted); }
+.creator-work-switch-placeholder { color: var(--cc-muted); font-style: italic; }
 .creator-work-switch-img {
   flex: 0 0 20px;
   width: 20px;
@@ -3028,6 +3029,23 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .creator-spell-granted .creator-spell-group-label { color: var(--cc-muted); }
 .creator-spell-granted .creator-spell-group-label i { margin-right: 0.3rem; }
+/* Level-up: the spells the character already has, under the tally. A high-level caster can
+   know thirty-odd spells, so the panel shrinks and scrolls rather than pushing the tally and
+   the focused spell out of the column. */
+.creator-spell-known {
+  flex: 0 1 auto;
+  min-height: 4rem;
+  overflow-y: auto;
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px dashed var(--cc-line);
+  border-radius: var(--cc-radius);
+}
+.creator-spell-known .creator-spell-selected-label { color: var(--cc-muted); }
 /* Picked spells, grouped by level so cantrips and 1st-level spells read apart. */
 .creator-spell-groups { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.5rem; }
 .creator-spell-group { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.6rem; }
@@ -3878,6 +3896,13 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
    the combined rule wins on specificity and adds the widths together. */
 .dnd5e2.character .sheet-header-buttons.sogrom-has-levelup { transform: translateX(-38px); }
 .dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-levelup { transform: translateX(-114px); }
+/* The repair wrench (shown only while a level has an unanswered choice) takes one more icon-width. */
+.dnd5e2.character .sheet-header-buttons.sogrom-has-repair { transform: translateX(-38px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-levelup.sogrom-has-repair { transform: translateX(-76px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-repair { transform: translateX(-114px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-levelup.sogrom-has-repair {
+  transform: translateX(-152px);
+}
 
 /* Fallback placement for sheets without the v2 header row: a labelled title-bar button. */
 .sogrom-levelup-btn--window {
@@ -4597,6 +4622,15 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-store-row .content-link i { display: none; }
 .creator-store-row .content-link:hover { color: var(--cc-gold); }
 .creator-store-row-type { color: var(--cc-muted); font-size: 0.72rem; }
+/* Why the character can't make proper use of a magic item — no proficiency, or not enough Strength.
+   A note, not a block: the item is still pickable, so this is coloured as a caution rather than an
+   error and sits under the name where the eye already is. */
+.creator-magic-warning {
+  display: block;
+  color: var(--cc-danger);
+  font-size: 0.72rem;
+}
+.creator-magic-warning i { margin-right: 0.2rem; }
 /* Right-aligned inside a ~380px track, so it still forms a scannable column of prices down each
    section without being flung to the far side of the window. Tabular figures so those columns
    line up digit for digit. */
@@ -4946,6 +4980,21 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-magic-slot.is-full { opacity: 0.6; }
 .creator-magic-slots-hint { margin: 0.3rem 0 0.4rem; color: var(--cc-muted); font-size: 0.72rem; }
 .creator-magic-die { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; }
+/* The bonus-gold roll, before it is made: a small button in the gold panel, styled like the HP roll. */
+.creator-magic-roll-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: auto;
+  padding: 0.2rem 0.7rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-gold-bright);
+  font-weight: 600;
+  cursor: pointer;
+}
+.creator-magic-roll-btn:hover { border-color: var(--cc-select); background: var(--cc-select-soft); }
 
 /* The GM's Magic Item Shop window: Foundry chrome, like the store window above. */
 .sogrom-magic-config-fields {
@@ -5516,3 +5565,21 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 /* The tick box leads the label; the accent marks it as chosen the same way a picked card is. */
 .creator-pdf-toggle.is-active { border-color: var(--cc-select); color: var(--cc-text); }
 .creator-pdf-note { margin: 0; color: var(--cc-muted); font-size: 0.9rem; }
+
+/* ---- Third-party advancement, shown through its module's own flow (native-flow-step.mjs) ---- */
+/* The mounted element is the module's markup, styled by dnd5e's own sheet rules (hence `dnd5e2` on the
+   host); this only gives it room and keeps it from inheriting the wizard's card grid. */
+.creator-native-flow { display: block; min-height: 2rem; }
+.creator-native-flow > form,
+.creator-native-flow > .advancement { position: static; width: auto; max-width: 100%; }
+.creator-native-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--cc-danger);
+  border-radius: var(--cc-radius-sm, 4px);
+  background: color-mix(in srgb, var(--cc-danger) 12%, var(--cc-panel));
+  color: var(--cc-danger);
+}

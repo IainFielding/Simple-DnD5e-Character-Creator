@@ -174,8 +174,36 @@ export function appliesToClass(advancement, item = advancement?.item) {
  * @returns {{id: string, type: string, title: string}[]}
  */
 export function unresolvedAdvancements(item, level = Infinity) {
+  // One flag per advancement, in advancement order, whatever levels it is owed at.
+  const seen = new Set();
+  return unresolvedByLevel(item, level, { hitPoints: false })
+    .filter(e => !seen.has(e.id) && seen.add(e.id))
+    .map(({ id, type, title }) => ({ id, type, title }));
+}
+
+/**
+ * Every unanswered decision on an item, one entry per **level** it is owed at — the finer-grained
+ * form of {@link unresolvedAdvancements} that a "repair this level" action needs.
+ *
+ * The level is the item's own advancement level: a class's class level, and for a subclass or a
+ * class-linked feature (a Savant feature granted by its subclass) the level of the class it hangs
+ * off, which is what dnd5e's `advancementLevel` reads. A multi-tier `ItemChoice` (Metamagic at
+ * 2/10/17, the Savant's pick at every new slot level) reports each short tier separately, so a
+ * player who skipped only the level-10 Metamagic is sent to level 10 and nowhere else.
+ *
+ * Hit points are included by default, because a class level with no hit-point entry is a real gap
+ * — the character has fewer hit points than it should — and dnd5e never blocks Next on it either.
+ * @param {object} item
+ * @param {number} [level]   The item's advancement level; Infinity for a level-less item.
+ * @param {object} [options]
+ * @param {boolean} [options.hitPoints=true]   Report a class level whose hit points were never taken.
+ * @returns {{id: string, type: string, title: string, level: number}[]}
+ */
+export function unresolvedByLevel(item, level = Infinity, { hitPoints = true } = {}) {
   const out = [];
-  const flag = adv => out.push({ id: adv._id, type: adv.type, title: advancementTitle(adv) || adv.type });
+  const flag = (adv, at) => out.push({
+    id: adv._id ?? adv.id, type: adv.type, title: advancementTitle(adv) || adv.type, level: Number(at ?? 0)
+  });
 
   for ( const adv of advancementArray(item) ) {
     if ( (typeof adv.level === "number") && (adv.level > level) ) continue;
@@ -185,20 +213,15 @@ export function unresolvedAdvancements(item, level = Infinity) {
       case "Trait": {
         const required = (adv.configuration?.choices ?? [])
           .reduce((sum, c) => sum + (c?.count ?? 0), 0);
-        if ( required && (entryCount(adv.value?.chosen) < required) ) flag(adv);
+        if ( required && (entryCount(adv.value?.chosen) < required) ) flag(adv, adv.level);
         break;
       }
       case "ItemChoice": {
-        // Only the tiers at or below the character's level are owed an answer yet.
-        const choices = Object.entries(adv.configuration?.choices ?? {});
-        const required = choices
-          .filter(([at, c]) => (Number(at) <= level) && c?.count)
-          .reduce((sum, [, c]) => sum + c.count, 0);
-        if ( !required ) break;
-        const added = choices
-          .filter(([at]) => Number(at) <= level)
-          .reduce((sum, [at]) => sum + entryCount(addedEntries(adv, at)), 0);
-        if ( added < required ) flag(adv);
+        // Each tier at or below the item's level is owed its own count.
+        for ( const [at, c] of Object.entries(adv.configuration?.choices ?? {}) ) {
+          if ( !c?.count || (Number(at) > level) ) continue;
+          if ( entryCount(addedEntries(adv, at)) < c.count ) flag(adv, at);
+        }
         break;
       }
       case "AbilityScoreImprovement": {
@@ -208,13 +231,111 @@ export function unresolvedAdvancements(item, level = Infinity) {
         // *decision* actually takes, not merely for being non-empty.
         if ( !(adv.configuration?.points > 0) ) break;
         const spent = entryCount(adv.value?.assignments) || entryCount(adv.value?.feat);
-        if ( !spent ) flag(adv);
+        if ( !spent ) flag(adv, adv.level);
         break;
       }
       case "Subclass":
-        if ( !adv.value?.uuid ) flag(adv);
+        if ( !adv.value?.uuid ) flag(adv, adv.level);
         break;
+      case "HitPoints": {
+        // Only a class has hit points, and only for the levels it actually has.
+        if ( !hitPoints || (item.type !== "class") || !Number.isFinite(level) ) break;
+        for ( let l = 1; l <= level; l++ ) if ( adv.value?.[l] === undefined ) flag(adv, l);
+        break;
+      }
     }
   }
   return out;
+}
+
+/* -------------------------------------------- */
+/*  Optional and replacement grants             */
+/* -------------------------------------------- */
+
+/** Dotted keys for a nested object — `foundry.utils.flattenObject`, without needing the global. */
+function flattenKeys(obj, prefix = "", out = {}) {
+  for ( const [k, v] of Object.entries(obj ?? {}) ) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if ( v && (typeof v === "object") && !Array.isArray(v) ) flattenKeys(v, key, out);
+    else out[key] = v;
+  }
+  return out;
+}
+
+/**
+ * Whether an advancement is a grant the player may decline part of: Tasha's *optional class features*
+ * (an `ItemGrant` with `configuration.optional`) or its *replacement features* (`TCOEReplacementGrant`,
+ * an ItemGrant whose `configuration.replacements` maps a 2014 feature to its alternative). Both are
+ * injected into every 2014-rules class by `dnd-tashas-cauldron`.
+ * @param {object} adv
+ * @returns {"optional"|"replacement"|null}
+ */
+export function optionalGrantKind(adv) {
+  const cfg = adv?.configuration;
+  if ( !cfg?.items ) return null;
+  const replacements = cfg.replacements;
+  if ( replacements && Object.keys(replacements).length ) return "replacement";
+  if ( cfg.optional ) return "optional";
+  return null;
+}
+
+/**
+ * A grant's items as `{uuid, optional}`, uuids in their modern `.Item.` spelling.
+ * @param {object} adv
+ * @returns {{uuid: string, optional: boolean}[]}
+ */
+export function grantItems(adv) {
+  return Array.from(adv?.configuration?.items ?? [])
+    .map(i => (typeof i === "string") ? { uuid: i } : i)
+    .filter(i => i?.uuid)
+    .map(i => ({ uuid: withItemSegment(i.uuid), optional: !!i.optional }));
+}
+
+/**
+ * What the character holds from an optional or replacement grant when nobody has chosen: every item
+ * the grant does not individually mark optional. That is dnd5e's own seed (`ItemGrantAdvancement#apply`
+ * under `initial`) and the driver's, so for a replacement grant it is the 2014 base of each pair plus
+ * anything outside a pair, and for an optional grant it is the lot.
+ * @param {object} adv
+ * @returns {string[]}
+ */
+export function defaultGrantKeep(adv) {
+  return grantItems(adv).filter(i => !i.optional).map(i => i.uuid);
+}
+
+/**
+ * Group a replacement grant's items into base-and-alternatives sets, one exclusive group per base.
+ *
+ * The `replacements` map is base→alternative, but one base can map to *several* items (Tasha's swaps
+ * Natural Explorer for Deft Explorer **and** Canny) while the map records only the first. So a group
+ * is built from what the map names, and the optional items it names nowhere are folded in as further
+ * alternatives — but only when the grant carries a **single** base, the only arrangement in which they
+ * can be attributed to one. With two or more bases they are left out rather than added to every group:
+ * a group is exclusive, so an extra shown under one base would unpick a different base's choice.
+ *
+ * Anything non-optional outside every pair is not offered at all.
+ * @param {object} replacements   The grant's `configuration.replacements`.
+ * @param {{uuid: string, optional: boolean}[]} items   From {@link grantItems}.
+ * @returns {{groups: {base: string, members: string[]}[], unattributed: string[]}}
+ *   `unattributed` — alternatives left out because several bases share the grant.
+ */
+export function replacementGroups(replacements, items) {
+  const flat = flattenKeys(replacements);
+  const bases = new Set(Object.keys(flat).map(withItemSegment));
+  const offered = new Set(items.map(i => i.uuid));
+  // Scoped to what the grant actually offers: a stale map entry naming an item no longer in
+  // `configuration.items` must not render a card for something that cannot be granted.
+  const named = new Map([...bases].map(b => [b, []]));
+  for ( const [rawBase, rawAlt] of Object.entries(flat) ) {
+    const base = withItemSegment(rawBase);
+    const alt = rawAlt ? withItemSegment(rawAlt) : null;
+    if ( alt && offered.has(alt) && named.has(base) ) named.get(base).push(alt);
+  }
+  const attributed = new Set([...named.values()].flat());
+  const extras = items.filter(i => i.optional && !bases.has(i.uuid) && !attributed.has(i.uuid)).map(i => i.uuid);
+  const shareExtras = bases.size === 1;
+  return {
+    groups: [...bases].map(base => ({ base, members: [base, ...named.get(base), ...(shareExtras ? extras : [])] })),
+    unattributed: shareExtras ? [] : extras
+  };
 }

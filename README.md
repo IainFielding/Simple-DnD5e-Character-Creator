@@ -1,5 +1,5 @@
 ![](https://img.shields.io/badge/Foundry-v14.368-informational) 
-![](https://img.shields.io/badge/D&D-v6.0.2-informational)
+![](https://img.shields.io/badge/D&D-v6.0.3-informational)
 ![Latest Release Download Count](https://img.shields.io/github/downloads/IainFielding/Simple-DnD5e-Character-Creator/latest/module.zip?label=Downloads) [![Ko-fi](https://img.shields.io/badge/Ko--fi-sogrom?logo=ko-fi&logoColor=white)](https://ko-fi.com/sogrom)<br>
 
 # Simple D&D Character Creator
@@ -105,7 +105,7 @@ If your class can cast spells, this is where you pick your cantrips and starting
 *Screenshot: picking spells.*
 
 **6. Choices**
-Some classes, backgrounds, and species let you make extra decisions: a bonus skill, a tool proficiency, a fighting style. Any remaining choices are gathered here in one tidy list so nothing slips through the cracks.
+Some classes, backgrounds, and species let you make extra decisions: a bonus skill, a tool proficiency, a fighting style. Any remaining choices are gathered here in one tidy list so nothing slips through the cracks. If your game uses Tasha's optional class features, a 2014-rules class lists its level-1 ones here too. You have them all by default, and you can give one up or swap a feature for its Tasha's version, such as Favored Foe in place of Favored Enemy.
 
 ![Making your choices](docs/screenshots/choices.png)
 *Screenshot: the choices step.*
@@ -161,6 +161,8 @@ The level-up wizard walks you through everything that new level brings, one scre
 
 Nothing touches your character until you click **Apply Level-Up**, so you can back out any time.
 
+**Skipped a choice?** D&D 5e lets a level finish with a choice left unmade: a fighting style never picked, an ability score improvement never spent, a subclass never chosen. When that happens, a **wrench** appears beside the Level Up button (and in the same menus). Click it to reopen the level-up wizard on just that level's missing choices. Everything you already chose stays exactly as it was, and a subclass picked late brings every feature it would have given you since. If more than one level needs attention, you choose which one to fix first. The wrench disappears once nothing is left unanswered, and it still works on a level-20 character.
+
 **Multiclassing** is supported too, when your GM turns it on. From the class step you can begin a brand-new class at level 1 alongside your existing ones, and the wizard keeps the labels clear (like "Wizard 3") so you always know which class is gaining the level.
 
 ![Levelling up, one screen at a time](docs/screenshots/levelup.png)
@@ -202,7 +204,7 @@ These sit directly in the module's settings list.
 
 > In an Ember world the creation card isn't posted. Ember finishes the character after this module's part is done, so announcing it here would be jumping the gun — level-up cards work as normal.
 
-Everything else lives behind one of three buttons in that same list: **House Rules**, **Level-Up Options**, and **Store**.
+Everything else lives behind one of four buttons in that same list: **House Rules**, **Level-Up Options**, **Store**, and **Magic Items**.
 
 ### House Rules
 
@@ -223,6 +225,8 @@ The **Configure Level-Up** button holds everything about levelling.
 - **Show Level Up button** on the character sheet header.
 - **Show Level Up in sheet menu**, the ⋯ menu in the sheet's header.
 - **Show Level Up in right-click menu** on characters in the Actors sidebar.
+
+Each of these also carries **Repair skipped choices** while a character has a level with an unmade choice.
 
 **Hit points:**
 
@@ -250,6 +254,24 @@ Nothing is saved until you press **Save Changes**, so closing the window is a ha
 ![The GM store configuration window](docs/screenshots/store-config.png)
 *Screenshot: the GM store configuration window.*
 
+### The Magic Item Shop
+
+A character who starts above 1st level would, by the Dungeon Master's Guide, arrive with extra gold and a few magic items. The Magic Item Shop hands those over. It's off by default. Open the **Magic Item Shop** menu (the "Configure Magic Items" button in settings) and tick **Enable the magic item shop** to turn it on.
+
+With it on, a **Magic Items** step appears at the end of the climb to the starting level, just before the final review. There the player:
+
+- **Rolls their bonus gold.** A single d10 is rolled on the screen and then locked, and the gold goes straight into the character's purse.
+- **Picks free magic items** up to the number allowed at each rarity. A slot can also hold an item of a lower rarity, so an uncommon slot will take a common item. Cards flag an item the character isn't proficient with, is too weak to wear, or can't attune to because it requires a particular class or a spellcaster (for example, "Attunement by a Bard"). That flag is only a note, because a player may want something for later or for a friend.
+
+A character starting at 1st level never sees the step, and neither does a normal level-up.
+
+The window has two tabs:
+
+- **Wealth Table.** The four level bands from the DMG (2–4, 5–10, 11–16 and 17–20), each with a base gold amount, gold per d10, and how many items of each rarity the player may pick. Change any number to suit your table, or press **Reset to DMG** to put the book values back.
+- **Inventory.** What's on offer. The shop starts empty, so stock it first. **Drag in** a single magic item, a compendium folder (subfolders included) or a whole compendium, and only items with a rarity are added. Search the list, **hide** or **remove** anything you don't want on offer, or **Clear All** to start again. The Dungeon Master's Guide's enchantment templates, such as *+1 Weapon* or *Wand of the War Mage*, are expanded into one item for every enchantment and base item they allow.
+
+As with the Store, nothing is saved until you press **Save Changes**.
+
 ---
 
 ## Module compatibility
@@ -262,7 +284,7 @@ This module is designed to sit quietly alongside the rest of your world. Where a
 | Modules that want to handle *some* level-ups | Yes | There's a published hook (`preLevelUpTakeover`) another module can use to claim an individual level-up, which makes this one stand aside and hand it back to the native D&D 5e wizard — no blanket conflict needed. See [For module developers](#for-module-developers). |
 | [D&D Player's Handbook (2024)](https://foundryvtt.com/packages/dnd-players-handbook) | Yes, enhanced | Fully supported as a content source, and its official artwork is used as the backdrop on the class, species, and background screens. |
 | Other official content modules (Artificer, Ravenloft, Forgotten Realms, and similar) | Yes | Their classes, species, backgrounds, spells, and equipment appear in the wizard like any other compendium content. |
-| [Tasha's Cauldron of Everything](https://foundryvtt.com/packages/dnd-tashas-cauldron) | Yes | Its subclasses build on the 2014 classes the system still ships. Its **optional class features** are offered on their own level-up screen, and its **replacement features** let you choose between the original and the Tasha's version. |
+| [Tasha's Cauldron of Everything](https://foundryvtt.com/packages/dnd-tashas-cauldron) | Yes | Its subclasses build on the 2014 classes the system still ships. Its **optional class features** are offered in the Choices step at creation and on their own level-up screen after that, and its **replacement features** let you choose between the original and the Tasha's version. |
 | 2014-rules classes and subclasses | Yes | Supported alongside 2024 content in the same world. Classes that choose a subclass at 1st level (Cleric, Sorcerer, Warlock) get that choice during character creation rather than at level 3. |
 | Homebrew compendiums and content modules | Yes | Anything that follows the standard 5e item and advancement format is picked up automatically. Advancement types added by other modules are handled as whichever standard type they extend, rather than being skipped. |
 | [Simple D&D PDF Character sheet](https://foundryvtt.com/packages/sogrom-dnd5e-character-sheet-pdf) | Yes, enhanced | Optional. With version 2.2.0 or later installed, an **Export Character Sheet PDF** tick box appears on the creation and level-up review screens; it fills in an official sheet and downloads it, choosing the 2014 or 2024 layout to match your character's edition. Without that module the tick box is not shown at all. |

@@ -707,4 +707,137 @@ export class CreatorShellBase extends HandlebarsApplicationMixin(ApplicationV2) 
       rejectClose: false
     });
   }
+
+  /* -------------------------------------------- */
+  /*  Shelf and pick-list search                  */
+  /* -------------------------------------------- */
+
+  /**
+   * Wire a shop shelf's search box — the Store and Magic Items steps — in whichever shell shows it.
+   *
+   * This used to live in the creator shell alone. The Magic Items step moved to the end of the
+   * level-up climb, and there nothing listened to its search box: the dropdowns kept working, since
+   * they re-render through the shared step-change funnel, but typing filtered nothing.
+   *
+   * The text is kept on the state, per step, and put back after every render. Picking an item
+   * re-renders the whole page, and without this the search cleared itself on the first click.
+   * @param {HTMLElement} root
+   * @returns {boolean}  Whether a shelf search was wired.
+   */
+  _wireShelfSearch(root) {
+    const search = root.querySelector("[data-creator-search]");
+    if ( !search || !root.querySelector(".creator-store-shelf, .creator-store-row") ) return false;
+    const key = this._activeStep?.id ?? "";
+    const saved = (this.state.shelfSearch ??= {})[key] ?? "";
+    if ( saved ) {
+      search.value = saved;
+      this._filterCards(saved);
+    }
+    search.addEventListener("input", ev => {
+      this.state.shelfSearch[key] = ev.currentTarget.value;
+      this._filterCards(ev.currentTarget.value);
+    });
+    return true;
+  }
+
+  /**
+   * Toggle a "no matches" line inside any pick-list whose rows are all currently filtered out, so a
+   * search or filter that hides everything explains itself instead of leaving a blank column. Lists
+   * that were empty to begin with keep their own `.creator-empty` message and are left alone.
+   * @param {string} needle    The active name search, for the message wording.
+   * @param {boolean} filtered Whether a non-search filter (spell level/school) is also narrowing.
+   */
+  _updateNoResults(needle, filtered = false) {
+    for ( const list of this.element.querySelectorAll(".creator-picklist") ) {
+      const rows = [...list.querySelectorAll("li:not(.creator-no-results)")];
+      let msg = list.querySelector(".creator-no-results");
+      // No real rows at all → the template's empty-state already covers it.
+      if ( !rows.length || rows.some(li => !li.classList.contains("is-hidden")) ) {
+        msg?.remove();
+        continue;
+      }
+      if ( !msg ) {
+        msg = document.createElement("li");
+        msg.className = "creator-no-results";
+        list.appendChild(msg);
+      }
+      msg.textContent = needle
+        ? t("common.noResults", { query: needle })
+        : (filtered ? t("common.noResultsFilters") : t("common.noEntries"));
+    }
+  }
+
+  _filterCards(query) {
+    const needle = query.trim().toLowerCase();
+    // The pick-lists (class/species/background) and the store's shelf rows share this filter; for a
+    // pick-row the <li> wrapper is hidden so the list gap collapses with it.
+    for ( const card of this.element.querySelectorAll(".creator-pickrow, .creator-store-row") ) {
+      const name = (card.dataset.name ?? "").toLowerCase();
+      const target = card.closest("li") ?? card;
+      target.classList.toggle("is-hidden", !!needle && !name.includes(needle));
+    }
+    this._updateNoResults(needle);
+    this._updateVisibleCount();
+    // Collapsible shelves (the Magic Items step) open every section while a search is typed.
+    this.element.querySelector(".creator-store-shelf")?.classList.toggle("is-filtering", !!needle);
+    this._updateStoreGroups(needle);
+  }
+
+  /**
+   * Hide a store shelf section once the filter has emptied it.
+   *
+   * The shelf is grouped by item type — Weapons, Armor & Gear, Consumables… — and each section is
+   * a `.creator-store-group` around its heading and list. Filtering hides rows, not headings, so
+   * without this a search for "rope" left five empty headings with one row lost among them.
+   *
+   * Purely presentational and keyed off the rows' own hidden state, so it needs no knowledge of
+   * what the filter matched on.
+   */
+  _updateStoreGroups(needle = "") {
+    const shelf = this.element.querySelector(".creator-store-shelf");
+    if ( !shelf ) return;
+    const groups = [...shelf.querySelectorAll(".creator-store-group")];
+    for ( const group of groups ) {
+      const rows = [...group.querySelectorAll(".creator-store-row")];
+      group.classList.toggle("is-hidden", rows.length > 0 && rows.every(r => r.classList.contains("is-hidden")));
+    }
+    // Hiding whole sections rather than bare rows means a search that matches nothing now empties
+    // the shelf completely, where it used to leave the headings standing. Say so, or the step
+    // looks like it failed to load.
+    const allHidden = groups.length > 0 && groups.every(g => g.classList.contains("is-hidden"));
+    let msg = shelf.querySelector(".creator-no-results");
+    if ( !allHidden ) return msg?.remove();
+    if ( !msg ) {
+      msg = document.createElement("p");
+      msg.className = "creator-no-results";
+      shelf.appendChild(msg);
+    }
+    msg.textContent = needle ? t("common.noResults", { query: needle }) : t("common.noResultsFilters");
+  }
+
+  /**
+   * Rewrite the drawer's "Available: N" to the number of options actually on screen.
+   *
+   * Filtering happens in the DOM with no re-render, deliberately, so the search field keeps focus
+   * while typing. The count was rendered by Handlebars and therefore never moved: type "wiz" and
+   * one card sits under the words "Available: 87".
+   *
+   * The element is an aria-live region, so this is also the only thing that speaks the result of a
+   * search — rows are hidden with a class, which no screen reader reports. Writing the full string
+   * (rather than just the number) is what makes the announcement a sentence instead of a bare
+   * numeral, and `aria-atomic` on the element is what makes the whole sentence get read.
+   *
+   * Silent where there is no such element: the spell steps share the filter passes below and have
+   * their own toolbar.
+   */
+  _updateVisibleCount() {
+    const readout = this.element.querySelector("[data-creator-count]");
+    if ( !readout ) return;
+    // The picker drawer and the store shelf both render this readout over a filterable list.
+    const rows = [...this.element.querySelectorAll(".creator-drawer .creator-pickrow, .creator-store-row")];
+    // Nothing this count describes → leave the rendered value alone.
+    if ( !rows.length ) return;
+    const shown = rows.filter(row => !(row.closest("li") ?? row).classList.contains("is-hidden")).length;
+    readout.textContent = `${t("common.available")}: ${shown}`;
+  }
 }

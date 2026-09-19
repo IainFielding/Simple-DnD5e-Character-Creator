@@ -94,3 +94,37 @@ describe("autoResolve: an ASI answered with a feat", () => {
     expect(driver.applyAsiFeat).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * dnd5e 6.0 renamed the feat prerequisite check to `assertPrerequisites` and kept
+ * `validatePrerequisites` only as a deprecated forwarder (it logs a compatibility warning on every
+ * feat pick). 5.3.3 — still the module's minimum — has only the old name. The driver must take the
+ * new one when it exists and still work where it does not.
+ */
+describe("applyAsiFeat: the prerequisite check across dnd5e versions", () => {
+  const record = { level: 4, advancement: { id: "asi" } };
+  const clone = { name: "Clone" };
+
+  function driverFor(system) {
+    const driver = Object.create(LevelUpDriver.prototype);
+    driver.clone = clone;
+    vi.stubGlobal("fromUuid", async () => ({ system }));
+    return driver;
+  }
+
+  it("calls assertPrerequisites on dnd5e 6.0, never the deprecated name", async () => {
+    const system = {
+      assertPrerequisites: vi.fn(() => ["Requires level 8"]),
+      validatePrerequisites: vi.fn(() => { throw new Error("deprecated path taken"); })
+    };
+    expect(await driverFor(system).applyAsiFeat(record, "u", { showMessage: false })).toBe(false);
+    expect(system.assertPrerequisites).toHaveBeenCalledWith(clone, { showMessage: false });
+    expect(system.validatePrerequisites).not.toHaveBeenCalled();
+  });
+
+  it("falls back to validatePrerequisites on 5.3.3, bound to the item's system data", async () => {
+    const system = { validatePrerequisites: vi.fn(function () { return this === system ? ["nope"] : "unbound"; }) };
+    expect(await driverFor(system).applyAsiFeat(record, "u", { showMessage: false })).toBe(false);
+    expect(system.validatePrerequisites).toHaveReturnedWith(["nope"]);
+  });
+});

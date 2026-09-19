@@ -12,6 +12,7 @@
  *   node run.mjs --sidekicks              # assert Tasha's sidekick classes are not offered
  *   node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
  *   node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
+ *   node run.mjs --repair                 # a skipped-choice build, repaired, against the full build
  *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
  *                                         # native only, per level, in a world without this module
  *   HEADED=1 node run.mjs                 # watch the native wizard being driven
@@ -100,6 +101,12 @@ try {
     console.log(JSON.stringify(await harness("probeSpellChoice", {
       match: value("probe-spell-choice") || undefined, to: Number(value("level") ?? 5), jump: flag("jump")
     }), null, 2));
+  } else if ( flag("probe-magic-climb") ) {
+    console.log(JSON.stringify(await harness("probeMagicShopClimb", {
+      match: value("probe-magic-climb") || undefined, to: Number(value("level") ?? 5)
+    }), null, 2));
+  } else if ( flag("probe-magic-shop") ) {
+    console.log(JSON.stringify(await harness("probeMagicShopStep", { level: Number(value("level") ?? 5) }), null, 2));
   } else if ( flag("probe-bookorder") ) {
     console.log(JSON.stringify(await harness("probeBookOrdering"), null, 2));
   } else if ( flag("probe-minbook") ) {
@@ -143,6 +150,27 @@ try {
       for ( const f of r.failures ) console.log(`  ${f}`);
       exitCode = 1;
     }
+  } else if ( flag("repair") ) {
+    // "Repair this level": a native build with decisions skipped, repaired, and compared against
+    // the fully answered native build. See in-world/repair.mjs.
+    const r = await harness("checkRepair");
+    for ( const c of r.cases ) {
+      console.log(`\n${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);
+      if ( c.error ) {
+        console.log(`  error: ${c.error.split("\n").slice(0, 4).join("\n         ")}`);
+        continue;
+      }
+      for ( const g of c.gaps ) console.log(`  gap      ${g}`);
+      for ( const p of c.repaired ) console.log(`  repaired level ${p.level} (${p.steps} step(s))`);
+      for ( const g of c.left ) console.log(`  ! still unanswered: ${g}`);
+      for ( const d of c.differences.slice(0, 20) ) {
+        console.log(`  ! ${d.path}\n      reference: ${d.native}\n      repaired : ${d.creator}`);
+      }
+      if ( c.differences.length > 20 ) console.log(`  … and ${c.differences.length - 20} more`);
+    }
+    console.log(r.ok ? "\nPASS   every repaired character matches its fully answered reference"
+      : "\nFAIL   a repair did not reproduce the fully answered character");
+    if ( !r.ok ) exitCode = 1;
   } else if ( flag("granted-spells") ) {
     const r = await harness("checkGrantedSpells");
     for ( const c of r.cases ) {

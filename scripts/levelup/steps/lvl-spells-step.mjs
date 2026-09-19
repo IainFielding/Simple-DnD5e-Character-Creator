@@ -348,10 +348,44 @@ export const lvlSpellsStep = {
       focused,
       selectedCantrips: [...state.selectedCantrips].sort(byName).map(toChip),
       selectedSpells: [...state.selectedSpells].sort(byLevelThenName).map(toChip),
-      hasSelected: state.selectedCantrips.length + state.selectedSpells.length > 0
+      hasSelected: state.selectedCantrips.length + state.selectedSpells.length > 0,
+      knownGroups: knownSpellGroups(state.spellSource)
     };
   }
 };
+
+/**
+ * Every spell the character already has, grouped by level for the sidebar's reference panel — so a
+ * player choosing a new spell can see what it would sit beside (a second damage cantrip, a
+ * concentration clash, a duplicate of something a feature already grants).
+ *
+ * Read from the spell source rather than the actor, so a spell granted by this very level-up is
+ * listed too. Unfiltered by caster or preparation for the same reason {@link ownedSpellKeys} is:
+ * the question is "what do I have", not "what may I swap". Deduplicated on spell identity, since a
+ * multiclass character can hold the same spell twice.
+ * @param {Actor5e} source
+ * @returns {{label:string, spells:{uuid:string, name:string, img:string}[]}[]}
+ */
+function knownSpellGroups(source) {
+  const byLevel = new Map();
+  const seen = new Set();
+  for ( const item of source?.items ?? [] ) {
+    if ( item.type !== "spell" ) continue;
+    const key = spellKey(item);
+    if ( key && seen.has(key) ) continue;
+    if ( key ) seen.add(key);
+    const level = Number(item.system?.level ?? 0);
+    if ( !byLevel.has(level) ) byLevel.set(level, []);
+    // The compendium source where there is one: a clone item's own uuid does not resolve for the
+    // chip's tooltip or click-to-open.
+    byLevel.get(level).push({ uuid: item._stats?.compendiumSource ?? item.uuid, name: item.name, img: item.img });
+  }
+  const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+  return [...byLevel.keys()].sort((a, b) => a - b).map(level => ({
+    label: level === 0 ? t("levelup.step.spells.cantrips") : t("levelup.step.spells.levelTag", { level }),
+    spells: byLevel.get(level).sort(byName)
+  }));
+}
 
 /** Toggle a spell into/out of the staged selection, capped at the effective add budget (incl. swap). */
 async function pickSpell(el, { state }) {

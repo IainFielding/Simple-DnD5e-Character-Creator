@@ -219,6 +219,22 @@ describe("level-up spell choice restricted to available slot levels (Savant)", (
     expect(data[0].sections[0].options.map(o => o.name)).not.toContain("Fireball");
   });
 
+  it("caps the slot level for a choice owned by the class item itself", async () => {
+    // The class item casts, so its own spellcasting is read — still at the clone's level 5.
+    const { record, state, driver } = savant({ level: 3, classes: wizard(5) });
+    record.advancement.item = wizard(5).wizard;
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Find Familiar", "Misty Step", "Shield"]);
+  });
+
+  it("caps the slot level for a choice owned by an embedded subclass", async () => {
+    // dnd5e's subclass `spellcasting` getter reports the parent class's levels (5 on the clone).
+    const { record, state, driver } = savant({ level: 3, classes: wizard(5) });
+    record.advancement.item = { type: "subclass", spellcasting: { type: "leveled", progression: "full", levels: 5 } };
+    const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Find Familiar", "Misty Step", "Shield"]);
+  });
+
   it("includes cantrips for a plain \"available\" restriction", async () => {
     const { state, driver } = savant({ level: 3, classes: wizard(3), restriction: "available" });
     const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
@@ -240,5 +256,61 @@ describe("level-up spell choice restricted to available slot levels (Savant)", (
     record.advancement.configuration.restriction.school = new Set(["con"]);
     const data = await choicesStep.sectionsAt({ state, driver, spells: wizardStub }, 3);
     expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Find Familiar", "Misty Step"]);
+  });
+});
+
+/**
+ * A spell choice that names **no** list: the 2014 SRD Wizard's *Signature Spells* (any 3rd-level
+ * spell) and Bard's *Magical Secrets* ("two spells from any classes"). dnd5e's flow opens its browser
+ * filtered by level alone. The choices step offered nothing for this shape, marked the block
+ * exhausted, and the pick was silently skipped: the same failure as the Savants, found by the sweep
+ * the first time it answered level-up spell choices.
+ */
+describe("level-up spell choice with no spell list (Signature Spells)", () => {
+  const anyStub = {
+    calls: [],
+    async forSpellList() { throw new Error("no list is named, so no list should be loaded"); },
+    async forAnySpell(maxLevel) {
+      this.calls.push(maxLevel);
+      return { byLevel: {
+        2: [{ uuid: "Compendium.x.Item.web", name: "Web", img: "w.webp" }],
+        3: [{ uuid: "Compendium.x.Item.fireball", name: "Fireball", img: "f.webp" },
+          { uuid: "Compendium.x.Item.counterspell", name: "Counterspell", img: "c.webp" }]
+      } };
+    }
+  };
+
+  function signatureSpells({ pool = [] } = {}) {
+    const record = {
+      level: 20, screenLevel: 20,
+      advancement: {
+        title: "Signature Spells",
+        configuration: {
+          allowDrops: true, choices: { 20: { count: 2, replacement: false } }, pool,
+          restriction: { type: "", subtype: "", level: "3" }, spell: { ability: [] }, type: "spell"
+        }
+      }
+    };
+    const st = { current: 0, max: 2, full: false, selected: new Set(), replaceable: false, replacing: null, priorEntries: [] };
+    const state = { choiceSteps: [record], driver: { choiceState: () => st } };
+    return { record, state, driver: state.driver };
+  }
+
+  beforeEach(() => { anyStub.calls = []; });
+
+  it("offers every spell of the restricted level, and leaves the block open", async () => {
+    const { record, state, driver } = signatureSpells();
+    const data = await choicesStep.sectionsAt({ state, driver, spells: anyStub }, 20);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Counterspell", "Fireball"]);
+    expect(record.exhausted).toBe(false);
+    expect(anyStub.calls).toEqual([3]);
+  });
+
+  it("keeps to an authored pool when the choice has one, rather than opening every spell", async () => {
+    globalThis.fromUuid = async uuid => ({ uuid, name: "Shield", img: "s.webp", system: {} });
+    const { state, driver } = signatureSpells({ pool: [{ uuid: "Compendium.x.Item.shield" }] });
+    const data = await choicesStep.sectionsAt({ state, driver, spells: anyStub }, 20);
+    expect(data[0].sections[0].options.map(o => o.name)).toEqual(["Shield"]);
+    expect(anyStub.calls).toEqual([]);
   });
 });

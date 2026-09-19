@@ -11,7 +11,9 @@ import { applyLevelUpSpells, spellChanges, featSubstituteData } from "./steps/lv
 import { reconcileGrantedSpells } from "../build/spell-reconcile.mjs";
 import { captureLevelUpSummary, postLevelUpSummary, postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
+import { grantMagicItems } from "../data/magic-shop-source.mjs";
 import { stageEmberGear, abandonEmberCreation } from "./ember-creation.mjs";
+import { mountNativeFlows, closeNativeFlows } from "./steps/native-flow-step.mjs";
 
 /**
  * The level-up window. Like the creator's shell it is deliberately thin — it owns its step list and
@@ -149,6 +151,9 @@ export class LevelUpShell extends CreatorShellBase {
     // The Ember hand-off isn't a level-up from the player's point of view — they are still creating
     // the character, and Ember's builder is waiting behind this window.
     if ( this.state.emberCreation ) return t("levelup.window.emberTitle", { name });
+    if ( this.state.repairLevel ) {
+      return t("levelup.window.repairTitle", { name, class: this.state.classItem?.name ?? "", level: this.state.repairLevel });
+    }
     return t("levelup.window.title", { name, level: this.state.toLevel });
   }
 
@@ -348,10 +353,15 @@ export class LevelUpShell extends CreatorShellBase {
     // live on the state so the re-render a spell click causes restores them (a rebuilt control
     // would otherwise reset to "show everything"). Shared with the creator, which needs exactly
     // the same behaviour on exactly the same controls.
-    this._wireSpellFilters(this.element);
+    // Otherwise a shop shelf's search box: the Magic Items step at the end of a creation climb, and
+    // the Store in an Ember hand-off. `_wireSpellFilters` declines a page with no spell filters on it.
+    if ( !this._wireSpellFilters(this.element) ) this._wireShelfSearch(this.element);
     // The ASI feat picker's own toolbar, on the same terms: filters in the DOM, values on the state
     // so the re-render a "coming later" peek causes puts them back.
     this._wireFeatFilters(this.element);
+    // A third-party advancement's own screen goes into the placeholder its block left. Not awaited:
+    // the flows render asynchronously and nothing below depends on them.
+    mountNativeFlows(this.element, this.state, () => this.render());
     this.#guideToNext();
   }
 
@@ -530,6 +540,21 @@ export class LevelUpShell extends CreatorShellBase {
       }
     }
 
+    // The free magic items and bonus gold a creation climb picked on the Magic Items step, written
+    // once the levels themselves have landed — so the character that receives them is the one the
+    // allowance was measured against. Ordinary level-ups carry no creation state and grant nothing.
+    if ( !ember && this.state.creationState ) {
+      try {
+        // Kept for the creation card, which puts the roll and the picks on the record.
+        this.state.magicShopGrant = await grantMagicItems(actor, this.state.creationState);
+      } catch ( err ) {
+        // Non-fatal, like the gear grant above: the levels are the important part, and an item can
+        // be added on the sheet.
+        log("magic item grant failed", err);
+        ui.notifications?.error(t("levelup.notify.magicItemsFailed"));
+      }
+    }
+
     // Collapse any spell this level-up's features granted always-prepared that the character had
     // already chosen at an earlier level. Runs after the picks are written, on the real actor, so it
     // sees the finished state; the spells step has already offered the freed selection back.
@@ -559,12 +584,14 @@ export class LevelUpShell extends CreatorShellBase {
       fireHook(HOOKS.characterCreated, {
         actor, state: this.state.creationState, targetLevel: actor?.system?.details?.level ?? this.state.toLevel
       });
-      await postCreationSummary(actor);
-    } else if ( this.state.announce === "levelup" ) {
+      await postCreationSummary(actor, { magicShop: this.state.magicShopGrant });
+    } else if ( (this.state.announce === "levelup") || this.state.repairLevel ) {
+      // A repair applies too, and a listener that saw it start needs to see it finish. It gains no
+      // level, so `fromLevel` equals `toLevel`, and it posts no card: there is no level to announce.
       fireHook(HOOKS.levelUpApplied, {
         actor, state: this.state, fromLevel: this.state.fromLevel, toLevel: this.state.toLevel, summary
       });
-      await postLevelUpSummary(actor, summary);
+      if ( this.state.announce === "levelup" ) await postLevelUpSummary(actor, summary);
     }
 
     // Last of all, and only if asked: the sheet on the PDF has to be the one the player just
@@ -640,6 +667,7 @@ export class LevelUpShell extends CreatorShellBase {
    */
   _onClose(options) {
     super._onClose(options);
+    closeNativeFlows(this.state);
     // In the Ember hand-off the actor's sheet *is* Ember's character builder, waiting behind this
     // window with all of the player's creation choices in it. Re-rendering it would reset that UI,
     // and there is no level selector to snap back — so leave it to Ember either way.

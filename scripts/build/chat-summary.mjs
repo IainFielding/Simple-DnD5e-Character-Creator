@@ -115,9 +115,13 @@ function dedupe(entries) {
  * Safe to call with a null actor (a build that failed part-way), and safe to call when the setting
  * is off; both are no-ops.
  * @param {Actor5e|null} actor
+ * @param {object} [options]
+ * @param {object|null} [options.magicShop]  What the Magic Items step granted, as
+ *   {@link module:data/magic-shop-source.grantMagicItems} returns it. The bonus gold is a die roll
+ *   made inside the creator, so the card is where a GM sees it: the d10, the sum, and the picks.
  * @returns {Promise<void>}
  */
-export async function postCreationSummary(actor) {
+export async function postCreationSummary(actor, { magicShop = null } = {}) {
   try {
     if ( !actor ) return;
     const mode = creationSummaryMode();
@@ -146,6 +150,7 @@ export async function postCreationSummary(actor) {
     rows.push({ label: t("chat.creation.hitPoints"), value: String(sys.attributes?.hp?.max ?? 0) });
     const ac = sys.attributes?.ac?.value;
     if ( ac ) rows.push({ label: t("chat.creation.armourClass"), value: String(ac) });
+    rows.push(...magicShopRows(magicShop));
 
     await postCard(actor, "creation", mode, {
       heading: t("chat.creation.heading"),
@@ -162,6 +167,32 @@ export async function postCreationSummary(actor) {
     // A card is never worth losing a built character over.
     log("creation chat summary failed", err);
   }
+}
+
+/**
+ * The Magic Items step's rows for the creation card: the bonus gold with the d10 behind it, and the
+ * free items. Nothing when the step didn't apply.
+ * @param {object|null} grant  {@link module:data/magic-shop-source.grantMagicItems}'s result.
+ * @returns {object[]}
+ */
+function magicShopRows(grant) {
+  if ( !grant ) return [];
+  const rows = [];
+  // A tier with a flat amount rolled nothing, so there is no die to show.
+  if ( grant.gp > 0 ) rows.push({
+    label: t("chat.creation.bonusGold"),
+    value: grant.perD10Gp > 0
+      ? t("chat.creation.bonusGoldValue", { gp: grant.gp, die: grant.d10, base: grant.baseGp, per: grant.perD10Gp })
+      : t("chat.creation.bonusGoldFlat", { gp: grant.gp })
+  });
+  if ( grant.items?.length ) rows.push({
+    label: t("chat.creation.magicItems"),
+    items: grant.items.map(i => ({
+      name: i.qty > 1 ? t("chat.creation.magicItemQty", { name: i.name, qty: i.qty }) : i.name,
+      uuid: i.uuid ?? ""
+    }))
+  });
+  return rows;
 }
 
 /* -------------------------------------------- */

@@ -27,6 +27,8 @@ const { resolveChoices } = await import(`${MODULE}/data/choice-resolver.mjs`);
 const { LevelUpDriver } = await import(`${MODULE}/levelup/manager-driver.mjs`);
 const { resolveFeatSpells } = await import(`${MODULE}/steps/feat-spells-step.mjs`);
 const { isEmberCreationManager, foldOriginScreens } = await import(`${MODULE}/levelup/ember-creation.mjs`);
+const { choicesStep } = await import(`${MODULE}/levelup/steps/choices-step.mjs`);
+const { SpellSource } = await import(`${MODULE}/data/spell-source.mjs`);
 const BUST = new URL(import.meta.url).search;
 const { ScenarioChoiceProvider } = await import(`./provider.mjs${BUST}`);
 const { stageEmberManager } = await import(`./ember.mjs${BUST}`);
@@ -434,8 +436,8 @@ export async function buildCreator(
   await settle(actor);
   await onLevel?.(1, actor);
 
-  await levelUp(actor, scenario, book, consumed, onLevel);
-  await multiclass(actor, scenario, book, consumed);
+  await levelUp(actor, scenario, book, consumed, onLevel, unofferable);
+  await multiclass(actor, scenario, book, consumed, unofferable);
   await settle(actor);
   return actor;
 }
@@ -470,9 +472,9 @@ async function buildEmberCreator(scenario, { book, consumed, onLevel }) {
   // Origin decisions belong on the level-1 screen for a character being created; the shell does this
   // too. It moves `screenLevel` only, so nothing about what applies where changes.
   foldOriginScreens(driver);
-  await warmBook(driver, book);
+  await warmBook(driver, book, "creation");
 
-  const provider = new ScenarioChoiceProvider(book);
+  const provider = new ScenarioChoiceProvider(book, { phase: "creation" });
   await driver.autoResolve(provider);
   await driver.commit();
   for ( const id of provider.consumed ) consumed.add(id);
@@ -498,7 +500,7 @@ async function buildEmberCreator(scenario, { book, consumed, onLevel }) {
  * @param {object} scenario
  * @param {Set<string>} consumed
  */
-async function multiclass(actor, scenario, book, consumed) {
+async function multiclass(actor, scenario, book, consumed, unofferable) {
   const mc = scenario.multiclass;
   if ( !mc?.classUuid ) return;
 
@@ -510,7 +512,7 @@ async function multiclass(actor, scenario, book, consumed) {
 
   const manager = dnd5e.applications.advancement.AdvancementManager.forNewItem(actor, data);
   manager._sogromLevelUp = true;
-  await resolveWith(manager, book, consumed);
+  await resolveWith(manager, book, consumed, unofferable);
 }
 
 /**
@@ -524,14 +526,16 @@ async function multiclass(actor, scenario, book, consumed) {
  * @param {AdvancementManager} manager
  * @param {AnswerBook} book
  * @param {Set<string>} consumed
+ * @param {object[]} [unofferable]   Collector for picks the wizard's screen would not have offered.
  */
-async function resolveWith(manager, book, consumed) {
+async function resolveWith(manager, book, consumed, unofferable) {
   const driver = new LevelUpDriver(manager);
   await driver.prepare();
-  const records = await warmBook(driver, book);
+  const records = await warmBook(driver, book, "levelup");
 
-  const provider = new ScenarioChoiceProvider(book);
+  const provider = new ScenarioChoiceProvider(book, { phase: "levelup" });
   await driver.autoResolve(provider);
+  await checkSpellOffers(driver, unofferable);
   await driver.commit();
   for ( const id of provider.consumed ) consumed.add(id);
 
@@ -554,15 +558,57 @@ async function resolveWith(manager, book, consumed) {
  * @param {AnswerBook} book
  * @returns {Promise<object[]>}  The records warmed, so a caller can tell which were already present.
  */
-async function warmBook(driver, book) {
+async function warmBook(driver, book, phase) {
   const records = [
     ...driver.hpSteps, ...driver.sizeSteps, ...driver.grantSteps, ...driver.subclassSteps,
     ...driver.asiSteps, ...driver.traitSteps, ...driver.choiceSteps
   ];
   for ( const rec of records ) {
-    await book.answer(rec.advancement, rec.level, { asker: "creator", offered: () => offeredFor(driver, rec) });
+    await book.answer(rec.advancement, rec.level, { asker: "creator", phase, offered: () => offeredFor(driver, rec) });
   }
   return records;
+}
+
+/** One spell source for the session, as the wizard holds one: its list caches are the expensive part. */
+let spellSource = null;
+
+/**
+ * Hold every level-up spell pick to what the wizard's choices step would actually have offered.
+ *
+ * `autoResolve` applies answers through `driver.toggleChoice`, which takes any uuid — the screen is
+ * never consulted. That is exactly how the Savant bug hid: its choices step built an empty list, the
+ * block counted as complete, and a player could pick nothing, yet a harness that applies the answer
+ * directly builds a character no player could. So once the answers are in, every spell choice is
+ * rendered through the real `choicesStep` against the same driver, and each pick that is not on that
+ * list is (a) reported, as the same `unofferable` finding the creation leg raises, and (b) taken back
+ * off, so the creator's character is the one the wizard would really have produced.
+ *
+ * Run after `autoResolve` rather than before so it also sees the choices a subclass or feat reveals
+ * mid-resolve — the Savant pick is a level-3 subclass feature. Spell choices only: a feature pool is
+ * the same authored list on both sides, and the book already reads those from the asker's screen.
+ * @param {LevelUpDriver} driver
+ * @param {object[]} [unofferable]
+ */
+async function checkSpellOffers(driver, unofferable) {
+  const records = driver.choiceSteps.filter(r => r.advancement?.configuration?.type === "spell");
+  if ( !records.length ) return;
+  spellSource ??= new SpellSource();
+  const ctx = { state: { choiceSteps: driver.choiceSteps, driver }, driver, spells: spellSource };
+  for ( const record of records ) {
+    const chosen = [...driver.choiceState(record).selected];
+    if ( !chosen.length ) continue;
+    const blocks = (await choicesStep.sectionsAt(ctx, record.screenLevel ?? record.level)) ?? [];
+    const index = driver.choiceSteps.indexOf(record);
+    const section = blocks.flatMap(b => b.sections ?? []).find(s => s.index === index);
+    const offered = new Set((section?.options ?? []).map(o => o.uuid));
+    const refused = chosen.filter(uuid => !offered.has(uuid));
+    if ( !refused.length ) continue;
+    for ( const uuid of refused ) await driver.toggleChoice(record, uuid);
+    unofferable?.push({
+      advId: record.advancement.id, title: record.advancement.title, type: "ItemChoice",
+      source: `level ${record.level}`, picks: refused, offers: [...offered]
+    });
+  }
 }
 
 /**
@@ -592,7 +638,7 @@ async function offeredFor(driver, rec) {
  * @param {Set<string>} consumed   Shared with the creation pass; the provider records into it so
  *   the orphaned-answer check can see answers read by either leg.
  */
-async function levelUp(actor, scenario, book, consumed, onLevel) {
+async function levelUp(actor, scenario, book, consumed, onLevel, unofferable) {
   const target = scenario.targetLevel ?? 1;
   if ( target <= 1 ) return;
 
@@ -608,7 +654,7 @@ async function levelUp(actor, scenario, book, consumed, onLevel) {
     const manager = dnd5e.applications.advancement.AdvancementManager
       .forLevelChange(actor, classItem.id, stride);
     manager._sogromLevelUp = true;
-    await resolveWith(manager, book, consumed);
+    await resolveWith(manager, book, consumed, unofferable);
 
     // What the shell's Apply does after the driver commits, and the driver does not do for itself:
     // collapse a spell this level granted always-prepared that the character had already chosen.

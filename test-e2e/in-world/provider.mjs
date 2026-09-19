@@ -26,8 +26,18 @@ export class ScenarioChoiceProvider {
   /** Ids an answer was actually read for, so the caller can catch answers that went nowhere. */
   consumed = new Set();
 
-  constructor(book) {
+  /** @type {"creation"|"levelup"} Which build phase is being resolved — see answers.mjs#isDeferred. */
+  #phase;
+
+  /**
+   * @param {import("./answers.mjs").AnswerBook} book
+   * @param {object} [options]
+   * @param {"creation"|"levelup"} [options.phase="levelup"]   The Ember hand-off is a creation; every
+   *   other driver this resolves is a level-up.
+   */
+  constructor(book, { phase = "levelup" } = {}) {
     this.#book = book;
+    this.#phase = phase;
   }
 
   /** The settled answer for a decision, marked as consumed. */
@@ -85,12 +95,13 @@ export class ScenarioChoiceProvider {
   }
 
   /**
-   * Spell-type `ItemChoice`s are deferred, matching the creator: it owns those in its feat-spells
-   * step and applies them to the actor after commit rather than through the driver. The book decides
-   * which those are, so this side and the native side agree on the category.
+   * Spell-type `ItemChoice`s are deferred during creation, matching the creator: it owns those in its
+   * feat-spells step and applies them to the actor after commit rather than through the driver. At a
+   * level-up they are answered like any other choice. The book decides which those are, so this side
+   * and the native side agree on the category.
    */
   defer(rec) {
-    return this.#book.isDeferred(rec?.advancement);
+    return this.#book.isDeferred(rec?.advancement, this.#phase);
   }
 
   /** The chosen uuids for a feature `ItemChoice`. */

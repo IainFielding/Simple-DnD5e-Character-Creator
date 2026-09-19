@@ -41,15 +41,24 @@ const ABILITY_ORDER = ["str", "dex", "con", "int", "wis", "cha"];
 /**
  * Whether an advancement's choice is deliberately routed around the driver rather than through it.
  *
- * Spell-type `ItemChoice`s (Magic Initiate and every variant of it) are owned by the creator's own
- * feat-spells step, which applies the spells straight to the actor after commit. The advancement
- * therefore records nothing on that side by design. Both adapters read this one predicate so they
- * agree on which choices are in that category.
+ * During **creation**, spell-type `ItemChoice`s (Magic Initiate and every variant of it) are owned by
+ * the creator's own feat-spells step, which applies the spells straight to the actor after commit.
+ * The advancement therefore records nothing on that side by design. Both adapters read this one
+ * predicate so they agree on which choices are in that category.
+ *
+ * During a **level-up** nothing is routed around: the wizard's choices step presents a spell choice
+ * like any other (a Paladin's Blessed Warrior, Arcana Unleashed's Savants), so it is answered. It used
+ * to be deferred in every phase, which made both builds apply nothing and agree — the reason the
+ * sweep never saw the Savant pick being silently skipped.
+ *
+ * The phase is the asker's, not a level: a feat's advancements all sit at level 0 whether the feat
+ * came from a background at creation or from an ASI at level 8.
  * @param {Advancement} adv
+ * @param {"creation"|"levelup"} [phase="creation"]
  * @returns {boolean}
  */
-export function isDeferred(adv) {
-  return (adv?.type === "ItemChoice") && (adv?.configuration?.type === "spell");
+export function isDeferred(adv, phase = "creation") {
+  return (phase === "creation") && (adv?.type === "ItemChoice") && (adv?.configuration?.type === "spell");
 }
 
 /* -------------------------------------------- */
@@ -250,6 +259,149 @@ async function generateItemChoice(adv, level, offered, reserved = new Set()) {
 }
 
 /**
+ * The pack a duplicated spell is taken from, most preferred first.
+ *
+ * With the PHB module installed, most class spells exist twice — the module's copy and dnd5e's own
+ * SRD 5.2 copy — and a spell list names both. A player picking natively takes the PHB copy they own
+ * the book for, so the book does too. This only breaks a tie between copies of one spell; which
+ * spells are *eligible* comes from dnd5e alone (see {@link generateSpellChoice}).
+ */
+const SPELL_PACK_PREFERENCE = ["Compendium.dnd-players-handbook.spells.", "Compendium.dnd5e.spells24."];
+
+/** How far down {@link SPELL_PACK_PREFERENCE} a uuid sits; unlisted packs rank last. */
+function spellPackRank(uuid) {
+  const i = SPELL_PACK_PREFERENCE.findIndex(p => uuid.startsWith(p));
+  return i < 0 ? SPELL_PACK_PREFERENCE.length : i;
+}
+
+/**
+ * A spell's index entry with the fields a restriction reads, or its document when the index lacks
+ * them.
+ *
+ * Asked of the pack every time rather than cached here. Foundry memoises the index itself and only
+ * reloads when a field is missing, but it rebuilds the entries when anything else re-indexes the pack
+ * with different fields. A cached reference then held entries with no `system.level`, the level
+ * filter dropped that pack's copy of a spell, and the book picked the other pack's copy instead. It
+ * picked the SRD Befuddlement for one warlock and the PHB one for the next, from the same list.
+ */
+async function spellIndexEntry(uuid) {
+  const parsed = foundry.utils.parseUuid(uuid);
+  const pack = parsed?.collection;
+  let entry = null;
+  if ( pack?.getIndex ) {
+    entry = (await pack.getIndex({ fields: ["system.level", "system.school"] })).get(parsed.documentId) ?? null;
+  }
+  if ( entry?.system?.level === undefined ) entry = await fromUuid(uuid).catch(() => null);
+  return entry;
+}
+
+/** Every spell the Compendium Browser can see, as dnd5e's own flow fetches them. Once per session. */
+let allSpells = null;
+function allSpellEntries() {
+  allSpells ??= dnd5e.applications.CompendiumBrowser.fetch(Item, {
+    types: new Set(["spell"]),
+    indexFields: new Set(["system.level", "system.school"])
+  }).then(entries => Array.from(entries ?? []));
+  return allSpells;
+}
+
+/**
+ * The highest spell-slot level for an "available" restriction when no native flow is at hand to ask.
+ * The same arithmetic as dnd5e's `ItemChoiceFlow#_maxSpellSlotLevel`: a casting class or subclass
+ * item reads its own progression — at the decision's level, which is the class level the native
+ * manager's clone stands at when it renders the step — and anything else reads the actor's slots.
+ */
+function fallbackMaxSpellSlot(adv, level) {
+  const Actor5e = CONFIG.Actor.documentClass;
+  const sc = adv.item?.spellcasting;
+  let spells;
+  if ( sc?.type ) {
+    const progression = Object.fromEntries(Object.keys(CONFIG.DND5E.spellcasting).map(k => [k, 0]));
+    const maxSpellLevel = Object.keys(CONFIG.DND5E.spellLevels).length - 1;
+    spells = Object.fromEntries(Array.from({ length: maxSpellLevel }, (_, i) => [`spell${i + 1}`, {}]));
+    const spellcasting = level ? { ...sc, levels: Math.min(sc.levels ?? level, level) } : sc;
+    Actor5e.computeClassProgression(progression, adv.item, { spellcasting });
+    Actor5e.prepareSpellcastingSlots(spells, sc.type, progression);
+  } else spells = adv.actor?.system?.spells ?? {};
+  return Object.values(spells).reduce((slot, s) => (s?.max ? Math.max(slot, s.level || -1) : slot), 0);
+}
+
+/**
+ * Picks for a **spell** `ItemChoice` restricted to a spell list — "learn two Cleric cantrips", or a
+ * Savant's "two wizard spells of a level you have slots for".
+ *
+ * The native flow renders no options for these, only a compendium-browser button, and the creator's
+ * choices step builds its own grid. Taking the pool from either side's screen would make that side
+ * its own oracle: if our screen offered nothing (the Savant bug), the book would answer nothing and
+ * both builds would agree. So the pool comes from dnd5e alone — the spell-list registry, the
+ * restriction's level and school, and for "available" the slot level dnd5e's own flow computes
+ * (`maxSpellSlot`, handed over by the native adapter, which asks first). The creator adapter then
+ * checks each pick against what its choices step actually offers (`creator.mjs#checkSpellOffers`).
+ *
+ * Spells the character already holds, by name, are skipped. The native browser would let a player
+ * take one twice while the creator shows it as taken — a known, deliberate difference, and not the
+ * one under test.
+ */
+async function generateSpellChoice(adv, level, { offered, reserved, maxSpellSlot } = {}) {
+  const cfg = adv.configuration ?? {};
+  const restriction = cfg.restriction ?? {};
+  const lists = Array.from(restriction.list ?? []);
+  // An authored pool (a fixed handful of spells) renders checkboxes like any feature choice.
+  if ( Array.from(cfg.pool ?? []).length ) return generateItemChoice(adv, level, offered, reserved);
+
+  const count = cfg.choices?.[level]?.count ?? 0;
+  const ability = sorted(cfg.spell?.ability ?? [])[0] ?? null;
+  if ( !count ) {
+    return ability ? { answer: { uuids: [], ability } } : { answer: null, note: "no picks at this level" };
+  }
+
+  const raw = restriction.level;
+  let levels = null;
+  if ( (raw === "available") || (raw === "availableNoCantrips") ) {
+    const max = (await maxSpellSlot?.()) ?? fallbackMaxSpellSlot(adv, level);
+    const min = raw === "availableNoCantrips" ? 1 : 0;
+    levels = new Set(Array.from({ length: Math.max(0, max - min + 1) }, (_, i) => min + i));
+  } else if ( (raw !== "") && (raw != null) && Number.isInteger(Number(raw)) ) {
+    levels = new Set([Number(raw)]);
+  }
+  const schools = new Set(restriction.school ?? []);
+
+  const already = new Set(Object.values(adv.value?.added ?? {}).flatMap(m => Object.values(m ?? {})));
+  const held = new Set((adv.actor?.itemTypes?.spell ?? []).map(s => s.name.trim().toLowerCase()));
+  const byName = new Map();
+  const consider = (uuid, entry) => {
+    if ( !uuid || !entry || already.has(uuid) ) return;
+    if ( levels && !levels.has(Number(entry.system?.level)) ) return;
+    if ( schools.size && !schools.has(entry.system?.school) ) return;
+    const name = entry.name?.trim().toLowerCase();
+    if ( !name || held.has(name) ) return;
+    const current = byName.get(name);
+    const better = !current || (spellPackRank(uuid) < spellPackRank(current))
+      || ((spellPackRank(uuid) === spellPackRank(current)) && (uuid < current));
+    if ( better ) byName.set(name, uuid);
+  };
+  if ( lists.length ) {
+    for ( const list of lists ) {
+      const spellList = dnd5e.registry?.spellLists?.forType?.(list);
+      for ( const uuid of spellList?.uuids ?? [] ) consider(uuid, await spellIndexEntry(uuid));
+    }
+  } else {
+    // No list: "any spell of this level" — the 2014 Bard's Magical Secrets, the 2014 Wizard's
+    // Signature Spells. dnd5e's flow opens its browser filtered by level alone, so the pool is what
+    // that browser fetches, not anything of ours.
+    for ( const entry of await allSpellEntries() ) consider(entry.uuid, entry);
+  }
+
+  const uuids = [...byName.keys()].sort().slice(0, count).map(n => byName.get(n));
+  if ( uuids.length < count ) {
+    const shown = levels ? [...levels].join("/") : "any";
+    return { missing: `"${adv.title}" has ${uuids.length} eligible spell(s) on ${lists.join(", ") || "any list"} `
+      + `at level(s) ${shown} for a choice of ${count} at level ${level}` };
+  }
+  return { answer: ability ? { uuids, ability } : uuids };
+}
+
+/**
  * The casting ability for a spell-granting ItemGrant: the first the configuration allows.
  *
  * Only a genuine choice counts. A grant that allows exactly one ability — which is most of them, a
@@ -418,8 +570,11 @@ function generateAsi(adv) {
  *                                       against a character (see {@link generateTrait}).
  * @returns {Promise<{answer?: *, missing?: string, note?: string}>}
  */
-async function generate(adv, level, { offered, asiFeats = false, reserved } = {}) {
-  if ( isDeferred(adv) ) return { answer: null, note: "deferred to the creator's feat-spells step" };
+async function generate(adv, level, { offered, asiFeats = false, reserved, phase, maxSpellSlot } = {}) {
+  if ( isDeferred(adv, phase) ) return { answer: null, note: "deferred to the creator's feat-spells step" };
+  if ( (adv?.type === "ItemChoice") && (adv.configuration?.type === "spell") ) {
+    return generateSpellChoice(adv, level, { offered, reserved, maxSpellSlot });
+  }
   switch ( adv?.type ) {
     case "HitPoints": return { answer: "avg" };   // never "roll" — a die is not an equivalence test
     case "Size": return generateSize(adv);
@@ -571,9 +726,13 @@ export class AnswerBook {
    * @param {object} [options]
    * @param {string} [options.asker]      "native" or "creator" — recorded, never used to decide.
    * @param {Function} [options.offered]  The asker's own option list, where generation needs one.
+   * @param {string} [options.phase]      "creation" or "levelup": whether a spell choice is deferred
+   *   (see {@link isDeferred}). Both sides ask any one decision in the same phase.
+   * @param {Function} [options.maxSpellSlot]  The native flow's `_maxSpellSlotLevel`, for an
+   *   "available" spell restriction (see {@link generateSpellChoice}).
    * @returns {Promise<*>}  The answer, or `undefined` when there is none.
    */
-  async answer(adv, level, { asker, offered } = {}) {
+  async answer(adv, level, { asker, offered, phase = "creation", maxSpellSlot } = {}) {
     if ( !adv?.id ) return undefined;
     const key = memoKey(adv, level);
 
@@ -592,7 +751,7 @@ export class AnswerBook {
         entry.source = "override";
       } else if ( this.#generate ) {
         const result = await generate(adv, level, {
-          offered, asiFeats: this.#asiFeats, reserved: await this.#reservedKeys()
+          offered, asiFeats: this.#asiFeats, reserved: await this.#reservedKeys(), phase, maxSpellSlot
         });
         entry.answer = result.answer;
         entry.missing = result.missing ?? null;
@@ -628,8 +787,8 @@ export class AnswerBook {
   }
 
   /** @see {isDeferred} — exposed here so an adapter needs only the book. */
-  isDeferred(adv) {
-    return isDeferred(adv);
+  isDeferred(adv, phase) {
+    return isDeferred(adv, phase);
   }
 
   /* -------------------------------------------- */

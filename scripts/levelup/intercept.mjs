@@ -7,6 +7,7 @@ import { LevelUpState } from "./levelup-state.mjs";
 import { LevelUpShell } from "./levelup-shell.mjs";
 import { multiclassBlockers, formatBlockers } from "./multiclass.mjs";
 import { isEmberCreationManager, foldOriginScreens } from "./ember-creation.mjs";
+import { canRepair, promptRepair } from "./repair.mjs";
 
 /**
  * Wires up the level-up takeover (§4). Two trigger paths:
@@ -42,7 +43,13 @@ export function registerLevelUp() {
     tpl("levelup/grant.hbs"),
     tpl("levelup/optional-grant.hbs"),
     tpl("levelup/review.hbs"),
-    tpl("levelup/spells.hbs")
+    tpl("levelup/spells.hbs"),
+    // A third-party advancement's own screen, mounted inside the level (Potent Dragonmark). Missing
+    // from this list, the first level carrying one closed the whole window on render.
+    tpl("levelup/native.hbs"),
+    // The creator's Magic Items step, shown only at the end of a creation climb. It is no longer in
+    // the creator's own STEPS, so main.mjs's preload (built from that list) no longer registers it.
+    tpl("steps/magic-shop.hbs")
   ]);
 
   Hooks.on("dnd5e.preAdvancementManagerRender", onPreAdvancementManagerRender);
@@ -82,6 +89,10 @@ function onPreAdvancementManagerRender(manager) {
     return false;
   }
 
+  // Refused outright rather than left to the native flow, which would add the class regardless.
+  // Nothing is lost: a dropped class is only created when its manager completes, so a manager
+  // that never renders leaves the actor exactly as it was.
+  if ( multiclassBlocked(manager) ) return false;
   if ( !shouldTakeOver(manager) ) return;
 
   manager._sogromLevelUp = true;
@@ -89,6 +100,25 @@ function onPreAdvancementManagerRender(manager) {
   // without awaiting it and suppress the native UI straight away.
   launchLevelUp(manager);
   return false;
+}
+
+/**
+ * Whether this manager adds a class the actor may not take under the `"prereq"` multiclass mode —
+ * and if so, say why. The wizard's own picker never offers an ineligible class, but a class item
+ * dragged onto the sheet arrives here unchecked. It is checked apart from {@link shouldTakeOver}
+ * because the answer differs: a level-up we merely can't drive goes to the native flow, while a
+ * class the world's rule forbids must not be added by any flow.
+ * @param {AdvancementManager} manager
+ * @returns {boolean}
+ */
+function multiclassBlocked(manager) {
+  if ( multiclassMode() !== "prereq" ) return false;
+  const classItem = manager.steps.find(s => s.class)?.class?.item;
+  if ( !classItem || manager.actor.items.get(classItem.id) ) return false;
+  const blockers = multiclassBlockers(manager.actor, classItem);
+  if ( !blockers.length ) return false;
+  ui.notifications?.warn(t("levelup.multiclass.blocked", { reasons: formatBlockers(blockers) }));
+  return true;
 }
 
 /**
@@ -103,18 +133,6 @@ function shouldTakeOver(manager) {
   if ( !manager?.actor?.isOwner ) return false;
   const mode = multiclassMode();
   if ( !LevelUpDriver.canDrive(manager, { allowNewClass: mode !== "off" }) ) return false;
-
-  // A new-class claim under the "prereq" mode must meet the written multiclass prerequisites.
-  // The wizard's own picker never offers an ineligible class, but a class item dragged onto
-  // the sheet arrives here unchecked — warn and stand down, leaving the native flow to run.
-  const classItem = manager.steps.find(s => s.class)?.class?.item;
-  if ( (mode === "prereq") && classItem && !manager.actor.items.get(classItem.id) ) {
-    const blockers = multiclassBlockers(manager.actor, classItem);
-    if ( blockers.length ) {
-      ui.notifications?.warn(t("levelup.multiclass.blocked", { reasons: formatBlockers(blockers) }));
-      return false;
-    }
-  }
 
   // The last gate, and the polite one: a listener returning false means we decline this level-up
   // and the *native* dnd5e wizard renders in our place — the player is never left with nothing.
@@ -147,6 +165,7 @@ async function launchLevelUp(manager, { emberCreation = false, announce = null, 
     const state = new LevelUpState(manager.actor, driver, { emberCreation, announce, creationState });
     const app = new LevelUpShell(state, launchWindowOptions());
     app.render(true);
+    state.startAnnounced = true;
     fireHook(HOOKS.levelUpStarted, { actor: manager.actor, app, state, driver });
   } catch ( err ) {
     log("level-up takeover failed; the native advancement flow was suppressed", err);
@@ -189,27 +208,37 @@ export function onGetHeaderControls(application, controls) {
     // whole of the "is this a character sheet" test; canLevelUp does the rest (a class to level,
     // ownership, and not already at the cap).
     const actor = application?.actor;
-    if ( !canLevelUp(actor) ) return;
+    if ( actor?.type !== "character" ) return;
     // A re-render rebuilds the array, but a sheet that somehow reuses one must not stack entries.
-    if ( controls.some(c => c.action === HEADER_CONTROL) ) return;
-
-    controls.push({
-      action: HEADER_CONTROL,
-      icon: "fa-solid fa-trophy-star",
-      label: t("levelup.button"),
-      // Supplied directly rather than via the sheet's `actions` map: the action name is ours and
-      // the sheet has never heard of it, so there is nothing for Foundry to look up. It prefers
-      // `onClick` when one is given (see ApplicationV2#_headerControlContextEntries).
-      onClick: () => triggerLevelUp(actor)
-    });
+    if ( canLevelUp(actor) && !controls.some(c => c.action === HEADER_CONTROL) ) {
+      controls.push({
+        action: HEADER_CONTROL,
+        icon: "fa-solid fa-trophy-star",
+        label: t("levelup.button"),
+        // Supplied directly rather than via the sheet's `actions` map: the action name is ours and
+        // the sheet has never heard of it, so there is nothing for Foundry to look up. It prefers
+        // `onClick` when one is given (see ApplicationV2#_headerControlContextEntries).
+        onClick: () => triggerLevelUp(actor)
+      });
+    }
+    // Offered only while a level has something unanswered — see {@link module:levelup/repair}.
+    if ( canRepair(actor) && !controls.some(c => c.action === REPAIR_CONTROL) ) {
+      controls.push({
+        action: REPAIR_CONTROL,
+        icon: "fa-solid fa-wrench",
+        label: t("levelup.repair.button"),
+        onClick: () => promptRepair(actor)
+      });
+    }
   } catch ( err ) {
     // This runs for every application in the world; it must never be what stops one rendering.
     log("could not add the Level Up header control", err);
   }
 }
 
-/** Our header-control action name, namespaced so it cannot collide with a sheet's own. */
+/** Our header-control action names, namespaced so they cannot collide with a sheet's own. */
 const HEADER_CONTROL = "sogromLevelUp";
+const REPAIR_CONTROL = "sogromRepairLevel";
 
 /* -------------------------------------------- */
 /*  Sheet button                                */
@@ -231,7 +260,71 @@ const HEADER_CONTROL = "sogromLevelUp";
 function onRenderActorSheet(app, html) {
   const root = html instanceof HTMLElement ? html : html?.[0];
   if ( !root ) return;
-  const actor = app?.actor;
+  renderLevelUpButton(root, app?.actor);
+  renderRepairButton(root, app?.actor);
+}
+
+/**
+ * The "Repair skipped choices" wrench, beside the Level Up trophy and styled the same way. Shown only
+ * while one of the character's levels has an unanswered decision, so it doubles as the only sign on
+ * the sheet that something was skipped — and, unlike the trophy, at the level cap too.
+ * @param {HTMLElement} root
+ * @param {Actor5e} actor
+ */
+function renderRepairButton(root, actor) {
+  const show = levelUpEnabled() && game.settings.get(MODULE_ID, SETTINGS.levelUpButton) && canRepair(actor);
+  const existing = root.querySelector(".sogrom-repair-btn");
+  if ( !show ) {
+    existing?.closest(".sheet-header-buttons")?.classList.remove("sogrom-has-repair");
+    existing?.remove();
+    return;
+  }
+  if ( existing ) return;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.addEventListener("click", ev => {
+    ev.preventDefault();
+    promptRepair(actor);
+  });
+  const icon = "<i class=\"fa-solid fa-wrench\" inert></i>";
+
+  const tidyRow = tidyActionRow(root);
+  if ( tidyRow ) {
+    button.className = "sogrom-repair-btn button button-icon-only button-gold";
+    button.dataset.tooltip = "";
+    button.setAttribute("aria-label", t("levelup.repair.button"));
+    button.innerHTML = icon;
+    tidyRow.append(button);
+    return;
+  }
+
+  // The same row the trophy uses. A row synthesised for the trophy is ours and has room; the
+  // system's own populated row is shifted left one more icon-width (see creator.css).
+  const systemRow = root.querySelector(".sheet-header-buttons:not(.sogrom-synth-row)");
+  const row = systemRow ?? root.querySelector(".sheet-header-buttons") ?? buildHeaderButtonRow(root);
+  if ( row ) {
+    button.className = "sogrom-repair-btn gold-button";
+    button.dataset.tooltip = "";
+    button.setAttribute("aria-label", t("levelup.repair.button"));
+    button.innerHTML = icon;
+    row.append(button);
+    if ( systemRow ) row.classList.add("sogrom-has-repair");
+    return;
+  }
+  const header = root.querySelector(".window-header");
+  if ( !header ) return;
+  button.className = "sogrom-repair-btn sogrom-levelup-btn--window";
+  button.innerHTML = `${icon} ${t("levelup.repair.button")}`;
+  header.prepend(button);
+}
+
+/**
+ * The Level Up trophy (see {@link onRenderActorSheet}).
+ * @param {HTMLElement} root
+ * @param {Actor5e} actor
+ */
+function renderLevelUpButton(root, actor) {
   const show = levelUpEnabled()
     && game.settings.get(MODULE_ID, SETTINGS.levelUpButton) && canLevelUp(actor);
 
@@ -300,7 +393,8 @@ function buildHeaderButtonRow(root) {
   const wrapper = root.querySelector(".sheet-header .right > div:last-child");
   if ( !wrapper ) return null;
   const row = document.createElement("div");
-  row.className = "sheet-header-buttons";
+  // Marked as ours: only the system's populated row needs shifting to make room for our buttons.
+  row.className = "sheet-header-buttons sogrom-synth-row";
   wrapper.prepend(row);
   return row;
 }
@@ -439,6 +533,7 @@ export async function launchLevelUpTo(actor, target, { creationState = null } = 
  * @param {AdvancementManager} manager
  */
 function driveManager(manager) {
+  if ( multiclassBlocked(manager) ) return;
   if ( !shouldTakeOver(manager) ) {
     ui.notifications?.warn(t("levelup.notify.choicesUnsupported"));
     return;

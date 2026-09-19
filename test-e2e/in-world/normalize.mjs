@@ -302,6 +302,27 @@ function normaliseEffectChanges(item) {
 }
 
 /**
+ * Put a `ModifyItem` advancement's `value.modified` records into a canonical order.
+ *
+ * Each record is `{change, effect, item}` — "this change landed on this item as this effect" — and the
+ * list is a set in all but type: `reverse` walks every record, and nothing reads a position. Its order
+ * is whatever order the advancement met the items in, which differs between the two builds whenever
+ * the matching items arrive in a different sequence. The Transmuter's Wondrous Alterations reaches two
+ * copies of Alter Self (its own grant and a Savant pick); native modifies both in one pass, the driver
+ * in two, and the same two records then compared as four positional differences. Sorted after the id
+ * rewrite, so the key is the records' stable identities rather than per-build ids.
+ * @param {object} item   A rewritten item entry, mutated in place.
+ */
+function normaliseModifyRecords(item) {
+  for ( const adv of Object.values(item?.system?.advancement ?? {}) ) {
+    const records = adv?.value?.modified;
+    if ( Array.isArray(records) && (records.length > 1) ) {
+      records.sort((x, y) => contentKey(x).localeCompare(contentKey(y)));
+    }
+  }
+}
+
+/**
  * Drop an item's `system.source.book` when it holds nothing but dnd5e's own placeholder for the pack.
  *
  * `SourceField.prepareData` invents an empty `book` from the pack's `sourceBook` flag or its module's
@@ -343,6 +364,7 @@ export function sourceSnapshot(actor) {
     const entry = rewrite(item, idMap, DROP_ITEM);
     normaliseActivities(entry);
     normaliseEffectChanges(entry);
+    normaliseModifyRecords(entry);
     normaliseSourceBook(entry, item._stats?.compendiumSource ?? item.flags?.core?.sourceId ?? null);
     // The module under test stamps its own flags; they are bookkeeping, not advancement output.
     if ( entry.flags ) delete entry.flags[MODULE_FLAG];
