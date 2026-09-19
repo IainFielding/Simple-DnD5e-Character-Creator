@@ -1,0 +1,10 @@
+{{!-- Level-up block for an advancement of a type another module registered (native-flow-step.mjs).
+      The placeholder is replaced after render with that module's own flow element; the fallback text
+      stays only if mounting fails. The advancement is already applied either way. --}}
+<section class="creator-levelup creator-levelup-native">
+  {{#if hint}}<div class="creator-choice-hint">{{{hint}}}</div>{{/if}}
+  {{#if error}}<p class="creator-native-error"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> {{error}}</p>{{/if}}
+  <div class="creator-native-flow dnd5e2" data-native-flow="{{index}}">
+    <p class="creator-choice-hint">{{unavailable}}</p>
+  </div>
+</section>

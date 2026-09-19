@@ -440,6 +440,11 @@ export class LevelUpState {
     return this.driver?.grantSteps ?? [];
   }
 
+  /** Third-party advancements the wizard presents through their own flow (see LevelUpDriver#nativeSteps). */
+  get nativeSteps() {
+    return this.driver?.nativeSteps ?? [];
+  }
+
   /**
    * Whether the player has actually made a decision yet — used by the shell to decide if closing
    * before Apply deserves a "discard this level-up?" confirmation. Pre-seeded defaults (average
@@ -485,7 +490,7 @@ export class LevelUpState {
   gainedLevels() {
     const levels = new Set();
     for ( const arr of [this.hpSteps, this.asiSteps, this.subclassSteps, this.choiceSteps, this.traitSteps,
-      this.grantSteps, this.optionalGrantSteps] ) {
+      this.grantSteps, this.optionalGrantSteps, this.nativeSteps] ) {
       for ( const record of arr ) levels.add(recordLevel(record));
     }
     return [...levels].sort((a, b) => a - b);

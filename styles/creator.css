@@ -5540,3 +5540,21 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 /* The tick box leads the label; the accent marks it as chosen the same way a picked card is. */
 .creator-pdf-toggle.is-active { border-color: var(--cc-select); color: var(--cc-text); }
 .creator-pdf-note { margin: 0; color: var(--cc-muted); font-size: 0.9rem; }
+
+/* ---- Third-party advancement, shown through its module's own flow (native-flow-step.mjs) ---- */
+/* The mounted element is the module's markup, styled by dnd5e's own sheet rules (hence `dnd5e2` on the
+   host); this only gives it room and keeps it from inheriting the wizard's card grid. */
+.creator-native-flow { display: block; min-height: 2rem; }
+.creator-native-flow > form,
+.creator-native-flow > .advancement { position: static; width: auto; max-width: 100%; }
+.creator-native-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--cc-danger);
+  border-radius: var(--cc-radius-sm, 4px);
+  background: color-mix(in srgb, var(--cc-danger) 12%, var(--cc-panel));
+  color: var(--cc-danger);
+}

@@ -81,8 +81,11 @@ describe("LevelUpDriver.isStepSupported", () => {
     expect(LevelUpDriver.isStepSupported(step("ItemGrant", { cfg: { items, optional: false } }))).toBe(true);
   });
 
-  it("rejects an advancement type it has never seen", () => {
-    expect(LevelUpDriver.isStepSupported(step("SomeFutureAdvancement"))).toBe(false);
+  // A type another module registered is claimed rather than handing the level-up back to dnd5e: the
+  // driver commits it as its untouched screen would be and the wizard mounts that screen itself (see
+  // test/levelup-native-flow.test.mjs). It used to take a named case per type.
+  it("claims an advancement type it has never seen", () => {
+    expect(LevelUpDriver.isStepSupported(step("SomeFutureAdvancement"))).toBe(true);
   });
 });
 
@@ -155,7 +158,7 @@ describe("LevelUpDriver.canDrive", () => {
   it("still rejects unsupported steps and level-downs with allowNewClass", () => {
     const unsupported = makeManager([
       step("HitPoints"),
-      step("SomeFutureAdvancement"),
+      step("Size", { cfg: { sizes: new Set(["sm", "med"]) } }),
       marker()
     ], { classOnActor: false });
     expect(LevelUpDriver.canDrive(unsupported, { allowNewClass: true })).toBe(false);

@@ -244,6 +244,10 @@
           "label": "Spell",
           "prompt": "Choose the spellcasting ability for this spell."
         },
+        "native": {
+          "label": "Feature",
+          "unavailable": "This feature has already been applied. Its own screen could not be shown here."
+        },
         "optionalGrant": {
           "label": "Optional Features",
           "prompt": "Your game includes optional class features. Take the ones you want — you already have them all, so untick any you would rather not.",

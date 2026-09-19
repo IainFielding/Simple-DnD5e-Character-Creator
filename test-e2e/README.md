@@ -442,8 +442,10 @@ past, and FAILed instead, which is where the creator bugs were:
 
 - **The creator dropped the advancement.** `PotentDragonmarkAdvancement` extends the base
   `Advancement`, whose `automaticApplicationValue` is `false`, so `#ingestFlow`'s default branch
-  skipped it and a dragonmarked character never got their Spells of the Mark. The driver now handles
-  the type by name (`PASSTHROUGH_TYPES`, beside Ember's) and applies it.
+  skipped it and a dragonmarked character never got their Spells of the Mark. The driver first handled
+  the type by name; since 2026-09-19 no third-party type is named at all — an unrecognised
+  non-automatic advancement is committed as its untouched native screen would be (`nativeSteps`)
+  and its own flow is mounted in the level screen.
 - **The creator offered the feat to everyone.** `classifyAsiFeats` gated on level and
   `prerequisites.items` only. `CONTENT_FEAT_PREREQS` in `choice-resolver.mjs` now holds prerequisites
   content enforces elsewhere, keyed by feat identifier. The picker locks the feat and

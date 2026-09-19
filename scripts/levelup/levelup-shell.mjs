@@ -13,6 +13,7 @@ import { captureLevelUpSummary, postLevelUpSummary, postCreationSummary } from "
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
 import { grantMagicItems } from "../data/magic-shop-source.mjs";
 import { stageEmberGear, abandonEmberCreation } from "./ember-creation.mjs";
+import { mountNativeFlows, closeNativeFlows } from "./steps/native-flow-step.mjs";
 
 /**
  * The level-up window. Like the creator's shell it is deliberately thin — it owns its step list and
@@ -353,6 +354,9 @@ export class LevelUpShell extends CreatorShellBase {
     // The ASI feat picker's own toolbar, on the same terms: filters in the DOM, values on the state
     // so the re-render a "coming later" peek causes puts them back.
     this._wireFeatFilters(this.element);
+    // A third-party advancement's own screen goes into the placeholder its block left. Not awaited:
+    // the flows render asynchronously and nothing below depends on them.
+    mountNativeFlows(this.element, this.state, () => this.render());
     this.#guideToNext();
   }
 
@@ -656,6 +660,7 @@ export class LevelUpShell extends CreatorShellBase {
    */
   _onClose(options) {
     super._onClose(options);
+    closeNativeFlows(this.state);
     // In the Ember hand-off the actor's sheet *is* Ember's character builder, waiting behind this
     // window with all of the player's creation choices in it. Re-rendering it would reset that UI,
     // and there is no level selector to snap back — so leave it to Ember either way.

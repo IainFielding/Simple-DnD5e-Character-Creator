@@ -37,7 +37,7 @@ import { findAsiFeats, classifyAsiFeats, evalContentPrereq } from "../data/choic
  *   prepare()                    – WALK every step: auto-apply the ones with no choice, and collect
  *                                  the ones that DO need a choice into the decision arrays (hpSteps,
  *                                  asiSteps, choiceSteps, traitSteps, subclassSteps, grantSteps,
- *                                  optionalGrantSteps, sizeSteps).
+ *                                  optionalGrantSteps, sizeSteps, nativeSteps).
  *   the apply/reverse helpers    – when the player picks in the UI, apply it to the clone (reversible).
  *   autoResolve()                – the same decisions, answered from a provider instead of the UI.
  *   commit()                     – write the finished clone onto the real actor.
@@ -146,6 +146,21 @@ export class LevelUpDriver {
    */
   sizeSteps = [];
 
+  /**
+   * Advancements of a type the driver has no case for — a premium module's own, registered on
+   * `CONFIG.DND5E.advancementTypes` — that are not automatic: `{ level, screenLevel, advancement,
+   * item, flow, error }`.
+   *
+   * Each is applied at ingest exactly as the native manager would commit its screen if the player
+   * pressed Next without touching it (see {@link #submitNativeFlow}), so the clone is complete
+   * whether or not anyone looks. The wizard then mounts the type's *own* flow in a block of its
+   * level screen, so a real choice still reaches the player in the module's own form. That is what
+   * spares us a hand-written case per third-party type: Forge of the Artificer's Potent Dragonmark
+   * used to need one because the old default branch skipped anything non-automatic. `error` holds
+   * the message the flow refused with (an `Advancement.ERROR`), which keeps the level incomplete.
+   */
+  nativeSteps = [];
+
   /** Snapshot of the clone's items before a step, used to detect synthesised additions. */
   #preItems = null;
 
@@ -218,12 +233,6 @@ export class LevelUpDriver {
     "ScaleValue", "Size", "Trait", "ItemGrant"];
 
   /**
-   * Third-party advancement types that subclass no system type but that the driver handles by name.
-   * Each is inert in a world without the module that registers it: the type never appears.
-   */
-  static PASSTHROUGH_TYPES = ["EmberKnowledge", "PotentDragonmark"];
-
-  /**
    * The type to treat an advancement as: its own, or the nearest system type it subclasses.
    *
    * A module may register an advancement type of its own. Switching on the bare type string then
@@ -241,7 +250,7 @@ export class LevelUpDriver {
    */
   static baseType(adv) {
     if ( !adv ) return null;
-    if ( this.KNOWN_TYPES.includes(adv.type) || this.PASSTHROUGH_TYPES.includes(adv.type) ) return adv.type;
+    if ( this.KNOWN_TYPES.includes(adv.type) ) return adv.type;
     const types = dnd5e.documents?.advancement ?? {};
     for ( const name of this.KNOWN_TYPES ) {
       const cls = types[`${name}Advancement`];
@@ -275,28 +284,13 @@ export class LevelUpDriver {
       // it and surfaced so the player can decline. Declining this used to hand the whole level-up
       // back to dnd5e, which meant our wizard never appeared for a 2014 class in a Tasha's world.
       case "ItemGrant":  return true;
-      // Ember registers its own advancement type on background items (a culture/path granting
-      // knowledge areas). It is pure grant — its `automaticApplicationValue()` returns the whole
-      // grant list, so `#ingestFlow`'s default branch applies it with no screen of its own —
-      // but it still has to pass this gate, or the Ember hand-off would fall through to the
-      // native manager. The case is inert in a world without Ember: the type never appears.
-      case "EmberKnowledge": return true;
-      // Forge of the Artificer's Potent Dragonmark: a screen that only previews the spells it adds,
-      // with nothing to choose — see `#ingestFlow`.
-      case "PotentDragonmark": return true;
-      default:           return false;             // (no renderable types left)
+      // A type registered by another module and subclassing no system type (Ember's
+      // `EmberKnowledge`, Forge of the Artificer's `PotentDragonmark`, whatever ships next). An
+      // automatic one applies itself; any other is committed as its untouched screen would be and
+      // its own flow is mounted in the wizard — see {@link nativeSteps}. Claiming these used to take
+      // a named case each, and anything unnamed handed the whole level-up back to dnd5e.
+      default:           return true;
     }
-  }
-
-  /**
-   * Whether an actor holds a dragonmark that Potent Dragonmark can build on — the exact test the
-   * module's own flow makes (`PotentDragonmarkFlow#dragonmark`) before it lets the step submit.
-   * @param {Actor5e} actor
-   * @returns {boolean}
-   */
-  static #hasDragonmark(actor) {
-    return (actor?.itemTypes?.feat ?? []).some(i => (i.system?.type?.value === "feat")
-      && (i.system?.type?.subtype === "dragonmark") && String(i.identifier ?? "").startsWith("mark-"));
   }
 
   /* -------------------------------------------- */
@@ -610,30 +604,78 @@ export class LevelUpDriver {
         this.sizeSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
         return;
       }
-      case "PotentDragonmark":
-        // Forge of the Artificer's feat advancement. It subclasses the base `Advancement`, whose
-        // `automaticApplicationValue` is `false`, so the default branch below skipped it — and a
-        // dragonmarked character who took the feat never got their Spells of the Mark. Its flow has
-        // no inputs: submitting it calls `apply(level, formData)` with nothing in the data, and
-        // `apply` reads the actor's dragonmark spell lists itself.
-        //
-        // The flow also refuses to submit without a qualifying dragonmark (a `mark-*` dragonmark
-        // feat), which is the feat's real prerequisite. The picker gates on it
-        // (`CONTENT_FEAT_PREREQS`), so reaching here without one means the feat came in by some other
-        // route; applying would be a no-op anyway, so say so rather than pretend.
-        if ( !LevelUpDriver.#hasDragonmark(adv.actor) ) {
-          log("Potent Dragonmark without a dragonmark feat — nothing to apply", adv.item?.name);
-          return;
-        }
-        return adv.apply(flow.level, {});
       default: {
+        // A third-party type. Automatic ones (Ember's knowledge grant) apply themselves, as they
+        // would under the native manager's `automaticApplication`.
         const auto = await flow.getAutomaticApplicationValue();
         if ( auto !== false ) return adv.apply(flow.level, auto, { automatic: true });
-        // Should be unreachable on the main walk: canDrive() rejects unsupported renderable steps.
-        // Reachable for a subclass feature we don't yet re-skin — skip it rather than break.
-        log("skipping unsupported renderable advancement", adv?.type);
+        // Anything else is committed the way its untouched screen would be, then surfaced so the
+        // wizard can mount that screen. This used to skip the advancement outright, which is how a
+        // dragonmarked character who took Potent Dragonmark lost their Spells of the Mark: its
+        // screen has no inputs and only previews what `apply` adds.
+        const record = {
+          level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item, flow, error: null
+        };
+        await this.#submitNativeFlow(record);
+        this.nativeSteps.push(record);
       }
     }
+  }
+
+  /**
+   * Commit a {@link nativeSteps} record's flow as the native manager's `#forward` would on Next.
+   *
+   * Untouched (no `formData`), that is what the player gets by pressing Next on a screen they never
+   * edited. A V2 flow is pre-filled by `apply(level, {}, { initial: true })` when the manager
+   * renders it and then applies its own form on every change, so the seed *is* its untouched state.
+   * A V1 flow applies nothing until its form is submitted through `_updateObject`, the same call the
+   * manager makes; that is also where a flow runs its own validation (Potent Dragonmark refuses
+   * without a `mark-*` dragonmark feat), so going through it rather than straight to `apply` keeps
+   * each module's rules in force without us restating them.
+   *
+   * A re-submission (the wizard mounted a V1 screen and the player changed it) reverses the
+   * previous application first, the same undo the native manager does on Back.
+   * @param {object} record              One of {@link nativeSteps}.
+   * @param {object} [formData]          The V1 flow's form data; omit for the untouched submit.
+   * @returns {Promise<void>}
+   */
+  async #submitNativeFlow(record, formData) {
+    const { flow, advancement: adv } = record;
+    const FlowV2 = globalThis.dnd5e?.applications?.advancement?.AdvancementFlowV2;
+    record.error = null;
+    try {
+      if ( FlowV2 && (flow instanceof FlowV2) ) {
+        await adv.apply(flow.level, {}, { initial: true });
+        return;
+      }
+      if ( formData !== undefined ) {
+        await adv.reverse(flow.level);
+        this.clone.reset();
+      }
+      if ( typeof flow._updateObject === "function" ) await flow._updateObject(null, formData ?? {});
+      else await adv.apply(flow.level, formData ?? {});
+    } catch ( err ) {
+      // `Advancement.ERROR` is how a flow says "this cannot be submitted as it stands"; the native
+      // manager shows it and stays put. We record it the same way so the level cannot be finished.
+      // Anything else is a module's bug, and must not take the rest of the level-up down with it.
+      record.error = err?.message || String(err);
+      log(`advancement "${adv?.type}" refused to apply`, adv?.item?.name, err);
+    } finally {
+      this.clone.reset();
+    }
+  }
+
+  /**
+   * Re-commit a mounted V1 flow after the player edited its form. See {@link #submitNativeFlow}.
+   * A V2 flow needs no call: it applies its own form on every change, exactly as it does inside
+   * the native manager.
+   * @param {object} record   One of {@link nativeSteps}.
+   * @returns {Promise<void>}
+   */
+  async resubmitNativeFlow(record) {
+    const flow = record?.flow;
+    if ( !flow?.form || (typeof flow._getSubmitData !== "function") ) return;
+    await this.#submitNativeFlow(record, flow._getSubmitData());
   }
 
   /**
@@ -1334,7 +1376,7 @@ export class LevelUpDriver {
    * @param {Item5e} item
    * @param {number} maxLevel
    * @returns {Promise<{flows: object[], choices: object[], asi: object[], traits: object[],
-   *                    grants: object[], optionalGrants: object[]}>}
+   *                    grants: object[], optionalGrants: object[], natives: object[]}>}
    */
   async #ingestItemFeatures(item, maxLevel) {
     const beforeChoices = this.choiceSteps.length;
@@ -1342,6 +1384,7 @@ export class LevelUpDriver {
     const beforeTraits = this.traitSteps.length;
     const beforeGrants = this.grantSteps.length;
     const beforeOptional = this.optionalGrantSteps.length;
+    const beforeNative = this.nativeSteps.length;
     const flows = [];
     await this.#ingestItemTree(item, maxLevel, flows, new Set([item.id]));
     // A feature synthesised after the main walk — a subclass's, or a chosen feat's — can carry an
@@ -1360,7 +1403,9 @@ export class LevelUpDriver {
       // rail — `gainedLevels()` reads `optionalGrantSteps` like every other decision array. Cold
       // Caster is the case in the wild: its granted cantrip is the one item of the five
       // spell-granting feats that the pack marks `optional`.
-      optionalGrants: this.optionalGrantSteps.slice(beforeOptional)
+      optionalGrants: this.optionalGrantSteps.slice(beforeOptional),
+      // A third-party advancement on a feat or subclass feature — Potent Dragonmark is a feat's.
+      natives: this.nativeSteps.slice(beforeNative)
     };
   }
 
@@ -1377,7 +1422,7 @@ export class LevelUpDriver {
   static #synthRecords(synth) {
     return [
       ...(synth?.choices ?? []), ...(synth?.asi ?? []), ...(synth?.traits ?? []),
-      ...(synth?.grants ?? []), ...(synth?.optionalGrants ?? [])
+      ...(synth?.grants ?? []), ...(synth?.optionalGrants ?? []), ...(synth?.natives ?? [])
     ];
   }
 
@@ -1414,7 +1459,7 @@ export class LevelUpDriver {
    * Reverse what {@link #ingestItemFeatures} applied: undo each synthesised advancement and drop the
    * decisions it added. Best-effort — reversing a flow the player never touched is a no-op.
    * @param {{flows: object[], choices: object[], asi: object[], traits: object[], grants: object[],
-   *   optionalGrants: object[]}} synth
+   *   optionalGrants: object[], natives: object[]}} synth
    */
   async #reverseSynth(synth) {
     if ( !synth ) return;
@@ -1442,6 +1487,7 @@ export class LevelUpDriver {
     if ( synth.optionalGrants?.length ) {
       this.optionalGrantSteps = this.optionalGrantSteps.filter(o => !synth.optionalGrants.includes(o));
     }
+    if ( synth.natives?.length ) this.nativeSteps = this.nativeSteps.filter(n => !synth.natives.includes(n));
     this.clone.reset();
   }
 
