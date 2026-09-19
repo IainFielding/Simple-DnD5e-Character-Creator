@@ -240,6 +240,16 @@ function liveLevelUp() {
  * hooks `_finish` emits.
  */
 async function applyLevelUp(shell) {
+  // With multiclassing enabled the wizard always opens on its Class step — "start a new class" is a
+  // levelling option for everyone below the cap — and there is no driver until a class is picked.
+  // Pick the character's own class the way a player's click does, through the step's own action.
+  if ( !shell.state.driver && shell.state.needsClassChoice ) {
+    const classItem = shell.state.actor.items.find(i => i.type === "class");
+    const card = { dataset: { kind: "existing", id: classItem?.id }, getAttribute: () => null };
+    await shell._dispatch("pick-levelup-class", card);
+    await pause(500);
+  }
+  if ( !shell.state.driver ) throw new Error("the level-up wizard has no driver to resolve");
   const provider = new ScenarioChoiceProvider(new AnswerBook({ generate: true }));
   await shell.state.driver.autoResolve(provider);
   await shell._finish();

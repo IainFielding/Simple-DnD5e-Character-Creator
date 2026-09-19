@@ -161,6 +161,8 @@ The level-up wizard walks you through everything that new level brings, one scre
 
 Nothing touches your character until you click **Apply Level-Up**, so you can back out any time.
 
+**Skipped a choice?** D&D 5e lets a level finish with a choice left unmade: a fighting style never picked, an ability score improvement never spent, a subclass never chosen. When that happens, a **wrench** appears beside the Level Up button (and in the same menus). Click it to reopen the level-up wizard on just that level's missing choices. Everything you already chose stays exactly as it was, and a subclass picked late brings every feature it would have given you since. If more than one level needs attention, you choose which one to fix first. The wrench disappears once nothing is left unanswered, and it still works on a level-20 character.
+
 **Multiclassing** is supported too, when your GM turns it on. From the class step you can begin a brand-new class at level 1 alongside your existing ones, and the wizard keeps the labels clear (like "Wizard 3") so you always know which class is gaining the level.
 
 ![Levelling up, one screen at a time](docs/screenshots/levelup.png)
@@ -223,6 +225,8 @@ The **Configure Level-Up** button holds everything about levelling.
 - **Show Level Up button** on the character sheet header.
 - **Show Level Up in sheet menu**, the ⋯ menu in the sheet's header.
 - **Show Level Up in right-click menu** on characters in the Actors sidebar.
+
+Each of these also carries **Repair skipped choices** while a character has a level with an unmade choice.
 
 **Hit points:**
 

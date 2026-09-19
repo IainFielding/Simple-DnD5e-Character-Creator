@@ -174,8 +174,36 @@ export function appliesToClass(advancement, item = advancement?.item) {
  * @returns {{id: string, type: string, title: string}[]}
  */
 export function unresolvedAdvancements(item, level = Infinity) {
+  // One flag per advancement, in advancement order, whatever levels it is owed at.
+  const seen = new Set();
+  return unresolvedByLevel(item, level, { hitPoints: false })
+    .filter(e => !seen.has(e.id) && seen.add(e.id))
+    .map(({ id, type, title }) => ({ id, type, title }));
+}
+
+/**
+ * Every unanswered decision on an item, one entry per **level** it is owed at — the finer-grained
+ * form of {@link unresolvedAdvancements} that a "repair this level" action needs.
+ *
+ * The level is the item's own advancement level: a class's class level, and for a subclass or a
+ * class-linked feature (a Savant feature granted by its subclass) the level of the class it hangs
+ * off, which is what dnd5e's `advancementLevel` reads. A multi-tier `ItemChoice` (Metamagic at
+ * 2/10/17, the Savant's pick at every new slot level) reports each short tier separately, so a
+ * player who skipped only the level-10 Metamagic is sent to level 10 and nowhere else.
+ *
+ * Hit points are included by default, because a class level with no hit-point entry is a real gap
+ * — the character has fewer hit points than it should — and dnd5e never blocks Next on it either.
+ * @param {object} item
+ * @param {number} [level]   The item's advancement level; Infinity for a level-less item.
+ * @param {object} [options]
+ * @param {boolean} [options.hitPoints=true]   Report a class level whose hit points were never taken.
+ * @returns {{id: string, type: string, title: string, level: number}[]}
+ */
+export function unresolvedByLevel(item, level = Infinity, { hitPoints = true } = {}) {
   const out = [];
-  const flag = adv => out.push({ id: adv._id, type: adv.type, title: advancementTitle(adv) || adv.type });
+  const flag = (adv, at) => out.push({
+    id: adv._id ?? adv.id, type: adv.type, title: advancementTitle(adv) || adv.type, level: Number(at ?? 0)
+  });
 
   for ( const adv of advancementArray(item) ) {
     if ( (typeof adv.level === "number") && (adv.level > level) ) continue;
@@ -185,20 +213,15 @@ export function unresolvedAdvancements(item, level = Infinity) {
       case "Trait": {
         const required = (adv.configuration?.choices ?? [])
           .reduce((sum, c) => sum + (c?.count ?? 0), 0);
-        if ( required && (entryCount(adv.value?.chosen) < required) ) flag(adv);
+        if ( required && (entryCount(adv.value?.chosen) < required) ) flag(adv, adv.level);
         break;
       }
       case "ItemChoice": {
-        // Only the tiers at or below the character's level are owed an answer yet.
-        const choices = Object.entries(adv.configuration?.choices ?? {});
-        const required = choices
-          .filter(([at, c]) => (Number(at) <= level) && c?.count)
-          .reduce((sum, [, c]) => sum + c.count, 0);
-        if ( !required ) break;
-        const added = choices
-          .filter(([at]) => Number(at) <= level)
-          .reduce((sum, [at]) => sum + entryCount(addedEntries(adv, at)), 0);
-        if ( added < required ) flag(adv);
+        // Each tier at or below the item's level is owed its own count.
+        for ( const [at, c] of Object.entries(adv.configuration?.choices ?? {}) ) {
+          if ( !c?.count || (Number(at) > level) ) continue;
+          if ( entryCount(addedEntries(adv, at)) < c.count ) flag(adv, at);
+        }
         break;
       }
       case "AbilityScoreImprovement": {
@@ -208,12 +231,18 @@ export function unresolvedAdvancements(item, level = Infinity) {
         // *decision* actually takes, not merely for being non-empty.
         if ( !(adv.configuration?.points > 0) ) break;
         const spent = entryCount(adv.value?.assignments) || entryCount(adv.value?.feat);
-        if ( !spent ) flag(adv);
+        if ( !spent ) flag(adv, adv.level);
         break;
       }
       case "Subclass":
-        if ( !adv.value?.uuid ) flag(adv);
+        if ( !adv.value?.uuid ) flag(adv, adv.level);
         break;
+      case "HitPoints": {
+        // Only a class has hit points, and only for the levels it actually has.
+        if ( !hitPoints || (item.type !== "class") || !Number.isFinite(level) ) break;
+        for ( let l = 1; l <= level; l++ ) if ( adv.value?.[l] === undefined ) flag(adv, l);
+        break;
+      }
     }
   }
   return out;

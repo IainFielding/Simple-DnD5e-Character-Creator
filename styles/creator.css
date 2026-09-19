@@ -3878,6 +3878,13 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
    the combined rule wins on specificity and adds the widths together. */
 .dnd5e2.character .sheet-header-buttons.sogrom-has-levelup { transform: translateX(-38px); }
 .dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-levelup { transform: translateX(-114px); }
+/* The repair wrench (shown only while a level has an unanswered choice) takes one more icon-width. */
+.dnd5e2.character .sheet-header-buttons.sogrom-has-repair { transform: translateX(-38px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-levelup.sogrom-has-repair { transform: translateX(-76px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-repair { transform: translateX(-114px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-levelup.sogrom-has-repair {
+  transform: translateX(-152px);
+}
 
 /* Fallback placement for sheets without the v2 header row: a labelled title-bar button. */
 .sogrom-levelup-btn--window {

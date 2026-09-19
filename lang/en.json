@@ -135,7 +135,16 @@
     "levelup": {
       "window": {
         "title": "Level Up — {name} (Level {level})",
-        "emberTitle": "Finish {name} — Level 1"
+        "emberTitle": "Finish {name} — Level 1",
+        "repairTitle": "Repair {class} {level} — {name}"
+      },
+      "repair": {
+        "button": "Repair skipped choices",
+        "dialogTitle": "Repair a level",
+        "prompt": "These levels have choices that were never made. Pick one to finish it; nothing you already chose is changed.",
+        "option": "{class} {level} — {titles}",
+        "nothing": "There is nothing left to repair on that level.",
+        "failed": "The repair could not be prepared. Nothing on the character was changed."
       },
       "nav": {
         "apply": "Apply Level-Up",

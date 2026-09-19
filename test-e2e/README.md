@@ -631,6 +631,7 @@ node run.mjs --subclasses wizard      # subclasses for a class identifier
 node run.mjs --sidekicks              # assert Tasha's sidekicks are not offered as classes
 node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
 node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
+node run.mjs --repair                 # skipped-choice builds, repaired, against the full build
 node run.mjs --sweep                  # every subclass in the world, at level 20 (see below)
 node run.mjs --sweep --axis species   # vary the species instead, on a fixed Wizard/Evoker
 node run.mjs --sweep --axis background  # vary the background, taking a feat at every ASI
@@ -2407,3 +2408,29 @@ rather than waiting the full timeout for a form an automatic step will never pai
 none of `languages:standard:elvish` or its neighbours. The six hand-written scenarios name those
 keys literally, so they cannot run there — which is why every scenario now declares a `world` and the
 base world is the default. Anything naming specific content is portable only to the world holding it.
+
+## Repair this level: an assertion against the full build
+
+```
+node run.mjs --repair
+```
+
+"Repair skipped choices" (`scripts/levelup/repair.mjs`) re-runs one class level's unanswered
+decisions through the level-up shell. dnd5e never blocks Next on an unmade choice, so the check
+reproduces that with a *broken* native build, where chosen decisions are answered `null`, and a
+*reference* native build with everything answered. Then:
+
+1. `repairTargets` must find the skipped decisions, and only those;
+2. each gap level is repaired through the real `LevelUpDriver`, answered from the reference's own
+   answer book;
+3. the repaired character must match the reference exactly, with nothing left to repair.
+
+The cases (`in-world/repair.mjs`) cover a PHB Champion missing its Fighting Style, subclass and first
+ASI; a Conjurer missing its subclass, so the Savant choice only appears with the repair; the same
+Champion shape on the 2014 SRD class with Tasha's options; and a lone skipped ASI. A last case goes
+through the real front door. It checks that the sheet's wrench is present, opens the real
+`LevelUpShell` (title, and the rail `level-N, review`), applies with `_finish`, and then checks that
+the character is whole, its level unchanged, the wrench gone, and the hooks heard were
+`levelUpStarted → levelUpApplied` carrying `state.repairLevel`.
+
+**First run, 2026-09-19: 5/5.**

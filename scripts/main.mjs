@@ -5,6 +5,7 @@ import {
 import { STEPS } from "./steps/registry.mjs";
 import { warmSources } from "./data/source-cache.mjs";
 import { registerLevelUp, triggerLevelUp, canLevelUp } from "./levelup/intercept.mjs";
+import { canRepair, promptRepair } from "./levelup/repair.mjs";
 import { registerXpNotice } from "./levelup/xp-notice.mjs";
 import { StoreConfigApp } from "./app/store-config.mjs";
 import { MagicShopConfigApp } from "./app/magic-shop-config.mjs";
@@ -345,6 +346,19 @@ Hooks.on("getActorContextOptions", (_directory, options) => {
     callback: li => {
       const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
       if ( actor ) triggerLevelUp(actor);
+    }
+  });
+  // Beside it, and only while one of the character's levels has an unanswered choice.
+  options.push({
+    name: t("levelup.repair.button"),
+    icon: "<i class=\"fa-solid fa-wrench\"></i>",
+    condition: li => {
+      if ( !levelUpEnabled() ) return false;
+      return canRepair(game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId));
+    },
+    callback: li => {
+      const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
+      if ( actor ) promptRepair(actor);
     }
   });
 });

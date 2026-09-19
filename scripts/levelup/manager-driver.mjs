@@ -164,6 +164,12 @@ export class LevelUpDriver {
   /** Snapshot of the clone's items before a step, used to detect synthesised additions. */
   #preItems = null;
 
+  /**
+   * Every `ModifyItem` advancement applied during the walk, `{ advancement, level }`, settled once
+   * more just before commit. See {@link #settleModifiers}.
+   */
+  #modifiers = [];
+
   constructor(manager) {
     // A manager this driver walks is ours, whoever built it. {@link #firePreRender} raises
     // `dnd5e.preAdvancementManagerRender` for other modules' sake, and our own takeover listens to
@@ -240,7 +246,7 @@ export class LevelUpDriver {
    * `ItemGrant`), so the first match down this list is the narrowest correct answer.
    */
   static KNOWN_TYPES = ["HitPoints", "ItemChoice", "AbilityScoreImprovement", "Subclass",
-    "ScaleValue", "Size", "Trait", "ItemGrant"];
+    "ScaleValue", "Size", "Trait", "ItemGrant", "ModifyItem"];
 
   /**
    * The type to treat an advancement as: its own, or the nearest system type it subclasses.
@@ -294,6 +300,7 @@ export class LevelUpDriver {
       // it and surfaced so the player can decline. Declining this used to hand the whole level-up
       // back to dnd5e, which meant our wizard never appeared for a 2014 class in a Tasha's world.
       case "ItemGrant":  return true;
+      case "ModifyItem": return true;              // always automatic (dnd5e 6.0); see #ingestFlow
       // A type registered by another module and subclassing no system type (Ember's
       // `EmberKnowledge`, Forge of the Artificer's `PotentDragonmark`, whatever ships next). An
       // automatic one applies itself; any other is committed as its untouched screen would be and
@@ -612,6 +619,18 @@ export class LevelUpDriver {
         // the same fallback the native pre-fill leaves in place until the player picks.
         await this.#seed(flow);
         this.sizeSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        return;
+      }
+      case "ModifyItem": {
+        // dnd5e 6.0's "add this effect to every item with these identifiers" — Arcana Unleashed's
+        // Transmuter adds Wondrous Alterations to Alter Self. It is automatic, so it applies now, but
+        // *which* items it reaches depends on what the character holds when it runs. The native
+        // manager runs it after the same level's choice screens; the walk runs it before the choices
+        // are made. A Savant pick of Alter Self at that same level was therefore left unmodified here
+        // and modified natively. It is re-settled just before commit (see {@link #settleModifiers}).
+        const auto = await flow.getAutomaticApplicationValue();
+        await adv.apply(flow.level, (auto === false) ? {} : auto, { automatic: true });
+        this.#modifiers.push({ advancement: adv, level: flow.level });
         return;
       }
       default: {
@@ -1644,6 +1663,13 @@ export class LevelUpDriver {
    * Testing for it here rather than stripping the flag ourselves keeps the rule where it belongs:
    * the item goes through a normal update, and the system's own hook decides what to remove. It
    * costs one extra write per affected item, once — the clone reflects the actor next time round.
+   *
+   * "Stale" is not only "empty". The hook rebuilds the flag from the item's enchant activities
+   * (the riders each enchantment effect declares), so a pack flag that names riders those activities
+   * no longer declare is replaced just the same. Tasha's Experimental Elixir ships four effect riders
+   * its enchantments do not list: native shed them on its full re-write and ours kept them, the one
+   * difference the Alchemist had carried since the 6.0.2 sweep. So the flag is compared with what the
+   * hook would compute, read off the clone's prepared item.
    * @param {object} data   Item source data from the clone.
    * @returns {boolean}
    */
@@ -1653,7 +1679,23 @@ export class LevelUpDriver {
     if ( Array.isArray(riders) ) return !riders.length;
     if ( !riders || (typeof riders !== "object") ) return false;
     const lists = Object.values(riders);
-    return !lists.length || lists.some(v => Array.isArray(v) ? !v.length : !v);
+    if ( !lists.length || lists.some(v => Array.isArray(v) ? !v.length : !v) ) return true;
+
+    // What `preUpdateActivities` would write: the union of every enchant effect's declared riders.
+    const enchants = this.clone.items.get(data._id)?.system?.activities?.getByType?.("enchant");
+    if ( !enchants ) return false;
+    const expected = { activity: new Set(), effect: new Set() };
+    for ( const activity of enchants ) {
+      for ( const e of activity.effects ?? [] ) {
+        e.riders?.activity?.forEach(id => expected.activity.add(id));
+        e.riders?.effect?.forEach(id => expected.effect.add(id));
+      }
+    }
+    const same = (list, set) => {
+      const have = new Set(Array.isArray(list) ? list : []);
+      return (have.size === set.size) && [...set].every(id => have.has(id));
+    };
+    return !same(riders.activity, expected.activity) || !same(riders.effect, expected.effect);
   }
 
   /**
@@ -1706,6 +1748,7 @@ export class LevelUpDriver {
    * @returns {Promise<Actor5e>}  The updated real actor.
    */
   async commit() {
+    await this.#settleModifiers();
     const updates = this.clone.toObject();
     const items = updates.items;
     delete updates.items;
@@ -1737,6 +1780,26 @@ export class LevelUpDriver {
     // The one render the four suppressed ops deferred to: surface the new level on the sheet.
     if ( this.actor.sheet?.rendered ) this.actor.sheet.render();
     return this.actor;
+  }
+
+  /**
+   * Re-apply every `ModifyItem` so it also reaches the items the player's choices added after it
+   * first ran. `ModifyItemAdvancement#apply` is built for this: it skips any item it has already
+   * modified and records only the new ones, so a second pass adds exactly what the native order
+   * would have. An advancement whose item has since left the clone (a subclass swapped out) is
+   * skipped, or it would modify the character on behalf of a feature they no longer have.
+   */
+  async #settleModifiers() {
+    if ( !this.#modifiers.length ) return;
+    for ( const { advancement: adv, level } of this.#modifiers ) {
+      if ( !adv?.item?.id || !this.clone.items.get(adv.item.id) ) continue;
+      try {
+        await adv.apply(level, {}, { automatic: true });
+      } catch ( err ) {
+        log("re-settling a ModifyItem advancement failed", adv.item?.name, err);
+      }
+    }
+    this.clone.reset();
   }
 
   /* -------------------------------------------- */

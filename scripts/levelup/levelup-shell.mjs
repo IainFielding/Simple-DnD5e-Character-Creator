@@ -151,6 +151,9 @@ export class LevelUpShell extends CreatorShellBase {
     // The Ember hand-off isn't a level-up from the player's point of view — they are still creating
     // the character, and Ember's builder is waiting behind this window.
     if ( this.state.emberCreation ) return t("levelup.window.emberTitle", { name });
+    if ( this.state.repairLevel ) {
+      return t("levelup.window.repairTitle", { name, class: this.state.classItem?.name ?? "", level: this.state.repairLevel });
+    }
     return t("levelup.window.title", { name, level: this.state.toLevel });
   }
 
@@ -580,11 +583,13 @@ export class LevelUpShell extends CreatorShellBase {
         actor, state: this.state.creationState, targetLevel: actor?.system?.details?.level ?? this.state.toLevel
       });
       await postCreationSummary(actor, { magicShop: this.state.magicShopGrant });
-    } else if ( this.state.announce === "levelup" ) {
+    } else if ( (this.state.announce === "levelup") || this.state.repairLevel ) {
+      // A repair applies too, and a listener that saw it start needs to see it finish. It gains no
+      // level, so `fromLevel` equals `toLevel`, and it posts no card: there is no level to announce.
       fireHook(HOOKS.levelUpApplied, {
         actor, state: this.state, fromLevel: this.state.fromLevel, toLevel: this.state.toLevel, summary
       });
-      await postLevelUpSummary(actor, summary);
+      if ( this.state.announce === "levelup" ) await postLevelUpSummary(actor, summary);
     }
 
     // Last of all, and only if asked: the sheet on the PDF has to be the one the player just

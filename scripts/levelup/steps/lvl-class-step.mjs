@@ -1,4 +1,4 @@
-import { t, log, multiclassMode } from "../../config.mjs";
+import { t, log, multiclassMode, fireHook, HOOKS } from "../../config.mjs";
 import { LevelUpDriver } from "../manager-driver.mjs";
 import { multiclassBlockers, formatBlockers } from "../multiclass.mjs";
 
@@ -218,6 +218,14 @@ async function buildDriver(ctx) {
     const driver = new LevelUpDriver(manager);
     await driver.prepare();
     state.adoptDriver(driver);
+    // A session that opened on this step has no driver until now, so this is when its level-up
+    // starts — and the only place `levelUpStarted` can carry the driver its contract promises. Once
+    // per session: picking a different class is the same session changing its mind. With
+    // multiclassing on, every level-up opens here, and none of them used to announce a start.
+    if ( !state.startAnnounced ) {
+      state.startAnnounced = true;
+      fireHook(HOOKS.levelUpStarted, { actor, app: ctx.app, state, driver });
+    }
     // Kick the background warms (subclass cards, spell pool) for the freshly-known class.
     ctx.app?.warmForDriver?.();
   } catch ( err ) {

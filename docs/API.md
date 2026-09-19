@@ -112,7 +112,10 @@ itself. The API object itself exists earlier, from `init`.
   never left with nothing, so this is a safe hook to use liberally — it is the right way to carve
   out level-ups your module wants to own, rather than asking users to disable this one.
 - **`levelUpStarted`** — the wizard is open. `driver` is the object holding the working clone; the
-  real actor is untouched until apply.
+  real actor is untouched until apply. A session that opens on the Class step (a multiclassed
+  character, or any character once multiclassing is enabled) fires this when the class is picked,
+  since that is when there is a driver to hand over. Once per session: changing the pick does not
+  fire it again.
 - **`levelUpStepChanged`** — as `creationStepChanged`, for the level-up wizard. Note that the
   level-up's step list is rebuilt as choices reveal further choices, so indices are not stable
   across renders.
@@ -127,6 +130,12 @@ itself. The API object itself exists earlier, from `init`.
   advancement manager to ask the level-1 questions Ember hands to the system. Lets you tell an
   Ember-driven build from an ordinary level-up. Not cancellable: declining would strand Ember's
   builder waiting on a manager nobody drives.
+
+> **A repair is a level-up session that gains no level.** "Repair skipped choices" (the wrench on the
+> sheet) re-opens the level-up wizard on one class level's unanswered decisions. It fires
+> `levelUpStarted`, then `preLevelUpApply` and `levelUpApplied`, or `levelUpCancelled`, like any
+> level-up, with `state.repairLevel` naming the level repaired. `fromLevel` equals `toLevel`, and no
+> chat card is posted.
 
 > **A creation climb announces `characterCreated`, not `levelUpApplied`.** When the creator hands
 > a 1 → N jump to the level-up wizard, the player made *one character* — so that session posts the

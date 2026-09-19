@@ -21,6 +21,7 @@ const { AnswerBook } = await import(`./answers.mjs${BUST}`);
 const { sweepScenarios } = await import(`./sweep.mjs${BUST}`);
 const { checkHooks } = await import(`./hooks.mjs${BUST}`);
 const deleteErrors = await import(`./delete-errors.mjs${BUST}`);
+const { checkRepair } = await import(`./repair.mjs${BUST}`);
 
 // The module under test, imported *without* a buster — the same instance the world already loaded.
 const { SourceIndex } = await import("/modules/sogrom-dnd5e-character-creator/scripts/data/source-index.mjs");
@@ -180,6 +181,9 @@ function advancementTypes(docs) {
  * Re-exported here so the Node runner reaches it the same way it reaches every other command.
  */
 export { checkHooks };
+
+/** "Repair this level" end to end — see `in-world/repair.mjs`. */
+export { checkRepair };
 
 /* -------------------------------------------- */
 

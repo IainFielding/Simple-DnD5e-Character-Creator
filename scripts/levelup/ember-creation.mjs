@@ -93,7 +93,7 @@ export function isEmberCreationManager(manager) {
  */
 export function foldOriginScreens(driver) {
   const arrays = [driver.hpSteps, driver.asiSteps, driver.choiceSteps, driver.traitSteps,
-    driver.subclassSteps, driver.grantSteps, driver.sizeSteps, driver.optionalGrantSteps];
+    driver.subclassSteps, driver.grantSteps, driver.sizeSteps, driver.optionalGrantSteps, driver.nativeSteps];
   for ( const records of arrays ) {
     // A decision array is absent rather than empty on a driver assembled from partial state, so
     // adding one here must not break the folding of the others.

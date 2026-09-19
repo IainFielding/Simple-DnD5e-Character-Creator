@@ -274,16 +274,25 @@ function spellPackRank(uuid) {
   return i < 0 ? SPELL_PACK_PREFERENCE.length : i;
 }
 
-/** Spell index entries by pack, fetched once per session with the fields a restriction reads. */
-const spellIndexes = new Map();
+/**
+ * A spell's index entry with the fields a restriction reads, or its document when the index lacks
+ * them.
+ *
+ * Asked of the pack every time rather than cached here. Foundry memoises the index itself and only
+ * reloads when a field is missing, but it rebuilds the entries when anything else re-indexes the pack
+ * with different fields. A cached reference then held entries with no `system.level`, the level
+ * filter dropped that pack's copy of a spell, and the book picked the other pack's copy instead. It
+ * picked the SRD Befuddlement for one warlock and the PHB one for the next, from the same list.
+ */
 async function spellIndexEntry(uuid) {
   const parsed = foundry.utils.parseUuid(uuid);
   const pack = parsed?.collection;
-  if ( !pack?.getIndex ) return fromUuid(uuid).catch(() => null);
-  if ( !spellIndexes.has(pack.collection) ) {
-    spellIndexes.set(pack.collection, pack.getIndex({ fields: ["system.level", "system.school"] }));
+  let entry = null;
+  if ( pack?.getIndex ) {
+    entry = (await pack.getIndex({ fields: ["system.level", "system.school"] })).get(parsed.documentId) ?? null;
   }
-  return (await spellIndexes.get(pack.collection)).get(parsed.documentId) ?? null;
+  if ( entry?.system?.level === undefined ) entry = await fromUuid(uuid).catch(() => null);
+  return entry;
 }
 
 /** Every spell the Compendium Browser can see, as dnd5e's own flow fetches them. Once per session. */
