@@ -247,3 +247,95 @@ export function unresolvedByLevel(item, level = Infinity, { hitPoints = true } =
   }
   return out;
 }
+
+/* -------------------------------------------- */
+/*  Optional and replacement grants             */
+/* -------------------------------------------- */
+
+/** Dotted keys for a nested object — `foundry.utils.flattenObject`, without needing the global. */
+function flattenKeys(obj, prefix = "", out = {}) {
+  for ( const [k, v] of Object.entries(obj ?? {}) ) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if ( v && (typeof v === "object") && !Array.isArray(v) ) flattenKeys(v, key, out);
+    else out[key] = v;
+  }
+  return out;
+}
+
+/**
+ * Whether an advancement is a grant the player may decline part of: Tasha's *optional class features*
+ * (an `ItemGrant` with `configuration.optional`) or its *replacement features* (`TCOEReplacementGrant`,
+ * an ItemGrant whose `configuration.replacements` maps a 2014 feature to its alternative). Both are
+ * injected into every 2014-rules class by `dnd-tashas-cauldron`.
+ * @param {object} adv
+ * @returns {"optional"|"replacement"|null}
+ */
+export function optionalGrantKind(adv) {
+  const cfg = adv?.configuration;
+  if ( !cfg?.items ) return null;
+  const replacements = cfg.replacements;
+  if ( replacements && Object.keys(replacements).length ) return "replacement";
+  if ( cfg.optional ) return "optional";
+  return null;
+}
+
+/**
+ * A grant's items as `{uuid, optional}`, uuids in their modern `.Item.` spelling.
+ * @param {object} adv
+ * @returns {{uuid: string, optional: boolean}[]}
+ */
+export function grantItems(adv) {
+  return Array.from(adv?.configuration?.items ?? [])
+    .map(i => (typeof i === "string") ? { uuid: i } : i)
+    .filter(i => i?.uuid)
+    .map(i => ({ uuid: withItemSegment(i.uuid), optional: !!i.optional }));
+}
+
+/**
+ * What the character holds from an optional or replacement grant when nobody has chosen: every item
+ * the grant does not individually mark optional. That is dnd5e's own seed (`ItemGrantAdvancement#apply`
+ * under `initial`) and the driver's, so for a replacement grant it is the 2014 base of each pair plus
+ * anything outside a pair, and for an optional grant it is the lot.
+ * @param {object} adv
+ * @returns {string[]}
+ */
+export function defaultGrantKeep(adv) {
+  return grantItems(adv).filter(i => !i.optional).map(i => i.uuid);
+}
+
+/**
+ * Group a replacement grant's items into base-and-alternatives sets, one exclusive group per base.
+ *
+ * The `replacements` map is base→alternative, but one base can map to *several* items (Tasha's swaps
+ * Natural Explorer for Deft Explorer **and** Canny) while the map records only the first. So a group
+ * is built from what the map names, and the optional items it names nowhere are folded in as further
+ * alternatives — but only when the grant carries a **single** base, the only arrangement in which they
+ * can be attributed to one. With two or more bases they are left out rather than added to every group:
+ * a group is exclusive, so an extra shown under one base would unpick a different base's choice.
+ *
+ * Anything non-optional outside every pair is not offered at all.
+ * @param {object} replacements   The grant's `configuration.replacements`.
+ * @param {{uuid: string, optional: boolean}[]} items   From {@link grantItems}.
+ * @returns {{groups: {base: string, members: string[]}[], unattributed: string[]}}
+ *   `unattributed` — alternatives left out because several bases share the grant.
+ */
+export function replacementGroups(replacements, items) {
+  const flat = flattenKeys(replacements);
+  const bases = new Set(Object.keys(flat).map(withItemSegment));
+  const offered = new Set(items.map(i => i.uuid));
+  // Scoped to what the grant actually offers: a stale map entry naming an item no longer in
+  // `configuration.items` must not render a card for something that cannot be granted.
+  const named = new Map([...bases].map(b => [b, []]));
+  for ( const [rawBase, rawAlt] of Object.entries(flat) ) {
+    const base = withItemSegment(rawBase);
+    const alt = rawAlt ? withItemSegment(rawAlt) : null;
+    if ( alt && offered.has(alt) && named.has(base) ) named.get(base).push(alt);
+  }
+  const attributed = new Set([...named.values()].flat());
+  const extras = items.filter(i => i.optional && !bases.has(i.uuid) && !attributed.has(i.uuid)).map(i => i.uuid);
+  const shareExtras = bases.size === 1;
+  return {
+    groups: [...bases].map(base => ({ base, members: [base, ...named.get(base), ...(shareExtras ? extras : [])] })),
+    unattributed: shareExtras ? [] : extras
+  };
+}

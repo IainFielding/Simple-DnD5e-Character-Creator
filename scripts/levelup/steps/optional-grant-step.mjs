@@ -1,6 +1,6 @@
 import { t, log } from "../../config.mjs";
 import { atLevel, advancementHint } from "../levelup-state.mjs";
-import { withItemSegment, advancementTitle} from "../../data/advancement-util.mjs";
+import { advancementTitle, grantItems, replacementGroups } from "../../data/advancement-util.mjs";
 
 /**
  * Optional class features — the items an `ItemGrant` marks as declinable, and the base-or-alternative
@@ -82,63 +82,21 @@ export const optionalGrantStep = {
 /* -------------------------------------------- */
 
 /**
- * Group a replacement grant's items into base-and-alternatives sets, one exclusive group per base.
- *
- * The configuration's `replacements` map is base→alternative, but one base can map to *several*
- * items (Tasha's swaps Natural Explorer for Deft Explorer **and** Canny) while the map records only
- * the first. So a group is built from what the map names, and the optional items it names nowhere
- * are folded in as further alternatives — but only when the grant carries a **single** base, which
- * is the only arrangement in which they can be attributed to one.
- *
- * With two or more bases those unattributable extras are left out rather than added to every group.
- * Handing them to all of them is what the code used to do, and it is not a cosmetic error: the
- * step's handler treats a group as exclusive, so clicking an extra shown under one base would
- * deselect a different base's pick — losing a feature the player had chosen for an unrelated
- * replacement. Dropping an option is visible and safe; silently unpicking another group is neither.
- * The `log` marks the case, since no content is known to produce it today.
- *
- * Anything non-optional sits outside every group and is not offered as a choice at all.
+ * Group a replacement grant's items into base-and-alternatives sets — see {@link replacementGroups},
+ * shared with the creation checklist so the two screens agree on what counts as a pair. A group is
+ * exclusive: the handler above takes one member and drops the rest.
  */
 function buildGroups(record, state) {
-  // Every uuid normalised, because `state.options` is too — this content stores the pre-v10 shape
-  // and the two forms compare unequal, which showed a group's base as unselected and made clicking
-  // it a no-op.
-  const flat = foundry.utils.flattenObject(record.replacements);
-  const bases = new Set(Object.keys(flat).map(withItemSegment));
-  const configured = new Map(Array.from(record.advancement.configuration?.items ?? [])
-    .map(i => (typeof i === "string") ? { uuid: i } : i)
-    .map(i => [withItemSegment(i.uuid), i]));
-
-  // Alternatives the map attributes to a base, keyed by that base. Scoped to what the grant
-  // actually offers: the map is content the grant was mutated *with*, so a stale entry naming an
-  // item no longer in `configuration.items` would otherwise render a card for something that
-  // cannot be granted.
-  const offered = new Set(state.options.map(o => o.uuid));
-  const named = new Map([...bases].map(b => [b, []]));
-  for ( const [rawBase, rawAlt] of Object.entries(flat) ) {
-    const base = withItemSegment(rawBase);
-    const alt = rawAlt ? withItemSegment(rawAlt) : null;
-    if ( alt && offered.has(alt) && named.has(base) ) named.get(base).push(alt);
+  const { groups, unattributed } = replacementGroups(record.replacements, grantItems(record.advancement));
+  if ( unattributed.length ) {
+    log(`replacement grant "${advancementTitle(record.advancement) || record.advancement.id}" has ${groups.length} bases `
+      + `and ${unattributed.length} unattributable alternatives; leaving them out rather than sharing them`);
   }
-
-  // Optional items the map attributes to nobody — the "and Canny" case.
-  const attributed = new Set([...named.values()].flat());
-  const extras = state.options
-    .filter(o => configured.get(o.uuid)?.optional && !bases.has(o.uuid) && !attributed.has(o.uuid))
-    .map(o => o.uuid);
-  if ( extras.length && (bases.size > 1) ) {
-    log(`replacement grant "${advancementTitle(record.advancement) || record.advancement.id}" has ${bases.size} bases `
-      + `and ${extras.length} unattributable alternatives; leaving them out rather than sharing them`);
-  }
-
   const selected = new Set(state.options.filter(o => o.selected).map(o => o.uuid));
-  return [...bases].map(base => {
-    const members = [base, ...named.get(base), ...(bases.size === 1 ? extras : [])];
-    return {
-      members,
-      options: members.map(uuid => ({ uuid, selected: selected.has(uuid) }))
-    };
-  });
+  return groups.map(({ members }) => ({
+    members,
+    options: members.map(uuid => ({ uuid, selected: selected.has(uuid) }))
+  }));
 }
 
 /** Resolve each group member to a rendered card. */

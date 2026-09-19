@@ -37,6 +37,32 @@ function decisionCounts(resolved) {
 }
 
 /**
+ * Record a click on an optional class feature. The answer is stored as the grant's whole keep list
+ * (under the advancement id), which is what the creation provider hands the driver.
+ *
+ * A card inside a replacement group takes that side of the pair and drops the other members — the
+ * group is exclusive, so clicking the side already held changes nothing. A card outside any group
+ * toggles on its own.
+ */
+async function pickOptionalGrant(el, state, source) {
+  const { choiceSource, selKey, key, group } = el.dataset;
+  const bucket = state.advChoices[choiceSource];
+  const req = state.choiceCache?.sources?.find(s => s.key === choiceSource)
+    ?.requirements.find(r => r.selKey === selKey && r.type === "OptionalGrant");
+  if ( !bucket || !req || !key ) return;
+
+  let next;
+  if ( group ) {
+    const members = group.split("|");
+    next = [...req.keep.filter(u => !members.includes(u)), key];
+  } else {
+    next = req.keep.includes(key) ? req.keep.filter(u => u !== key) : [...req.keep, key];
+  }
+  bucket[selKey] = next;
+  state.choiceCache = await resolveChoices(state, source);
+}
+
+/**
  * The Choices step: every player decision a chosen origin defers to level ≤ 1 —
  * skill/tool/language/weapon proficiencies, Expertise, size, "choose a feature"
  * (ItemChoice), spellcasting-ability picks — laid out as one guided checklist of accordion
@@ -82,6 +108,11 @@ export const choicesStep = {
     if ( action === "toggle-decision" ) {
       const k = el.dataset.decision;
       state.openDecision = state.openDecision === k ? "" : k;
+      return;
+    }
+
+    if ( action === "optional-grant" ) {
+      await pickOptionalGrant(el, state, source);
       return;
     }
 
@@ -134,9 +165,13 @@ export const choicesStep = {
       sourceName: d.sourceName,
       sourceImg: d.sourceImg,
       complete: d.complete,
-      statusLabel: d.complete
-        ? null
-        : (d.req.showProgress ? `${d.req.chosenCount}/${d.req.count}` : d.req.countLabel),
+      // An optional class feature is satisfied by its default, so it says so rather than showing a
+      // bare tick the player might read as "nothing to see here".
+      statusLabel: d.req.optional
+        ? t("choice.optionalGrant.status")
+        : d.complete
+          ? null
+          : (d.req.showProgress ? `${d.req.chosenCount}/${d.req.count}` : d.req.countLabel),
       ...d.req
     }));
 

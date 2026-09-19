@@ -655,6 +655,13 @@
       }
     },
     "choice": {
+      "optionalGrant": {
+        "title": "Optional Class Features",
+        "status": "Optional",
+        "prompt": "Your game includes optional class features. You have them all already; click one to give it up.",
+        "promptReplace": "This feature can be swapped for an alternative. Pick the version you want.",
+        "insteadOf": "{feature}, or its alternative"
+      },
       "chooseOne": "Choose one",
       "chooseCount": "Choose {count}",
       "recommendedAbility": "Matches your {class}'s spellcasting ability",

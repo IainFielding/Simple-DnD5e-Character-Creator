@@ -11,8 +11,9 @@
   <li>
     <button type="button"
             class="creator-choice-card {{#if isSelected}}is-selected{{/if}} {{#if recommended}}is-recommended{{/if}} {{#if disabled}}is-disabled{{/if}}"
-            data-action="stepAction" data-step-action="pick-choice"
+            data-action="stepAction" data-step-action="{{#if stepAction}}{{stepAction}}{{else}}pick-choice{{/if}}"
             data-choice-source="{{source}}" data-sel-key="{{selKey}}" data-key="{{key}}" data-count="{{count}}"
+            {{#if group}}data-group="{{group}}"{{/if}}
             {{#if disabled}}disabled data-tooltip="{{disabledReason}}"{{else}}{{#if uuid}}{{> itemTip uuid=uuid}}{{else}}{{#if recommendTip}} data-tooltip="{{recommendTip}}"{{/if}}{{/if}}{{/if}}>
       {{#if recommended}}<i class="creator-choice-card-star fa-solid fa-star" aria-hidden="true"></i>{{/if}}
       {{#if img}}<img class="creator-choice-card-img" src="{{img}}" alt="">{{/if}}

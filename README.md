@@ -105,7 +105,7 @@ If your class can cast spells, this is where you pick your cantrips and starting
 *Screenshot: picking spells.*
 
 **6. Choices**
-Some classes, backgrounds, and species let you make extra decisions: a bonus skill, a tool proficiency, a fighting style. Any remaining choices are gathered here in one tidy list so nothing slips through the cracks.
+Some classes, backgrounds, and species let you make extra decisions: a bonus skill, a tool proficiency, a fighting style. Any remaining choices are gathered here in one tidy list so nothing slips through the cracks. If your game uses Tasha's optional class features, a 2014-rules class lists its level-1 ones here too. You have them all by default, and you can give one up or swap a feature for its Tasha's version, such as Favored Foe in place of Favored Enemy.
 
 ![Making your choices](docs/screenshots/choices.png)
 *Screenshot: the choices step.*
@@ -261,7 +261,7 @@ A character who starts above 1st level would, by the Dungeon Master's Guide, arr
 With it on, a **Magic Items** step appears at the end of the climb to the starting level, just before the final review. There the player:
 
 - **Rolls their bonus gold.** A single d10 is rolled on the screen and then locked, and the gold goes straight into the character's purse.
-- **Picks free magic items** up to the number allowed at each rarity. A slot can also hold an item of a lower rarity, so an uncommon slot will take a common item. Cards flag an item the character isn't proficient with or is too weak to wear. That flag is only a note, because a player may want something for later or for a friend.
+- **Picks free magic items** up to the number allowed at each rarity. A slot can also hold an item of a lower rarity, so an uncommon slot will take a common item. Cards flag an item the character isn't proficient with, is too weak to wear, or can't attune to because it requires a particular class or a spellcaster (for example, "Attunement by a Bard"). That flag is only a note, because a player may want something for later or for a friend.
 
 A character starting at 1st level never sees the step, and neither does a normal level-up.
 
@@ -284,7 +284,7 @@ This module is designed to sit quietly alongside the rest of your world. Where a
 | Modules that want to handle *some* level-ups | Yes | There's a published hook (`preLevelUpTakeover`) another module can use to claim an individual level-up, which makes this one stand aside and hand it back to the native D&D 5e wizard — no blanket conflict needed. See [For module developers](#for-module-developers). |
 | [D&D Player's Handbook (2024)](https://foundryvtt.com/packages/dnd-players-handbook) | Yes, enhanced | Fully supported as a content source, and its official artwork is used as the backdrop on the class, species, and background screens. |
 | Other official content modules (Artificer, Ravenloft, Forgotten Realms, and similar) | Yes | Their classes, species, backgrounds, spells, and equipment appear in the wizard like any other compendium content. |
-| [Tasha's Cauldron of Everything](https://foundryvtt.com/packages/dnd-tashas-cauldron) | Yes | Its subclasses build on the 2014 classes the system still ships. Its **optional class features** are offered on their own level-up screen, and its **replacement features** let you choose between the original and the Tasha's version. |
+| [Tasha's Cauldron of Everything](https://foundryvtt.com/packages/dnd-tashas-cauldron) | Yes | Its subclasses build on the 2014 classes the system still ships. Its **optional class features** are offered in the Choices step at creation and on their own level-up screen after that, and its **replacement features** let you choose between the original and the Tasha's version. |
 | 2014-rules classes and subclasses | Yes | Supported alongside 2024 content in the same world. Classes that choose a subclass at 1st level (Cleric, Sorcerer, Warlock) get that choice during character creation rather than at level 3. |
 | Homebrew compendiums and content modules | Yes | Anything that follows the standard 5e item and advancement format is picked up automatically. Advancement types added by other modules are handled as whichever standard type they extend, rather than being skipped. |
 | [Simple D&D PDF Character sheet](https://foundryvtt.com/packages/sogrom-dnd5e-character-sheet-pdf) | Yes, enhanced | Optional. With version 2.2.0 or later installed, an **Export Character Sheet PDF** tick box appears on the creation and level-up review screens; it fills in an official sheet and downloads it, choosing the 2014 or 2024 layout to match your character's edition. Without that module the tick box is not shown at all. |

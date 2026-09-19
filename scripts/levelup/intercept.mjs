@@ -44,6 +44,9 @@ export function registerLevelUp() {
     tpl("levelup/optional-grant.hbs"),
     tpl("levelup/review.hbs"),
     tpl("levelup/spells.hbs"),
+    // A third-party advancement's own screen, mounted inside the level (Potent Dragonmark). Missing
+    // from this list, the first level carrying one closed the whole window on render.
+    tpl("levelup/native.hbs"),
     // The creator's Magic Items step, shown only at the end of a creation climb. It is no longer in
     // the creator's own STEPS, so main.mjs's preload (built from that list) no longer registers it.
     tpl("steps/magic-shop.hbs")

@@ -353,7 +353,9 @@ export class LevelUpShell extends CreatorShellBase {
     // live on the state so the re-render a spell click causes restores them (a rebuilt control
     // would otherwise reset to "show everything"). Shared with the creator, which needs exactly
     // the same behaviour on exactly the same controls.
-    this._wireSpellFilters(this.element);
+    // Otherwise a shop shelf's search box: the Magic Items step at the end of a creation climb, and
+    // the Store in an Ember hand-off. `_wireSpellFilters` declines a page with no spell filters on it.
+    if ( !this._wireSpellFilters(this.element) ) this._wireShelfSearch(this.element);
     // The ASI feat picker's own toolbar, on the same terms: filters in the DOM, values on the state
     // so the re-render a "coming later" peek causes puts them back.
     this._wireFeatFilters(this.element);

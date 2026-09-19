@@ -151,19 +151,48 @@ async function applyFeatSpells(actor, state, source) {
     const sourceTag = `feat:${grant.featIdentifier}`;
 
     const data = [];
-    for ( const uuid of picks.cantrips ?? [] ) {
-      data.push(await buildFeatSpell(uuid, {
-        ability, cantrip: true, feat, sourceTag, spellConfig: grant.cantripSpellConfig
-      }));
+    // The feat's own advancement each created spell answers, and the `value.added` it should record.
+    const recorded = new Map();
+    const slots = [
+      [picks.cantrips, true, grant.cantripSpellConfig, grant.cantripAdv],
+      [picks.spells, false, grant.spellSpellConfig, grant.spellAdv]
+    ];
+    for ( const [uuids, cantrip, spellConfig, slot] of slots ) {
+      const adv = (feat && slot) ? advancementOn(feat, slot.id) : null;
+      for ( const uuid of uuids ?? [] ) {
+        const obj = await buildFeatSpell(uuid, { ability, cantrip, feat, advId: adv ? slot.id : null, sourceTag, spellConfig });
+        if ( !obj ) continue;
+        data.push(obj);
+        if ( !adv ) continue;
+        if ( !recorded.has(adv) ) recorded.set(adv, { level: slot.level, added: {} });
+        recorded.get(adv).added[obj._id] = uuid;
+      }
     }
-    for ( const uuid of picks.spells ?? [] ) {
-      data.push(await buildFeatSpell(uuid, {
-        ability, cantrip: false, feat, sourceTag, spellConfig: grant.spellSpellConfig
-      }));
+    if ( !data.length ) continue;
+    await actor.createEmbeddedDocuments("Item", data, { render: false, keepId: true });
+
+    // What the native ItemChoice flow records: the created item's id against its source uuid, under
+    // the level the choice was made at. dnd5e reads this back at every later level — it is how a feat
+    // that lets you "replace one of these spells when you gain a level" (Magic Initiate, Arcana
+    // Unleashed's Arcane Warrior) knows what there is to replace. Left empty, a level-up offered
+    // nothing ("0 of 0") and the swap the feat promises was impossible.
+    for ( const [adv, { level, added }] of recorded ) {
+      try {
+        // A nested object, not a dotted key: `Item5e#updateAdvancement` wraps this under
+        // `system.advancement.<id>`, and the merge then adds this level beside any the choice had.
+        await adv.update({ value: { added: { [level]: added } } });
+      } catch ( err ) {
+        log(`could not record ${feat?.name ?? "feat"}'s spell picks on its advancement`, err);
+      }
     }
-    const clean = data.filter(Boolean);
-    if ( clean.length ) await actor.createEmbeddedDocuments("Item", clean, { render: false });
   }
+}
+
+/** A feat's advancement by id, across the shapes dnd5e exposes it in. */
+function advancementOn(item, id) {
+  const byId = item?.advancement?.byId;
+  if ( !byId || !id ) return null;
+  return (typeof byId.get === "function" ? byId.get(id) : byId[id]) ?? null;
 }
 
 /**
@@ -180,12 +209,23 @@ async function applyFeatSpells(actor, state, source) {
  * The hand-rolled block below remains for the advancement-less feat, where there is no
  * configuration to borrow and the PHB's fixed Magic Initiate shape is all we have.
  */
-async function buildFeatSpell(uuid, { ability, cantrip, feat, sourceTag, spellConfig }) {
+async function buildFeatSpell(uuid, { ability, cantrip, feat, advId = null, sourceTag, spellConfig }) {
   const doc = await fromUuid(uuid).catch(() => null);
   if ( !doc ) { log(`feat spell not found: ${uuid}`); return null; }
   const obj = doc.toObject();
+  // A known id, so the feat's advancement can record it in `value.added` (created with `keepId`).
+  obj._id = foundry.utils.randomID();
   if ( obj._stats ) obj._stats.compendiumSource = uuid;
-  if ( feat ) foundry.utils.setProperty(obj, "flags.dnd5e.advancementOrigin", `${feat.id}.`);
+  // The flags `Advancement#createItemData` stamps: where it came from, which advancement granted it,
+  // and the root of that chain — the feat's own root (the background's grant), else this origin.
+  foundry.utils.setProperty(obj, "flags.dnd5e.sourceId", uuid);
+  if ( feat ) {
+    const origin = `${feat.id}.${advId ?? ""}`;
+    foundry.utils.setProperty(obj, "flags.dnd5e.advancementOrigin", origin);
+    if ( advId ) {
+      foundry.utils.setProperty(obj, "flags.dnd5e.advancementRoot", feat.getFlag?.("dnd5e", "advancementRoot") ?? origin);
+    }
+  }
 
   if ( spellConfig?.applySpellChanges ) {
     spellConfig.applySpellChanges(obj, { ability });

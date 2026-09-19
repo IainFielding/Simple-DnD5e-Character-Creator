@@ -1,5 +1,8 @@
 import { ABILITIES, t, log } from "../config.mjs";
-import { advancementArray, appliesToClass, advancementTitle} from "./advancement-util.mjs";
+import {
+  advancementArray, appliesToClass, advancementTitle, optionalGrantKind, grantItems, defaultGrantKeep,
+  replacementGroups, withItemSegment
+} from "./advancement-util.mjs";
 import { matchesRules, packageTypeOf, readAsi } from "./source-index.mjs";
 import { packageOf, rankPackage } from "./dedupe.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
@@ -217,7 +220,12 @@ async function levelOneOwners(item, sel = {}, seen = new Set(), ownerUuid = null
   for ( const adv of advancementArray(item) ) {
     if ( (adv.level ?? 0) > 1 ) continue;
     let refs = null;
-    if ( adv.type === "ItemGrant" ) {
+    if ( isClassOptionalGrant(adv, item) ) {
+      // Tasha's optional/replacement features: only what the character will actually hold. Walking
+      // every item asked the declined side's questions — a Ranger who swapped Favored Enemy for
+      // Favored Foe was still asked for Favored Enemy's language.
+      refs = optionalGrantKeep(adv, sel);
+    } else if ( adv.type === "ItemGrant" ) {
       refs = Array.from(adv.configuration?.items ?? []).map(r => typeof r === "string" ? r : r?.uuid);
     } else if ( adv.type === "ItemChoice" ) {
       refs = itemChoicePicks(adv, sel);
@@ -242,6 +250,27 @@ async function levelOneOwners(item, sel = {}, seen = new Set(), ownerUuid = null
     }
   }
   return owners;
+}
+
+/**
+ * Whether an advancement is one of Tasha's optional or replacement grants on a class or subclass —
+ * the "optional class features" the creation checklist offers. Scoped to classes because that is
+ * where Tasha's injects them; a feat whose granted spell is marked optional (Cold Caster) is the
+ * spell page's business, not this.
+ */
+function isClassOptionalGrant(adv, owner) {
+  return ["class", "subclass"].includes(owner?.type) && !!optionalGrantKind(adv);
+}
+
+/**
+ * The items the character keeps from an optional or replacement grant: the player's recorded answer
+ * when there is one (stored under the advancement id, as the whole keep list), else the default
+ * both dnd5e and the driver seed — see {@link defaultGrantKeep}. The creation provider hands the
+ * recorded list to the driver, and nothing when there is none, so the two can't disagree.
+ */
+function optionalGrantKeep(adv, sel) {
+  const stored = sel?.[adv._id];
+  return Array.isArray(stored) ? stored.map(p => withItemSegment(typeof p === "string" ? p : p?.uuid)) : defaultGrantKeep(adv);
 }
 
 /** The UUIDs the player picked for an ItemChoice advancement (stored under its bare id). */
@@ -533,6 +562,15 @@ async function parseAdvancementChoice(adv, ctx) {
     return;
   }
 
+  // Optional class features (Tasha's): a grant the player may decline part of. Applied by default —
+  // both dnd5e and the driver seed it — so the row is complete on sight and never gates Next; it is
+  // here so a 2014 Ranger can take Favored Foe at creation rather than only at a later level-up.
+  if ( isClassOptionalGrant(adv, ownerItem) ) {
+    const req = await optionalGrantReq(adv, { source, ownerUuid, sel, level });
+    if ( req ) reqs.push(req);
+    return;
+  }
+
   // ItemGrant: items handed out automatically (no pick to make) — except when a granted spell
   // lets the player choose which ability casts it, which is the only decision we surface here.
   if ( adv.type === "ItemGrant" ) {
@@ -670,6 +708,62 @@ async function parseAdvancementChoice(adv, ctx) {
     req.groups = groupRecommended(req.options) ?? req.groups;
     reqs.push(req);
   }
+}
+
+/**
+ * The checklist row for an optional or replacement grant. A plain optional grant's items are
+ * independent toggles; a replacement grant's are "this or that" groups, one per 2014 feature, built by
+ * the same {@link replacementGroups} the level-up screen uses. Items outside every pair (the 2014
+ * Ranger's *Ranger Archetype*) are not offered: they land regardless.
+ *
+ * Every option carries the grant's whole keep list's membership (`isSelected`) and routes to the
+ * `optional-grant` action, which writes the new keep list back under the advancement id.
+ * @returns {Promise<object|null>}
+ */
+async function optionalGrantReq(adv, { source, ownerUuid, sel, level }) {
+  const kind = optionalGrantKind(adv);
+  const items = grantItems(adv);
+  const keep = new Set(optionalGrantKeep(adv, sel));
+  const selKey = adv._id;
+  const docs = new Map(await Promise.all(items.map(async i => [i.uuid, await fromUuid(i.uuid).catch(() => null)])));
+  const option = (uuid, group = null) => {
+    const doc = docs.get(uuid);
+    return {
+      key: uuid, uuid, label: doc?.name ?? uuid, img: doc?.img ?? null,
+      isSelected: keep.has(uuid), source, selKey, stepAction: "optional-grant", group
+    };
+  };
+
+  let options, groups = null;
+  if ( kind === "replacement" ) {
+    groups = replacementGroups(adv.configuration.replacements, items).groups
+      .map(({ base, members }) => ({
+        label: t("choice.optionalGrant.insteadOf", { feature: docs.get(base)?.name ?? base }),
+        options: members.map(uuid => option(uuid, members.join("|")))
+      }))
+      .filter(g => g.options.length > 1);
+    options = groups.flatMap(g => g.options);
+  } else {
+    options = items.map(i => option(i.uuid));
+  }
+  if ( !options.length ) return null;
+
+  const chosenCount = options.filter(o => o.isSelected).length;
+  return {
+    advId: adv._id, choiceIndex: null, selKey, source, ownerUuid, type: "OptionalGrant", level,
+    title: advancementTitle(adv) || t("choice.optionalGrant.title"),
+    hint: adv.hint || t(kind === "replacement" ? "choice.optionalGrant.promptReplace" : "choice.optionalGrant.prompt"),
+    count: options.length,
+    countLabel: "",
+    showProgress: false,
+    chosenCount,
+    // Always satisfied: declining everything is as valid an answer as keeping the default.
+    complete: true,
+    optional: true,
+    keep: [...keep],
+    options,
+    groups
+  };
 }
 
 /**
