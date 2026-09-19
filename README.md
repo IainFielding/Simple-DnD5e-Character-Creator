@@ -202,7 +202,7 @@ These sit directly in the module's settings list.
 
 > In an Ember world the creation card isn't posted. Ember finishes the character after this module's part is done, so announcing it here would be jumping the gun — level-up cards work as normal.
 
-Everything else lives behind one of three buttons in that same list: **House Rules**, **Level-Up Options**, and **Store**.
+Everything else lives behind one of four buttons in that same list: **House Rules**, **Level-Up Options**, **Store**, and **Magic Items**.
 
 ### House Rules
 
@@ -249,6 +249,24 @@ Nothing is saved until you press **Save Changes**, so closing the window is a ha
 
 ![The GM store configuration window](docs/screenshots/store-config.png)
 *Screenshot: the GM store configuration window.*
+
+### The Magic Item Shop
+
+A character who starts above 1st level would, by the Dungeon Master's Guide, arrive with extra gold and a few magic items. The Magic Item Shop hands those over. It's off by default. Open the **Magic Item Shop** menu (the "Configure Magic Items" button in settings) and tick **Enable the magic item shop** to turn it on.
+
+With it on, a **Magic Items** step appears at the end of the climb to the starting level, just before the final review. There the player:
+
+- **Rolls their bonus gold.** A single d10 is rolled on the screen and then locked, and the gold goes straight into the character's purse.
+- **Picks free magic items** up to the number allowed at each rarity. A slot can also hold an item of a lower rarity, so an uncommon slot will take a common item. Cards flag an item the character isn't proficient with or is too weak to wear. That flag is only a note, because a player may want something for later or for a friend.
+
+A character starting at 1st level never sees the step, and neither does a normal level-up.
+
+The window has two tabs:
+
+- **Wealth Table.** The four level bands from the DMG (2–4, 5–10, 11–16 and 17–20), each with a base gold amount, gold per d10, and how many items of each rarity the player may pick. Change any number to suit your table, or press **Reset to DMG** to put the book values back.
+- **Inventory.** What's on offer. The shop starts empty, so stock it first. **Drag in** a single magic item, a compendium folder (subfolders included) or a whole compendium, and only items with a rarity are added. Search the list, **hide** or **remove** anything you don't want on offer, or **Clear All** to start again. The Dungeon Master's Guide's enchantment templates, such as *+1 Weapon* or *Wand of the War Mage*, are expanded into one item for every enchantment and base item they allow.
+
+As with the Store, nothing is saved until you press **Save Changes**.
 
 ---
 

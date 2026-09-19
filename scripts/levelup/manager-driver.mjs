@@ -1608,8 +1608,8 @@ export class LevelUpDriver {
    *
    * ── This is a copy. Here is the original ──
    * `AdvancementManager##complete` — `dnd5e/module/applications/advancement/advancement-manager.mjs`,
-   * around line 880 in **5.3.3**, the version this was ported from. `module.json` declares a wider
-   * floor than that (`minimum: 5.3.0`), so this has to hold for the oldest system it claims as well
+   * around line 880 in **5.3.3**, the version this was ported from. `module.json` declares that
+   * as its floor (`minimum: 5.3.3`), so this has to hold for the oldest system it claims as well
    * as the newest it is verified on.
    *
    * Everywhere else the driver merely *drives* the system: if dnd5e changes an advancement's
