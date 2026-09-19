@@ -96,7 +96,7 @@ async function change(element) {
  * @param {AnswerBook} book           The scenario's answers.
  * @param {Set<string>} [consumed]    Collects the ids an answer was read for.
  */
-async function fillStep(step, book, consumed, manager) {
+async function fillStep(step, book, consumed, manager, phase = "levelup") {
   const flow = step.flow;
   const adv = flow?.advancement;
   if ( !adv ) return;
@@ -120,7 +120,10 @@ async function fillStep(step, book, consumed, manager) {
     }
     return [];
   };
-  const answer = await book.answer(adv, flow.level, { asker: "native", offered });
+  // dnd5e's own slot level for an "available" spell restriction, straight off the live flow — the
+  // oracle the book builds a Savant-style pool from (see answers.mjs#generateSpellChoice).
+  const maxSpellSlot = () => flow._maxSpellSlotLevel?.() ?? null;
+  const answer = await book.answer(adv, flow.level, { asker: "native", offered, phase, maxSpellSlot });
   if ( answer !== undefined ) consumed?.add(adv.id);
 
   // A manager built with `automaticApplication` — Ember's hand-off is one — re-evaluates
@@ -506,8 +509,11 @@ async function takeAsiFeat(flow, uuid) {
  * @param {AdvancementManager} manager
  * @param {AnswerBook} book          The scenario's answers.
  * @param {Set<string>} [consumed]   Collects the ids an answer was read for.
+ * @param {object} [options]
+ * @param {"creation"|"levelup"} [options.phase="levelup"]   Which build phase this manager belongs
+ *   to — it decides whether a spell choice is deferred (see answers.mjs#isDeferred).
  */
-export async function driveManager(manager, book, consumed) {
+export async function driveManager(manager, book, consumed, { phase = "levelup" } = {}) {
   // Opt out of the module's takeover so the *native* wizard runs (see the file header).
   manager._sogromLevelUp = true;
   if ( !manager.steps.length ) return;
@@ -535,7 +541,7 @@ export async function driveManager(manager, book, consumed) {
     // let the next iteration pick up wherever it actually settled.
     if ( manager.step !== step ) continue;
 
-    await fillStep(step, book, consumed, manager);
+    await fillStep(step, book, consumed, manager, phase);
 
     const button = manager.element.querySelector("[data-action=next], [data-action=complete]");
     if ( !button ) throw new Error(`no next/complete button on step "${step.flow?.advancement?.title}"`);
@@ -665,7 +671,7 @@ export async function buildNative(scenario, { book, consumed, onLevel } = {}) {
   // manager's clone and hands that over. The reference is the system's own wizard driving it.
   if ( scenario.ember ) {
     const { actor, manager } = await stageEmberManager(scenario);
-    if ( manager.steps.length ) await driveManager(manager, book, consumed);
+    if ( manager.steps.length ) await driveManager(manager, book, consumed, { phase: "creation" });
     await onLevel?.(1, actor);
     return actor;
   }
@@ -690,7 +696,7 @@ export async function buildNative(scenario, { book, consumed, onLevel } = {}) {
     if ( data.type === "class" ) data.system.levels = 1;
 
     const manager = AdvancementManager.forNewItem(actor, data);
-    if ( manager.steps.length ) await driveManager(manager, book, consumed);
+    if ( manager.steps.length ) await driveManager(manager, book, consumed, { phase: "creation" });
     else await actor.createEmbeddedDocuments("Item", [data], { render: false });
   }
 

@@ -37,6 +37,12 @@ import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended } fr
  * all this shape. With no branch for it the list came back empty, the block was marked exhausted and
  * counted as complete, and the Savant pick was silently skipped. Anything else that is not a level
  * yields nothing, leaving the block to the authored pool and drop-scan.
+ *
+ * A spell choice that names **no** list and authors no pool is "any spell of this level", which is
+ * how dnd5e's flow treats it: a browser filtered by level alone. The 2014 SRD Bard's *Magical
+ * Secrets* ("two spells from any classes", `available`) and the 2014 Wizard's *Signature Spells*
+ * (level 3) are this shape. Returning nothing for them had the same effect as the Savant bug: an
+ * empty, "exhausted" block, and a pick the character silently never got.
  * @param {object} cfg                                          The advancement configuration.
  * @param {import("../../data/spell-source.mjs").SpellSource} spells
  * @param {object} [record]   The decision record, for the slot level an "available" restriction needs.
@@ -46,7 +52,9 @@ async function spellListOptions(cfg, spells, record = null) {
   const out = new Map();
   const raw = cfg.restriction?.level;
   const lists = Array.from(cfg.restriction?.list ?? []).map(l => String(l).replace(/^class:/, ""));
-  if ( !lists.length ) return out;
+  // No list: any spell — unless the choice authors its own pool, which is then the whole offer.
+  const anySpell = !lists.length && !Array.from(cfg.pool ?? []).length;
+  if ( !lists.length && !anySpell ) return out;
   if ( !spells ) {
     log("spell choice: no spell source on this session, so its class list can't be offered");
     return out;
@@ -75,9 +83,9 @@ async function spellListOptions(cfg, spells, record = null) {
   // (cleric/druid/wizard), so a Blessed Warrior or Druidic Warrior pick reads a warm cache instead
   // of opening a second, level-0-only one. Only a choice above 1st level pays for its own load.
   const fetchLevel = Math.max(1, ...levels);
-  for ( const listId of lists ) {
+  for ( const listId of (anySpell ? [null] : lists) ) {
     try {
-      const { byLevel } = await spells.forSpellList(listId, fetchLevel);
+      const { byLevel } = listId ? await spells.forSpellList(listId, fetchLevel) : await spells.forAnySpell(fetchLevel);
       for ( const spell of levels.flatMap(l => byLevel?.[l] ?? []) ) {
         if ( !spell?.uuid ) continue;
         if ( schools.size && !schools.has(spell.schoolKey) ) continue;

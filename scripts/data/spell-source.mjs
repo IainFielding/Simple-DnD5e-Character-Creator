@@ -264,6 +264,35 @@ export class SpellSource {
     return this.#byLevelUp.get(key);
   }
 
+  /** maxLevel -> promise of every spell up to that level, grouped by level (see {@link forAnySpell}). */
+  #anySpell = new Map();
+
+  /**
+   * Every spell in the world up to `maxLevel`, one copy per spell, grouped by level. It backs a
+   * spell choice that names **no** spell list, which dnd5e's own flow answers with a browser
+   * filtered only by level: the 2014 Bard's *Magical Secrets* ("two spells from any classes") and
+   * the 2014 Wizard's *Signature Spells* (any 3rd-level spell; the data does not say "in your
+   * spellbook"). Drawn from the same shared browser fetch the class lists use, so it costs nothing
+   * extra once a list of that depth has loaded.
+   * @param {number} [maxLevel=1]
+   * @returns {Promise<{byLevel: Record<number, object[]>}>}
+   */
+  async forAnySpell(maxLevel = 1) {
+    if ( !this.#anySpell.has(maxLevel) ) {
+      const promise = (async () => {
+        const pool = await this.#fetchSpellPool(maxLevel);
+        const entries = pool ? [...pool.values()] : await scanAllSpells(maxLevel);
+        const all = deduplicateSpells(entries.map(e => (e?.uuid ? buildSpellFromEntry(e) : e)).filter(Boolean));
+        const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+        const byLevel = {};
+        for ( let l = 0; l <= maxLevel; l++ ) byLevel[l] = all.filter(s => s.level === l).sort(byName);
+        return { byLevel };
+      })().catch(err => { this.#anySpell.delete(maxLevel); throw err; });
+      this.#anySpell.set(maxLevel, promise);
+    }
+    return this.#anySpell.get(maxLevel);
+  }
+
   /** classId -> spell-list payload promise for a feat's spell choice (Magic Initiate), memoised. */
   #byList = new Map();
 
@@ -617,6 +646,29 @@ async function fetchSpellsByUuids(uuids, maxLevel = 1, poolPromise = null) {
     if ( doc?.type === "spell" && (doc.system?.level ?? 99) <= maxLevel ) found.set(uuid, buildSpellFromEntry(doc));
   });
   return [...found.values()];
+}
+
+/**
+ * Every spell index entry up to `maxLevel` across the usable packs — {@link SpellSource#forAnySpell}'s
+ * fallback when the Compendium Browser's bulk fetch is unavailable.
+ * @param {number} maxLevel
+ * @returns {Promise<object[]>}
+ */
+async function scanAllSpells(maxLevel) {
+  const enabled = getEnabledPacks();
+  const out = [];
+  for ( const pack of game.packs ) {
+    if ( !isUsableItemPack(pack, enabled) ) continue;
+    try {
+      const index = await pack.getIndex({ fields: ["type", ...SPELL_INDEX_FIELDS] });
+      for ( const entry of index ) {
+        if ( (entry.type === "spell") && ((entry.system?.level ?? 99) <= maxLevel) ) out.push(entry);
+      }
+    } catch ( err ) {
+      log(`spell scan failed for ${pack.collection}`, err);
+    }
+  }
+  return out;
 }
 
 /** Last-resort scan: every level-≤1 spell tagged with the class identifier. */

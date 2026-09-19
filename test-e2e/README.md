@@ -536,11 +536,34 @@ Conjurer, 1→5 in one jump
   actor: Absorb Elements (1), Acid Arrow (2), Aganazzar's Scorcher (2)
 ```
 
-**The sweep's blind spot.** `AnswerBook#isDeferred` defers *every* spell-type `ItemChoice` to the
-creator's feat-spells step, which only exists for level-≤1 origin choices. So both builds apply
-nothing to a level-up spell choice (Savant, Blessed Warrior) and report identical. The school in the
-Savant hint ("from the Conjuration school") is text only, so neither native nor the creator enforces
-it.
+**The sweep's blind spot, closed 2026-09-19.** `AnswerBook#isDeferred` used to defer *every*
+spell-type `ItemChoice` to the creator's feat-spells step, which only exists for creation. So both
+builds applied nothing to a level-up spell choice (Savant, Blessed Warrior) and reported identical.
+Three changes close it:
+
+- **Deferral is by phase, not by type.** Every ask carries `phase: "creation" | "levelup"`. Only
+  creation defers a spell choice. A feat's advancements sit at level 0 wherever the feat came from, so
+  the level can't tell the two phases apart.
+- **The pool comes from dnd5e, not from either screen.** `generateSpellChoice` reads the spell-list
+  registry, the restriction's level and school, and, for `available`, the native flow's own
+  `_maxSpellSlotLevel()`, which the native adapter passes along because it asks first. It skips spells
+  already held (by name) and prefers the PHB copy of a spell that exists twice. Building the pool from
+  the creator's screen instead would have left an empty screen answering nothing, blind again.
+- **The creator side is held to what its screen offers.** `autoResolve` applies picks through
+  `toggleChoice`, which takes any uuid. `creator.mjs#checkSpellOffers` therefore renders every spell
+  choice through the real `choicesStep` afterwards. Each pick not on that list is reported as a
+  `decision.offered.ItemChoice.*` difference and unticked, as a player could not have made it.
+
+Negative check: with the Savant bug put back temporarily (`spellListOptions` returning nothing for
+`available`), the Conjurer at level 5 fails at level 3 with native offering *Air Bubble, Cloud of
+Daggers*, the creator offering nothing, and the spells missing. With the fix in place it passes to
+level 7, all three Savant picks applied on both sides.
+
+The school in the Savant hint ("from the Conjuration school") is still text only in the data, so
+neither side enforces it. Both honour `restriction.school` as soon as the data carries it.
+
+> **Baselines taken before 2026-09-19 are not comparable.** Every level-up spell choice was answered
+> with nothing before this change and is answered with picks after it.
 
 `source.book` (finding 2 above) is also gone from the diff. `normaliseSourceBook` drops an item's
 `book` when it is empty or equals the placeholder `SourceField.prepareData` invents for that item's

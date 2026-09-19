@@ -196,3 +196,21 @@ describe("LevelUpDriver.canDrive", () => {
     expect(LevelUpDriver.canDrive(manager)).toBe(true);
   });
 });
+
+/* -------------------------------------------- */
+/*  Ownership of a driven manager                */
+/* -------------------------------------------- */
+
+describe("a manager a LevelUpDriver walks", () => {
+  // The driver raises `dnd5e.preAdvancementManagerRender` for other modules, and the module's own
+  // takeover listens to the same hook and stands down only for a flagged manager. The creator's
+  // headless creation manager was never flagged: with multiclassing on, its clone-only class read as
+  // a claimable multiclass, a second driver walked the same clone, and every automatic grant of a
+  // 2014 character landed twice.
+  it("is flagged as ours on construction, so the takeover hook can never claim it a second time", () => {
+    const manager = makeManager([step("HitPoints"), marker()], { classOnActor: false });
+    expect(manager._sogromLevelUp).toBeUndefined();
+    new LevelUpDriver(manager);
+    expect(manager._sogromLevelUp).toBe(true);
+  });
+});

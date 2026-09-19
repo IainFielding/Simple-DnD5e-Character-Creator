@@ -165,6 +165,16 @@ export class LevelUpDriver {
   #preItems = null;
 
   constructor(manager) {
+    // A manager this driver walks is ours, whoever built it. {@link #firePreRender} raises
+    // `dnd5e.preAdvancementManagerRender` for other modules' sake, and our own takeover listens to
+    // that hook too: an unflagged manager could be claimed by it and walked by a *second* driver
+    // over the same clone, landing every automatic grant twice. The creator's headless creation
+    // manager was exactly that. Its class exists only on the clone, so with multiclassing enabled
+    // it read as a claimable multiclass, and 2014 characters came out with two Second Winds and two
+    // background features (a Small-or-Medium species, i.e. every 2024 one, failed the claim gate and
+    // hid it). Flagging here rather than at each call site means a new headless caller cannot
+    // forget.
+    manager._sogromLevelUp = true;
     this.manager = manager;
     this.actor = manager.actor;
     this.clone = manager.clone;
