@@ -1,0 +1,105 @@
+{{!--
+  The entry chooser, and the ready-made list behind one of its answers.
+
+  One template for both because they are one screen to the player — a question and the longer
+  answer to its third option — and because they share the card shell, the art tiers and the Back
+  affordance. Which one renders is decided by `premades` being present in the context.
+
+  Like source-details.hbs and compare.hbs, this covers the stage BODY only: the Back/Next footer
+  stays reachable underneath, and the dossier beside it is untouched.
+
+  Art comes in two tiers here, not three. `banner` is a journal scene from a book this world has;
+  with no match there is no icon to fall back on (these are our own concepts, not compendium
+  content), so the card wears our own frame and a sigil seeded from its id.
+--}}
+<div class="creator-entry" tabindex="-1">
+
+  {{#if premades}}
+  {{!-- ---------------------------------------------------------------- ready-made --}}
+  <header class="creator-entry-head">
+    <h2>{{premades.heading}}</h2>
+    <p>{{premades.blurb}}</p>
+  </header>
+
+  {{#if premades.none}}
+  <p class="creator-entry-empty">{{premades.none}}</p>
+  {{else}}
+  {{!-- Two groups, each labelled with where it came from. A player picking "Akra" is getting the
+        system's own Akra, not our approximation of her, and the heading says so. --}}
+  {{#each premades.groups}}
+  <section class="creator-premade-group">
+    <h3 class="creator-premade-grouphead">
+      {{#if this.badge}}<img src="{{this.badge}}" alt="" aria-hidden="true">{{/if}}
+      {{this.label}}
+    </h3>
+    <ul class="creator-premade-grid">
+      {{#each this.entries}}
+      <li>
+        <button type="button" class="creator-premade" data-action="entryPremade"
+                data-id="{{this.id}}" data-uuid="{{this.uuid}}">
+          <span class="creator-premade-art">
+            {{#if this.banner}}
+            <img src="{{this.banner}}" alt="" loading="lazy">
+            {{else if this.icon}}
+            <img src="{{this.icon}}" alt="" loading="lazy" class="is-icon">
+            {{else}}
+            <canvas class="creator-sigil" data-seed="{{this.seed}}" aria-hidden="true"></canvas>
+            {{/if}}
+          </span>
+          <span class="creator-premade-body">
+            <span class="creator-premade-name">{{this.name}}</span>
+            <span class="creator-premade-line">{{this.line}}</span>
+            {{#if this.tagline}}<span class="creator-premade-tag">{{this.tagline}}</span>{{/if}}
+          </span>
+        </button>
+      </li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/each}}
+  {{/if}}
+
+  <p class="creator-entry-foot">
+    <button type="button" class="creator-btn" data-action="entryBack">
+      <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
+      {{premades.back}}
+    </button>
+  </p>
+
+  {{else}}
+  {{!-- ------------------------------------------------------------------- chooser --}}
+  <header class="creator-entry-head">
+    <h2>{{heading}}</h2>
+    <p>{{blurb}}</p>
+  </header>
+
+  <ul class="creator-entry-paths">
+    {{#each paths}}
+    <li class="creator-entry-path{{#if this.lead}} is-lead{{/if}}">
+      <span class="creator-entry-art{{#unless this.banner}} is-frame{{/unless}}">
+        {{#if this.banner}}
+        <img src="{{this.banner}}" alt="" loading="lazy">
+        {{else}}
+        <canvas class="creator-sigil" data-seed="{{this.seed}}" aria-hidden="true"></canvas>
+        {{/if}}
+        <span class="creator-entry-scrim">
+          {{#if this.recommended}}<span class="creator-entry-kicker">{{this.recommended}}</span>{{/if}}
+          <span class="creator-entry-title">{{this.title}}</span>
+        </span>
+      </span>
+      <span class="creator-entry-body">
+        <span class="creator-entry-tag">{{this.tagline}}</span>
+        <ul class="creator-entry-points">
+          {{#each this.points}}<li>{{this}}</li>{{/each}}
+        </ul>
+        {{!-- The lead path's button is styled off its `.is-lead` parent, not a class of its own. --}}
+        <button type="button" class="creator-btn creator-entry-go"
+                data-action="entryPath" data-path="{{this.id}}">{{this.go}}</button>
+      </span>
+    </li>
+    {{/each}}
+  </ul>
+
+  <p class="creator-entry-foot creator-entry-note">{{gmNote}}</p>
+  {{/if}}
+</div>

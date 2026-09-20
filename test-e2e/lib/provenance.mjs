@@ -182,12 +182,25 @@ export function describeMeta(meta) {
  * disagree — the increments catch a level-5 divergence that a later level papers over, the jump
  * catches a capstone applied out of order — so diffing across them reports the mode, dressed up as
  * a regression. Same for a level-6 file against a level-20 one, or two different axes.
+ *
+ * The system and Foundry versions count too: 5.3.3-to-6.0.0 drift diffed naively reads as code
+ * regressions. The module's own version is left out — a change there is what a comparison is for. A
+ * baseline that never recorded its versions (every headerless file, whose {@link deriveMeta} guess has
+ * none) is named as such when the current run did record them, since nothing can vouch for it.
  * @param {object} a   The baseline's header.
  * @param {object} b   The current run's shape.
  * @returns {string[]} One phrase per incomparable field, empty when the two runs match.
  */
 export function describeDrift(a, b) {
-  const differs = (key, label = key) =>
-    (a[key] && b[key] && (a[key] !== b[key])) ? `${label} (${b[key]} now, ${a[key]} there)` : null;
-  return [differs("mode"), differs("level"), differs("axis")].filter(Boolean);
+  const pick = (meta, key) => (key.startsWith("versions.") ? meta.versions?.[key.slice(9)] : meta[key]);
+  const differs = (key, label = key) => {
+    const [was, now] = [pick(a, key), pick(b, key)];
+    return (was && now && (was !== now)) ? `${label} (${now} now, ${was} there)` : null;
+  };
+  const unrecorded = (b.versions?.system && !a.versions?.system)
+    ? `system version (${b.versions.system} now, not recorded there)` : null;
+  return [
+    differs("mode"), differs("level"), differs("axis"),
+    differs("versions.system", "system"), differs("versions.foundry", "Foundry"), unrecorded
+  ].filter(Boolean);
 }

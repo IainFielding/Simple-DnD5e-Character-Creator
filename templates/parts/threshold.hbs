@@ -1,0 +1,133 @@
+{{!--
+  The quick-build screen. Three art cards, a name, and one button.
+
+  Covers the stage BODY only, like the chooser and the compare grid — the Back/Next footer stays
+  reachable underneath and the dossier beside it fills in as the picks are made.
+
+  Art comes in three tiers, chosen in `threshold.mjs` and rendered here in the same order:
+    banner  the source book's own journal scene, bled behind the title
+    icon    the item's own image, which always exists and is always legal to show, set on a ground
+            rather than bled (an emblem bled behind a title reads as a watermark — the rule
+            page-illumination.mjs exists to record)
+    frame   our own gradient and a sigil seeded from the option, so an art-free card still reads
+            as designed rather than as a missing image
+--}}
+<div class="creator-threshold" tabindex="-1">
+  {{#if empty}}
+  <p class="creator-entry-empty">{{empty}}</p>
+  {{else}}
+
+  <div class="creator-threshold-head">
+    {{!-- A whole character at once, beside the three dice that each roll one slot. The name goes
+          with it — asking for a random character is asking for a random name too. --}}
+    <button type="button" class="creator-btn creator-threshold-rollall" data-action="thresholdRollAll">
+      <span class="creator-btn-icon"><i class="fa-solid fa-dice-d20"></i></span>
+      {{rollAll}}
+    </button>
+
+    {{!-- The edition switch is offered only where the world holds both, so it is never a control
+          with one useful position. Flipping it clears and re-seeds every pick. --}}
+    {{#if editions}}
+    <div class="creator-threshold-editions" role="group"
+         aria-label="{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.editionAria"}}">
+      {{#each editions}}
+      <button type="button" class="creator-threshold-edition{{#if this.active}} is-active{{/if}}"
+              data-action="thresholdEdition" data-rules="{{this.rules}}"
+              aria-pressed="{{this.active}}">{{this.label}}</button>
+      {{/each}}
+    </div>
+    {{/if}}
+  </div>
+
+  <ul class="creator-threshold-cards">
+    {{#each cards}}
+    <li class="creator-threshold-card{{#unless this.uuid}} is-empty{{/unless}}" data-category="{{this.category}}">
+      {{!-- The blurred ground behind a contained icon is set from script, not here: Handlebars
+            HTML-escapes an attribute, so a path holding an apostrophe would arrive as &#x27; and
+            break the CSS url(). See `fitCardArt`. --}}
+      <span class="creator-threshold-art{{#if this.icon}} is-icon{{/if}}{{#unless this.banner}}{{#unless this.icon}} is-frame{{/unless}}{{/unless}}">
+        {{#if this.banner}}
+        <img src="{{this.banner}}" alt="" loading="lazy">
+        {{else if this.icon}}
+        <img src="{{this.icon}}" alt="" loading="lazy">
+        {{else}}
+        <canvas class="creator-sigil" data-seed="{{this.seed}}" aria-hidden="true"></canvas>
+        {{/if}}
+        <span class="creator-threshold-scrim">
+          <span class="creator-threshold-kicker">{{this.label}}</span>
+          <span class="creator-threshold-name">{{this.name}}</span>
+        </span>
+      </span>
+
+      <button type="button" class="creator-threshold-die" data-action="thresholdRoll"
+              data-category="{{this.category}}" title="{{this.roll}}" aria-label="{{this.roll}}">
+        <i class="fa-solid fa-dice-d20"></i>
+      </button>
+
+      <span class="creator-threshold-body">
+        <button type="button" class="creator-threshold-browse" data-action="thresholdBrowse"
+                data-category="{{this.category}}">
+          {{this.browse}}
+          <span class="creator-btn-icon"><i class="fa-solid fa-arrow-right"></i></span>
+        </button>
+      </span>
+    </li>
+    {{/each}}
+  </ul>
+
+  <div class="creator-threshold-lower">
+    <div class="creator-threshold-identity">
+      <div class="creator-threshold-portrait">
+        <canvas class="creator-sigil" data-seed="{{name}}" aria-hidden="true"></canvas>
+      </div>
+      <div class="creator-threshold-fields">
+        <label for="threshold-name">{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.name"}}</label>
+        <div class="creator-threshold-namerow">
+          <input type="text" id="threshold-name" name="thresholdName" value="{{name}}"
+                 data-action="thresholdName">
+          <button type="button" class="creator-threshold-die" data-action="thresholdRoll"
+                  data-category="name"
+                  title="{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.rollName"}}"
+                  aria-label="{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.rollName"}}">
+            <i class="fa-solid fa-dice-d20"></i>
+          </button>
+        </div>
+        <p class="creator-threshold-note">
+          {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.nameNote"}}
+        </p>
+      </div>
+    </div>
+
+    <div class="creator-threshold-fills">
+      <p class="creator-threshold-fillhead">{{fills}}</p>
+      <ul class="creator-threshold-abilities">
+        {{#each plates}}
+        <li class="creator-threshold-plate{{#if this.top}} is-top{{/if}}{{#if this.bonus}} has-bonus{{/if}}">
+          {{#if this.bonus}}<span class="plate-bonus">+{{this.bonus}}</span>{{/if}}
+          <span class="plate-key">{{this.label}}</span>
+          <span class="plate-value">{{this.total}}</span>
+          <span class="plate-mod">{{this.mod}}</span>
+          {{#if this.bonus}}<span class="plate-base">{{this.base}}</span>{{/if}}
+        </li>
+        {{/each}}
+      </ul>
+      {{#if asi}}<p class="creator-threshold-asi">{{asi}} {{asiEdit}}</p>{{/if}}
+    </div>
+  </div>
+
+  <div class="creator-threshold-actions">
+    <button type="button" class="creator-btn creator-btn-primary creator-threshold-create"
+            data-action="thresholdCreate" {{#unless canCreate}}disabled{{/unless}}>
+      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.create"}}
+    </button>
+    <button type="button" class="creator-btn" data-action="entryPath" data-path="custom">
+      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.stepwise"}}
+    </button>
+    <button type="button" class="creator-btn creator-btn--quiet" data-action="entryBack">
+      <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
+      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.otherWays"}}
+    </button>
+    {{#if credit}}<p class="creator-threshold-credit">{{credit}}</p>{{/if}}
+  </div>
+  {{/if}}
+</div>

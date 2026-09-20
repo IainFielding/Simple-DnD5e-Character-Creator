@@ -147,9 +147,10 @@ async function fillStep(step, book, consumed, manager, phase = "levelup") {
       // submits with nothing selected and applies *nothing*, so the native reference silently lost
       // every feature on the advancement (a 2014 Ranger's Favored Enemy, Natural Explorer and
       // Ranger Archetype). Choosing the base is what "the player did not take Tasha's alternative"
-      // means, and it is what the driver applies, so the two are comparable again.
+      // means, and it is what the driver applies, so the two are comparable again. A scenario that
+      // states a keep list instead takes the alternatives it names.
       if ( adv.configuration?.replacements && !foundry.utils.isEmpty(adv.configuration.replacements) ) {
-        return fillReplacementGrant(flow, adv, moved);
+        return fillReplacementGrant(flow, adv, moved, answer);
       }
       // Nothing to answer, or a type this harness does not drive yet. Leave it as rendered and
       // let the manager apply whatever the flow defaults to.
@@ -163,8 +164,12 @@ async function fillStep(step, book, consumed, manager, phase = "levelup") {
  * The flow renders one group per base→replacement pair plus the unpaired items. Everything in a pair
  * carries `optional: true` in the configuration, and only the *base* of each pair is also a key of
  * `configuration.replacements` — so "base or unpaired" is the same rule the driver applies.
+ *
+ * An array answer is the whole keep list instead — the shape the creator stores under the
+ * advancement id — so a scenario can take Tasha's alternatives and test the swap, not just the default.
+ * @param {string[]} [answer]   Uuids to keep, unpaired items included.
  */
-async function fillReplacementGrant(flow, adv, moved) {
+async function fillReplacementGrant(flow, adv, moved, answer) {
   const withItem = uuid => {
     const parts = String(uuid).split(".");
     if ( parts[3] === "Item" ) return uuid;
@@ -172,7 +177,7 @@ async function fillReplacementGrant(flow, adv, moved) {
     return parts.join(".");
   };
   const bases = new Set(Object.keys(foundry.utils.flattenObject(adv.configuration.replacements)).map(withItem));
-  const wanted = new Set(Array.from(adv.configuration.items ?? [])
+  const wanted = Array.isArray(answer) ? new Set(answer.map(withItem)) : new Set(Array.from(adv.configuration.items ?? [])
     .map(i => (typeof i === "string") ? { uuid: i } : i)
     .filter(i => i.uuid && (!i.optional || bases.has(withItem(i.uuid))))
     .map(i => withItem(i.uuid)));
@@ -201,14 +206,19 @@ async function fillReplacementGrant(flow, adv, moved) {
     });
   }
 
-  for ( const input of inputs ) {
-    const uuid = withItem(input.value || input.name.split(".").slice(-1)[0]);
-    const want = wanted.has(uuid);
-    if ( input.checked !== want ) {
-      input.checked = want;
-      await change(input);
-      if ( moved?.() ) return;
-    }
+  // Each change re-renders the flow, so the controls are re-read before every one; a change on a
+  // detached element reaches no form and is silently lost. A pair is a radio group whose handler
+  // applies the clicked item and reverses the other, so only the radio being *chosen* is changed —
+  // "unticking" its sibling would apply the sibling. Disabled controls are Tasha's to drive (Canny
+  // follows Deft Explorer), not the player's.
+  const resolve = input => withItem(input.value || input.name.split(".").slice(-1)[0]);
+  const pending = () => [...flow.element?.querySelectorAll("input[type=checkbox], input[type=radio]") ?? []]
+    .filter(i => !i.disabled)
+    .find(i => (i.type === "radio") ? (wanted.has(resolve(i)) && !i.checked) : (i.checked !== wanted.has(resolve(i))));
+  for ( let guard = 0, input; (input = pending()) && (guard < inputs.length); guard++ ) {
+    input.checked = (input.type === "radio") || !input.checked;
+    await change(input);
+    if ( moved?.() ) return;
   }
 }
 

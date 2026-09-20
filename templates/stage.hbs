@@ -40,6 +40,12 @@
           of them is ever set — see _openCompare(). Both cover the stage body and nothing else, so
           the footer's Back/Next stay reachable underneath either. --}}
     {{#if compare}}{{> "modules/sogrom-dnd5e-character-creator/templates/parts/compare.hbs" compare}}{{/if}}
+    {{!-- The entry screens share this slot too, and the shell guarantees only one overlay is ever
+          set. They are the way IN to a build rather than a detour from one, so they sit here
+          rather than replacing the step: the footer's Back/Next stay reachable underneath, and the
+          dossier beside them fills in as the picks are made. --}}
+    {{#if entry}}{{> "modules/sogrom-dnd5e-character-creator/templates/parts/entry-chooser.hbs" entry}}{{/if}}
+    {{#if threshold}}{{> "modules/sogrom-dnd5e-character-creator/templates/parts/threshold.hbs" threshold}}{{/if}}
   </div>
 
   <footer class="creator-stage-foot">
@@ -51,6 +57,15 @@
     {{#if finishHint}}<span class="creator-nav-hint" role="status"><i class="fa-solid fa-circle-info"></i>{{finishHint}}</span>{{/if}}
     {{else}}
     {{#if nav.hint}}<span class="creator-nav-hint" role="status"><i class="fa-solid fa-circle-info"></i>{{nav.hint}}</span>{{/if}}
+    {{/if}}
+    {{!-- The way back to the quick screen, for a player who left it to browse one category in
+          full. Lives in the footer rather than in the step, so no step has to know that screen
+          exists — the same reason the entry screens are overlays rather than steps. --}}
+    {{#if quickReturn}}
+    <button type="button" class="creator-btn creator-quick-return" data-action="entryReturn">
+      <span class="creator-btn-icon"><i class="fa-solid fa-bolt"></i></span>
+      {{quickReturn}}
+    </button>
     {{/if}}
     {{#if isReview}}
     <button type="button" class="creator-btn creator-btn-primary creator-btn-finish" data-action="finish" {{#unless canFinish}}disabled{{/unless}}>

@@ -256,7 +256,13 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
       const picks = normalisePicks(answer);
       if ( !picks ) continue;                              // an ASI map — handled from `originAbilities`
       consumed.add(advId);
-      for ( const [selKey, keys] of distribute(reqs, picks, { unofferable: passUnofferable }) ) {
+      // Tasha's optional/replacement grant stores the whole keep list under the advancement id,
+      // unpaired items included — and those are never offered as options, so `distribute` would
+      // reject them. The answer is written back as-is, as the checklist's `optional-grant` action does.
+      const assignments = (reqs[0].type === "OptionalGrant")
+        ? new Map([[reqs[0].selKey, picks]])
+        : distribute(reqs, picks, { unofferable: passUnofferable });
+      for ( const [selKey, keys] of assignments ) {
         const bucket = state.advChoices[reqs[0].source] ??= {};
         const current = bucket[selKey] ?? [];
         if ( (current.length === keys.length) && keys.every(k => current.includes(k)) ) continue;
@@ -356,6 +362,7 @@ async function answerFeatSpells(state, source, scenario) {
       throw new Error(`the build grants no spell-bearing feat ${featUuid} `
         + `(it grants: ${grants.map(g => g.featUuid).join(", ") || "none"})`);
     }
+    await checkFeatSpellSchools(grant, picks, featUuid);
     state.featSpells[grant.key] = {
       // A grant that fixes its own class list or ability leaves nothing to choose; state the
       // pick anyway and let the assembler prefer the fixed value, as it does for a real player.
@@ -364,6 +371,38 @@ async function answerFeatSpells(state, source, scenario) {
       cantrips: picks.cantrips ?? [],
       spells: picks.spells ?? []
     };
+  }
+}
+
+/**
+ * Hold a feat's spell picks to the school its choice is restricted to (Arcana Unleashed's Arcane
+ * Undertaker: a necromancy cantrip).
+ *
+ * The native flow enforces `restriction.school` itself and would refuse an off-school pick, so the
+ * equivalence diff alone already fails a scenario that makes one. What it cannot see is the
+ * creator's feat-spells screen, which filters its browser on the grant's `cantripSchools` /
+ * `spellSchools` — so the grant is checked twice: it must carry the schools the scenario expects
+ * (`schools: { cantrips: ["nec"] }`), and every pick must be one that filtered screen would show.
+ * @param {object} grant    One of `resolveFeatSpells`' grants.
+ * @param {object} picks    The scenario's `featSpells` entry for it.
+ * @param {string} featUuid
+ */
+async function checkFeatSpellSchools(grant, picks, featUuid) {
+  for ( const [kind, field] of [["cantrips", "cantripSchools"], ["spells", "spellSchools"]] ) {
+    const schools = [...(grant[field] ?? [])].sort();
+    const expected = picks.schools?.[kind];
+    if ( expected && (JSON.stringify(schools) !== JSON.stringify([...expected].sort())) ) {
+      throw new Error(`${featUuid} ${kind}: the creator's grant restricts to [${schools.join(", ")}], `
+        + `expected [${[...expected].sort().join(", ")}]`);
+    }
+    if ( !schools.length ) continue;
+    for ( const uuid of picks[kind] ?? [] ) {
+      const school = (await fromUuid(uuid))?.system?.school;
+      if ( !schools.includes(school) ) {
+        throw new Error(`${featUuid} ${kind}: ${uuid} is ${school ?? "no school"}, which the `
+          + `feat-spells screen would not offer (restricted to ${schools.join(", ")})`);
+      }
+    }
   }
 }
 
@@ -542,7 +581,7 @@ async function resolveWith(manager, book, consumed, unofferable) {
   // A subclass brings its own features into the walk *after* it is chosen, so the records that
   // carry them did not exist when the warm above ran. Nothing further needs answering by then —
   // `autoResolve` has run — but the ledger should still show what was raised.
-  for ( const rec of [...driver.traitSteps, ...driver.choiceSteps, ...driver.asiSteps] ) {
+  for ( const rec of [...driver.traitSteps, ...driver.choiceSteps, ...driver.asiSteps, ...driver.optionalGrantSteps] ) {
     if ( !records.includes(rec) ) book.peek(rec.advancement, rec.level, "creator");
   }
 }
@@ -561,7 +600,7 @@ async function resolveWith(manager, book, consumed, unofferable) {
 async function warmBook(driver, book, phase) {
   const records = [
     ...driver.hpSteps, ...driver.sizeSteps, ...driver.grantSteps, ...driver.subclassSteps,
-    ...driver.asiSteps, ...driver.traitSteps, ...driver.choiceSteps
+    ...driver.asiSteps, ...driver.traitSteps, ...driver.choiceSteps, ...driver.optionalGrantSteps
   ];
   for ( const rec of records ) {
     await book.answer(rec.advancement, rec.level, { asker: "creator", phase, offered: () => offeredFor(driver, rec) });

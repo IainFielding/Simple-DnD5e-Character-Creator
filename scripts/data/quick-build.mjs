@@ -30,9 +30,19 @@ import { generateName } from "./name-generator.mjs";
  * @param {import("./equipment-source.mjs").EquipmentSource} ctx.equipment
  * @param {object} [opts]
  * @param {() => number} [opts.rng]  Injectable RNG for the species pick (deterministic tests).
+ * @param {object} [opts.profile]    Profile fields to layer over the class's own — how a ready-made
+ *   character states its picks ({@link module:data/premades}). Merged, not substituted, so a
+ *   premade may state one field and inherit the rest. Omitted, the class's `QUICK_BUILD` entry is
+ *   used exactly as before.
+ * @param {string} [opts.speciesUuid]     Pin the species instead of rolling one.
+ * @param {string} [opts.backgroundUuid]  Pin the background instead of choosing by ability fit.
+ * @param {string} [opts.name]            Pin the name instead of rolling one.
  * @returns {Promise<{ok: boolean, warnings: string[]}>}
  */
-export async function applyQuickBuild({ state, source, spells, equipment }, { rng = Math.random } = {}) {
+export async function applyQuickBuild({ state, source, spells, equipment }, {
+  rng = Math.random, profile: profileOverride = null,
+  speciesUuid = null, backgroundUuid = null, name: fixedName = null
+} = {}) {
   if ( !state.classUuid ) return { ok: false, warnings: ["no-class"] };
 
   const warnings = [];
@@ -49,7 +59,12 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
   // Quick Build picks the origins for the player, so it has to respect the same edition scoping the
   // grids do — a 2014 class must not be handed a 2024 species. See `SourceIndex#matchesRules`.
   const rules = source.rulesOf(state.classUuid);
-  const profile = QUICK_BUILD[identifier] ?? await genericProfile(state.classUuid);
+  // A ready-made character supplies overrides, which layer OVER the resolved profile rather than
+  // replacing it. Replacing it would let a premade for a class with no `QUICK_BUILD` entry arrive
+  // with no `abilities` at all, and `assignStandardArray` would throw on the whole build. With no
+  // override this resolves exactly as it always did.
+  const base = QUICK_BUILD[identifier] ?? await genericProfile(state.classUuid);
+  const profile = profileOverride ? { ...base, ...profileOverride } : base;
   const classDoc = await fromUuid(state.classUuid).catch(() => null);
 
   // Start from a clean slate for everything the build derives, exactly as if the player had
@@ -71,9 +86,12 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
   // Ability scores: the standard array laid out in the class's priority order.
   assignStandardArray(state, profile.abilities);
 
-  // Background: the suggested one when installed, else the best ability-aligned fit.
+  // Background: a pinned one when the caller named it, else the suggested one when installed,
+  // else the best ability-aligned fit.
   await attempt("background", async () => {
-    const card = await pickBackground(source, profile, { rules });
+    const card = backgroundUuid
+      ? (source.card(backgroundUuid) ?? await pickBackground(source, profile, { rules }))
+      : await pickBackground(source, profile, { rules });
     if ( !card ) { warnings.push("no-backgrounds"); return; }
     state.backgroundUuid = card.uuid;
     state.originAsi.background = await source.abilityScoreIncrease(card.uuid);
@@ -85,7 +103,10 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
   await attempt("species", async () => {
     const list = source.species({ rules });
     if ( !list.length ) { warnings.push("no-species"); return; }
-    state.speciesUuid = list[Math.floor(rng() * list.length)]?.uuid ?? null;
+    // A pinned species is used as given; the roll is the fallback, not the rule.
+    state.speciesUuid = (speciesUuid && source.card(speciesUuid))
+      ? speciesUuid
+      : (list[Math.floor(rng() * list.length)]?.uuid ?? null);
     if ( !state.speciesUuid ) return;
     state.originAsi.species = await source.abilityScoreIncrease(state.speciesUuid);
     allocateOriginAsi(state, "species", profile.abilities);
@@ -93,6 +114,7 @@ export async function applyQuickBuild({ state, source, spells, equipment }, { rn
 
   // Name: rolled in the chosen species' style (the generator falls back to a generic pool).
   await attempt("name", () => {
+    if ( fixedName ) { state.details.name = fixedName; return; }
     // Some species ship without an identifier (every Ravenloft lineage does), so fall
     // back to the name — the generator folds either into the same style key.
     const species = source.card(state.speciesUuid);

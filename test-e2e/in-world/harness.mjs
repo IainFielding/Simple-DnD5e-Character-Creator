@@ -119,10 +119,17 @@ function assertBookComplete(book) {
  * answer for produced the same result on both paths by definition, so a one-sided raise there says
  * nothing. Hit points are excluded outright: a level-1 original class takes maximum automatically
  * and raises no native decision at all.
+ *
+ * A forced ability increase is excluded too, even when a scenario states its answer. The native flow
+ * renders it as a step with an un-clicked "+" and so asks; the driver applies it at ingest and never
+ * surfaces it. `generateAsi` answers these with `null` for exactly that reason, but a hand-written
+ * scenario has to state one (see `human-wizard-sage-l4-halffeat`), which used to put the same
+ * structural asymmetry on every run. The character diff still checks that both sides landed it.
  * @param {AnswerBook} book
  */
 function decisionDifferences(book) {
-  return book.asymmetric().filter(e => (e.type !== "HitPoints") && (e.answer !== undefined) && (e.answer !== null)).map(e => ({
+  return book.asymmetric().filter(e => (e.type !== "HitPoints") && !e.forced
+    && (e.answer !== undefined) && (e.answer !== null)).map(e => ({
     path: `decision.raised.${e.type}.${e.advId}@${e.level}`,
     native: e.askedBy.includes("native") ? `"${e.title ?? e.advId}" on ${e.item ?? "?"}` : "<never raised>",
     creator: e.askedBy.includes("creator") ? `"${e.title ?? e.advId}" on ${e.item ?? "?"}` : "<never raised>"
