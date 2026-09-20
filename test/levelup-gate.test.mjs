@@ -116,6 +116,14 @@ describe("LevelUpDriver.canDrive", () => {
     expect(LevelUpDriver.canDrive(manager)).toBe(true);
   });
 
+  // dnd5e 6.0's ModifyItem (Arcana Unleashed's Necromancer, Transmuter and Arcane Archer) is always
+  // automatic. A level whose manager enumerates one directly must still be ours, not dnd5e's.
+  it("claims a level with a directly enumerated ModifyItem step", () => {
+    expect(LevelUpDriver.isStepSupported(step("ModifyItem"))).toBe(true);
+    const manager = makeManager([step("HitPoints"), step("ModifyItem"), step("ItemGrant"), marker()]);
+    expect(LevelUpDriver.canDrive(manager)).toBe(true);
+  });
+
   it("rejects an empty manager", () => {
     expect(LevelUpDriver.canDrive(makeManager([]))).toBe(false);
     expect(LevelUpDriver.canDrive(null)).toBe(false);

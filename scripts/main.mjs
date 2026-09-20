@@ -66,6 +66,9 @@ Hooks.once("init", () => {
     // The comparison grid is included by stage.hbs alongside the book-page overlay, so it is a
     // partial for the same reason that one is: the stage is loaded as a PART, its includes are not.
     tpl("parts/compare.hbs"),
+    // The entry screens share that slot in stage.hbs, so they are partials for the same reason.
+    tpl("parts/entry-chooser.hbs"),
+    tpl("parts/threshold.hbs"),
     tpl("parts/rules-link.hbs"),
     // The sheet-PDF switch, included by both review screens so the two can't offer the export on
     // different terms.
@@ -171,6 +174,14 @@ function registerSettings() {
   });
   game.settings.register(MODULE_ID, SETTINGS.bannedAlignments, {
     scope: "world", config: false, type: Array, default: DEFAULTS.bannedAlignments
+  });
+  // Dead under Ember, which owns creation outright and never reaches our first step. Registered
+  // either way, because `game.settings.get` on an unregistered setting throws and the creator
+  // shell reads this on every fresh build.
+  game.settings.register(MODULE_ID, SETTINGS.entryChooser, {
+    name: t("settings.entryChooser.name"),
+    hint: t("settings.entryChooser.hint"),
+    scope: "world", config: !ember, type: Boolean, default: DEFAULTS.entryChooser
   });
   game.settings.registerMenu(MODULE_ID, "houseRulesMenu", {
     name: t("settings.houseRulesMenu.name"),

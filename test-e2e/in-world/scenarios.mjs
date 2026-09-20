@@ -47,7 +47,11 @@ export const UUID = {
   savageAttacker: "Compendium.dnd5e.feats24.Item.phbftSavageAttac",
   // Fighter fighting styles.
   archery: "Compendium.dnd5e.feats24.Item.phbfstArchery000",
-  defense: "Compendium.dnd5e.feats24.Item.phbfstDefense000"
+  defense: "Compendium.dnd5e.feats24.Item.phbfstDefense000",
+  // Arcana Unleashed: a background whose origin feat picks a school-restricted cantrip.
+  covenantRecruit: "Compendium.dnd-arcana-unleashed.backgrounds.Item.aunCovenantofTRS",
+  arcaneUndertaker: "Compendium.dnd-arcana-unleashed.feats.Item.aunArcaneUnder1Z",
+  chillTouch: "Compendium.dnd5e.spells24.Item.phbsplChillTouch"
 };
 
 /**
@@ -66,7 +70,22 @@ export const SRD2014 = {
   wizard: "Compendium.dnd5e.classes.Item.wZK2Q0rXB0AQo8h3",
   acolyte: "Compendium.dnd5e.backgrounds.Item.IgJkSnLiLJOWH7eK",
   hillDwarf: "Compendium.dnd5e.races.Item.UQiRQUTBcsz8gZU1",
-  halfElf: "Compendium.dnd5e.races.Item.Hye5IZwPOSwV0qRR"
+  halfElf: "Compendium.dnd5e.races.Item.Hye5IZwPOSwV0qRR",
+  ranger: "Compendium.dnd5e.classes.Item.VkRQ7glQvTWWiOCS",
+  hunter: "Compendium.dnd5e.subclasses.Item.uqd2q6WjVfcsaaGb",
+  rangerArchetype: "Compendium.dnd5e.classfeatures.Item.1dJHU48yNqn3lcfx",
+  archery: "Compendium.dnd5e.classfeatures.Item.8YwPFv3UAPjWVDNf",
+  colossusSlayer: "Compendium.dnd5e.classfeatures.Item.5gx1O0sxK08awEO9"
+};
+
+/**
+ * Tasha's Cauldron alternatives the ranger swap scenario takes. Tasha's injects them into the 2014
+ * Ranger's own level-1 and level-3 feature grants at load, so the grant ids are the Ranger's.
+ */
+const TCOE = {
+  favoredFoe: "Compendium.dnd-tashas-cauldron.tcoe-character-options.Item.tcoeranFavoredFo",
+  deftExplorer: "Compendium.dnd-tashas-cauldron.tcoe-character-options.Item.tcoeranDeftExplo",
+  primalAwareness: "Compendium.dnd-tashas-cauldron.tcoe-character-options.Item.tcoeranPrimalAwa"
 };
 
 /**
@@ -288,6 +307,45 @@ const SCENARIO_LIST = [
   },
 
   /**
+   * A feat-spell choice restricted to one **school**: Arcana Unleashed's Covenant of the Grave
+   * Recruit grants Arcane Undertaker, a Cleric or Wizard cantrip "from the Necromancy school"
+   * (`restriction.school: ["nec"]`, added in AU 1.0.1).
+   *
+   * The native flow enforces the school itself. The creator's feat-spells screen filters its browser
+   * on the grant's `cantripSchools`, which was once missing entirely — so beyond the usual diff, the
+   * creator adapter checks that the grant carries `nec` and that the pick is one the filtered screen
+   * would show (`schools` below; see `creator.mjs#checkFeatSpellSchools`). No sweep takes this
+   * background, so this is its only end-to-end coverage.
+   *
+   * Chill Touch is on the Wizard list only, so the creator's list is stated rather than left to
+   * default to the first allowed (Cleric).
+   */
+  {
+    id: "human-wizard-covenant-undertaker",
+    name: "Equivalence: Human Wizard (Covenant of the Grave Recruit) with a necromancy cantrip",
+    speciesUuid: UUID.human,
+    backgroundUuid: UUID.covenantRecruit,
+    classUuid: UUID.wizard,
+    abilities: { str: 8, dex: 14, con: 13, int: 15, wis: 12, cha: 10 },
+    answers: {
+      dLxv96vt2B2KOEe2: "med",                                   // Human size
+      KB8IQLwyuL6SOFnv: [UUID.alert],                            // Human Versatile: an origin feat
+      xIdIaWtTj1cBERln: ["skills:ath"],                          // Human Skillful
+      OYYiJqsj9i4rbsWC: { int: 2, wis: 1 },                      // Covenant increase (dex/con/cha locked)
+      "73lag0NN0ElcSq94": ["skills:arc", "skills:inv"],           // Wizard skills (not History/Medicine, granted)
+      "2fdpIhHcbiUlOTdt": { uuids: [UUID.chillTouch], ability: "int" }   // Arcane Undertaker's cantrip
+    },
+    featSpells: {
+      [UUID.arcaneUndertaker]: {
+        list: "wizard",
+        ability: "int",
+        cantrips: [UUID.chillTouch],
+        schools: { cantrips: ["nec"] }
+      }
+    }
+  },
+
+  /**
    * A level-1 Fighter who multiclasses into Wizard — a *second class item*, not a level change,
    * which is a different entry point (`forNewItem`) and a different set of advancements.
    *
@@ -371,6 +429,48 @@ const SCENARIO_LIST = [
       Z9hvZFkWUNvowbQX: { cha: 2, dex: 1, con: 1 },             // +2 fixed, 2 points placed
       CormRQZ5momyvS2I: ["skills:per", "skills:prc"],           // Skill Versatility (choose 2)
       U3OO7jLU0nm0Z7zw: ["languages:standard:dwarvish"]         // Choose 1 extra language
+    }
+  },
+
+  /**
+   * A 2014 Ranger who takes **Tasha's alternatives** instead of the 2014 features: Favored Foe and
+   * Deft Explorer at creation, Primal Awareness at level 3.
+   *
+   * Every other scenario and sweep keeps the default — the 2014 base of each pair — so the swap path
+   * had only unit coverage. The two levels exercise its two routes: level 1 goes through the
+   * creation Choices step (`advChoices.class[<grant id>]`, the whole keep list), level 3 through the
+   * level-up driver's `setOptionalGrant`. The native side ticks the same list in Tasha's own flow.
+   *
+   * The answer is the whole keep list, unpaired items included (Ranger Archetype at level 3), which is
+   * the shape the creator stores. None of these features carries advancements, so the swap changes
+   * only which items land.
+   *
+   * **Canny is deliberately not in the answer, and this scenario fails on it (2026-09-19).** Tasha's
+   * flow ties Canny to Deft Explorer — its `_onRender` locks Canny's checkbox to Deft Explorer's radio
+   * and `_handleForm` grants or reverses it alongside — so the native build gets Canny without being
+   * asked. The creator models Canny as a competing alternative (or, on this two-base grant, drops it:
+   * `replacementGroups`), so its Deft Explorer arrives without Canny. That is a module bug; once
+   * fixed, the creator should grant Canny from this same answer.
+   */
+  {
+    id: "hill-dwarf-ranger-2014-tashas",
+    name: "Equivalence: Hill Dwarf Ranger (Acolyte) 3 with Tasha's alternatives, 2014 rules",
+    speciesUuid: SRD2014.hillDwarf,
+    backgroundUuid: SRD2014.acolyte,
+    classUuid: SRD2014.ranger,
+    targetLevel: 3,
+    abilities: { str: 12, dex: 15, con: 14, int: 8, wis: 13, cha: 10 },
+    answers: {
+      "9YuEhI3iqUxEfIOk": ["languages:exotic:celestial",          // Acolyte: choose 2 languages
+        "languages:standard:draconic"],
+      "9CYW7Bj53L9G8Zsw": ["tool:art:smith"],                    // Dwarven artisan's tools
+      ICgRpBmX0g8Y0ZzD: ["skills:ani", "skills:ath", "skills:nat"],   // Ranger skills (choose 3)
+      L0DHAlnRhNlttHtT: [TCOE.favoredFoe, TCOE.deftExplorer],    // Level 1: both 2014 features swapped
+      xBohtOEv3ukqmso2: "avg",                                   // Hit points, every gained level
+      ih8WlydEZdg3rCPh: [SRD2014.archery],                       // Fighting Style, level 2
+      gb53865sgbtx8xr2: SRD2014.hunter,                          // Ranger Archetype, level 3
+      Xr04szY7gFqZKBxP: [SRD2014.colossusSlayer],                // Hunter's Prey, level 3
+      uBfO0VT74Ubkb3Vq: [SRD2014.rangerArchetype, TCOE.primalAwareness]  // Level 3: Primeval swapped
     }
   },
 

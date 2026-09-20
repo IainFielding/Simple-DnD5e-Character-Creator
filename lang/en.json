@@ -76,7 +76,33 @@
       "confirmTitle": "Overwrite current choices?",
       "confirmBody": "Quick Build replaces your background, species, name, ability scores, spells, and other choices with the recommended set. Continue?",
       "partial": "Quick Build finished with some gaps — check the remaining steps.",
-      "failed": "Quick Build failed; your choices were left as they were."
+      "failed": "Quick Build failed; your choices were left as they were.",
+      "threshold": {
+        "title": "Begin",
+        "instruction": "Three choices. Everything else is filled in for you, and none of it is locked.",
+        "create": "Create Character",
+        "stepwise": "Build step by step instead",
+        "otherWays": "Other ways in",
+        "browse": "Browse all {count}",
+        "name": "Name",
+        "rollName": "Roll a name",
+        "rollCategory": "Roll a {category}",
+        "nameNote": "Rolled in the chosen species' style.",
+        "fills": "Ability scores — standard array, {array}, down the {class} priority",
+        "asiFixed": "{origin} — {fixed} fixed by the origin.",
+        "asiSpent": "{origin} — {spent} spent down the {class} priority ({points} points, max {cap} in one ability).",
+        "asiBoth": "{origin} — {fixed} fixed by the origin, plus {spent} spent down the {class} priority ({points} points, max {cap} in one ability).",
+        "asiNone": "This origin grants no ability increase.",
+        "asiEdit": "Change it on the Abilities step like any other pick.",
+        "credit": "Artwork from the content modules installed in this world.",
+        "noClasses": "No classes are installed, so there is nothing to build from.",
+        "edition2024": "5.5e (2024)",
+        "edition2014": "5e (2014)",
+        "editionAria": "Rules edition",
+        "willPick": "Quick Build will pick",
+        "returnToQuick": "Back to Quick Build",
+        "rollAll": "Roll everything"
+      }
     },
     "pdfExport": {
       "label": "Export Character Sheet PDF",
@@ -392,9 +418,9 @@
         "label": "Class & Abilities",
         "hint": "Choose a class to continue.",
         "switchPlaceholder": "Choose a Class",
-      "filterEditionAria": "Filter by rules edition",
-      "filterAllEditions": "Both editions",
-      "filterEdition": "{year} rules",
+        "filterEditionAria": "Filter by rules edition",
+        "filterAllEditions": "Both editions",
+        "filterEdition": "{year} rules",
         "traits": "Class Traits",
         "features": "Class Features",
         "spells": "Spells",
@@ -841,6 +867,10 @@
       "allowManualAbilities": {
         "name": "Allow Manual Ability Scores",
         "hint": "Adds a fourth method to the Ability Scores panel where players type the six numbers in themselves. Off by default: manual entry ignores the point-buy budget, the standard array and the roll formula, so turn it on only where the scores are decided away from this window."
+      },
+      "entryChooser": {
+        "name": "Ask how to build",
+        "hint": "Opens the creator on a choice of three ways in — build step by step, quick build, or start from a ready-made character — instead of going straight to the first step. Off by default; the step-by-step path is unchanged either way."
       }
     },
     "storeConfig": {
@@ -935,6 +965,45 @@
       "announcements": "Announcements",
       "creationNote": "The character-creation summary card is set separately, in the main settings list.",
       "save": "Save Changes"
+    },
+    "entry": {
+      "title": "Start",
+      "instruction": "Three ways in. They all end on the same Review page.",
+      "heading": "How do you want to build this character?",
+      "blurb": "All three end in the same place: a finished character on the Review page, with every choice still yours to change. They differ only in how much is decided for you.",
+      "recommended": "Recommended",
+      "gmNote": "Your GM decides whether this screen appears at all.",
+      "custom": {
+        "title": "Custom build",
+        "tagline": "Every choice is yours, in order, with the rules explained as you go.",
+        "go": "Build step by step",
+        "point1": "Every step, nothing decided for you",
+        "point2": "Compare options side by side",
+        "point3": "The longest way round, and the most yours"
+      },
+      "quick": {
+        "title": "Quick build",
+        "tagline": "Three choices — class, species, background. Everything else is filled in.",
+        "go": "Pick three things",
+        "point1": "Ability scores, skills, spells and kit chosen for you",
+        "point2": "Lands on Review with a finished character",
+        "point3": "Every pick still editable afterwards"
+      },
+      "premade": {
+        "title": "Ready-made",
+        "tagline": "Start from a finished character and be playing in a minute.",
+        "go": "Browse the ready-made",
+        "point1": "Complete characters, built and ready",
+        "point2": "Only the ones this world has the content for",
+        "point3": "Still yours to edit before it is created",
+        "none": "No ready-made characters are available in this world.",
+        "heading": "Ready-made characters",
+        "blurb": "Finished characters, ready to play. Foundry's own pregenerated heroes are imported exactly as the system built them; anything below them is built the same way a hand-made character is.",
+        "back": "Back",
+        "fromFoundry": "From Foundry Virtual Tabletop",
+        "fromModule": "From this module",
+        "importFailed": "That ready-made character could not be imported."
+      }
     }
   }
 }

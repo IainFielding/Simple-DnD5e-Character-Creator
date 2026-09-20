@@ -1,8 +1,9 @@
 import {
-  MODULE_ID, HOOKS, tpl, t, log, ABILITIES, formatMod, fireHook, fireCancellableHook
+  MODULE_ID, HOOKS, tpl, t, log, ABILITIES, formatMod, fireHook, fireCancellableHook,
+  entryChooserEnabled, emberActive, systemRulesEdition
 } from "../config.mjs";
 import { CreatorShellBase, shellOptions, dossierStageParts, SHELL_ACTIONS } from "./shell-base.mjs";
-import { illuminatePages } from "./page-illumination.mjs";
+import { illuminatePages, drawFrameSigils, fitCardArt } from "./page-illumination.mjs";
 import { CreatorState } from "../state/creator-state.mjs";
 import {
   applyDraft, cancelDraftSave, clearDraft, flushDraftSave, pruneMissingOrigins, scheduleDraftSave
@@ -13,6 +14,11 @@ import { assembleActor } from "../build/actor-assembler.mjs";
 import { postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
 import { launchLevelUpTo } from "../levelup/intercept.mjs";
+import { chooserContext, premadeContext, applyPremade, takePregen } from "./entry-chooser.mjs";
+import {
+  QUICK_FILLED_STEPS, thresholdClear, thresholdContext, thresholdCreate, thresholdRoll,
+  thresholdRollAll, thresholdRollName, seedThreshold
+} from "./threshold.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
@@ -43,7 +49,25 @@ export class CreatorShell extends CreatorShellBase {
     actions: {
       ...SHELL_ACTIONS,
       openPicker() { this._setPicker(true); },
-      closePicker() { this._setPicker(false); }
+      closePicker() { this._setPicker(false); },
+      // The entry screens. Every one of these ends in either a render or a step change, and none
+      // of them touches the wizard's own step model — which is what keeps the chooser addable
+      // without any step being able to notice it exists.
+      entryPath(event, target) { return this._entryPath(target.dataset.path); },
+      entryBack() { return this._openEntry("chooser"); },
+      entryReturn() { return this._returnToQuick(); },
+      entryPremade(event, target) {
+        // Foundry's own pregens carry a uuid and are imported whole; ours are built.
+        return target.dataset.uuid
+          ? takePregen(this._ctx(), target.dataset.uuid, target)
+          : applyPremade(this._ctx(), target.dataset.id, target);
+      },
+      thresholdEdition(event, target) { return this._thresholdEdition(target.dataset.rules); },
+      thresholdRoll(event, target) { return this._thresholdRoll(target.dataset.category); },
+      thresholdRollAll() { return this._thresholdRollAll(); },
+      thresholdBrowse(event, target) { this._entryBrowse(target.dataset.category); },
+      thresholdCreate(event, target) { return this._thresholdCreate(target); },
+      thresholdName(event, target) { this._thresholdName(target.value); }
     }
   };
 
@@ -76,6 +100,38 @@ export class CreatorShell extends CreatorShellBase {
   #dirty = false;
   /** Whether this window opened on a restored draft, so the load can report what didn't survive. */
   #resumed = false;
+  /**
+   * Which entry screen is covering the stage: "chooser", "premade", "threshold", or null for none.
+   *
+   * Held here rather than as a step because an entry screen must not be able to disturb step
+   * gating, ordering or reachability — it is chrome over the stage, like Compare and the source
+   * book page, and it shares their slot and their one-at-a-time rule.
+   * @type {"chooser"|"premade"|"threshold"|null}
+   */
+  #entry = null;
+  /**
+   * Whether the player has typed a name of their own on the threshold. Rolling a new species
+   * re-rolls the name to match it, but never over a name they wrote.
+   */
+  #nameTouched = false;
+  /**
+   * Which rules edition the quick screen is offering — "2024" (5.5e) or "2014" (5e).
+   *
+   * Defaults to the world's own answer (dnd5e's `rulesVersion`), which is 2024 unless the GM has
+   * set the world to legacy. Deferring to the world rather than hard-coding 2024 means a table
+   * playing 2014 opens on its own books without touching anything, and a 2024 table — the large
+   * majority, and the system default — sees 5.5e as asked.
+   */
+  #thresholdRules = null;
+  /**
+   * Whether the player stepped out of the quick screen to browse a category in full, and so should
+   * be offered a way back to it.
+   *
+   * Set on the way out and cleared when they take it or finish. It survives moving between steps on
+   * purpose: someone who goes to the class grid, then wanders to Background to look something up,
+   * has not changed their mind about wanting to go back.
+   */
+  #returnToQuick = false;
   /**
    * Whether this window's work belongs in a draft.
    *
@@ -184,6 +240,10 @@ export class CreatorShell extends CreatorShellBase {
     this.#loading = false;
     // Resuming an in-progress actor: jump to the first step still needing input.
     this._stepIndex = this.#firstIncompleteIndex();
+    // The chooser, if this world asked for it and there is nothing built yet. Gated in this one
+    // place, so a world with the setting off never builds an entry context and never renders an
+    // entry template — the creator opens on its first step exactly as it always has.
+    if ( this.#shouldOfferEntry() ) this.#entry = "chooser";
     if ( this.rendered ) this.render();
     // The window is now genuinely usable — sources loaded, first step chosen. Announcing at
     // construction instead would hand listeners a shell still showing its loading screen.
@@ -208,6 +268,16 @@ export class CreatorShell extends CreatorShellBase {
     // caches those flags read (the Choices step resolves its requirements into `state.choiceCache`),
     // so the dossier tick and the Next button reflect this very render rather than the previous one.
     const stepContext = this.#loading ? {} : await step.context(this._ctx());
+    // Built before the flags are read, like the step context above and for the same reason: the
+    // threshold resolves origin ability increases into the state, and the dossier must show this
+    // render rather than the previous one.
+    const entry = this.#entry === "chooser" ? await chooserContext(this._ctx())
+      : this.#entry === "premade" ? { premades: await premadeContext(this._ctx()) }
+        : null;
+    const threshold = this.#entry === "threshold"
+    ? await thresholdContext(this._ctx(), this.#thresholdRules ?? systemRulesEdition())
+    : null;
+
     const flags = this._completeFlags();
     // Both derived from `flags`, rather than re-running every step's isComplete() twice more.
     const missing = REQUIRED_STEPS.filter(s => !flags[STEPS.indexOf(s)]);
@@ -221,9 +291,17 @@ export class CreatorShell extends CreatorShellBase {
       // The comparison grid, likewise. Both are the shell's, not the step's: the step supplies the
       // options, the shell decides what is covering them.
       compare: this._compare,
+      // The entry screens, in the same slot and under the same rule: at most one is ever set.
+      entry,
+      threshold,
       version: game.modules.get(MODULE_ID)?.version ?? "",
       cancelLabel: t("nav.cancel"),
-      dossier: this.#dossierContext(lines),
+      // The way back to the quick screen, for a player who left it to browse one category in full.
+      // Shell chrome in the stage footer, so no step has to know the quick screen exists.
+      quickReturn: (this.#returnToQuick && !this.#entry && !this.#loading)
+        ? t("quickBuild.threshold.returnToQuick")
+        : null,
+      dossier: this.#dossierContext(lines, threshold),
       progress: this._progressContext(lines, missing),
       step: {
         id: step.id,
@@ -278,6 +356,9 @@ export class CreatorShell extends CreatorShellBase {
     // The head artwork lives in stage DOM, so it has to be redrawn whenever the
     // stage is. Cheap and idempotent — it clears its own previous pass first.
     illuminatePages(root);
+    drawFrameSigils(root);
+    fitCardArt(root);
+    this.#wireEntryEscape(root);
     // Above the guard below, and deliberately: a pending focus request has to be *consumed* on the
     // very next render whatever kind it is, or a rail-only render would carry it forward and move
     // focus during some later, unrelated one.
@@ -578,6 +659,10 @@ export class CreatorShell extends CreatorShellBase {
    */
   #stepLines(flags) {
     const lines = [];
+    // On the quick screen, a step this build answers for the player is not something outstanding.
+    // An em-dash against four of them reads as "four things left to do", which is the opposite of
+    // what the screen is promising.
+    const quickFilling = this.#entry === "threshold";
     STEPS.forEach((s, i) => {
       if ( this.#hidden(s) ) return;        // dropped from the roll until it applies
       // A step can still opt out of applicability while remaining visible (e.g. Spells for a
@@ -585,6 +670,9 @@ export class CreatorShell extends CreatorShellBase {
       const applicable = s.applicable?.(this.state) ?? true;
       const complete = flags[i] && s.id !== "review" && applicable;
       const reachable = this._reachable(i, flags);
+      const pending = (quickFilling && applicable && !complete && QUICK_FILLED_STEPS.has(s.id))
+        ? t("quickBuild.threshold.willPick")
+        : null;
       lines.push({
         index: i,
         id: s.id,
@@ -598,8 +686,17 @@ export class CreatorShell extends CreatorShellBase {
         // reach yet is not something they have left to do, it is something they have left to
         // arrive at. Marking those too would paint most of the roll teal on the first screen and
         // teach the player to ignore the colour.
-        open: reachable && applicable && !complete && s.id !== "review",
-        summary: s.summary?.(this.state, this.source) ?? ""
+        // A step the quick build is about to answer is not something the player has left to do,
+        // so it loses the "To do" chip along with its progress count. Leaving the chip would put
+        // "To do" and "Quick Build will pick" on the same line, contradicting each other.
+        open: reachable && applicable && !complete && s.id !== "review" && !pending,
+        // A promise, not an answer — styled quietly so it cannot be mistaken for one.
+        pending,
+        // Suppressed while the promise stands. Several of these steps report progress even with
+        // nothing chosen — Choices says "0 of 6 made" — and a running count is the wrong thing to
+        // show beside a screen whose whole claim is that the player has nothing left to answer.
+        // It reads as six outstanding tasks rather than six about to be filled in.
+        summary: pending ? "" : (s.summary?.(this.state, this.source) ?? "")
       });
     });
     return lines;
@@ -612,14 +709,15 @@ export class CreatorShell extends CreatorShellBase {
    * values lives on the work surface; the dossier only ever reports. Keeping that rule is what
    * stops the two halves of the window competing to own the same decision.
    * @param {object[]} lines   From {@link #stepLines}.
+   * @param {object|null} [threshold]   The quick screen's context, when it is the screen on show.
    */
-  #dossierContext(lines) {
+  #dossierContext(lines, threshold = null) {
     return {
       portrait: this.state.portrait,
       name: this.state.details.name?.trim() ?? "",
       className: this.source.card(this.state.classUuid)?.name ?? "",
       level: this.state.targetLevel ?? 1,
-      ...this.#dossierAbilities(),
+      ...this.#dossierAbilities(threshold),
       steps: lines
     };
   }
@@ -632,7 +730,26 @@ export class CreatorShell extends CreatorShellBase {
    * those would show the player a set of scores they never chose sitting on their sheet. Blanks
    * are the honest reading of "not decided yet".
    */
-  #dossierAbilities() {
+  #dossierAbilities(threshold = null) {
+    // On the quick screen the dossier mirrors the plates in the middle of the stage. Those are a
+    // *preview* — `applyQuickBuild` does not write the scores until Create — so reading the state
+    // here would show six dashes beside six numbers and leave the player to guess which was real.
+    // Nothing is written early to make this work: showing two views of one answer is the
+    // dossier's job, and inventing state to populate it would set `abilityMethod` behind the
+    // player's back, which is the thing the quick screen was careful not to do.
+    if ( threshold?.plates?.length ) {
+      return {
+        abilities: threshold.plates.map(plate => ({
+          key: plate.key,
+          abbr: CONFIG.DND5E?.abilities?.[plate.key]?.abbreviation ?? plate.key.slice(0, 3).toUpperCase(),
+          value: plate.total,
+          modifier: plate.mod,
+          bonus: plate.bonus ? `+${plate.bonus}` : null,
+          bonusTip: null
+        })),
+        abilitiesSet: true
+      };
+    }
     const scores = this.state.resolvedScores();
     const deltas = this.state.abilityDeltas();
     const abilities = ABILITIES.map(key => {
@@ -666,6 +783,218 @@ export class CreatorShell extends CreatorShellBase {
    */
   _ctx() {
     return { state: this.state, source: this.source, spells: this.spells, equipment: this.equipment, store: this.store, app: this };
+  }
+
+  /* -------------------------------------------- */
+  /*  The entry screens                           */
+  /* -------------------------------------------- */
+
+  /**
+   * Mark this window's work as concluded, so closing it does not warn about a discard.
+   *
+   * Taking one of Foundry's pregenerated characters finishes the job without going through
+   * `_finish` — the actor is imported whole rather than built — so the latch has to be set by hand.
+   * Without it the player is asked whether they really want to throw away the character they just
+   * successfully made.
+   */
+  markFinished() {
+    this.#finished = true;
+    cancelDraftSave();
+    clearDraft();
+  }
+
+  /**
+   * Whether to open on the chooser: the world asked for it, Ember does not own creation here, and
+   * nothing has been chosen yet.
+   *
+   * The last condition is what makes it safe on a resumed draft — a player who got three steps in
+   * yesterday should land back on their work, not be asked how they would like to start.
+   *
+   * The Ember check is belt and braces: the setting is `config: !ember`, so in such a world no GM
+   * can have turned it on through the UI, but a stored value from before Ember was installed would
+   * otherwise survive and offer a chooser in front of a flow Ember owns outright.
+   * @returns {boolean}
+   */
+  #shouldOfferEntry() {
+    if ( !entryChooserEnabled() || emberActive() ) return false;
+    return !this.state.classUuid && !this.state.speciesUuid && !this.state.backgroundUuid;
+  }
+
+  /**
+   * Escape on an entry screen. Every other overlay in this window closes on Escape, so these have
+   * to as well or the key becomes conditional — but "close" means something different here: an
+   * entry screen has nothing behind it yet, so Escape takes the path that always works. From the
+   * chooser that is Custom build (the wizard, which is where Escape would have left them anyway);
+   * from the other two it is back to the chooser.
+   * @param {HTMLElement} root
+   */
+  #wireEntryEscape(root) {
+    const overlay = root.querySelector(".creator-entry, .creator-threshold");
+    if ( !overlay ) return;
+    overlay.addEventListener("keydown", ev => {
+      if ( ev.key !== "Escape" ) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if ( this.#entry === "chooser" ) this._entryPath("custom");
+      else this._openEntry("chooser");
+    });
+    // Take focus so Escape reaches the handler without the player clicking first — but never off
+    // an input the player may already be typing in.
+    if ( !root.contains(document.activeElement) ) overlay.focus?.();
+  }
+
+  /**
+   * Show one entry screen, or dismiss them all with null. Clears the other overlays for the same
+   * reason they clear each other: one absolute surface over the stage at a time.
+   * @param {"chooser"|"premade"|"threshold"|null} view
+   */
+  async _openEntry(view) {
+    this.#entry = view;
+    this._sourceDetails = null;
+    this._compare = null;
+    if ( view === "threshold" ) {
+      this.#thresholdRules ??= systemRulesEdition();
+      // Open on a character rather than three blanks: an empty threshold would ask for three
+      // decisions before it could show anything, which is the wizard it exists to replace.
+      await seedThreshold(this._ctx(), { rules: this.#thresholdRules });
+      this.#nameTouched = false;
+    }
+    this.render();
+  }
+
+  /**
+   * Take one of the three paths. Custom dismisses the entry screens onto the wizard, unchanged;
+   * the other two open their own screen.
+   * @param {"custom"|"quick"|"premade"} path
+   */
+  async _entryPath(path) {
+    if ( path === "quick" ) return this._openEntry("threshold");
+    if ( path === "premade" ) return this._openEntry("premade");
+    // Custom: dismiss onto the wizard. Anything the threshold already seeded is kept rather than
+    // discarded — the player carries their picks in with them. Choosing this is a decision to build
+    // by hand, so the offer of a way back to the quick screen goes with it.
+    this.#entry = null;
+    this.#returnToQuick = false;
+    this._leaveStepFor(this.#firstIncompleteIndex());
+  }
+
+  /**
+   * "Browse all 13" on a threshold card: leave for that category's own step, where the full grid,
+   * the detail pane and the comparison tool already live. Rebuilding any of that inside the overlay
+   * would be a second picker to maintain.
+   *
+   * The seeded pick is **cleared on the way out**. Arriving with it still selected — one card lit,
+   * the detail pane already filled — reads as "here is your class" rather than "here are the
+   * classes", which makes the control look like it did nothing. The step is a question again, and
+   * the footer carries the way back.
+   * @param {"class"|"species"|"background"} category
+   */
+  async _entryBrowse(category) {
+    this.#dirty = true;
+    await thresholdClear(this._ctx(), category);
+    this.#entry = null;
+    this.#returnToQuick = true;
+    const index = STEPS.findIndex(step => step.id === category);
+    this._leaveStepFor(index >= 0 ? index : this.#firstIncompleteIndex());
+  }
+
+  /**
+   * Back to the quick screen from whichever step the player wandered to.
+   *
+   * Anything they chose while they were away is kept — that was the point of the trip — and any
+   * slot still empty is re-seeded, so the screen is never reached with a blank card.
+   */
+  async _returnToQuick() {
+    this.#returnToQuick = false;
+    return this._openEntry("threshold");
+  }
+
+  /**
+   * Switch the quick screen between 5e (2014) and 5.5e (2024).
+   *
+   * Every pick is cleared and re-seeded rather than kept: a 2014 class with a 2024 background is
+   * not a character anyone asked for, and the origin grids are scoped to the class's edition
+   * everywhere else in the wizard for exactly that reason.
+   * @param {"2014"|"2024"} rules
+   */
+  async _thresholdEdition(rules) {
+    if ( !rules || rules === this.#thresholdRules ) return;
+    this.#thresholdRules = rules;
+    this.#dirty = true;
+    this.state.classUuid = null;
+    this.state.speciesUuid = null;
+    this.state.backgroundUuid = null;
+    this.state.resetClassDependent();
+    this.state.resetSourceChoices("species");
+    this.state.resetSourceChoices("background");
+    await seedThreshold(this._ctx(), { rules });
+    this.render();
+  }
+
+  /**
+   * Roll one of the threshold's dice: a category, or the name.
+   * @param {"class"|"species"|"background"|"name"} category
+   */
+  async _thresholdRoll(category) {
+    this.#dirty = true;
+    if ( category === "name" ) {
+      thresholdRollName(this._ctx());
+      this.#nameTouched = false;
+    } else {
+      await thresholdRoll(this._ctx(), category,
+        { rerollName: !this.#nameTouched, rules: this.#thresholdRules });
+    }
+    this.render();
+  }
+
+  /**
+   * Roll a whole character: all three cards and the name.
+   *
+   * The name goes with them, and the touched flag resets — asking for a random character is asking
+   * for a random name too, unlike the species die, which leaves a name the player wrote alone.
+   */
+  async _thresholdRollAll() {
+    this.#dirty = true;
+    await thresholdRollAll(this._ctx(), { rules: this.#thresholdRules });
+    this.#nameTouched = false;
+    this.render();
+  }
+
+  /**
+   * The typed name. Written straight to the state without a re-render: re-rendering would destroy
+   * the very box the player is typing in, which is the same reason the ability panel patches in
+   * place rather than repainting.
+   * @param {string} value
+   */
+  _thresholdName(value) {
+    this.state.details.name = value;
+    this.#nameTouched = true;
+    this.#dirty = true;
+  }
+
+  /**
+   * Fill the character from the threshold's three picks and create it.
+   *
+   * "Create Character" means what it says: the actor is built and the window closes. Landing on
+   * Review instead would make the button a lie and leave a second Create to find, which is the
+   * wizard this screen exists to skip.
+   *
+   * The one case that does not create is a fill with a gap in it — a class whose spell list could
+   * not be read, say. `_finish` already refuses unless every required step is complete, but it
+   * refuses *silently*, so the gap is caught here and the player is put on the step that still
+   * needs them rather than left pressing a button that does nothing.
+   */
+  async _thresholdCreate(el) {
+    this.#dirty = true;
+    this.#returnToQuick = false;
+    const filled = await thresholdCreate(this._ctx(), el);
+    this.#entry = null;
+    if ( !filled ) { this.render(); return; }
+
+    if ( REQUIRED_STEPS.every(step => step.isComplete(this.state)) ) return this._finish(el);
+
+    ui.notifications?.warn(t("quickBuild.partial"));
+    this._leaveStepFor(this.#firstIncompleteIndex());
   }
 
   /** @override Creation step changes are public — see {@link module:api}. */

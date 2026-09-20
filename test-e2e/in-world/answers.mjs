@@ -530,19 +530,34 @@ async function generateAsiFeat(adv, level) {
   return { answer: { feat: pick.uuid } };
 }
 
+/** The abilities an ASI's point budget can actually be spent on. */
+function openAbilities(adv) {
+  const locked = adv.configuration?.locked;
+  return ABILITY_ORDER.filter(k => canImprove(adv, k) && !locked?.has?.(k));
+}
+
+/**
+ * Whether an ability-score improvement has nothing to decide: no point budget (a capstone's fixed
+ * `+4`), or a budget with a single legal target (a half-feat's `+1 Cha` with the other five locked).
+ */
+export function isForcedAsi(adv) {
+  if ( adv?.type !== "AbilityScoreImprovement" ) return false;
+  return ((adv.configuration?.points ?? 0) <= 0) || (openAbilities(adv).length <= 1);
+}
+
 function generateAsi(adv) {
   const cfg = adv.configuration ?? {};
   const fixed = cfg.fixed ?? {};
   const cap = cfg.cap ?? Infinity;
   const budget = cfg.points ?? 0;
 
-  const open = ABILITY_ORDER.filter(k => canImprove(adv, k) && !cfg.locked?.has?.(k));
+  const open = openAbilities(adv);
 
   // Nothing to decide: a capstone's fixed `+4` (Primal Champion, Body and Mind), a half-feat's `+1`,
   // or a budget with a single legal target. Both sides apply these without asking anyone — the
   // driver holds them back and applies them in level order, the native manager's pre-render seed
   // lands them — so answering would only make the ledger report a decision neither side made.
-  if ( (budget <= 0) || (open.length <= 1) ) {
+  if ( isForcedAsi(adv) ) {
     return { answer: null, note: "a forced increase, not an allocation" };
   }
 
@@ -741,7 +756,9 @@ export class AnswerBook {
       entry = {
         advId: adv.id, level, type: adv.type, title: adv.title ?? null,
         item: adv.item?.name ?? null, source: null, answer: undefined,
-        missing: null, note: null, askedBy: []
+        missing: null, note: null, askedBy: [],
+        // Recorded so the ledger can tell a forced increase a scenario states from a real choice.
+        forced: isForcedAsi(adv)
       };
       this.#memo.set(key, entry);
 

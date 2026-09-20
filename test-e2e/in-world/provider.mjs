@@ -104,6 +104,15 @@ export class ScenarioChoiceProvider {
     return this.#book.isDeferred(rec?.advancement, this.#phase);
   }
 
+  /**
+   * The keep list for one of Tasha's optional or replacement grants, or null to leave the seed alone.
+   * `null` and `[]` differ here: the second declines every item.
+   */
+  optionalGrant(rec) {
+    const value = this.#answer(rec);
+    return Array.isArray(value) ? value : null;
+  }
+
   /** The chosen uuids for a feature `ItemChoice`. */
   choiceUuids(rec) {
     const value = this.#answer(rec);

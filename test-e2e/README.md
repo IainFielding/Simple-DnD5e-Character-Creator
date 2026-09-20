@@ -31,7 +31,7 @@ now **131** scenarios; the Arcana Unleashed subclasses are among them.
 | 2014 Tasha's Rangers and Clerics, level 5 (after the creation optional-feature change) | 6.0.3 | **6 / 6 identical** | `sweep-results-603-optional-2014-l5.jsonl` |
 | Background axis, level 20 | 6.0.2 | **71 / 71 identical** | `sweep-results-602-background-final.jsonl` |
 | Species axis, level 20 | 6.0.2 | 22 / 24 — Changeling (`source.book`), Dwarf (`hp.value`), both known | `sweep-results-602-species.jsonl` |
-| Base suite | 6.0.3 | **7 / 8** — only the known level-4 half-feat `decision.raised` remains | `base-suite-603-featspells.log` |
+| Base suite | 6.0.3 | **9 / 10** — the half-feat's forced `decision.raised` is now excluded (see *A forced increase still has to be stated*); the new Tasha's ranger fails on the Canny bug (open item 1) | `base-suite-tashas-undertaker.log` |
 | Ember | 6.0.2 | **3 / 3 identical** | `ember-6.0.2.log` |
 | `--hooks` | 6.0.2 | **7 / 7** | `hooks-6.0.2.log` |
 | Granted always-prepared spells, sidekicks | 6.0.2 | pass | `granted-spells-6.0.2.log`, `sidekicks-6.0.2.log` |
@@ -89,14 +89,23 @@ that is unit-tested only: the sweep never takes Arcane Undertaker.
 
 ### Open, in priority order
 
-1. **Creation optional class features have no harness coverage beyond the default.** The Choices step
-   now offers Tasha's optional and replacement features at level 1. The sweeps above prove the default
-   (keep everything; keep the 2014 base of each pair) is unchanged, but the answer book never declines
-   or swaps, so the swap path is covered only by `test/optional-grant-creation.test.mjs` and the
-   driver's level-up path it shares.
-2. Species, background, base suite, Ember and `--hooks` were last run on 6.0.2. dnd5e 6.0.2 → 6.0.3 is
-   a patch release and was checked by hand, but a re-run would make this table one version.
-3. `describeDrift` still does not compare system versions (6.0.0 open item 5).
+1. **Deft Explorer arrives without Canny — a module bug, found 2026-09-19.** The new
+   `hill-dwarf-ranger-2014-tashas` takes Favored Foe and Deft Explorer at creation and Primal
+   Awareness at level 3; every swap matches except Canny (3 rows, `base-suite-tashas-undertaker.log`).
+   Tasha's flow treats Canny as part of Deft Explorer (locked checkbox, granted and reversed with it);
+   `replacementGroups` treats it as a competing alternative, or drops it on a two-base grant. Both
+   adapters now take a keep list for a replacement grant: `native.mjs` chooses radios in Tasha's flow
+   (re-reading the controls after each re-render), the creator writes the list under the grant id at
+   creation, and the provider's `optionalGrant` hands it to `setOptionalGrant` at level-up.
+2. Species, background, Ember and `--hooks` were last run on 6.0.2. dnd5e 6.0.2 → 6.0.3 is a patch
+   release and was checked by hand, but a re-run would make this table one version.
+3. ~~`describeDrift` still does not compare system versions~~ — **done.** It now names a different
+   dnd5e or Foundry version, and a baseline that recorded none, so `compare-baseline.mjs` warns.
+   The module's own version is deliberately not compared.
+4. ~~Arcane Undertaker's school restriction is unit-tested only~~ — **covered** by
+   `human-wizard-covenant-undertaker`, which also asserts the creator's grant carries `nec`.
+5. ~~A directly enumerated `ModifyItem` step would make `canDrive` decline~~ — **stale.** It has its
+   own case and the native-flow fallback claims any type; `test/levelup-gate.test.mjs` now pins it.
 
 ## Master findings — dnd5e 6.0.0, 2026-09-05 (superseded by 6.0.3 above)
 
@@ -1285,7 +1294,7 @@ here because it always has.
 | `human-fighter-sage` | martial level 1: weapon mastery, fighting style, background ASI | 8 | **identical** |
 | `human-wizard-sage` | full caster level 1: spellcasting progression, ScaleValues, Int casting | 4 | **identical** |
 | `human-wizard-sage-l3` | 1→3 in one manager: hit-point decisions, level-2 trait, subclass + its synthesised features | 6 | **identical** |
-| `human-wizard-sage-l4-halffeat` | level-4 ASI answered with a feat, and the half-feat's own increase | 6 | 1 |
+| `human-wizard-sage-l4-halffeat` | level-4 ASI answered with a feat, and the half-feat's own increase | 6 | **identical** |
 | `human-wizard-sage-featspells` | Magic Initiate's spells actually chosen, both routes | 18 | 11 |
 | `fighter-multiclass-wizard` | a second class item: secondary advancements, a real first-level HP decision | 18 | **identical** |
 | `hill-dwarf-wizard-2014` | a 2014 **species** increase that is entirely fixed (+2 CON / +1 WIS) | — | **identical** |
@@ -1529,6 +1538,11 @@ un-incremented with a live "+" button (`ability-score-improvement-flow.mjs` sets
 that leaves it unanswered gets +1 from the creator and nothing from the native reference. The
 creator is the one following the rules there; state the answer anyway so the scenario tests that
 both sides *can* apply it rather than re-reporting a known divergence every run.
+
+Stating it used to leave one `decision.raised` row behind: the native flow asks, the driver never
+surfaces the increase. Since 2026-09-19 the book flags a forced increase (`isForcedAsi` in
+`answers.mjs`) and `decisionDifferences` skips it, as it already skips the no-choice cases
+`generateAsi` answers with `null`. The character diff still checks that the +1 lands on both sides.
 
 ### Found by the sweep, fixed
 

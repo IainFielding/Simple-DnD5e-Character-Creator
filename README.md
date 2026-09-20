@@ -332,7 +332,7 @@ Hooks.on(api.HOOKS.characterCreated, ({ actor, targetLevel }) => {
 ## Requirements
 
 - **Foundry VTT** version 14 or later
-- The **D&D Fifth Edition (dnd5e)** game system, version 5.3.3 or later
+- The **D&D Fifth Edition (dnd5e)** game system, version 5.3.0 or later
 - Your character content (classes, species, backgrounds, spells, and equipment) enabled in your compendiums
 
 ---

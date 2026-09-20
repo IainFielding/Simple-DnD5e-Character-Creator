@@ -84,6 +84,11 @@
               the element as a tooltip whenever there is any. --}}
         <span class="creator-dossier-value-line" {{#if summary}}data-tooltip="{{summary}}"{{/if}}>
           {{#if summary}}{{summary}}
+          {{!-- `pending` is set only while the quick screen is up, and only for the steps it fills.
+                It is a promise rather than an answer, so it is styled as one — an em-dash here
+                would read as four outstanding tasks on the screen whose whole point is that there
+                are none. --}}
+          {{else if pending}}<span class="creator-dossier-pending">{{pending}}</span>
           {{else if applicable}}&mdash;
           {{else}}{{localize "sogrom-dnd5e-character-creator.dossier.notApplicable"}}{{/if}}
         </span>
