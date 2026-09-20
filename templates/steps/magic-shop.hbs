@@ -117,6 +117,26 @@
                 <i class="fa-solid fa-plus"></i>
               </button>
             </div>
+            {{!-- Buying, separate from the free-pick stepper on its left. The two are different
+                  currencies in the literal sense: one spends a rarity slot, the other spends coin,
+                  and the same item can take both. An item with no price is not for sale. --}}
+            <div class="creator-magic-buy">
+              {{#if bought}}
+              <button type="button" class="creator-store-qty-btn" data-action="stepAction"
+                      data-step-action="magic-unbuy" data-uuid="{{uuid}}"
+                      aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.removeOne'}}">
+                <i class="fa-solid fa-minus"></i>
+              </button>
+              <span class="creator-store-qty-count">{{boughtQty}}</span>
+              {{/if}}
+              <button type="button" class="creator-btn creator-btn-ghost creator-magic-buy-btn"
+                      data-action="stepAction" data-step-action="magic-buy" data-uuid="{{uuid}}"
+                      data-cp="{{cp}}" data-name="{{name}}" data-img="{{img}}"
+                      {{#unless canBuy}}disabled{{/unless}} data-tooltip="{{buyLabel}}">
+                {{#if forSale}}<i class="fa-solid fa-coins"></i> {{price}}
+                {{else}}<i class="fa-solid fa-ban"></i>{{/if}}
+              </button>
+            </div>
           </li>
           {{/each}}
         </ul>
@@ -170,6 +190,43 @@
       </button>
       {{else if hasSlots}}
       <p class="creator-store-cart-empty">{{localize "sogrom-dnd5e-character-creator.step.magicShop.picksEmpty"}}</p>
+      {{/if}}
+
+      {{!-- Buying, below the free picks and visibly separate from them. The slots above are a
+            rarity allowance; this is money, and a player needs to see that the two budgets are
+            not the same one. Shown whenever there is anything to spend, so an empty cart still
+            tells them what they have. --}}
+      {{#if canSpend}}
+      <div class="creator-magic-purse {{#if overBudget}}is-over{{/if}}">
+        <h3 class="creator-magic-purse-head"><i class="fa-solid fa-coins"></i> {{cartHeading}}</h3>
+        <dl class="creator-magic-purse-sums">
+          <dt>{{budgetLabel}}</dt><dd>{{budget}}</dd>
+          <dt>{{spentLabel}}</dt><dd>{{spent}}</dd>
+          <dt>{{remainingLabel}}</dt><dd>{{remaining}}</dd>
+        </dl>
+
+        {{#if hasCart}}
+        <ul class="creator-store-cart-rows">
+          {{#each cart}}
+          <li class="creator-store-cart-row">
+            <img src="{{img}}" alt="" data-tooltip="{{ccItemTooltip link}}">
+            <span class="creator-store-cart-name"><a class="content-link" data-uuid="{{link}}" data-link
+                  data-tooltip="{{ccItemTooltip link}}">{{name}}</a> &times;{{qty}}
+              <span class="creator-magic-cart-price">{{price}}</span></span>
+            <button type="button" class="creator-store-qty-btn" data-action="stepAction"
+                    data-step-action="magic-unbuy" data-uuid="{{uuid}}"
+                    aria-label="{{localize 'sogrom-dnd5e-character-creator.step.store.removeOne'}}">
+              <i class="fa-solid fa-minus"></i>
+            </button>
+          </li>
+          {{/each}}
+        </ul>
+        <button type="button" class="creator-btn creator-store-clear" data-action="stepAction"
+                data-step-action="magic-cart-clear">
+          <i class="fa-solid fa-trash-can"></i> {{cartClear}}
+        </button>
+        {{/if}}
+      </div>
       {{/if}}
     </div>
 

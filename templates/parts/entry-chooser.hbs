@@ -16,11 +16,7 @@
 
   {{#if premades}}
   {{!-- ---------------------------------------------------------------- ready-made --}}
-  <header class="creator-entry-head">
-    <h2>{{premades.heading}}</h2>
-    <p>{{premades.blurb}}</p>
-  </header>
-
+  {{!-- No heading here: it is in the stage's own band above, so the question is not asked twice. --}}
   {{#if premades.none}}
   <p class="creator-entry-empty">{{premades.none}}</p>
   {{else}}
@@ -35,8 +31,9 @@
     <ul class="creator-premade-grid">
       {{#each this.entries}}
       <li>
-        <button type="button" class="creator-premade" data-action="entryPremade"
-                data-id="{{this.id}}" data-uuid="{{this.uuid}}">
+        <button type="button" class="creator-premade{{#if this.chosen}} is-chosen{{/if}}"
+                data-action="entryPremade" data-id="{{this.id}}"
+                aria-pressed="{{#if this.chosen}}true{{else}}false{{/if}}">
           <span class="creator-premade-art">
             {{#if this.banner}}
             <img src="{{this.banner}}" alt="" loading="lazy">
@@ -64,15 +61,17 @@
       <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
       {{premades.back}}
     </button>
+    {{!-- Selecting a card does not create anything. This does, and it names who it is about to
+          create — the one action in this window that cannot be undone from inside it. --}}
+    {{#if premades.chosen}}
+    <button type="button" class="creator-btn creator-premade-confirm" data-action="entryPremadeConfirm">
+      {{premades.confirm}}
+    </button>
+    {{/if}}
   </p>
 
   {{else}}
   {{!-- ------------------------------------------------------------------- chooser --}}
-  <header class="creator-entry-head">
-    <h2>{{heading}}</h2>
-    <p>{{blurb}}</p>
-  </header>
-
   <ul class="creator-entry-paths">
     {{#each paths}}
     <li class="creator-entry-path{{#if this.lead}} is-lead{{/if}}">
@@ -100,6 +99,5 @@
     {{/each}}
   </ul>
 
-  <p class="creator-entry-foot creator-entry-note">{{gmNote}}</p>
   {{/if}}
 </div>

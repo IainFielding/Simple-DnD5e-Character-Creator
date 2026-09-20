@@ -175,14 +175,6 @@ function registerSettings() {
   game.settings.register(MODULE_ID, SETTINGS.bannedAlignments, {
     scope: "world", config: false, type: Array, default: DEFAULTS.bannedAlignments
   });
-  // Dead under Ember, which owns creation outright and never reaches our first step. Registered
-  // either way, because `game.settings.get` on an unregistered setting throws and the creator
-  // shell reads this on every fresh build.
-  game.settings.register(MODULE_ID, SETTINGS.entryChooser, {
-    name: t("settings.entryChooser.name"),
-    hint: t("settings.entryChooser.hint"),
-    scope: "world", config: !ember, type: Boolean, default: DEFAULTS.entryChooser
-  });
   game.settings.registerMenu(MODULE_ID, "houseRulesMenu", {
     name: t("settings.houseRulesMenu.name"),
     label: t("settings.houseRulesMenu.label"),
@@ -398,7 +390,10 @@ function injectLaunchButton(root) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "sogrom-launch";
-  button.innerHTML = t("menu.launch");
+  // `fa-d-and-d` is a Font Awesome *brand* glyph, so it needs `fa-brands`, not `fa-solid` — with
+  // the wrong family it renders as an empty box. Font Awesome ships with Foundry, so no asset of
+  // ours is involved.
+  button.innerHTML = `<i class="fa-brands fa-d-and-d" aria-hidden="true"></i> ${t("menu.launch")}`;
   button.addEventListener("click", ev => { ev.preventDefault(); launchCreator(); });
   container.appendChild(button);
 }

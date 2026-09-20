@@ -1,6 +1,6 @@
 import {
   MODULE_ID, HOOKS, tpl, t, log, ABILITIES, formatMod, fireHook, fireCancellableHook,
-  entryChooserEnabled, emberActive, systemRulesEdition
+  emberActive, systemRulesEdition
 } from "../config.mjs";
 import { CreatorShellBase, shellOptions, dossierStageParts, SHELL_ACTIONS } from "./shell-base.mjs";
 import { illuminatePages, drawFrameSigils, fitCardArt } from "./page-illumination.mjs";
@@ -15,6 +15,7 @@ import { postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
 import { launchLevelUpTo } from "../levelup/intercept.mjs";
 import { chooserContext, premadeContext, applyPremade, takePregen } from "./entry-chooser.mjs";
+import { foundryPregens } from "../data/premades.mjs";
 import {
   QUICK_FILLED_STEPS, thresholdClear, thresholdContext, thresholdCreate, thresholdRoll,
   thresholdRollAll, thresholdRollName, seedThreshold
@@ -56,12 +57,8 @@ export class CreatorShell extends CreatorShellBase {
       entryPath(event, target) { return this._entryPath(target.dataset.path); },
       entryBack() { return this._openEntry("chooser"); },
       entryReturn() { return this._returnToQuick(); },
-      entryPremade(event, target) {
-        // Foundry's own pregens carry a uuid and are imported whole; ours are built.
-        return target.dataset.uuid
-          ? takePregen(this._ctx(), target.dataset.uuid, target)
-          : applyPremade(this._ctx(), target.dataset.id, target);
-      },
+      entryPremade(event, target) { this._premadeSelect(target.dataset.id); },
+      entryPremadeConfirm(event, target) { return this._premadeConfirm(target); },
       thresholdEdition(event, target) { return this._thresholdEdition(target.dataset.rules); },
       thresholdRoll(event, target) { return this._thresholdRoll(target.dataset.category); },
       thresholdRollAll() { return this._thresholdRollAll(); },
@@ -124,14 +121,21 @@ export class CreatorShell extends CreatorShellBase {
    */
   #thresholdRules = null;
   /**
-   * Whether the player stepped out of the quick screen to browse a category in full, and so should
-   * be offered a way back to it.
+   * Which entry screen the player left, and so which one to offer them a way back to — or null
+   * when they did not arrive from one.
    *
-   * Set on the way out and cleared when they take it or finish. It survives moving between steps on
-   * purpose: someone who goes to the class grid, then wanders to Background to look something up,
-   * has not changed their mind about wanting to go back.
+   * Two cases, and they want different destinations. Leaving the quick screen to browse one
+   * category in full should come back to the quick screen, with the pick they went to make. Taking
+   * Custom build from the chooser should come back to the chooser, because the choice being
+   * reconsidered is which path to take, not which class.
+   *
+   * It survives moving between steps on purpose: someone who goes to the class grid, then wanders
+   * to Background to look something up, has not changed their mind about wanting to go back.
+   * @type {"threshold"|"chooser"|null}
    */
-  #returnToQuick = false;
+  #returnTo = null;
+  /** The ready-made character the player has selected but not yet confirmed. */
+  #premadeChoice = null;
   /**
    * Whether this window's work belongs in a draft.
    *
@@ -272,7 +276,8 @@ export class CreatorShell extends CreatorShellBase {
     // threshold resolves origin ability increases into the state, and the dossier must show this
     // render rather than the previous one.
     const entry = this.#entry === "chooser" ? await chooserContext(this._ctx())
-      : this.#entry === "premade" ? { premades: await premadeContext(this._ctx()) }
+      : this.#entry === "premade"
+        ? { premades: await premadeContext(this._ctx(), this.#premadeChoice) }
         : null;
     const threshold = this.#entry === "threshold"
     ? await thresholdContext(this._ctx(), this.#thresholdRules ?? systemRulesEdition())
@@ -296,10 +301,19 @@ export class CreatorShell extends CreatorShellBase {
       threshold,
       version: game.modules.get(MODULE_ID)?.version ?? "",
       cancelLabel: t("nav.cancel"),
+      // The heading band. Normally the active step's, but an entry screen is not a step and must
+      // not wear one's name — "Class & Abilities" over the quick screen describes the step
+      // underneath rather than the screen on top of it. The chooser goes further and has no
+      // separate heading of its own: its question IS the heading, so it moves up into this band
+      // rather than repeating below it.
+      heading: this.#entryHeading() ?? {
+        title: t(step.labelKey),
+        instruction: step.instructionKey ? t(step.instructionKey) : null
+      },
       // The way back to the quick screen, for a player who left it to browse one category in full.
       // Shell chrome in the stage footer, so no step has to know the quick screen exists.
-      quickReturn: (this.#returnToQuick && !this.#entry && !this.#loading)
-        ? t("quickBuild.threshold.returnToQuick")
+      quickReturn: this.#canReturnToEntry()
+        ? t(this.#returnTo === "chooser" ? "entry.returnToChooser" : "quickBuild.threshold.returnToQuick")
         : null,
       dossier: this.#dossierContext(lines, threshold),
       progress: this._progressContext(lines, missing),
@@ -329,7 +343,10 @@ export class CreatorShell extends CreatorShellBase {
           nextLabel: t("nav.next"),
           // When Next is greyed because this step isn't finished, say what's still needed
           // instead of leaving the player guessing at a dead button.
-          hint: (hasNext && !flags[this._stepIndex])
+          // Suppressed behind an entry screen. "Spend all 27 remaining ability points" is advice
+          // about the step underneath, and on a screen that is about to spend them for you it is
+          // both wrong and alarming.
+          hint: (hasNext && !flags[this._stepIndex] && !this.#entry)
             ? (step.incompleteHint?.(this.state, this.source) ?? t("nav.incomplete"))
             : null
         };
@@ -804,19 +821,21 @@ export class CreatorShell extends CreatorShellBase {
   }
 
   /**
-   * Whether to open on the chooser: the world asked for it, Ember does not own creation here, and
-   * nothing has been chosen yet.
+   * Whether to open on the chooser: this is a fresh build and Ember does not own creation here.
    *
-   * The last condition is what makes it safe on a resumed draft — a player who got three steps in
-   * yesterday should land back on their work, not be asked how they would like to start.
+   * The chooser is the front door now, not an opt-in. It was built behind a world setting so that
+   * no existing world would acquire a new first screen by upgrading; that setting is gone, and
+   * every world gets it. Nothing about the step-by-step path changed — it is simply reached by
+   * choosing it rather than by default.
    *
-   * The Ember check is belt and braces: the setting is `config: !ember`, so in such a world no GM
-   * can have turned it on through the UI, but a stored value from before Ember was installed would
-   * otherwise survive and offer a chooser in front of a flow Ember owns outright.
+   * Two things still suppress it. **Ember** owns creation outright and has its own front end, so a
+   * chooser in front of it would be a door onto a room someone else furnished. And **a build
+   * already under way** — a resumed draft, an actor being finished — goes back to its work rather
+   * than being asked how the player would like to start something they already started.
    * @returns {boolean}
    */
   #shouldOfferEntry() {
-    if ( !entryChooserEnabled() || emberActive() ) return false;
+    if ( emberActive() ) return false;
     return !this.state.classUuid && !this.state.speciesUuid && !this.state.backgroundUuid;
   }
 
@@ -841,6 +860,47 @@ export class CreatorShell extends CreatorShellBase {
     // Take focus so Escape reaches the handler without the player clicking first — but never off
     // an input the player may already be typing in.
     if ( !root.contains(document.activeElement) ) overlay.focus?.();
+  }
+
+  /**
+   * Whether to still offer the way back to an entry screen.
+   *
+   * Withdrawn from the Choices step onwards. Up to that point the player has only settled the same
+   * three things the entry screens are about, so going back costs nothing. Choices is where the
+   * build starts answering questions that belong to those three — a class's fighting style, a
+   * species' lineage — and an offer to start over from a different door, sitting in the footer
+   * beside that work, is an invitation to lose it.
+   *
+   * Hidden rather than disabled: a greyed control still reads as something the player might get
+   * back, and this one is simply finished with.
+   * @returns {boolean}
+   */
+  #canReturnToEntry() {
+    if ( !this.#returnTo || this.#entry || this.#loading ) return false;
+    const choices = STEPS.findIndex(step => step.id === "choices");
+    return (choices < 0) || (this._stepIndex < choices);
+  }
+
+  /**
+   * The heading band for whichever entry screen is open, or null when none is.
+   *
+   * The chooser's question is its heading, so it is lifted here and not drawn again in the body.
+   * @returns {{title: string, instruction: string|null}|null}
+   */
+  #entryHeading() {
+    if ( this.#entry === "chooser" ) {
+      return { title: t("entry.heading"), instruction: t("entry.blurb") };
+    }
+    if ( this.#entry === "premade" ) {
+      return { title: t("entry.premade.heading"), instruction: t("entry.premade.blurb") };
+    }
+    if ( this.#entry === "threshold" ) {
+      return {
+        title: t("quickBuild.threshold.title"),
+        instruction: t("quickBuild.threshold.instruction")
+      };
+    }
+    return null;
   }
 
   /**
@@ -871,10 +931,11 @@ export class CreatorShell extends CreatorShellBase {
     if ( path === "quick" ) return this._openEntry("threshold");
     if ( path === "premade" ) return this._openEntry("premade");
     // Custom: dismiss onto the wizard. Anything the threshold already seeded is kept rather than
-    // discarded — the player carries their picks in with them. Choosing this is a decision to build
-    // by hand, so the offer of a way back to the quick screen goes with it.
+    // discarded — the player carries their picks in with them. The way back now points at the
+    // chooser rather than the quick screen: what they may want to reconsider is which path they
+    // took, not which class.
     this.#entry = null;
-    this.#returnToQuick = false;
+    this.#returnTo = "chooser";
     this._leaveStepFor(this.#firstIncompleteIndex());
   }
 
@@ -893,9 +954,34 @@ export class CreatorShell extends CreatorShellBase {
     this.#dirty = true;
     await thresholdClear(this._ctx(), category);
     this.#entry = null;
-    this.#returnToQuick = true;
+    this.#returnTo = "threshold";
     const index = STEPS.findIndex(step => step.id === category);
     this._leaveStepFor(index >= 0 ? index : this.#firstIncompleteIndex());
+  }
+
+  /**
+   * Select a ready-made character. Selecting is not taking it: creating an actor is the one action
+   * in this window that cannot be undone from inside it, so it takes a second, deliberate press.
+   * @param {string} id
+   */
+  _premadeSelect(id) {
+    this.#premadeChoice = (this.#premadeChoice === id) ? null : id;
+    this.render();
+  }
+
+  /** Create the selected ready-made character. */
+  async _premadeConfirm(el) {
+    const id = this.#premadeChoice;
+    if ( !id ) return;
+    const official = (await foundryPregens())
+      .flatMap(group => group.entries)
+      .find(pc => pc.id === id);
+    this.#dirty = true;
+    if ( official ) return takePregen(this._ctx(), official.uuid, el);
+    this.#entry = null;
+    this.#returnTo = null;
+    const done = await applyPremade(this._ctx(), id, el);
+    if ( !done ) this.render();
   }
 
   /**
@@ -905,8 +991,9 @@ export class CreatorShell extends CreatorShellBase {
    * slot still empty is re-seeded, so the screen is never reached with a blank card.
    */
   async _returnToQuick() {
-    this.#returnToQuick = false;
-    return this._openEntry("threshold");
+    const target = this.#returnTo ?? "chooser";
+    this.#returnTo = null;
+    return this._openEntry(target);
   }
 
   /**
@@ -986,7 +1073,7 @@ export class CreatorShell extends CreatorShellBase {
    */
   async _thresholdCreate(el) {
     this.#dirty = true;
-    this.#returnToQuick = false;
+    this.#returnTo = null;
     const filled = await thresholdCreate(this._ctx(), el);
     this.#entry = null;
     if ( !filled ) { this.render(); return; }

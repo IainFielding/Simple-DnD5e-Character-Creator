@@ -3,6 +3,7 @@ import {
   creationSummaryMode, levelUpSummaryMode
 } from "../config.mjs";
 import { slotChanges } from "../levelup/steps/lvl-review-step.mjs";
+import { formatCp } from "../data/store-source.mjs";
 
 /**
  * The chat cards this module posts when a character is finished and when a level-up is applied.
@@ -188,6 +189,15 @@ function magicShopRows(grant) {
   if ( grant.items?.length ) rows.push({
     label: t("chat.creation.magicItems"),
     items: grant.items.map(i => ({
+      name: i.qty > 1 ? t("chat.creation.magicItemQty", { name: i.name, qty: i.qty }) : i.name,
+      uuid: i.uuid ?? ""
+    }))
+  });
+  // Purchases are listed apart from the free picks, and the bill is named. A player reading the
+  // card later should be able to tell which items the tier gave them and which they paid for.
+  if ( grant.bought?.length ) rows.push({
+    label: t("chat.creation.magicBought", { spent: formatCp(grant.spentCp ?? 0) }),
+    items: grant.bought.map(i => ({
       name: i.qty > 1 ? t("chat.creation.magicItemQty", { name: i.name, qty: i.qty }) : i.name,
       uuid: i.uuid ?? ""
     }))

@@ -1,4 +1,4 @@
-import { log } from "../config.mjs";
+import { log, t } from "../config.mjs";
 import { slugify } from "./origin-art.mjs";
 
 /**
@@ -20,8 +20,25 @@ import { slugify } from "./origin-art.mjs";
  * magic items that a pregen cannot make for them.
  */
 
-/** The dnd5e system pack holding the official pregenerated characters. */
-export const PREGEN_PACK = "dnd5e.actors24";
+/**
+ * Packs that hold ready-made player characters, in the order they are offered.
+ *
+ * `idHint` is an optimisation, not the rule. The rule is "a character document whose class levels
+ * total one", which is the only test that stays right when a pack changes shape — but applying it
+ * means loading documents, and `dnd5e.actors24` holds 471 of them across four levels. Matching the
+ * id first cuts that to twelve. A pack with no hint is filtered on `type` from the index instead,
+ * which is cheap, and only the characters are loaded.
+ */
+export const PREGEN_SOURCES = [
+  { pack: "dnd5e.actors24", idHint: "Lv01" },
+  // `describe: false` because these characters' biographies are not biographies. Every one of the
+  // twelve carries the same ~1,900 characters of the book's own character-creation walkthrough —
+  // "Step 1: Choose a Class", then a table of classes and their primary abilities — which is
+  // useful on the sheet and meaningless on a card. There is nothing to trim it down to, so the
+  // card shows no description rather than a sentence of someone else's instructions.
+  { pack: "dnd-players-handbook.actors", describe: false },
+  { pack: "dnd-heroes-borderlands.actors" }
+];
 
 /**
  * Placeholder actor art, which is not a portrait and must not be shown as one.
@@ -54,62 +71,141 @@ export function portraitFor(doc, cls) {
   return cls?.img || "icons/svg/mystery-man.svg";
 }
 
-/**
- * How a level is spelled inside a pregen's `_id` — `AkraLv0100000000`, `AkraLv0500000000`.
- *
- * Matching on the id rather than on `system.details.level` is deliberate: the id is in the pack
- * index, so the list can be built without loading twelve Actor documents, and it is stable in a way
- * a computed level is not (a pregen's level is the sum of its class items, which the index cannot
- * see). If a future pack breaks the convention this yields an empty list, which degrades to "no
- * ready-made characters" rather than to a wrong one.
- */
-const LEVEL_1 = "Lv01";
-
-/** Resolved pregens, memoised — twelve Actor documents is not a load to repeat on every render. */
+/** Resolved pregens, memoised — these Actor documents are not a load to repeat on every render. */
 let pregenCache = null;
 
+/** A character's level: the sum of its class items, which is the only place the truth lives. */
+function levelOf(doc) {
+  return doc.items.reduce((sum, i) => sum + (i.type === "class" ? (i.system?.levels ?? 0) : 0), 0);
+}
+
 /**
- * Foundry's own level 1 pregenerated characters, newest-system-first.
+ * A short, plain-text description from a character's biography.
+ *
+ * The biography is enriched HTML — paragraphs, links, sometimes an embedded image — and a card has
+ * room for a sentence. Tags are stripped rather than rendered, both because the card is a button
+ * (so nested interactive markup would be invalid) and because a half-rendered link is worse than
+ * no description. Entities are decoded via the DOM rather than by hand, so `&amp;` and friends read
+ * as themselves. A pack with no biographies — Heroes of the Borderlands has none — simply gets no
+ * descriptions, which is why the card treats it as optional.
+ * @param {Actor} doc
+ * @param {number} [limit]
+ * @returns {string}
+ */
+export function describePregen(doc, limit = 130) {
+  const html = doc?.system?.details?.biography?.value ?? "";
+  if ( !html ) return "";
+
+  let text = "";
+  // The DOM is the right way to do this — it handles every entity and every malformed tag — but it
+  // is not always there. This runs under Node in the unit tests, and a `document` reference that
+  // throws would take the whole pack down with it (the caller catches, so the failure would show
+  // as "this book has no ready-made characters", which is a hard bug to trace back to here).
+  try {
+    const el = document.createElement("div");
+    el.innerHTML = html;
+    text = el.textContent ?? "";
+  } catch {
+    text = html
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&(?:quot|#34);/g, '"')
+      .replace(/&(?:apos|#39);/g, "'");
+  }
+
+  text = text.replace(/\s+/g, " ").trim();
+  if ( text.length <= limit ) return text;
+  // Cut at a word boundary, so the ellipsis never lands mid-word.
+  const cut = text.slice(0, limit);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > limit * 0.6 ? cut.slice(0, space) : cut).trimEnd()}\u2026`;
+}
+
+/**
+ * The label for a group of pregens: the book they came from.
+ *
+ * Read off the package rather than listed here, so adding a pack above needs no new translation
+ * string and a module's own title is always what the player sees.
+ * @param {string} pack   e.g. "dnd-heroes-borderlands.actors"
+ * @returns {{label: string, badge: string|null}}
+ */
+function groupFor(pack) {
+  const packageId = pack.split(".")[0];
+  if ( packageId === "dnd5e" ) {
+    return { label: t("entry.premade.fromFoundry"), badge: "icons/vtt-512.png" };
+  }
+  return { label: game.modules?.get(packageId)?.title ?? packageId, badge: null };
+}
+
+/**
+ * Every level 1 ready-made character this world has, grouped by the book that ships it.
  *
  * Each entry carries what the card needs and the uuid to import from, including the character's
- * own portrait — see {@link portraitFor}.
+ * own portrait ({@link portraitFor}) and a sentence of their biography ({@link describePregen}).
+ * A pack that is not installed contributes nothing and is not mentioned.
  *
- * @returns {Promise<Array<{id: string, uuid: string, name: string, line: string, img: string,
- *   className: string, speciesName: string, backgroundName: string, official: true}>>}
+ * @returns {Promise<Array<{label: string, badge: string|null, pack: string, entries: object[]}>>}
  */
 export async function foundryPregens() {
   if ( pregenCache ) return pregenCache;
-  const pack = game.packs?.get(PREGEN_PACK);
-  if ( !pack ) return (pregenCache = []);
+  const groups = [];
+  for ( const source of PREGEN_SOURCES ) {
+    const entries = await readPregenPack(source);
+    if ( entries.length ) groups.push({ ...groupFor(source.pack), pack: source.pack, entries });
+  }
+  return (pregenCache = groups);
+}
 
+/**
+ * The level 1 characters in one pack, or an empty list if it is absent or unreadable.
+ * @param {{pack: string, idHint?: string, describe?: boolean}} source
+ * @returns {Promise<object[]>}
+ */
+async function readPregenPack({ pack: packId, idHint, describe = true }) {
+  const pack = game.packs?.get(packId);
+  if ( !pack ) return [];
   try {
     const index = await pack.getIndex();
-    const wanted = [...index].filter(e => String(e._id).includes(LEVEL_1));
+    const wanted = [...index].filter(e => {
+      if ( idHint && !String(e._id).includes(idHint) ) return false;
+      // `type` is in every index; filtering on it here is what keeps a 166-actor pack of monsters
+      // from being loaded in full to find twelve characters.
+      return !e.type || e.type === "character";
+    });
     const docs = await Promise.all(wanted.map(e => pack.getDocument(e._id).catch(() => null)));
 
-    pregenCache = docs.filter(Boolean).map(doc => {
-      const of = type => doc.items.find(i => i.type === type);
-      const cls = of("class");
-      const race = of("race");
-      const background = of("background");
-      const parts = [race?.name, cls?.name].filter(Boolean).join(" ");
-      return {
-        id: doc.id,
-        uuid: doc.uuid,
-        name: doc.name,
-        className: cls?.name ?? "",
-        speciesName: race?.name ?? "",
-        backgroundName: background?.name ?? "",
-        line: background?.name ? `${parts} 1 · ${background.name}` : `${parts} 1`,
-        img: portraitFor(doc, cls),
-        official: true
-      };
-    }).sort((a, b) => a.name.localeCompare(b.name, game.i18n?.lang ?? "en"));
+    return docs
+      .filter(doc => doc && doc.type === "character" && levelOf(doc) === 1)
+      // Described inside the map, which is inside the try below — but note what the try is for:
+      // a pack that cannot be read at all. A single malformed document must not empty the list,
+      // which is why `describePregen` swallows its own failures rather than throwing here.
+      .map(doc => {
+        const of = type => doc.items.find(i => i.type === type);
+        const cls = of("class");
+        const race = of("race");
+        const background = of("background");
+        const parts = [race?.name, cls?.name].filter(Boolean).join(" ");
+        return {
+          id: doc.id,
+          uuid: doc.uuid,
+          name: doc.name,
+          className: cls?.name ?? "",
+          speciesName: race?.name ?? "",
+          backgroundName: background?.name ?? "",
+          line: parts ? (background?.name ? `${parts} 1 · ${background.name}` : `${parts} 1`) : "",
+          tagline: describe ? describePregen(doc) : "",
+          img: portraitFor(doc, cls),
+          official: true
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, game.i18n?.lang ?? "en"));
   } catch ( err ) {
-    log("could not read the official pregenerated characters", err);
-    pregenCache = [];
+    log(`could not read ready-made characters from ${packId}`, err);
+    return [];
   }
-  return pregenCache;
 }
 
 /** Drop the memo, so the next read re-queries. Called when the enabled packs may have changed. */

@@ -191,7 +191,6 @@ export const SETTINGS = {
   storeEnabled: "storeEnabled",
   storeConfig: "storeConfig",
   magicShopEnabled: "magicShopEnabled",
-  entryChooser: "openOnChooser",
   magicShopConfig: "magicShopConfig",
   debug: "debugLogging"
 };
@@ -226,10 +225,6 @@ export const DEFAULTS = {
   },
   // Off by default: it changes a higher-level character's starting wealth, which a table opts into.
   magicShopEnabled: false,
-  // Off by default, and this one matters more than most: it changes the first thing a player sees.
-  // Every world that upgrades keeps opening straight on the wizard, exactly as it does today, until
-  // its GM says otherwise. See `entryChooserEnabled()`.
-  entryChooser: false,
   magicShopConfig: {
     inventory: [],
     wealthTable: null          // null = the DMG table; see data/magic-shop.mjs
@@ -351,28 +346,6 @@ export function manualAbilitiesEnabled() {
     return !!game.settings.get(MODULE_ID, SETTINGS.manualAbilities);
   } catch {
     // Reachable only before the setting is registered; "off" is the right answer either way.
-    return false;
-  }
-}
-
-/**
- * Whether the creator opens on the entry chooser — "how do you want to build this character?" —
- * rather than straight on the first step.
- *
- * Off unless the GM says otherwise, and that default is the point: this is the only setting in the
- * module that changes the *first* thing a player sees, so no world may acquire it by upgrading.
- * With it off the creator behaves exactly as it always has, and Quick Build stays where it is — a
- * button in the class detail header.
- *
- * Meaningless under Ember, which owns creation outright and never reaches our first step; hence
- * `config: !ember` at registration. Read through here rather than off the setting directly so the
- * pre-registration case (an early hook, a unit test) answers "off" instead of throwing.
- * @returns {boolean}
- */
-export function entryChooserEnabled() {
-  try {
-    return !!game.settings.get(MODULE_ID, SETTINGS.entryChooser);
-  } catch {
     return false;
   }
 }

@@ -78,7 +78,7 @@
       "partial": "Quick Build finished with some gaps — check the remaining steps.",
       "failed": "Quick Build failed; your choices were left as they were.",
       "threshold": {
-        "title": "Begin",
+        "title": "Quick Build",
         "instruction": "Three choices. Everything else is filled in for you, and none of it is locked.",
         "create": "Create Character",
         "stepwise": "Build step by step instead",
@@ -101,7 +101,8 @@
         "editionAria": "Rules edition",
         "willPick": "Quick Build will pick",
         "returnToQuick": "Back to Quick Build",
-        "rollAll": "Roll everything"
+        "rollAll": "Roll everything",
+        "view": "View"
       }
     },
     "pdfExport": {
@@ -391,7 +392,8 @@
         "bonusGoldValue": "{gp} gp (d10 rolled {die}: {base} gp + {die} × {per} gp)",
         "bonusGoldFlat": "{gp} gp",
         "magicItems": "Magic Items",
-        "magicItemQty": "{name} ×{qty}"
+        "magicItemQty": "{name} ×{qty}",
+        "magicBought": "Bought ({spent})"
       },
       "levelup": {
         "heading": "Level up",
@@ -634,7 +636,16 @@
         "goldOnly": "Your starting level grants bonus gold but no magic items.",
         "allRarities": "All rarities",
         "filterRarityAria": "Filter by rarity",
-        "reviewHeading": "Magic Items"
+        "reviewHeading": "Magic Items",
+        "overBudget": "Your cart costs more than you can pay for.",
+        "buy": "Buy",
+        "buyPrice": "Buy for {price}",
+        "notForSale": "Not for sale",
+        "cartHeading": "Buying",
+        "cartClear": "Empty the cart",
+        "budget": "To spend",
+        "spent": "Spent",
+        "remaining": "Left"
       },
       "review": {
         "label": "Review",
@@ -867,10 +878,6 @@
       "allowManualAbilities": {
         "name": "Allow Manual Ability Scores",
         "hint": "Adds a fourth method to the Ability Scores panel where players type the six numbers in themselves. Off by default: manual entry ignores the point-buy budget, the standard array and the roll formula, so turn it on only where the scores are decided away from this window."
-      },
-      "entryChooser": {
-        "name": "Ask how to build",
-        "hint": "Opens the creator on a choice of three ways in — build step by step, quick build, or start from a ready-made character — instead of going straight to the first step. Off by default; the step-by-step path is unchanged either way."
       }
     },
     "storeConfig": {
@@ -972,7 +979,6 @@
       "heading": "How do you want to build this character?",
       "blurb": "All three end in the same place: a finished character on the Review page, with every choice still yours to change. They differ only in how much is decided for you.",
       "recommended": "Recommended",
-      "gmNote": "Your GM decides whether this screen appears at all.",
       "custom": {
         "title": "Custom build",
         "tagline": "Every choice is yours, in order, with the rules explained as you go.",
@@ -1002,8 +1008,10 @@
         "back": "Back",
         "fromFoundry": "From Foundry Virtual Tabletop",
         "fromModule": "From this module",
-        "importFailed": "That ready-made character could not be imported."
-      }
+        "importFailed": "That ready-made character could not be imported.",
+        "confirm": "Create {name}"
+      },
+      "returnToChooser": "Other ways to build"
     }
   }
 }

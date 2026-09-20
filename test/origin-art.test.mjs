@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  artCandidates, artDirectories, artDirectoriesFor, packageOf, resolveOriginArt, slugify
+  artCandidates, artDirectories, artDirectoriesFor, artPlan, packageOf, resolveOriginArt, slugify
 } from "../scripts/data/origin-art.mjs";
 
 /**
@@ -37,7 +37,12 @@ const LISTINGS = {
     // backgrounds — nine bare
     "guide.webp", "hermit.webp", "merchant.webp", "noble.webp", "sage.webp", "sailor.webp",
     "scribe.webp", "soldier.webp", "wayfarer.webp",
-    // the lone species-named file, and a scene that must never be mistaken for one
+    // the species scenes — the proper art for each people, under names no rule produces
+    "aasimar-working.webp", "dragonborn-meeting.webp", "dwarves-working.webp",
+    "elves-socializing.webp", "gnomes-working-on-armor.webp", "goliaths-transporting-stone.webp",
+    "halflings-dining.webp", "humans-celebrate.webp", "orcs-riding.webp",
+    "tieflings-playing-cards.webp",
+    // a lone species-named file, and a scene that must never be mistaken for one
     "tiefling.webp", "dwarf-paladin-uses-divine-smite.webp"
   ]),
   [PHB_SUBJECTS]: new Set([
@@ -150,19 +155,39 @@ describe("resolveOriginArt", () => {
     }
   });
 
-  it("resolves all ten species from subjects, including the unnumbered Aasimar", () => {
-    const numbered = ["dragonborn", "dwarf", "elf", "gnome", "goliath", "halfling", "human", "orc", "tiefling"];
-    for ( const id of numbered ) {
-      expect(resolveOriginArt(phbCard(id), "species", listingFor)?.file, id).toBe(`${id}-01.webp`);
+  it("gives every PHB species the book's own scene of those people, not a cutout", () => {
+    // The point of the named table: `subjects/dwarf-01.webp` exists and would win on the generic
+    // rule, but it is a 512px alpha cutout that floats on a card. `dwarves-working.webp` is the
+    // 2225x1440 painting the book uses to show what a dwarf is.
+    const expected = {
+      aasimar: "aasimar-working.webp", dragonborn: "dragonborn-meeting.webp",
+      dwarf: "dwarves-working.webp", elf: "elves-socializing.webp",
+      gnome: "gnomes-working-on-armor.webp", goliath: "goliaths-transporting-stone.webp",
+      halfling: "halflings-dining.webp", human: "humans-celebrate.webp",
+      orc: "orcs-riding.webp", tiefling: "tieflings-playing-cards.webp"
+    };
+    for ( const [id, file] of Object.entries(expected) ) {
+      const art = resolveOriginArt(phbCard(id), "species", listingFor);
+      expect(art?.file, id).toBe(file);
+      expect(art?.dir, id).toBe(PHB);
     }
-    expect(resolveOriginArt(phbCard("aasimar"), "species", listingFor)?.file).toBe("aasimar.webp");
+  });
+
+  it("still falls back to the subject cutout for a species the table does not name", () => {
+    // A third-party or homebrew species is unaffected: better a cutout than nothing.
+    const card = {
+      uuid: "Compendium.dnd-players-handbook.origins.Item.x", name: "Dwarf", identifier: "dwarf"
+    };
+    const listings = dir => (dir === PHB ? new Set() : listingFor(dir));
+    expect(resolveOriginArt(card, "species", listings)?.file).toBe("dwarf-01.webp");
   });
 
   it("never serves a species the journal scene that merely mentions it", () => {
-    // `dwarf-paladin-uses-divine-smite.webp` illustrates a moment, not a people, and lives in the
-    // directory species art is NOT taken from. A resolver that searched by prefix would find it.
+    // `dwarf-paladin-uses-divine-smite.webp` illustrates a moment, not a people. It sits in the
+    // same directory as the species scene we DO want, so the guard cannot be "wrong directory" —
+    // it is that every lookup is an exact filename from a table, never a prefix or fuzzy search.
     const art = resolveOriginArt(phbCard("dwarf"), "species", listingFor);
-    expect(art.dir).toBe(PHB_SUBJECTS);
+    expect(art.file).toBe("dwarves-working.webp");
     expect(art.file).not.toContain("divine-smite");
   });
 
@@ -247,6 +272,27 @@ describe("resolveOriginArt", () => {
       name: "Hexblood", identifier: "hexblood"
     };
     expect(resolveOriginArt(hexblood, "species", listingFor)?.dir).toBe(RL_SUBJECTS);
+  });
+});
+
+describe("artPlan", () => {
+  it("tries the book's own named art before anything the generic rule would find", () => {
+    const plan = artPlan("species", "dnd-players-handbook", ["dwarf"]);
+    expect(plan[0]).toEqual({ dir: PHB, file: "dwarves-working.webp" });
+    // The cutout is still in the plan, just behind it.
+    expect(plan.some(e => e.dir === PHB_SUBJECTS && e.file === "dwarf-01.webp")).toBe(true);
+  });
+
+  it("has no named entry to offer for a category or package without one", () => {
+    expect(artPlan("class", "dnd-players-handbook", ["paladin"])[0])
+      .toEqual({ dir: PHB, file: "paladin.webp" });
+    expect(artPlan("species", "dnd-forge-artificer", ["warforged"])[0].dir)
+      .toBe("modules/dnd-forge-artificer/assets/subjects");
+  });
+
+  it("is empty for an unknown category or a missing package", () => {
+    expect(artPlan("subclass", "dnd-players-handbook", ["thief"])).toEqual([]);
+    expect(artPlan("species", "", ["dwarf"])).toEqual([]);
   });
 });
 

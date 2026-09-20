@@ -347,7 +347,8 @@ export async function thresholdContext({ state, source }, rules = null) {
       seed: card?.identifier || card?.name || category,
       count: cardsFor(source, category, rules).length,
       browse: t("quickBuild.threshold.browse", { count: cardsFor(source, category, rules).length }),
-      roll: t("quickBuild.threshold.rollCategory", { category: t(`step.${category}.label`).toLowerCase() })
+      roll: t("quickBuild.threshold.rollCategory", { category: t(`step.${category}.label`).toLowerCase() }),
+      view: t("quickBuild.threshold.view")
     };
   });
 

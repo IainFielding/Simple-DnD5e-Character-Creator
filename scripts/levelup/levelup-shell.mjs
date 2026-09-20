@@ -12,6 +12,7 @@ import { reconcileGrantedSpells } from "../build/spell-reconcile.mjs";
 import { captureLevelUpSummary, postLevelUpSummary, postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
 import { grantMagicItems } from "../data/magic-shop-source.mjs";
+import { consolidateCurrency } from "../data/store-source.mjs";
 import { stageEmberGear, abandonEmberCreation } from "./ember-creation.mjs";
 import { mountNativeFlows, closeNativeFlows } from "./steps/native-flow-step.mjs";
 
@@ -547,6 +548,9 @@ export class LevelUpShell extends CreatorShellBase {
       try {
         // Kept for the creation card, which puts the roll and the picks on the record.
         this.state.magicShopGrant = await grantMagicItems(actor, this.state.creationState);
+        // The bonus gold is the last money to land, and it lands as plain gp. Consolidating after
+        // it is what stops a level 17 character starting with four figures of gold in their purse.
+        await consolidateCurrency(actor);
       } catch ( err ) {
         // Non-fatal, like the gear grant above: the levels are the important part, and an item can
         // be added on the sheet.

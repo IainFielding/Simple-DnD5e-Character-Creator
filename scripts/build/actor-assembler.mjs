@@ -1,7 +1,7 @@
 import { ABILITIES, MODULE_ID, log } from "../config.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { collectEquipment } from "../data/equipment-source.mjs";
-import { applyCartToCurrency, purchasedItems } from "../data/store-source.mjs";
+import { applyCartToCurrency, consolidateCurrency, purchasedItems } from "../data/store-source.mjs";
 import { spellMethodFor } from "../data/spell-source.mjs";
 import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
@@ -118,6 +118,11 @@ export async function assembleActor(state, source, equipment) {
 
   // Grant the starting equipment and currency chosen on the Choices step.
   if ( equipment ) await grantEquipment(actor, state, source, equipment);
+
+  // Whatever the build has paid out, expressed in the largest coins it will make. Harmless at
+  // level 1, where the sums are small; the case it is here for is the climb below, which pays
+  // again after this returns — see {@link module:data/store-source.consolidateCurrency}.
+  await consolidateCurrency(actor);
 
   // The Magic Items step is deliberately NOT granted here. It belongs to a character starting above
   // level 1, and this assembler only ever builds the level-1 one; the climb that follows

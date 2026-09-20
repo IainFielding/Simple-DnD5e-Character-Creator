@@ -17,9 +17,10 @@ import { resolveChoices } from "../data/choice-resolver.mjs";
  *
  * This shape exists because the quick screen on its own was a *second* front door onto a flow that
  * already had one, which is the objection the module's own `headerMenu` default was written to
- * avoid. Behind a chooser it is a first-class choice instead of a hidden setting, and the setting
- * shrinks to one question: does the creator open on this, or straight on the wizard as it always
- * has? Off by default, so no world acquires a new first screen by upgrading.
+ * avoid. Behind a chooser it is a first-class choice instead. It shipped behind a world setting so
+ * that no world would acquire a new first screen by upgrading; that setting is gone and this is
+ * simply where the creator opens. The step-by-step path is unchanged — it is now reached by
+ * choosing it.
  *
  * ## The art
  *
@@ -77,11 +78,11 @@ async function sceneArt() {
  */
 export async function chooserContext({ source }) {
   const art = await sceneArt();
-  const premades = [...await foundryPregens(), ...availablePremades(source)];
+  const officialCount = (await foundryPregens()).reduce((n, g) => n + g.entries.length, 0);
+  const premadeCount = officialCount + availablePremades(source).length;
   return {
     heading: t("entry.heading"),
     blurb: t("entry.blurb"),
-    gmNote: t("entry.gmNote"),
     paths: PATHS.map(p => ({
       id: p.id,
       lead: !!p.lead,
@@ -95,7 +96,7 @@ export async function chooserContext({ source }) {
       // A world with no ready-made characters it can build should not be offered the room.
       // Hiding it beats opening an empty list, which is the same rule the premades themselves
       // follow when their content is missing.
-      hidden: p.id === "premade" && !premades.length
+      hidden: p.id === "premade" && !premadeCount
     })).filter(p => !p.hidden)
   };
 }
@@ -111,7 +112,7 @@ export async function chooserContext({ source }) {
  * @param {object} ctx
  * @returns {Promise<object>}
  */
-export async function premadeContext({ source }) {
+export async function premadeContext({ source }, chosenId = null) {
   const official = await foundryPregens();
   const configured = availablePremades(source);
 
@@ -119,30 +120,30 @@ export async function premadeContext({ source }) {
   // themselves, which beats anything we could infer about them, so they need no lookup.
   const art = await resolveArtFor(configured.map(e => ({ card: e.species, category: "species" })));
 
-  const groups = [];
-  if ( official.length ) {
-    groups.push({
-      id: "official",
-      label: t("entry.premade.fromFoundry"),
-      // Foundry's own mark, served from core. Not bundled, and not a brand being borrowed:
-      // it labels content the platform itself ships.
-      badge: "icons/vtt-512.png",
-      entries: official.map(pc => ({
-        id: pc.id,
-        uuid: pc.uuid,
-        name: pc.name,
-        line: pc.line,
-        tagline: "",
-        // The character's own portrait, so it fills the plate rather than sitting on it as an
-        // emblem would. `portraitFor` has already fallen back to the class illustration for any
-        // document that turns out to have only a placeholder.
-        banner: pc.img,
-        icon: null,
-        seed: pc.id,
-        official: true
-      }))
-    });
-  }
+  // One group per book that ships ready-made characters, labelled with that book — a player
+  // picking "Akra" is getting the system's Akra, and one picking a Borderlands hero is getting
+  // that adventure's, and the heading says which.
+  const groups = official.map(group => ({
+    id: group.pack,
+    label: group.label,
+    badge: group.badge,
+    entries: group.entries.map(pc => ({
+      id: pc.id,
+      uuid: pc.uuid,
+      name: pc.name,
+      line: pc.line,
+      tagline: pc.tagline ?? "",
+      // The character's own portrait, so it fills the plate rather than sitting on it as an emblem
+      // would. `portraitFor` has already fallen back to the class illustration for any document
+      // that turns out to have only a placeholder.
+      banner: pc.img,
+      icon: null,
+      seed: pc.id,
+      official: true,
+      chosen: pc.id === chosenId
+    }))
+  }));
+
   if ( configured.length ) {
     groups.push({
       id: "configured",
@@ -157,17 +158,25 @@ export async function premadeContext({ source }) {
         banner: art.get(cards.species.uuid)?.path ?? null,
         icon: art.get(cards.species.uuid) ? null : (cards.species.img ?? null),
         seed: premade.id,
-        official: false
+        official: false,
+        chosen: premade.id === chosenId
       }))
     });
   }
+
+  // Picking a card selects it; a second, deliberate press creates the character. Creating an
+  // actor on a single click of a browsing grid is too easy to do by accident, and unlike every
+  // other path here it cannot be undone from inside the window.
+  const chosen = groups.flatMap(g => g.entries).find(e => e.chosen) ?? null;
 
   return {
     heading: t("entry.premade.heading"),
     blurb: t("entry.premade.blurb"),
     back: t("entry.premade.back"),
     none: groups.length ? null : t("entry.premade.none"),
-    groups
+    groups,
+    chosen,
+    confirm: chosen ? t("entry.premade.confirm", { name: chosen.name }) : null
   };
 }
 

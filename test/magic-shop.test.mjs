@@ -278,8 +278,46 @@ describe("the step's gate and grant", () => {
     let update = null;
     const actor = { system: { currency: { gp: 15 } }, update: async data => { update = data; } };
     const state = { targetLevel: 5, magicShop: { d10: 7, picks: {} } };
-    expect(await grantMagicItems(actor, state)).toEqual({ d10: 7, baseGp: 500, perD10Gp: 25, gp: 675, items: [] });
-    expect(update).toEqual({ "system.currency.gp": 690 });
+    expect(await grantMagicItems(actor, state)).toEqual({
+      d10: 7, baseGp: 500, perD10Gp: 25, gp: 675, items: [], bought: [], spentCp: 0
+    });
+    // The whole purse is rewritten rather than gp nudged, because the shop can spend from it too.
+    expect(update).toEqual({ "system.currency": { pp: 69, gp: 0, sp: 0, cp: 0 } });
     expect(await grantMagicItems(actor, { targetLevel: 1 })).toBeNull();
+  });
+
+  it("charges the cart against the bonus gold and the purse together", async () => {
+    enable();
+    let update = null;
+    const actor = { system: { currency: { gp: 15 } }, update: async data => { update = data; } };
+    const state = {
+      targetLevel: 5,
+      magicShop: {
+        d10: 7, picks: {},
+        // 100 gp of shopping, bought twice.
+        cart: { "Compendium.x.y.Item.z": { qty: 2, cp: 10000, name: "Potion", img: "" } }
+      }
+    };
+    const grant = await grantMagicItems(actor, state);
+    // 675 gp rolled + 15 gp carried = 690 gp; 200 gp spent leaves 490 gp, i.e. 49 pp.
+    expect(grant.spentCp).toBe(20000);
+    expect(update).toEqual({ "system.currency": { pp: 49, gp: 0, sp: 0, cp: 0 } });
+  });
+
+  it("never leaves a character owing money, however stale the cart", async () => {
+    // The step gates the cart against the budget, so a shortfall here means state from an earlier
+    // render. A discount is a better outcome than a negative purse.
+    enable();
+    let update = null;
+    const actor = { system: { currency: {} }, update: async data => { update = data; } };
+    const state = {
+      targetLevel: 5,
+      magicShop: {
+        d10: 0, picks: {},
+        cart: { "Compendium.x.y.Item.z": { qty: 1, cp: 9999999, name: "Too dear", img: "" } }
+      }
+    };
+    await grantMagicItems(actor, state);
+    for ( const value of Object.values(update["system.currency"]) ) expect(value).toBeGreaterThanOrEqual(0);
   });
 });

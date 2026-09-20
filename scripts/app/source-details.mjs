@@ -24,6 +24,21 @@ import { sourcePageFor } from "../data/journal-source.mjs";
  */
 
 /**
+ * The book an item names as its source.
+ *
+ * `system.source.label` is dnd5e's own resolved wording (book name plus page); the raw book code
+ * and a custom string are the fallbacks for content that never set one. Empty for content that
+ * declares no source at all, which is most homebrew — the caller then shows no pill rather than an
+ * empty one.
+ * @param {Item5e} doc
+ * @returns {string}
+ */
+export function sourceBookText(doc) {
+  const source = doc?.system?.source;
+  return source?.label || source?.book || source?.custom || "";
+}
+
+/**
  * Build the overlay payload for a class or subclass item.
  *
  * @param {Item5e} item   The class or subclass whose book page is wanted.
@@ -47,6 +62,11 @@ export async function sourceDetails(item) {
   return {
     name: item.name ?? "",
     img: item.img ?? "icons/svg/book.svg",
+    // Which book this came from. The detail pane in the wizard has always carried this pill; the
+    // overlay did not, which mattered most in exactly the place it was missing — a world with a
+    // dozen content modules, where "is this the PHB elf or the homebrew one" is the question the
+    // player opened the page to answer.
+    source: sourceBookText(item),
     pageName: page?.name ?? "",
     pageType: page?.type ?? "",
     bodyClasses: bodyClasses(page),

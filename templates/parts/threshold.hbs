@@ -65,6 +65,15 @@
       </button>
 
       <span class="creator-threshold-body">
+        {{!-- Read about this one without leaving the screen. The same overlay the wizard's detail
+              panes use, so a class shows its own book page and everything else its description. --}}
+        {{#if this.uuid}}
+        <button type="button" class="creator-threshold-view" data-action="openSourceDetails"
+                data-uuid="{{this.uuid}}">
+          <span class="creator-btn-icon"><i class="fa-solid fa-book-open"></i></span>
+          {{this.view}}
+        </button>
+        {{/if}}
         <button type="button" class="creator-threshold-browse" data-action="thresholdBrowse"
                 data-category="{{this.category}}">
           {{this.browse}}
@@ -76,10 +85,10 @@
   </ul>
 
   <div class="creator-threshold-lower">
+    {{!-- No portrait plate. It drew a sigil seeded from the name, which changed as the name did
+          and told the player nothing they could act on — decoration standing where information
+          belongs. The name and its die are the whole of this panel now. --}}
     <div class="creator-threshold-identity">
-      <div class="creator-threshold-portrait">
-        <canvas class="creator-sigil" data-seed="{{name}}" aria-hidden="true"></canvas>
-      </div>
       <div class="creator-threshold-fields">
         <label for="threshold-name">{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.name"}}</label>
         <div class="creator-threshold-namerow">
