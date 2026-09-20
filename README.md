@@ -20,7 +20,9 @@ If you can pick from a menu, you can build a character.
 - **No rulebook required.** Every option shows you its full description right there on screen, so you always know what a choice does before you commit to it.
 - **Nothing gets forgotten.** The wizard guides you through each part of your character in order and won't let you finish until the essentials are done.
 - **One thing at a time.** Instead of juggling sheets, compendiums, and drag-and-drop, you make one decision per screen and click **Next**.
-- **In a hurry? Quick Build has your back.** Pick a class, hit one button, and the wizard fills in a sensible, ready-to-play character you can tweak or run with as-is.
+- **Three ways in, and you pick.** The creator opens by asking how you want to build: step by step, a quick build from three choices, or a ready-made character you can play in a minute. They all end in the same place, with everything still yours to change.
+- **In a hurry? Quick Build has your back.** Choose a class, a species and a background — or roll all three — and the wizard fills in everything else: ability scores, skills, spells and kit.
+- **Or start from a finished character.** The D&D system and several content modules ship pregenerated heroes. The creator gathers up the 1st-level ones and lets you take any of them as your own.
 - **Torn between two options? Put them side by side.** Pin the classes, species, backgrounds or subclasses you are weighing up and read them as a comparison table — hit dice, proficiencies, features and all — instead of clicking back and forth trying to remember the last one.
 - **Close it and come back later.** Half-built characters aren't lost. Close the window and the creator offers to keep what you've done as a draft; open it next time — tomorrow, or on another computer — and it asks whether you'd like to pick up where you left off.
 - **It does the bookkeeping for you.** Proficiencies, starting equipment, hit points, and class features are all applied automatically when your character is created.
@@ -49,10 +51,18 @@ Want the actual rule rather than our summary? A **Read the Rules** button on the
 
 ### In a hurry? Try Quick Build
 
-See the **Quick Build** button? Give it a click after you've chosen a class and the wizard does the rest: a recommended spread of ability scores, a fitting background, a random species, a rolled name, sensible skill and feature choices, starting spells, and a default equipment pack. It drops you straight at the Review step with a complete character. Nothing is locked in, so you can hop back and change anything you like before you hit Create.
+Quick Build is one of the three ways in, and it asks for three things: a class, a species and a background. Each has a die beside it if you would rather leave it to chance, and there is a **Roll everything** button if you would rather leave all of it to chance.
+
+Everything else is decided for you — a recommended spread of ability scores, a rolled name, sensible skill and feature choices, starting spells, and a default equipment pack — and shown to you before you commit. **Create Character** then builds it. Nothing is locked in: every pick is still editable on the character afterwards, and **Build step by step instead** carries whatever you have chosen into the full wizard.
 
 ![Quick Build fills the whole character in one click](docs/screenshots/quick-build.png)
 *Screenshot: the Quick Build button on the class step.*
+
+### Or take a ready-made character
+
+The D&D system ships twelve finished 1st-level characters, one per class, and some content modules ship more. **Ready-made** gathers up whichever of those your world has, grouped by the book they came from, and hands you one as a real character of your own — already built, already correct, and yours to edit.
+
+Your GM can set which of the three ways is marked **Recommended** in the module settings, for the benefit of a player who has not built a character before.
 
 ### Can't decide? Compare them side by side
 
@@ -331,8 +341,8 @@ Hooks.on(api.HOOKS.characterCreated, ({ actor, targetLevel }) => {
 
 ## Requirements
 
-- **Foundry VTT** version 14 or later
-- The **D&D Fifth Edition (dnd5e)** game system, version 5.3.0 or later
+- **Foundry VTT** version 14.359 or later (verified against 14.368)
+- The **D&D Fifth Edition (dnd5e)** game system, version 5.3.3 or later (verified against 6.0.3)
 - Your character content (classes, species, backgrounds, spells, and equipment) enabled in your compendiums
 
 ---

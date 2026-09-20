@@ -122,7 +122,7 @@ function dedupe(entries) {
  *   made inside the creator, so the card is where a GM sees it: the d10, the sum, and the picks.
  * @returns {Promise<void>}
  */
-export async function postCreationSummary(actor, { magicShop = null } = {}) {
+export async function postCreationSummary(actor, { magicShop = null, readyMade = null } = {}) {
   try {
     if ( !actor ) return;
     const mode = creationSummaryMode();
@@ -137,6 +137,11 @@ export async function postCreationSummary(actor, { magicShop = null } = {}) {
     // template picks. Hit points and armour class are numbers and stay text — there is nothing
     // behind them to open.
     const rows = [];
+    // A ready-made character is announced as one. The table should be able to tell at a glance that
+    // this is the system's Akra rather than a build someone laboured over, and whose book it came
+    // from — the rest of the card reads identically either way, because the character is a real
+    // character either way.
+    if ( readyMade ) rows.push({ label: t("chat.creation.readyMade"), value: readyMade });
     const species = actor.items.find(i => i.type === "race");
     const background = actor.items.find(i => i.type === "background");
     if ( species ) rows.push({

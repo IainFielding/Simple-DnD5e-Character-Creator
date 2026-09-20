@@ -3,7 +3,9 @@ import { advancementTitle } from "../../data/advancement-util.mjs";
 import { summarizeEquipment } from "../../data/equipment-source.mjs";
 import { cartSummary, formatCp } from "../../data/store-source.mjs";
 import { rarityLabel } from "../../data/magic-shop.mjs";
-import { goldRolled, magicShopConfig, magicShopGrant, pickList } from "../../data/magic-shop-source.mjs";
+import {
+  cartList, goldRolled, magicCartCp, magicShopConfig, magicShopGrant, pickList
+} from "../../data/magic-shop-source.mjs";
 import { pdfExportContext } from "../../build/pdf-export.mjs";
 
 /**
@@ -177,19 +179,31 @@ function reviewPurchases(state) {
 }
 
 /**
- * The Magic Items step for the summary: the free picks, coloured by rarity, and the bonus gold.
- * Null for an ordinary level-up, and for a creation climb the step had nothing to offer.
+ * The Magic Items step for the summary: the free picks coloured by rarity, anything bought, and the
+ * bonus gold. Null for an ordinary level-up, and for a creation climb the step had nothing to offer.
+ *
+ * Purchases are listed apart from the picks and carry what they cost. They are a different kind of
+ * thing — a slot spent versus coin spent — and a player checking this page before they commit
+ * should be able to see the bill, not just the haul.
  * @param {object|null} state  The creator state a creation climb carries.
- * @returns {{items: object[], gold: string|null, hasItems: boolean}|null}
+ * @returns {{items: object[], bought: object[], gold: string|null, spent: string|null,
+ *            hasItems: boolean, hasBought: boolean}|null}
  */
 function reviewMagicItems(state) {
   if ( !state ) return null;
   const { tier, goldCp } = magicShopGrant(state, magicShopConfig());
   if ( !tier ) return null;
   const items = pickList(state).map(p => ({ ...p, count: p.qty > 1 ? p.qty : null, rarityLabel: rarityLabel(p.rarity) }));
+  const bought = cartList(state).map(p => ({ ...p, count: p.qty > 1 ? p.qty : null }));
+  const spentCp = magicCartCp(state);
   const gold = (goldRolled(state, tier) && goldCp > 0) ? formatCp(goldCp) : null;
-  if ( !items.length && !gold ) return null;
-  return { items, gold, hasItems: items.length > 0 };
+  if ( !items.length && !bought.length && !gold ) return null;
+  return {
+    items, bought, gold,
+    spent: spentCp > 0 ? formatCp(spentCp) : null,
+    hasItems: items.length > 0,
+    hasBought: bought.length > 0
+  };
 }
 
 /* -------------------------------------------- */

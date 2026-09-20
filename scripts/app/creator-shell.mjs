@@ -1246,7 +1246,7 @@ export class CreatorShell extends CreatorShellBase {
     // other modules and fires either way.
     if ( !climbing ) {
       fireHook(HOOKS.characterCreated, { actor, state: this.state, targetLevel });
-      await postCreationSummary(actor);
+      await postCreationSummary(actor, { magicShop: actor.sogromMagicShopGrant ?? null });
       // The sheet PDF, when it was asked for. Same rule as the card: a climb isn't finished here,
       // and that wizard prints it at the level the player actually asked for.
       if ( this.state.exportPdf ) await exportCharacterPdf(actor);

@@ -2,7 +2,7 @@ import { ABILITIES, log } from "../config.mjs";
 import { equipmentBudgetCp } from "./store-source.mjs";
 import { QUICK_BUILD, MI_SPELL_SUGGESTIONS, FEATURE_PREFERENCES } from "./quick-build-data.mjs";
 import { resolveChoices } from "./choice-resolver.mjs";
-import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
+import { resolveFeatSpells, originGrantedSpellUuids } from "../steps/feat-spells-step.mjs";
 import { spellInfoFor } from "../steps/spells-step.mjs";
 import { generateName } from "./name-generator.mjs";
 
@@ -130,8 +130,22 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
     state.spellInfo = await spellInfoFor(spells, state.classUuid);
     if ( !state.spellInfo?.isSpellcaster ) return;
     const data = await spells.forClass(state.classUuid);
-    state.selectedCantrips = pickSpells(data.cantrips ?? [], profile.cantrips, data.maxCantrips ?? 0);
-    state.selectedSpells = pickSpells(data.level1 ?? [], profile.spells, data.maxSpells ?? 0);
+
+    // Anything an origin already grants is off the menu, exactly as it is on the Spells step —
+    // which filters the same set (`originGrantedSpellCards`) out of the list a player sees.
+    //
+    // Without this the build could pick a spell the character is *also* handed by a feature, and
+    // the two are not interchangeable: the granted copy is always-prepared and carries its free
+    // casting, while the chosen copy eats a prepared slot for a spell they already have and burns
+    // a real slot when clicked. `reconcileGrantedSpells` cleans that up at build time, but it is a
+    // safety net for the case prevention cannot reach — a *later* level granting something chosen
+    // earlier — and leaning on it here would mean deliberately creating work for it, on a path
+    // where the player never even saw the choice being made.
+    const granted = await originGrantedSpellUuids(state).catch(() => new Set());
+    const free = list => (list ?? []).filter(spell => !granted.has(spell.uuid));
+
+    state.selectedCantrips = pickSpells(free(data.cantrips), profile.cantrips, data.maxCantrips ?? 0);
+    state.selectedSpells = pickSpells(free(data.level1), profile.spells, data.maxSpells ?? 0);
   });
 
   // Feat spells (Magic Initiate and friends) — after choices, since a picked feat can grant one.
@@ -265,12 +279,17 @@ async function fillAdvancementChoices(state, source, profile) {
     }
     if ( !open.length ) return;
 
-    // Skills chosen this pass, so two sources resolved together (whose `disabled` flags
-    // can't yet see each other's new picks) never spend two choices on the same skill.
-    const takenSkills = new Set();
+    // What has been claimed this pass. Two sources resolved together cannot see each other's new
+    // picks — their `disabled` flags were computed before either chose — so without this a species
+    // and a background offering overlapping pools both take the same thing.
+    //
+    // Skills were the original case. Documents are the worse one: a High Elf's cantrip and a
+    // background's Magic Initiate draw from the same spell list, and two choices landing on
+    // Prestidigitation puts the spell on the character *twice*, as two items.
+    const taken = new Set();
     let progressed = false;
     for ( const req of open ) {
-      const picks = choosePicks(req, profile, takenSkills);
+      const picks = choosePicks(req, profile, taken);
       const current = state.advChoices[req.source]?.[req.selKey] ?? [];
       if ( picks.length && !sameKeys(picks, current) ) {
         state.advChoices[req.source][req.selKey] = picks;
@@ -292,7 +311,7 @@ function sameKeys(a, b) {
  * options (granted or chosen elsewhere) are never taken.
  * @param {object} req            A requirement from the choice resolver.
  * @param {object} profile        The class's quick-build profile.
- * @param {Set<string>} [taken]   Skill keys claimed by other requirements this pass.
+ * @param {Set<string>} [taken]   Keys claimed by other requirements this pass.
  * @returns {string[]}
  */
 export function choosePicks(req, profile, taken = new Set()) {
@@ -300,8 +319,12 @@ export function choosePicks(req, profile, taken = new Set()) {
   if ( !available.length ) return [];
 
   const isSkill = k => typeof k === "string" && k.startsWith("skills:");
+  // An ItemChoice hands out an actual document — a spell, a feat. Two sources choosing the same one
+  // is not a wasted proficiency, it is the same item on the character twice, and for a spell that
+  // means a second copy competing with the first for preparation and slots.
+  const isDocument = req.type === "ItemChoice";
   // Expertise legitimately re-picks a proficient skill, so only plain picks honour `taken`.
-  const claimed = k => !req.isExpertise && isSkill(k) && taken.has(k);
+  const claimed = k => !req.isExpertise && (isSkill(k) || isDocument) && taken.has(k);
 
   const chosen = [];
   const push = key => {
@@ -312,7 +335,7 @@ export function choosePicks(req, profile, taken = new Set()) {
   for ( const key of preferenceKeys(req, profile, available) ) push(key);
   for ( const o of available ) push(o.key);
 
-  if ( !req.isExpertise ) for ( const k of chosen ) if ( isSkill(k) ) taken.add(k);
+  if ( !req.isExpertise ) for ( const k of chosen ) if ( isSkill(k) || isDocument ) taken.add(k);
   return chosen;
 }
 
@@ -384,7 +407,12 @@ async function fillFeatSpells(state, source, spells, profile, classDoc) {
   state.featSpellCache = await resolveFeatSpells(state, source);
   if ( !state.featSpellCache.length ) return;
 
+  // Everything the character is already getting: the class spells chosen above, and every spell an
+  // origin's own advancement grants or has chosen. The second half is what was missing — a High Elf
+  // picks a wizard cantrip through an advancement choice, and Magic Initiate would then pick the
+  // same one from the same list, because this set only knew about the class's spells.
   const known = new Set([...state.selectedCantrips, ...state.selectedSpells].map(s => s.uuid));
+  for ( const uuid of await originGrantedSpellUuids(state).catch(() => []) ) known.add(uuid);
   const classAbility = classDoc?.system?.spellcasting?.ability || null;
 
   for ( const grant of state.featSpellCache ) {

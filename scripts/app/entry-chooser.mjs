@@ -1,5 +1,6 @@
-import { t, log } from "../config.mjs";
+import { t, log, recommendedPath } from "../config.mjs";
 import { resolveArtFor } from "../data/art-cache.mjs";
+import { postCreationSummary } from "../build/chat-summary.mjs";
 import { availablePremades, foundryPregens, importPregen, profileFor } from "../data/premades.mjs";
 import { applyQuickBuild } from "../data/quick-build.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
@@ -34,10 +35,13 @@ import { resolveChoices } from "../data/choice-resolver.mjs";
 /**
  * The three paths. `art` names a Player's Handbook journal scene; `id` is both the action payload
  * and the sigil seed for the art-free fallback.
+ *
+ * Which one is badged as recommended is the GM's setting, not a constant here — see
+ * {@link recommendedPath}.
  */
 const PATHS = [
   { id: "custom", art: "consider-choices-sketch.webp" },
-  { id: "quick", art: "adventurers-ready-for-new-adventure.webp", lead: true },
+  { id: "quick", art: "adventurers-ready-for-new-adventure.webp" },
   { id: "premade", art: "heroes-of-the-forgotten-realm.webp" }
 ];
 
@@ -80,16 +84,20 @@ export async function chooserContext({ source }) {
   const art = await sceneArt();
   const officialCount = (await foundryPregens()).reduce((n, g) => n + g.entries.length, 0);
   const premadeCount = officialCount + availablePremades(source).length;
+  // A world that recommends the ready-made path but has no ready-made characters would badge a
+  // card that is not on screen, so the recommendation falls back to the default in that case.
+  let lead = recommendedPath();
+  if ( lead === "premade" && !premadeCount ) lead = "quick";
   return {
     heading: t("entry.heading"),
     blurb: t("entry.blurb"),
     paths: PATHS.map(p => ({
       id: p.id,
-      lead: !!p.lead,
+      lead: p.id === lead,
       title: t(`entry.${p.id}.title`),
       tagline: t(`entry.${p.id}.tagline`),
       go: t(`entry.${p.id}.go`),
-      recommended: p.lead ? t("entry.recommended") : null,
+      recommended: (p.id === lead) ? t("entry.recommended") : null,
       points: [1, 2, 3].map(n => t(`entry.${p.id}.point${n}`)),
       banner: art.get(p.id)?.path ?? null,
       seed: p.id,
@@ -196,6 +204,11 @@ export async function takePregen({ app }, uuid, el) {
   try {
     const actor = await importPregen(uuid);
     if ( !actor ) throw new Error(`could not read ${uuid}`);
+    // Announced like any other character this module makes. Taking a ready-made one is still
+    // making one, and a table that watches the creation cards should not have a player quietly
+    // appear with a finished character and no card. Obeys the same summary setting as the rest.
+    const group = (await foundryPregens()).find(g => g.entries.some(e => e.uuid === uuid));
+    await postCreationSummary(actor, { readyMade: group?.label ?? null });
     app.markFinished?.();
     await app.close();
     actor.sheet?.render(true);

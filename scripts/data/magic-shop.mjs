@@ -78,12 +78,52 @@ export function rarityLabel(rarity) {
 /* -------------------------------------------- */
 
 /** The four fixed level bands. Level 1 has no band: a level-1 character never sees the step. */
-export const BANDS = Object.freeze([
+/**
+ * The Dungeon Master's Guide's own four bands. Not what the GM edits any more — see {@link BANDS} —
+ * but still what "reset to the DMG" means, and still how a table stored by an older version is
+ * read back.
+ */
+export const DMG_BANDS = Object.freeze([
   { key: "t1", from: 2, to: 4 },
   { key: "t2", from: 5, to: 10 },
   { key: "t3", from: 11, to: 16 },
   { key: "t4", from: 17, to: 20 }
 ]);
+
+/**
+ * The levels a starting character can be given wealth for.
+ *
+ * First level is included and defaults to nothing, which is the book's answer — a 1st-level
+ * character starts with their class equipment and no more. It is a row rather than an absence so a
+ * GM who wants to hand their party a single common item at the start of a campaign can simply say
+ * so, instead of being told the table begins at 2nd.
+ */
+export const WEALTH_LEVELS = Object.freeze(
+  Array.from({ length: 20 }, (_, i) => i + 1)
+);
+
+/**
+ * One row per level, rather than one per DMG band.
+ *
+ * The book groups levels 5–10 into a single entitlement, and while that is a fine default it is a
+ * poor thing to be *limited to*: a GM who wants a level 7 party to start with something a level 5
+ * party does not had no way to say so, because editing the band changed both. Nineteen rows is more
+ * to look at, but it removes the whole question of band boundaries — there is nothing to overlap,
+ * nothing to leave a gap, and "what does a level 7 character get" is answered by reading one line.
+ *
+ * The shape is unchanged (`{key, from, to}`, with `from === to`), so everything that walks this list
+ * — the sanitiser, the lookup, the config form — works without knowing the difference.
+ */
+export const BANDS = Object.freeze(
+  WEALTH_LEVELS.map(level => ({ key: `l${level}`, from: level, to: level }))
+);
+
+/** The DMG band a level falls in, which is where its default entitlement comes from. */
+export function dmgBandFor(level) {
+  const lvl = Math.floor(Number(level) || 0);
+  return DMG_BANDS.find(b => lvl >= b.from && lvl <= b.to)
+    ?? ((lvl > DMG_BANDS.at(-1).to) ? DMG_BANDS.at(-1) : null);
+}
 
 /** An allowance with nothing in it, so every band carries all six rarities. */
 function emptyAllowance() {
@@ -94,12 +134,25 @@ function emptyAllowance() {
  * The DMG's starting wealth for a character above level 1: bonus gold of `baseGp + 1d10 ×
  * perD10Gp` on top of normal starting equipment, and a count of magic items per rarity.
  */
-export const DEFAULT_WEALTH_TABLE = Object.freeze({
+const DMG_BAND_WEALTH = Object.freeze({
   t1: { baseGp: 0, perD10Gp: 0, allowance: { ...emptyAllowance(), common: 1 } },
   t2: { baseGp: 500, perD10Gp: 25, allowance: { ...emptyAllowance(), common: 1, uncommon: 1 } },
   t3: { baseGp: 5000, perD10Gp: 250, allowance: { ...emptyAllowance(), common: 2, uncommon: 3, rare: 1 } },
   t4: { baseGp: 20000, perD10Gp: 250, allowance: { ...emptyAllowance(), common: 2, uncommon: 4, rare: 3, veryrare: 1 } }
 });
+
+/** The DMG's entitlement for every level, spread out of its four bands into nineteen rows. */
+export const DEFAULT_WEALTH_TABLE = Object.freeze(Object.fromEntries(
+  WEALTH_LEVELS.map(level => {
+    // Level 1 falls in no DMG band, so its row starts empty — present, and granting nothing.
+    const band = DMG_BAND_WEALTH[dmgBandFor(level)?.key] ?? null;
+    return [`l${level}`, {
+      baseGp: band?.baseGp ?? 0,
+      perD10Gp: band?.perD10Gp ?? 0,
+      allowance: band ? { ...band.allowance } : emptyAllowance()
+    }];
+  })
+));
 
 /** A stored number as a non-negative integer, or the fallback when it isn't a number at all. */
 function count(value, fallback) {
@@ -117,10 +170,18 @@ function count(value, fallback) {
  * @returns {Record<string, {baseGp: number, perD10Gp: number, allowance: Record<string, number>}>}
  */
 export function sanitizeWealthTable(raw) {
+  const stored = (raw && typeof raw === "object") ? raw : {};
+  // A table written before the per-level split is keyed by DMG band (`t1`…`t4`). Read it, and
+  // spread each band's numbers across the levels it covered, so a GM who tuned their table an
+  // update ago opens the new form on their own values rather than on the book's.
+  const legacy = DMG_BANDS.some(b => stored[b.key] && typeof stored[b.key] === "object");
+
   const table = {};
-  for ( const { key } of BANDS ) {
+  for ( const { key, from } of BANDS ) {
     const def = DEFAULT_WEALTH_TABLE[key];
-    const band = (raw && typeof raw === "object") ? raw[key] : null;
+    // Level 1 was never in the old table, so a legacy read leaves it at its empty default rather
+    // than inheriting the 2nd-4th band it sits below.
+    const band = legacy ? (from === 1 ? null : stored[dmgBandFor(from)?.key ?? ""]) : stored[key];
     const src = (band && typeof band === "object") ? band : {};
     const allowance = (src.allowance && typeof src.allowance === "object") ? src.allowance : {};
     table[key] = {
@@ -146,11 +207,20 @@ export function defaultWealthTable() {
  */
 export function tierFor(level, table = DEFAULT_WEALTH_TABLE) {
   const lvl = Math.floor(Number(level) || 0);
-  const band = BANDS.find(b => lvl >= b.from && lvl <= b.to)
+  // Level 1 has a row now. It grants nothing unless the GM filled it in, and `tierGrantsAnything`
+  // is what hides the step in that case — so this no longer refuses below 2nd.
+
+  // One row per level now, so this is a lookup rather than a search. A level past the top of the
+  // table takes the last row, which is what an epic-level world would expect and what the banded
+  // version did.
+  const band = BANDS.find(b => b.from === lvl)
     ?? ((lvl > BANDS.at(-1).to) ? BANDS.at(-1) : null);
   if ( !band ) return null;
   const row = table[band.key] ?? DEFAULT_WEALTH_TABLE[band.key];
-  return { ...band, baseGp: row.baseGp, perD10Gp: row.perD10Gp, allowance: { ...row.allowance } };
+  return {
+    ...band, level: band.from,
+    baseGp: row.baseGp, perD10Gp: row.perD10Gp, allowance: { ...row.allowance }
+  };
 }
 
 /** Whether a tier grants anything at all. A band the GM zeroed out hides the step. */

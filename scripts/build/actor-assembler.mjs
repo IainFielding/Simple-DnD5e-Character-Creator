@@ -2,6 +2,7 @@ import { ABILITIES, MODULE_ID, log } from "../config.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { collectEquipment } from "../data/equipment-source.mjs";
 import { applyCartToCurrency, consolidateCurrency, purchasedItems } from "../data/store-source.mjs";
+import { grantMagicItems } from "../data/magic-shop-source.mjs";
 import { spellMethodFor } from "../data/spell-source.mjs";
 import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
@@ -119,17 +120,28 @@ export async function assembleActor(state, source, equipment) {
   // Grant the starting equipment and currency chosen on the Choices step.
   if ( equipment ) await grantEquipment(actor, state, source, equipment);
 
-  // Whatever the build has paid out, expressed in the largest coins it will make. Harmless at
-  // level 1, where the sums are small; the case it is here for is the climb below, which pays
-  // again after this returns — see {@link module:data/store-source.consolidateCurrency}.
+  // Magic items, but only for a character who stops here. One starting above 1st level is about to
+  // climb ({@link module:levelup/intercept.launchLevelUpTo}), and that rail asks for its own picks
+  // against the row for its target level and grants them at Apply — granting here as well would
+  // roll the bonus gold before the player had chosen anything and then hand it over twice.
+  //
+  // At 1st level there is no climb, so this is the only place it can happen. It grants nothing
+  // unless the GM has filled in the table's 1st-level row, which is empty by default.
+  let magicShop = null;
+  if ( (state.targetLevel ?? 1) === 1 ) {
+    try {
+      magicShop = await grantMagicItems(actor, state);
+    } catch ( err ) {
+      log("granting first-level magic items failed", err);
+    }
+  }
+
+  // Whatever the build has paid out, expressed in the largest coins it will make — after the magic
+  // shop, which is the last thing to pay out.
   await consolidateCurrency(actor);
 
-  // The Magic Items step is deliberately NOT granted here. It belongs to a character starting above
-  // level 1, and this assembler only ever builds the level-1 one; the climb that follows
-  // ({@link module:levelup/intercept.launchLevelUpTo}) asks for the picks on its own Magic Items
-  // step and grants them at its Apply. Granting here would have rolled the bonus gold before the
-  // player had picked anything, and the climb would then have granted it a second time.
-
+  // Handed back so the caller's chat card can report it, the way the climb's does.
+  actor.sogromMagicShopGrant = magicShop;
   return actor;
 }
 

@@ -103,8 +103,11 @@ export function magicShopTier(state, config = magicShopConfig()) {
 // The description is read for one phrase, who the item's attunement is limited to ("Requires
 // Attunement by a Bard"), which dnd5e keeps nowhere else. It is the heaviest field here, paid once per
 // session on the first visit; only the parsed phrase is kept on the stock row.
-const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container",
-  "system.strength", "system.description.value"];
+// `system.price` is what the shop charges. The stock is built from a compendium *index*, and an
+// index carries only the fields asked for here — so leaving it out did not make items free, it made
+// them unpriced, and every row on the shelf read "Not for sale".
+export const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container",
+  "system.strength", "system.price", "system.description.value"];
 
 /**
  * Split a uuid into where it lives. `Compendium.<pkg>.<pack>.Item.<id>` names a pack;

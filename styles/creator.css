@@ -6213,3 +6213,17 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-magic-purse-sums dd { margin: 0; text-align: right; color: var(--cc-settled); }
 .creator-magic-purse.is-over .creator-magic-purse-sums dd:last-of-type { color: var(--cc-danger); }
 .creator-magic-cart-price { color: var(--cc-muted); font-size: 0.78rem; }
+
+/* The "Bought" heading inside the review's magic-items block, and the bill beside it. */
+.creator-review-subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.7rem 0 0.35rem;
+  font-family: var(--cc-font-heading);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+.creator-review-subhead .creator-review-gold { font-size: 0.8rem; letter-spacing: 0; }

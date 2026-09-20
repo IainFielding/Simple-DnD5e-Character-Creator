@@ -175,6 +175,20 @@ function registerSettings() {
   game.settings.register(MODULE_ID, SETTINGS.bannedAlignments, {
     scope: "world", config: false, type: Array, default: DEFAULTS.bannedAlignments
   });
+  // Which way in the chooser badges as recommended. Dead under Ember, which owns creation and
+  // never shows the chooser, but registered either way — reading an unregistered setting throws,
+  // and the chooser asks on every fresh build.
+  game.settings.register(MODULE_ID, SETTINGS.recommendedPath, {
+    name: t("settings.recommendedPath.name"),
+    hint: t("settings.recommendedPath.hint"),
+    scope: "world", config: !ember, type: String, default: DEFAULTS.recommendedPath,
+    choices: {
+      custom: t("entry.custom.title"),
+      quick: t("entry.quick.title"),
+      premade: t("entry.premade.title"),
+      none: t("settings.recommendedPath.none")
+    }
+  });
   game.settings.registerMenu(MODULE_ID, "houseRulesMenu", {
     name: t("settings.houseRulesMenu.name"),
     label: t("settings.houseRulesMenu.label"),

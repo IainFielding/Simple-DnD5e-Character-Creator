@@ -90,7 +90,7 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
         const row = this.#table[band.key];
         return {
           key: band.key,
-          label: t("magicShopConfig.band", { from: band.from, to: band.to }),
+          label: t("magicShopConfig.band", { level: band.from }),
           baseGp: row.baseGp,
           perD10Gp: row.perD10Gp,
           range: this.#rangeLabel(row),

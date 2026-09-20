@@ -9,6 +9,7 @@ import {
 } from "../scripts/data/premades.mjs";
 import { CreatorState } from "../scripts/state/creator-state.mjs";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
+import { ENTRY_PATHS, SETTINGS, recommendedPath } from "../scripts/config.mjs";
 
 /**
  * The quick-build screen and the ready-made list.
@@ -214,6 +215,32 @@ describe("seedThreshold and thresholdRoll", () => {
     state.details.name = "Typed By Hand";
     await thresholdRoll(ctx(), "species", { rng: () => 0, rerollName: false });
     expect(state.details.name).toBe("Typed By Hand");
+  });
+});
+
+describe("the recommended way in", () => {
+  beforeEach(() => installFoundryShims());
+
+  it("defaults to quick build — the path for a player who cannot tell them apart", () => {
+    expect(recommendedPath()).toBe("quick");
+  });
+
+  it("follows the GM's choice", () => {
+    for ( const path of ENTRY_PATHS ) {
+      game.settings.set("x", SETTINGS.recommendedPath, path);
+      expect(recommendedPath()).toBe(path);
+    }
+  });
+
+  it("allows no recommendation at all", () => {
+    game.settings.set("x", SETTINGS.recommendedPath, "none");
+    expect(recommendedPath()).toBe("none");
+  });
+
+  it("falls back rather than badging nothing when the stored value names no path", () => {
+    // Guards the case where a way in is removed later and a world still names it.
+    game.settings.set("x", SETTINGS.recommendedPath, "telepathy");
+    expect(recommendedPath()).toBe("quick");
   });
 });
 

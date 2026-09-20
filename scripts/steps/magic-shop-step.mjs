@@ -314,7 +314,7 @@ function asideContext(state, tier, d10, counts) {
   const slots = slotsSummary(counts, tier.allowance).map(s => ({ ...s, label: rarityLabel(s.rarity) }));
   const fits = withinAllowance(counts, tier.allowance);
   return {
-    tierLabel: t("step.magicShop.tier", { from: tier.from, to: tier.to }),
+    tierLabel: t("step.magicShop.tier", { level: tier.level ?? tier.from }),
     hasGold,
     rollable,
     rolled,
@@ -330,3 +330,53 @@ function asideContext(state, tier, d10, counts) {
     overAllowance: !fits
   };
 }
+
+/**
+ * The same step, on the creation rail rather than the climb.
+ *
+ * It exists because the wealth table has a row for 1st level now. That row is empty by default —
+ * the book gives a 1st-level character nothing — but a GM who fills it in was previously ignored:
+ * the step lived only on the level-up rail, a 1st-level character has no climb, and so there was
+ * nowhere for the grant to happen.
+ *
+ * **Only when there is no climb.** A character starting at 5th passes through the level-up rail,
+ * which asks for its own picks against the 5th-level row and grants them at Apply. Offering this
+ * as well would ask twice and grant twice, which is the mistake the note in
+ * {@link module:build/actor-assembler} warns about. One row per starting level, and a starting
+ * character gets exactly the row for the level they start at.
+ */
+function creationShopApplies(state) {
+  return ((state.targetLevel ?? 1) === 1) && !!magicShopTier(state);
+}
+
+export const creationMagicShopStep = {
+  ...magicShopStep,
+  applicable: creationShopApplies,
+
+  /**
+   * Every gate has to agree with `applicable`, and overriding only `applicable` is not enough.
+   *
+   * The base step answers "am I finished?" by asking whether the tier's gold has been rolled. At
+   * 5th level there *is* a tier — the climb's — so the inherited answer was "no", while
+   * `applicable` said the step was not on this rail at all. A hidden step that is permanently
+   * incomplete is the worst shape a gate can take: Next simply stops working and there is nothing
+   * on screen to fix, which is exactly what it did to a high-level custom build stuck on the Store.
+   *
+   * Nothing to do is done.
+   */
+  isComplete(state) {
+    return creationShopApplies(state) ? magicShopStep.isComplete(state) : true;
+  },
+
+  incompleteHint(state) {
+    return creationShopApplies(state) ? magicShopStep.incompleteHint(state) : null;
+  },
+
+  summary(state) {
+    return creationShopApplies(state) ? magicShopStep.summary(state) : "";
+  },
+
+  onEnter(state) {
+    if ( creationShopApplies(state) ) magicShopStep.onEnter(state);
+  }
+};

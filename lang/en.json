@@ -393,7 +393,8 @@
         "bonusGoldFlat": "{gp} gp",
         "magicItems": "Magic Items",
         "magicItemQty": "{name} ×{qty}",
-        "magicBought": "Bought ({spent})"
+        "magicBought": "Bought ({spent})",
+        "readyMade": "Ready-made"
       },
       "levelup": {
         "heading": "Level up",
@@ -612,7 +613,7 @@
         "intro": "Starting above 1st level, you begin with a few magic items. Choose them free of charge within the rarity slots on the right. A slot can also hold an item of a lower rarity.",
         "loading": "Loading magic items… {percent}%",
         "loadFailed": "The magic items could not be loaded. Leave the step and come back to try again.",
-        "tier": "Levels {from}–{to}",
+        "tier": "Level {level}",
         "goldLabel": "Bonus gold roll",
         "goldFormula": "{base} gp + {die} × {per} gp",
         "goldFormulaUnrolled": "{base} gp + d10 × {per} gp",
@@ -645,7 +646,8 @@
         "cartClear": "Empty the cart",
         "budget": "To spend",
         "spent": "Spent",
-        "remaining": "Left"
+        "remaining": "Left",
+        "reviewBought": "Bought"
       },
       "review": {
         "label": "Review",
@@ -878,6 +880,11 @@
       "allowManualAbilities": {
         "name": "Allow Manual Ability Scores",
         "hint": "Adds a fourth method to the Ability Scores panel where players type the six numbers in themselves. Off by default: manual entry ignores the point-buy budget, the standard array and the roll formula, so turn it on only where the scores are decided away from this window."
+      },
+      "recommendedPath": {
+        "name": "Recommended way to build",
+        "hint": "Which of the three ways into the creator is marked as recommended for a player who has not built a character before. Everything stays available whichever you pick.",
+        "none": "No recommendation"
       }
     },
     "storeConfig": {
@@ -912,12 +919,12 @@
       "title": "Magic Item Shop",
       "tabTable": "Wealth Table",
       "tabInventory": "Inventory",
-      "tableHint": "What a character starting above 1st level receives, per level band: bonus gold of base + 1d10 × per-die gp, and how many magic items of each rarity they may pick. Defaults to the Dungeon Master's Guide.",
-      "colLevels": "Levels",
+      "tableHint": "What a character starting above 1st level arrives with, per level: bonus gold on top of their normal starting equipment, and how many magic items of each rarity they may pick. Every level has its own row, so you can give 7th level something 5th level does not. Reset puts the Dungeon Master's Guide's own numbers back.",
+      "colLevels": "Level",
       "colBaseGp": "Base gp",
       "colPerD10": "gp per d10",
       "colRange": "Gold range",
-      "band": "Levels {from}–{to}",
+      "band": "Level {level}",
       "range": "{min}–{max} gp",
       "rangeFixed": "{gp} gp",
       "reset": {

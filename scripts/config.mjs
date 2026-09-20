@@ -191,6 +191,7 @@ export const SETTINGS = {
   storeEnabled: "storeEnabled",
   storeConfig: "storeConfig",
   magicShopEnabled: "magicShopEnabled",
+  recommendedPath: "recommendedPath",
   magicShopConfig: "magicShopConfig",
   debug: "debugLogging"
 };
@@ -225,6 +226,10 @@ export const DEFAULTS = {
   },
   // Off by default: it changes a higher-level character's starting wealth, which a table opts into.
   magicShopEnabled: false,
+  // Which way in the entry chooser marks as recommended. Quick build, because the player this
+  // badge is for is the one who does not yet know which they want — and that is the path that
+  // asks least of them. A table that would rather everyone built by hand says so here.
+  recommendedPath: "quick",
   magicShopConfig: {
     inventory: [],
     wealthTable: null          // null = the DMG table; see data/magic-shop.mjs
@@ -348,6 +353,30 @@ export function manualAbilitiesEnabled() {
     // Reachable only before the setting is registered; "off" is the right answer either way.
     return false;
   }
+}
+
+/** The ways into the creator, in the order the chooser offers them. */
+export const ENTRY_PATHS = ["custom", "quick", "premade"];
+
+/**
+ * Which way in the entry chooser marks as recommended, or `"none"` for no recommendation at all.
+ *
+ * The badge is aimed squarely at the player who has not built a character before and cannot tell
+ * the three paths apart. Which one that should be is a table's decision, not ours: a group who
+ * want everyone to learn the rules will point at the step-by-step build, a one-shot will point at
+ * the ready-made characters. Guarded against a stored value that no longer names a path, so
+ * removing a way in later cannot leave a world recommending nothing by accident.
+ * @returns {"custom"|"quick"|"premade"|"none"}
+ */
+export function recommendedPath() {
+  let raw;
+  try {
+    raw = game.settings.get(MODULE_ID, SETTINGS.recommendedPath);
+  } catch {
+    return DEFAULTS.recommendedPath;
+  }
+  if ( raw === "none" ) return "none";
+  return ENTRY_PATHS.includes(raw) ? raw : DEFAULTS.recommendedPath;
 }
 
 /**
