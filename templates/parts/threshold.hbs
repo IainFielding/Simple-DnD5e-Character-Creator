@@ -37,6 +37,17 @@
       {{/each}}
     </div>
     {{/if}}
+
+    {{!-- The starting level. Three rungs, not a spinner: the suggestion profile can stand behind a
+          subclass and an ability priority, and cannot stand behind eleven levels of invocations. --}}
+    <div class="creator-threshold-levels" role="group"
+         aria-label="{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.levelAria"}}">
+      {{#each levels}}
+      <button type="button" class="creator-threshold-level{{#if this.active}} is-active{{/if}}"
+              data-action="thresholdLevel" data-level="{{this.level}}"
+              aria-pressed="{{this.active}}">{{this.label}}</button>
+      {{/each}}
+    </div>
   </div>
 
   <ul class="creator-threshold-cards">

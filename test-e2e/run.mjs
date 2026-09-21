@@ -14,6 +14,7 @@
  *   node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
  *   node run.mjs --repair                 # a skipped-choice build, repaired, against the full build
  *   node run.mjs --quick-build            # Quick Build every class; assert the finished character
+ *   node run.mjs --quick-build --level 5  # ...and again at each higher starting rung (3, 5)
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
  *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
  *                                         # native only, per level, in a world without this module
@@ -194,7 +195,10 @@ try {
   } else if ( flag("quick-build") ) {
     // Quick Build has no native counterpart, so this asserts invariants on the finished character
     // rather than diffing one. See in-world/quick-build.mjs.
-    const r = await harness("checkQuickBuild", { only: value("only") ?? null });
+    const r = await harness("checkQuickBuild", {
+      level: Number(value("level")) || 1,
+      only: value("only") ?? null
+    });
     for ( const c of r.cases ) {
       console.log(`${c.ok ? "PASS  " : "FAIL  "} ${c.label}`
         + (c.error ? "" : ` — ${c.items} item(s), ${c.spells} spell(s)`));

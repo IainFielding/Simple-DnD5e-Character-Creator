@@ -29,7 +29,9 @@ import { resolveChoices } from "../data/choice-resolver.mjs";
  * origin cards but with no icon tier — these are our own concepts, not compendium content, so
  * nothing has an icon for them and the honest fallback is our own frame. The filenames are verified
  * against the directory listing like everything else; a world without the Player's Handbook gets
- * the frame treatment and no broken images.
+ * the frame treatment and no broken images — and so does a world that merely has it *disabled*,
+ * which needs its own check: Foundry serves module files from the filesystem regardless of whether
+ * the world enables them, so an existence check alone cannot tell the two apart. See {@link sceneArt}.
  */
 
 /**
@@ -58,6 +60,14 @@ const SCENE_PACKAGE = "dnd-players-handbook";
  * @returns {Promise<Map<string, {path: string}>>}  Keyed by path id.
  */
 async function sceneArt() {
+  // Installed is not the same as enabled, and only the existence check would notice the difference.
+  // Foundry serves a module's files from disk whether or not the world has it switched on, so the
+  // `FilePicker.browse` below happily finds these scenes in a world that deliberately excludes the
+  // Player's Handbook — and the chooser then illustrates itself with a book the GM turned off.
+  // This is the one lookup that names a package outright; the origin cards take theirs from the
+  // item's own uuid, so a card can only ever be drawn from a package the world is already using.
+  if ( !game.modules.get(SCENE_PACKAGE)?.active ) return new Map();
+
   const requests = PATHS.map(p => ({
     card: {
       uuid: `Compendium.${SCENE_PACKAGE}.journals.Item.${p.id}`,

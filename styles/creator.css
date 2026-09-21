@@ -6097,6 +6097,27 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   background: var(--cc-open-soft);
   border-color: var(--cc-open);
 }
+/* The starting-level rungs, built as the edition switch is — same pill, same active treatment, so
+   the two controls in this row read as one family rather than two competing ideas. It keeps its own
+   `margin-left` off `auto`: the edition switch already claims the free space, and a second `auto`
+   would push the two apart to opposite ends of the row. */
+.creator-threshold-levels { display: flex; align-items: center; gap: 0.4rem; }
+.creator-threshold-level {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.65rem;
+  cursor: pointer;
+  color: var(--cc-muted);
+  background: none;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill, 999px);
+}
+.creator-threshold-level.is-active {
+  color: var(--cc-bright);
+  background: var(--cc-open-soft);
+  border-color: var(--cc-open);
+}
+
 .creator-threshold-head { display: flex; align-items: center; gap: 0.85rem; }
 /* Rolls the whole character. Deliberately not a round die like the three on the cards: those each
    change one thing, this changes everything, and a fourth identical die would invite the player to

@@ -17,6 +17,12 @@ All notable changes to the Simple D&D Character Creator.
   array, spent down that class's priority), a name rolled in your species' style, skills, starting
   spells and a default equipment pack. You see all of it before you commit. **Build step by step
   instead** carries whatever you have chosen into the full wizard rather than starting over.
+- **Quick Build can start you at 3rd or 5th level.** Pick the level on the same screen and the
+  character arrives ready to play at it — subclass chosen, ability increase spent, new spells
+  learned, features taken. It is still the same three choices: the levels are filled in for you
+  rather than handed back as a wizard to work through. Everything it picked is ordinary and
+  editable afterwards, and if some part of a level needs your eye, the wrench on the sheet
+  (*Repair this level*) offers exactly that level.
 - **Ready-made characters.** The D&D system ships twelve finished 1st-level characters, one per
   class, and some content modules ship more. Ready-made gathers up whichever your world has, grouped
   by the book they came from, and hands you one as a character of your own — already built and
@@ -49,6 +55,13 @@ All notable changes to the Simple D&D Character Creator.
   level*) will pick it up.
 - **Origin artwork no longer goes stale.** Enabling or disabling a content module mid-session left
   the class, species and background screens showing the art they had found before the change.
+- **Spells you are already given are no longer offered to you again.** In a world running both the
+  Player's Handbook module and the system's own compendiums — the common arrangement — every spell
+  exists twice, and the creator only recognised one of them. So a spell your class or background
+  already grants could still appear in the list for you to choose, wasting the pick: the granted
+  copy is always prepared and free to cast, while the chosen one takes up a prepared slot and burns
+  a real one. Both the Spells step and Quick Build now match spells by what they *are* rather than
+  which book they came from.
 
 ### Compatibility
 

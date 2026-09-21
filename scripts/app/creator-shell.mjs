@@ -15,6 +15,7 @@ import { postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
 import { launchLevelUpTo } from "../levelup/intercept.mjs";
 import { chooserContext, premadeContext, applyPremade, takePregen } from "./entry-chooser.mjs";
+import { isQuickLevel, quickClimb } from "../data/quick-climb.mjs";
 import { foundryPregens } from "../data/premades.mjs";
 import {
   QUICK_FILLED_STEPS, thresholdClear, thresholdContext, thresholdCreate, thresholdRoll,
@@ -60,6 +61,7 @@ export class CreatorShell extends CreatorShellBase {
       entryPremade(event, target) { this._premadeSelect(target.dataset.id); },
       entryPremadeConfirm(event, target) { return this._premadeConfirm(target); },
       thresholdEdition(event, target) { return this._thresholdEdition(target.dataset.rules); },
+      thresholdLevel(event, target) { return this._thresholdLevel(target.dataset.level); },
       thresholdRoll(event, target) { return this._thresholdRoll(target.dataset.category); },
       thresholdRollAll() { return this._thresholdRollAll(); },
       thresholdBrowse(event, target) { this._entryBrowse(target.dataset.category); },
@@ -134,6 +136,11 @@ export class CreatorShell extends CreatorShellBase {
    * @type {"threshold"|"chooser"|null}
    */
   #returnTo = null;
+  /**
+   * Whether this build came through the Quick Build screen, and so should climb to its starting
+   * level headlessly rather than by opening the level-up wizard. See {@link _thresholdCreate}.
+   */
+  #quickClimb = false;
   /** The ready-made character the player has selected but not yet confirmed. */
   #premadeChoice = null;
   /**
@@ -1019,6 +1026,22 @@ export class CreatorShell extends CreatorShellBase {
   }
 
   /**
+   * Set the starting level from the threshold's rungs.
+   *
+   * Only `targetLevel` changes — none of the three picks, and nothing `applyQuickBuild` fills. The
+   * level is consumed after the character is created, by the climb, so changing it here costs
+   * nothing and never invalidates a pick already made.
+   * @param {string|number} level
+   */
+  _thresholdLevel(level) {
+    const next = Number(level) || 1;
+    if ( !isQuickLevel(next) || (next === this.state.targetLevel) ) return;
+    this.state.targetLevel = next;
+    this.#dirty = true;
+    this.render();
+  }
+
+  /**
    * Roll one of the threshold's dice: a category, or the name.
    * @param {"class"|"species"|"background"|"name"} category
    */
@@ -1074,6 +1097,11 @@ export class CreatorShell extends CreatorShellBase {
   async _thresholdCreate(el) {
     this.#dirty = true;
     this.#returnTo = null;
+    // Remember that this build came from the quick screen, so `_finish` climbs headlessly instead
+    // of opening the level-up wizard. The flag rather than a look at `#entry`: by the time `_finish`
+    // runs the overlay has been dismissed, and "which door did this character come through" is the
+    // question being asked, not "which door is open now".
+    this.#quickClimb = true;
     const filled = await thresholdCreate(this._ctx(), el);
     this.#entry = null;
     if ( !filled ) { this.render(); return; }
@@ -1233,9 +1261,23 @@ export class CreatorShell extends CreatorShellBase {
     // The creator state rides along so that wizard can announce the finished character with the
     // same payload this one would have (see {@link module:levelup/intercept}).
     const targetLevel = this.state.targetLevel ?? 1;
-    const climbing = (actor && targetLevel > 1)
+    // A Quick Build climbs headlessly: the screen promised three choices, so handing back a
+    // multi-level wizard here would break that promise at the last moment. Every other route keeps
+    // the interactive climb, where the player asked for the levels a screen at a time.
+    // `climbing` stays false for the quick path because nothing downstream will post the card —
+    // the climb is already over by the time this returns, so the duty to announce stays here.
+    const climbing = (actor && targetLevel > 1 && !this.#quickClimb)
       ? await launchLevelUpTo(actor, targetLevel, { creationState: this.state })
       : false;
+    if ( actor && (targetLevel > 1) && this.#quickClimb ) {
+      const { reached } = await quickClimb(actor, targetLevel, this.source, this.spells);
+      // Said plainly when the climb fell short: the character is valid at the level it reached, and
+      // the repair wrench on the sheet offers the rest. Silence here would leave a player looking
+      // at a 3rd-level character they asked to be 5th with no idea why.
+      if ( reached < targetLevel ) {
+        ui.notifications?.warn(t("quickBuild.climbPartial", { reached, target: targetLevel }));
+      }
+    }
     // Announce the finished character — but only when it *is* finished. A climb to a higher
     // starting level isn't done yet, so that wizard owns the card and posts it on Apply (or on
     // abandon, since the level-1 character it leaves behind is still a character). When the climb

@@ -55,6 +55,8 @@ Quick Build is one of the three ways in, and it asks for three things: a class, 
 
 Everything else is decided for you — a recommended spread of ability scores, a rolled name, sensible skill and feature choices, starting spells, and a default equipment pack — and shown to you before you commit. **Create Character** then builds it. Nothing is locked in: every pick is still editable on the character afterwards, and **Build step by step instead** carries whatever you have chosen into the full wizard.
 
+**Starting a campaign above 1st level?** The same screen offers **level 1, 3 or 5**. Pick one and the character arrives ready to play at it: subclass chosen, ability score increase spent, new spells learned and features taken. It stays the same three choices — the extra levels are filled in for you rather than handed back as a wizard to work through. If some part of a level wants your own eye, the wrench on the finished sheet (*Repair this level*) opens exactly that level.
+
 ![Quick Build fills the whole character in one click](docs/screenshots/quick-build.png)
 *Screenshot: the Quick Build button on the class step.*
 

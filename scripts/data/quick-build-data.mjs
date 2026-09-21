@@ -36,6 +36,13 @@
  *   the same way (e.g. `lute` ↔ `tool:music:lute`).
  * @property {string[]} [features]  Feature/feat NAMES for ItemChoice picks (fighting styles,
  *   invocations…), matched case-insensitively; falls back to {@link FEATURE_PREFERENCES}.
+ * @property {string[]} [subclasses] Subclass NAMES in preference order, for a Quick Build that
+ *   starts above the level its class chooses one. Names rather than identifiers, and a *list*
+ *   rather than one name, because the two editions rarely agree on either: the 2024 Monk takes
+ *   "Warrior of the Open Hand" where the 2014 Monk takes "Way of the Open Hand", and the Sorcerer
+ *   "Draconic Sorcery" against "Draconic Bloodline". Listing both lets one profile serve a world
+ *   holding either edition, and the first installed match wins. Each list leads with the simplest
+ *   subclass to play, not the strongest — this is the path for a player who has not chosen one.
  * @property {string[]} [cantrips]  Spell NAMES (case-insensitive) for the class cantrip picks.
  * @property {string[]} [spells]    Spell NAMES for the class level-1 spell picks.
  * @property {string} [miList]      Preferred spell list when a granted Magic Initiate-style feat
@@ -47,6 +54,7 @@ export const QUICK_BUILD = {
   artificer: {
     abilities: ["int", "con", "dex", "wis", "cha", "str"],
     backgrounds: ["artisan", "sage"],
+    subclasses: ["Alchemist", "Battle Smith"],
     skills: ["arc", "inv", "prc", "his", "med", "nat", "slt"],
     tools: ["alchemist"],
     cantrips: ["Fire Bolt", "Guidance", "Mending"],
@@ -55,12 +63,14 @@ export const QUICK_BUILD = {
   barbarian: {
     abilities: ["str", "con", "dex", "wis", "cha", "int"],
     backgrounds: ["soldier", "farmer"],
+    subclasses: ["Path of the Berserker"],
     skills: ["ath", "prc", "sur", "itm", "ani", "nat"],
     masteries: ["greataxe", "handaxe"]
   },
   bard: {
     abilities: ["cha", "dex", "con", "wis", "int", "str"],
     backgrounds: ["entertainer", "charlatan"],
+    subclasses: ["College of Lore"],
     skills: ["per", "dec", "prf", "ins", "acr"],
     tools: ["lute", "flute", "drum"],
     cantrips: ["Vicious Mockery", "Dancing Lights", "Prestidigitation"],
@@ -69,6 +79,7 @@ export const QUICK_BUILD = {
   cleric: {
     abilities: ["wis", "con", "str", "cha", "dex", "int"],
     backgrounds: ["acolyte"],
+    subclasses: ["Life Domain"],
     skills: ["rel", "ins", "med", "per", "his"],
     cantrips: ["Sacred Flame", "Guidance", "Thaumaturgy", "Light"],
     spells: ["Cure Wounds", "Guiding Bolt", "Bless", "Shield of Faith", "Healing Word"],
@@ -77,6 +88,7 @@ export const QUICK_BUILD = {
   druid: {
     abilities: ["wis", "con", "dex", "int", "cha", "str"],
     backgrounds: ["hermit", "guide"],
+    subclasses: ["Circle of the Land"],
     skills: ["prc", "nat", "sur", "ins", "med", "ani"],
     cantrips: ["Produce Flame", "Druidcraft", "Guidance", "Shillelagh"],
     spells: ["Entangle", "Cure Wounds", "Faerie Fire", "Thunderwave", "Animal Friendship"],
@@ -85,6 +97,7 @@ export const QUICK_BUILD = {
   fighter: {
     abilities: ["str", "con", "dex", "wis", "cha", "int"],
     backgrounds: ["soldier"],
+    subclasses: ["Champion"],
     skills: ["ath", "prc", "itm", "ins", "acr", "sur"],
     masteries: ["greatsword", "javelin", "longbow", "longsword"],
     features: ["Defense"]
@@ -92,6 +105,7 @@ export const QUICK_BUILD = {
   monk: {
     abilities: ["dex", "wis", "con", "str", "cha", "int"],
     backgrounds: ["sailor", "criminal", "guard"],
+    subclasses: ["Warrior of the Open Hand", "Way of the Open Hand"],
     skills: ["acr", "ste", "ins", "ath", "his", "rel"],
     masteries: ["spear", "dagger", "shortsword"],
     tools: ["calligrapher", "painter", "lute"]
@@ -99,6 +113,7 @@ export const QUICK_BUILD = {
   paladin: {
     abilities: ["str", "cha", "con", "wis", "dex", "int"],
     backgrounds: ["noble", "soldier"],
+    subclasses: ["Oath of Devotion"],
     skills: ["ath", "per", "itm", "ins", "med", "rel"],
     masteries: ["longsword", "javelin", "greatsword"],
     spells: ["Cure Wounds", "Bless", "Shield of Faith", "Heroism"]
@@ -106,6 +121,7 @@ export const QUICK_BUILD = {
   ranger: {
     abilities: ["dex", "wis", "con", "str", "int", "cha"],
     backgrounds: ["guide", "criminal", "sailor"],
+    subclasses: ["Hunter"],
     skills: ["prc", "ste", "sur", "nat", "ani", "ath"],
     masteries: ["longbow", "shortsword"],
     spells: ["Hunter's Mark", "Cure Wounds", "Ensnaring Strike", "Goodberry"],
@@ -114,6 +130,7 @@ export const QUICK_BUILD = {
   rogue: {
     abilities: ["dex", "int", "con", "cha", "wis", "str"],
     backgrounds: ["criminal"],
+    subclasses: ["Thief"],
     skills: ["ste", "slt", "prc", "dec", "acr", "inv", "per", "itm", "ath", "ins"],
     expertise: ["ste", "slt"],
     masteries: ["shortsword", "dagger", "shortbow"]
@@ -121,6 +138,7 @@ export const QUICK_BUILD = {
   sorcerer: {
     abilities: ["cha", "con", "dex", "wis", "int", "str"],
     backgrounds: ["hermit", "charlatan"],
+    subclasses: ["Draconic Sorcery", "Draconic Bloodline"],
     skills: ["arc", "dec", "per", "ins", "itm", "rel"],
     cantrips: ["Light", "Prestidigitation", "Ray of Frost", "Shocking Grasp", "Fire Bolt", "Mage Hand"],
     spells: ["Magic Missile", "Shield", "Burning Hands"]
@@ -128,6 +146,7 @@ export const QUICK_BUILD = {
   warlock: {
     abilities: ["cha", "con", "dex", "wis", "int", "str"],
     backgrounds: ["charlatan", "criminal"],
+    subclasses: ["Fiend Patron", "The Fiend"],
     skills: ["dec", "arc", "itm", "inv", "his", "rel"],
     features: ["Pact of the Tome"],
     cantrips: ["Eldritch Blast", "Minor Illusion", "Chill Touch", "Mage Hand"],
@@ -136,6 +155,7 @@ export const QUICK_BUILD = {
   wizard: {
     abilities: ["int", "con", "dex", "wis", "cha", "str"],
     backgrounds: ["sage"],
+    subclasses: ["Evoker", "School of Evocation"],
     skills: ["arc", "inv", "ins", "his", "med", "rel"],
     cantrips: ["Fire Bolt", "Light", "Mage Hand", "Ray of Frost", "Prestidigitation"],
     spells: ["Magic Missile", "Mage Armor", "Shield", "Sleep", "Detect Magic", "Feather Fall", "Burning Hands"],

@@ -102,8 +102,11 @@
         "willPick": "Quick Build will pick",
         "returnToQuick": "Back to Quick Build",
         "rollAll": "Roll everything",
-        "view": "View"
-      }
+        "view": "View",
+        "level": "Level {level}",
+        "levelAria": "Starting level"
+      },
+      "climbPartial": "Quick Build reached level {reached} of {target}. The wrench on the sheet finishes the rest."
     },
     "pdfExport": {
       "label": "Export Character Sheet PDF",

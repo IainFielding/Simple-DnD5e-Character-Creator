@@ -35,6 +35,7 @@ const { CreatorState } = await import(`${MODULE}/state/creator-state.mjs`);
 const { assembleActor } = await import(`${MODULE}/build/actor-assembler.mjs`);
 const { REQUIRED_STEPS } = await import(`${MODULE}/steps/registry.mjs`);
 const { spellKey } = await import(`${MODULE}/data/spell-identity.mjs`);
+const { quickClimb, QUICK_LEVELS } = await import(`${MODULE}/data/quick-climb.mjs`);
 
 const PREFIX = "[e2e] ";
 
@@ -144,6 +145,21 @@ async function runCase(spec) {
     await assembleActor(state, source, null);
     await pause(250);
 
+    // The climb, exactly as the shell runs it for a Quick Build — headless, answered from the
+    // profile. Asserted below like everything else: a character that stopped short of the level
+    // the screen offered is the failure this covers.
+    if ( spec.level > 1 ) {
+      const climb = await quickClimb(actor, spec.level, source, spells);
+      spec.climb = climb;
+      if ( climb.reached < spec.level ) {
+        return {
+          ok: false, spells: 0, items: actor.items.size,
+          failures: [`the climb stopped at level ${climb.reached} of ${spec.level}`]
+        };
+      }
+      await pause(250);
+    }
+
     return assertQuickBuild(actor, state, spec, result);
   } finally {
     await actor.delete().catch(() => {});
@@ -211,11 +227,18 @@ function assertQuickBuild(actor, state, spec, result) {
   //    pick straight against the granted keys asks the question directly, and distinguishes the two
   //    failures that look identical on the sheet: a pick that should have been filtered (this), and
   //    two grants of one spell that should have merged (the duplicate count above, without this).
+  //
+  //    **Level 1 only.** `state.selected*` records the picks made at *creation*, and above 1st
+  //    level a grant can legitimately arrive afterwards: a 2024 Cleric picks Bless at level 1 with
+  //    no subclass, and Life Domain grants it always-prepared at level 3. That is precisely the
+  //    case `reconcileGrantedSpells` exists for — "the one case prevention cannot reach" — and the
+  //    duplicate count above is the right oracle for it. Comparing a level-1 pick against a
+  //    level-3 grant failed a build that had done everything correctly.
   const grantedKeys = new Set(spellItems
     .filter(i => Number(i.system?.prepared ?? 0) === 2)
     .map(i => spellKey(i))
     .filter(Boolean));
-  for ( const entry of [...(state.selectedCantrips ?? []), ...(state.selectedSpells ?? [])] ) {
+  for ( const entry of (spec.level > 1 ? [] : [...(state.selectedCantrips ?? []), ...(state.selectedSpells ?? [])]) ) {
     if ( typeof entry === "string" ) continue;   // a bare uuid carries no level, so it has no key
     const key = spellKey(entry);
     if ( key && grantedKeys.has(key) ) {
@@ -243,6 +266,19 @@ function assertQuickBuild(actor, state, spec, result) {
     .reduce((n, i) => n + Number(i.system?.levels ?? 0), 0);
   if ( levels !== spec.level ) failures.push(`class levels total ${levels}, expected ${spec.level}`);
 
+  // 7. The subclass, which is the whole point of offering level 3 at all. Asserted separately from
+  //    the level total because a climb that reached 3 *without* one is the exact failure the
+  //    profile's `subclasses` list exists to prevent, and it is invisible in an item count. Every
+  //    class in the 2014 and 2024 rules has chosen its subclass by 3rd level.
+  if ( spec.level >= 3 ) {
+    const subclass = actor.items.find(i => i.type === "subclass");
+    if ( !subclass ) {
+      failures.push(`reached level ${spec.level} with no subclass`
+        + ` (profile resolved ${spec.climb?.subclassUuid ?? "nothing"};`
+        + ` the driver raised ${spec.climb?.subclassSteps ?? 0} subclass decision(s))`);
+    }
+  }
+
   return { ok: !failures.length, failures, spells: spellItems.length, items: actor.items.size };
 }
 
@@ -259,10 +295,16 @@ function assertQuickBuild(actor, state, spec, result) {
  * level-5 pass and proved only that `assembleActor` builds a 1st-level character, which is its job.
  * @param {{only?: string|null}} options
  */
-export async function checkQuickBuild({ only = null } = {}) {
+export async function checkQuickBuild({ level = 1, only = null } = {}) {
   const { source } = getSources();
 
   let cases = casesFor(source, 1);
+  // The higher rungs, which the climb answers headlessly from the profile. Every class is run at
+  // every rung asked for: a climb that stalls does so on the class's own decisions, so sampling a
+  // few classes would prove nothing about the rest.
+  for ( const rung of QUICK_LEVELS ) {
+    if ( (rung > 1) && (rung <= level) ) cases = [...cases, ...casesFor(source, rung)];
+  }
   if ( only ) {
     const want = only.toLowerCase();
     cases = cases.filter(c => c.id.includes(want) || c.label.toLowerCase().includes(want));

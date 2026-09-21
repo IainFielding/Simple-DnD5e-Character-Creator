@@ -111,7 +111,15 @@ export async function choose(names) {
   const { source } = getSources();
   const pick = (cards, name) => {
     const matches = cards.filter(c => c.name === name);
-    return (matches.find(c => c.uuid.includes("dnd-players-handbook")) ?? matches[0])?.uuid ?? null;
+    // PHB first for its artwork; then the **2024** copy, which is what matters in a world with no
+    // premium books. Falling through to `matches[0]` there picked the 2014 SRD class, and a 2014
+    // build then filters the origin grids to 2014 content — where the SRD ships a single
+    // background. The resulting picture is accurate and badly misleading: it reads as "this module
+    // offers one background" rather than "the 2014 SRD contains one". 2024 is the system default
+    // and what a fresh install opens on, so it is what the reference set should show.
+    return (matches.find(c => c.uuid.includes("dnd-players-handbook"))
+      ?? matches.find(c => String(c.rules) === "2024")
+      ?? matches[0])?.uuid ?? null;
   };
   if ( names.class ) shell.state.classUuid = pick(source.classes(), names.class);
   const rules = source.rulesOf(shell.state.classUuid);
@@ -506,6 +514,23 @@ export async function premadeSelect({ index = 0 } = {}) {
   await settleRender();
   await pause(600);
   return card.dataset.id ?? true;
+}
+
+/**
+ * Take one of the chooser's three paths, exactly as pressing its button does.
+ *
+ * `"custom"` is the one the wizard shots need: the creator now *opens* on the chooser, so a shot
+ * list that called `openCreator` and then `goto("class")` changed the step underneath while the
+ * overlay stayed up — and, because the shots run against one open creator, every picture from that
+ * point on was of the chooser rather than the screen it was captioned as. Driving the real action
+ * is better than dismissing the overlay by hand: it is what a player does, and it leaves the same
+ * "way back" state they would have.
+ * @param {"custom"|"quick"|"premade"} path
+ */
+export async function entryPath(path = "custom") {
+  await (shell ?? liveShell())._entryPath(path);
+  await settleRender();
+  return true;
 }
 
 /**

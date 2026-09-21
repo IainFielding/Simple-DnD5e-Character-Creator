@@ -4,6 +4,7 @@
  *   node provision.mjs                    # both worlds
  *   node provision.mjs playwright         # just the base world
  *   node provision.mjs playwright-ember   # just the Ember world
+ *   node provision.mjs playwright-bare    # no content modules, for the reference screenshots
  *   node provision.mjs --reset            # delete world databases first, rebuild from scratch
  *
  * For each world this: writes the manifest, activates the world (Foundry creates the database
