@@ -268,16 +268,17 @@ Nothing is saved until you press **Save Changes**, so closing the window is a ha
 
 A character who starts above 1st level would, by the Dungeon Master's Guide, arrive with extra gold and a few magic items. The Magic Item Shop hands those over. It's off by default. Open the **Magic Item Shop** menu (the "Configure Magic Items" button in settings) and tick **Enable the magic item shop** to turn it on.
 
-With it on, a **Magic Items** step appears at the end of the climb to the starting level, just before the final review. There the player:
+With it on, a **Magic Items** step appears just before the final review. There the player:
 
 - **Rolls their bonus gold.** A single d10 is rolled on the screen and then locked, and the gold goes straight into the character's purse.
 - **Picks free magic items** up to the number allowed at each rarity. A slot can also hold an item of a lower rarity, so an uncommon slot will take a common item. Cards flag an item the character isn't proficient with, is too weak to wear, or can't attune to because it requires a particular class or a spellcaster (for example, "Attunement by a Bard"). That flag is only a note, because a player may want something for later or for a friend.
+- **Buys anything else they can afford.** Alongside the free slots there's a cart. The budget is the bonus gold just rolled plus whatever the character already has, and the screen shows what's to spend, what's been spent and what's left. An item the shop has no price for is marked **Not for sale**, and a cart that costs more than the character can pay blocks the step until it's trimmed. Coins are tidied into the largest sensible denominations at the end of the build.
 
-A character starting at 1st level never sees the step, and neither does a normal level-up.
+Which levels see the step is entirely up to the wealth table below — a level whose row grants nothing is skipped. A normal level-up never shows it.
 
 The window has two tabs:
 
-- **Wealth Table.** The four level bands from the DMG (2–4, 5–10, 11–16 and 17–20), each with a base gold amount, gold per d10, and how many items of each rarity the player may pick. Change any number to suit your table, or press **Reset to DMG** to put the book values back.
+- **Wealth Table.** One row per level, 1 to 20, each with a base gold amount, gold per d10, and how many items of each rarity the player may pick. Every level has its own row, so you can give 7th level something 5th level doesn't get — including 1st level, whose row starts empty because the DMG's own bands begin at 2nd. Change any number to suit your table, or press **Reset to DMG** to put the book values back. A table set up before this release, which was keyed by the DMG's four bands, is carried across to the per-level rows automatically.
 - **Inventory.** What's on offer. The shop starts empty, so stock it first. **Drag in** a single magic item, a compendium folder (subfolders included) or a whole compendium, and only items with a rarity are added. Search the list, **hide** or **remove** anything you don't want on offer, or **Clear All** to start again. The Dungeon Master's Guide's enchantment templates, such as *+1 Weapon* or *Wand of the War Mage*, are expanded into one item for every enchantment and base item they allow.
 
 As with the Store, nothing is saved until you press **Save Changes**.
@@ -341,7 +342,7 @@ Hooks.on(api.HOOKS.characterCreated, ({ actor, targetLevel }) => {
 
 ## Requirements
 
-- **Foundry VTT** version 14.359 or later (verified against 14.368)
+- **Foundry VTT** version 14.359 or later (verified against 14.368). Foundry v14 only — this release deliberately won't install on v15, which hasn't been tested against yet.
 - The **D&D Fifth Edition (dnd5e)** game system, version 5.3.3 or later (verified against 6.0.3)
 - Your character content (classes, species, backgrounds, spells, and equipment) enabled in your compendiums
 

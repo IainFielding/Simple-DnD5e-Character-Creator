@@ -610,7 +610,7 @@
       },
       "magicShop": {
         "label": "Magic Items",
-        "intro": "Starting above 1st level, you begin with a few magic items. Choose them free of charge within the rarity slots on the right. A slot can also hold an item of a lower rarity.",
+        "intro": "Your starting level begins with a few magic items. Choose them free of charge within the rarity slots on the right. A slot can also hold an item of a lower rarity.",
         "loading": "Loading magic items… {percent}%",
         "loadFailed": "The magic items could not be loaded. Leave the step and come back to try again.",
         "tier": "Level {level}",
@@ -848,7 +848,7 @@
       },
       "magicShopEnabled": {
         "name": "Enable the magic item shop",
-        "hint": "Adds a Magic Items step for characters starting above 1st level. It rolls their bonus gold and lets them pick free magic items by rarity, using the wealth table below."
+        "hint": "Adds a Magic Items step for any starting level whose wealth-table row grants something. It rolls their bonus gold and lets them pick free magic items by rarity, and buy more with what they can afford."
       },
       "magicShopConfigMenu": {
         "name": "Magic Item Shop",

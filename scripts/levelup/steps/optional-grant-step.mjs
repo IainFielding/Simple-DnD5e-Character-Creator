@@ -74,6 +74,8 @@ export const optionalGrantStep = {
       const next = st.options
         .filter(o => group.includes(o.uuid) ? (o.uuid === uuid) : o.selected)
         .map(o => o.uuid);
+      // Riders (Canny, granted and reversed with Deft Explorer rather than picked) are settled by
+      // `setOptionalGrant`, so every writer gets them, not just this click.
       await driver.setOptionalGrant(record, next);
     }
   }

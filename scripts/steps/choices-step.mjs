@@ -1,4 +1,5 @@
 import { t } from "../config.mjs";
+import { applyDependents } from "../data/advancement-util.mjs";
 import { resolveChoices, choicesComplete } from "../data/choice-resolver.mjs";
 import { resolveFeatSpells } from "./feat-spells-step.mjs";
 
@@ -58,7 +59,9 @@ async function pickOptionalGrant(el, state, source) {
   } else {
     next = req.keep.includes(key) ? req.keep.filter(u => u !== key) : [...req.keep, key];
   }
-  bucket[selKey] = next;
+  // Canny is granted with Deft Explorer rather than alongside it, so it is settled from the pick
+  // instead of being offered as one. The level-up screen applies the same map to the same effect.
+  bucket[selKey] = applyDependents(next, req.dependents);
   state.choiceCache = await resolveChoices(state, source);
 }
 

@@ -17,6 +17,8 @@ const MODULE = "/modules/sogrom-dnd5e-character-creator/scripts";
 
 const { CreatorShell } = await import(`${MODULE}/app/creator-shell.mjs`);
 const { StoreConfigApp } = await import(`${MODULE}/app/store-config.mjs`);
+const { MagicShopConfigApp } = await import(`${MODULE}/app/magic-shop-config.mjs`);
+const { magicEntryFromItem } = await import(`${MODULE}/data/magic-shop.mjs`);
 const { applyQuickBuild } = await import(`${MODULE}/data/quick-build.mjs`);
 const { getSources } = await import(`${MODULE}/data/source-cache.mjs`);
 const { launchWindowOptions, MODULE_ID, SETTINGS } = await import(`${MODULE}/config.mjs`);
@@ -73,7 +75,7 @@ async function waitForStage(timeout = 420_000) {
  * source checkout because the release workflow is what substitutes it. Hidden rather than
  * back-filled with a number — a screenshot should not claim a version it wasn't taken from.
  */
-function depersonalise() {
+export function depersonalise() {
   document.querySelectorAll("#notifications .notification").forEach(el => el.remove());
   ui.notifications?.clear?.();
   document.querySelectorAll(".creator-topbar-version").forEach(el => { el.style.visibility = "hidden"; });
@@ -436,6 +438,222 @@ export async function closeAll() {
   for ( const app of foundry.applications.instances.values() ) await app.close?.().catch(() => {});
   shell = null;
   await pause(400);
+  return true;
+}
+
+/* -------------------------------------------- */
+/*  The entry screens                           */
+/* -------------------------------------------- */
+
+/**
+ * Open one of the three entry overlays: the chooser, Quick Build, or Ready-made.
+ *
+ * Driven through `_openEntry` rather than by setting the private field, because opening the
+ * threshold *seeds* it — `seedThreshold` resolves three origins and their ability increases — and a
+ * screenshot of an unseeded threshold is three empty slots, which is the wizard it exists to
+ * replace.
+ * @param {"chooser"|"threshold"|"premade"} view
+ */
+export async function entry(arg = "chooser") {
+  // One argument, because the screenshot runner's `call` passes exactly one. A bare string is the
+  // common case ("open the chooser"); an object carries the pinned origins.
+  const { view = "chooser", species = null, background = null } =
+    (typeof arg === "string") ? { view: arg } : (arg ?? {});
+  const app = shell ?? liveShell();
+  await app._openEntry(view);
+
+  // The threshold seeds a *random* species — "every installed species is somebody's favourite" —
+  // which is right for a player and wrong for a screenshot: the picture changes every run, and it
+  // can land on art we would rather not put in the README. Pin it after the seed rather than
+  // reaching into the seeding itself, so the shot still shows whatever that screen really renders.
+  if ( species || background ) {
+    const { source } = getSources();
+    const find = (cards, name) => cards.find(c => c.name?.toLowerCase() === name.toLowerCase())
+      ?? cards.find(c => c.name?.toLowerCase().includes(name.toLowerCase()));
+    if ( species ) {
+      const card = find(source.species(), species);
+      if ( !card ) throw new Error(`no species matching "${species}"`);
+      app.state.speciesUuid = card.uuid;
+      app.state.originAsi.species = await source.abilityScoreIncrease(card.uuid);
+    }
+    if ( background ) {
+      const card = find(source.backgrounds(), background);
+      if ( !card ) throw new Error(`no background matching "${background}"`);
+      app.state.backgroundUuid = card.uuid;
+      app.state.originAsi.background = await source.abilityScoreIncrease(card.uuid);
+    }
+  }
+
+  await settleRender();
+  // The entry screens are the art-led ones: every card carries a banner browsed from a content
+  // module, and a picture taken before those decode is a screenshot of empty frames.
+  await pause(1200);
+  await settleRender();
+  return true;
+}
+
+/**
+ * Select a ready-made character without taking it, so the card shows its chosen state.
+ *
+ * Selecting is deliberately not taking — a second, explicit press creates — so this is the state
+ * the screen actually sits in while a player reads the character they are considering.
+ */
+export async function premadeSelect({ index = 0 } = {}) {
+  const cards = [...document.querySelectorAll('[data-action="entryPremade"]')];
+  const card = cards[index];
+  if ( !card ) throw new Error(`no ready-made card at index ${index} (found ${cards.length})`);
+  card.click();
+  await settleRender();
+  await pause(600);
+  return card.dataset.id ?? true;
+}
+
+/**
+ * Dismiss whatever overlay is covering the stage — an entry screen, the comparison grid or a
+ * rulebook page — leaving the step underneath. The shots run against one open creator, so a shot
+ * that opens an overlay would otherwise leave it in every picture that follows.
+ */
+export async function closeOverlays() {
+  const app = shell ?? liveShell();
+  await app._openEntry(null);
+  app._closeCompare?.();
+  app._closeSourceDetails?.();
+  await settleRender();
+  return true;
+}
+
+/* -------------------------------------------- */
+/*  Compare                                     */
+/* -------------------------------------------- */
+
+/**
+ * Pin a few options in a category and open the comparison grid.
+ *
+ * Pins are written through the shell's own `PinSet` rather than by clicking each scales icon: the
+ * icons live on cards inside the picker drawer, and driving three of them through re-renders is a
+ * lot of machinery for a state the set can simply be told to hold.
+ * @param {{category?: string, count?: number}} options
+ */
+export async function compare({ category = "class", count = 3 } = {}) {
+  const app = shell ?? liveShell();
+  const { source } = getSources();
+  const cards = ({
+    class: () => source.classes(),
+    species: () => source.species(),
+    background: () => source.backgrounds()
+  })[category]?.() ?? [];
+
+  // Prefer the Player's Handbook copies, for the same reason `choose` does — the artwork.
+  const preferred = cards.filter(c => c.uuid.includes("dnd-players-handbook"));
+  for ( const card of (preferred.length >= count ? preferred : cards).slice(0, count) ) {
+    app.pins.toggle(category, card.uuid);
+  }
+  await app._openCompare(category);
+  await settleRender();
+  await pause(800);
+  return true;
+}
+
+/* -------------------------------------------- */
+/*  The magic item shop                         */
+/* -------------------------------------------- */
+
+/**
+ * Turn the magic shop on and stock it, so its step has something to show.
+ *
+ * The shop ships **empty** — stocking it is the GM's job, and an unstocked shop renders its "ask
+ * your GM to stock it" empty state. Stock is written straight into the setting through the module's
+ * own `magicEntryFromItem`, so the rows are shaped exactly as a drag-and-drop would leave them
+ * rather than by a second, divergent implementation of that mapping.
+ *
+ * The wealth table is left at its DMG default; only `targetLevel` decides whether the step appears.
+ * @param {{packs?: string[], limit?: number}} options
+ */
+export async function stockMagicShop({ packs = null, limit = 60 } = {}) {
+  await game.settings.set(MODULE_ID, SETTINGS.magicShopEnabled, true);
+
+  const wanted = packs ?? ["dnd-dungeon-masters-guide.items", "dnd5e.items24", "dnd5e.items"];
+  const inventory = [];
+  for ( const packId of wanted ) {
+    const pack = game.packs?.get(packId);
+    if ( !pack ) continue;
+    const index = await pack.getIndex({ fields: ["system.rarity", "system.type.value"] });
+    for ( const entry of index ) {
+      // Only items with a rarity are magic items — the same test the drop handler applies.
+      if ( !entry.system?.rarity ) continue;
+      inventory.push(magicEntryFromItem(entry, `Compendium.${packId}.Item.${entry._id}`));
+      if ( inventory.length >= limit ) break;
+    }
+    if ( inventory.length >= limit ) break;
+  }
+  if ( !inventory.length ) throw new Error(`no magic items found in ${wanted.join(", ")}`);
+
+  const current = game.settings.get(MODULE_ID, SETTINGS.magicShopConfig) ?? {};
+  await game.settings.set(MODULE_ID, SETTINGS.magicShopConfig, { ...current, inventory });
+  return inventory.length;
+}
+
+/**
+ * Put the creator on a starting level the wealth table actually grants something at.
+ *
+ * The magic-item step stands down on a level whose row gives nothing, so a picture of it needs a
+ * level inside the DMG's bands — 5th, which grants both gold and a couple of item slots.
+ */
+export async function startAtLevel(level = 5) {
+  const app = shell ?? liveShell();
+  app.state.targetLevel = level;
+  await settleRender();
+  return app.state.targetLevel;
+}
+
+/**
+ * Roll the bonus gold, open the shelves and take a few of the free slots.
+ *
+ * The groups start **collapsed** (all but a lone one), and a collapsed group renders no pick
+ * buttons at all — so this has to open them before it can take anything. The first version of this
+ * helper went straight for the buttons, found none, and produced a picture of an empty shelf under
+ * four shut headings, which is the least useful shot of this screen it is possible to take.
+ */
+export async function pickMagicItems({ count = 3, roll = true } = {}) {
+  if ( roll ) {
+    document.querySelector('[data-step-action="magic-roll"]')?.click();
+    await settleRender();
+    await pause(600);
+  }
+
+  // Re-query every pass. The click re-renders the shelf, so a list collected up front is detached
+  // after the first one and the remaining groups stay shut — the same reason `shop` re-queries.
+  // The guard is the group key, not the node: the keys are stable across renders, the nodes are not.
+  const opened = new Set();
+  for ( let i = 0; i < 12; i++ ) {
+    const toggle = [...document.querySelectorAll('[data-step-action="magic-group"][aria-expanded="false"]')]
+      .find(el => !opened.has(el.dataset.group));
+    if ( !toggle ) break;
+    opened.add(toggle.dataset.group);
+    toggle.click();
+    await settleRender();
+  }
+
+  const taken = new Set();
+  for ( let i = 0; i < count; i++ ) {
+    const button = [...document.querySelectorAll('[data-step-action="magic-add"]:not([disabled])')]
+      .find(el => !taken.has(el.dataset.uuid));
+    if ( !button ) break;
+    taken.add(button.dataset.uuid);
+    button.click();
+    await settleRender();
+  }
+  // Always settle, even when nothing was taken: this step loads its index asynchronously and
+  // re-renders when it lands, which puts back the `#{VERSION}#` pill `depersonalise` had hidden.
+  await settleRender();
+  return taken.size;
+}
+
+/** The GM's magic-shop configuration window. */
+export async function magicShopConfig() {
+  await closeAll();
+  await new MagicShopConfigApp().render(true);
+  await pause(1800);
   return true;
 }
 

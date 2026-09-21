@@ -49,9 +49,6 @@
  * it has already browsed and cached, which is what makes the whole thing unit-testable.
  */
 
-/** Categories this resolver knows how to look up. */
-export const ART_CATEGORIES = ["class", "species", "background"];
-
 /**
  * Where each category's art lives, relative to a package's root, and how a filename is built.
  *

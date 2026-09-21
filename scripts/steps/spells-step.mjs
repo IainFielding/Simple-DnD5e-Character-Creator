@@ -2,6 +2,7 @@ import { t } from "../config.mjs";
 import { pinContext } from "../app/compare.mjs";
 import { spellFilterOptions, spellListNotice } from "../data/spell-source.mjs";
 import { originGrantedSpellCards } from "./feat-spells-step.mjs";
+import { spellKey } from "../data/spell-identity.mjs";
 
 /**
  * The Spells step: for a spellcasting class, choose the cantrips and level-1 spells
@@ -96,7 +97,14 @@ export const spellsStep = {
       const max = isCantrip ? data.maxCantrips : data.maxSpells;
       if ( bucket.length >= max ) return;
       const spell = (isCantrip ? data.cantrips : data.level1).find(s => s.uuid === uuid);
-      if ( spell ) bucket.push({ uuid: spell.uuid, id: spell.id, name: spell.name, img: spell.img, level: spell.level });
+      // `identifier` rides along so this pick keys the same way as the pool row it came from —
+      // see {@link module:data/spell-identity.spellKey}. Without it every later comparison against
+      // a chosen spell falls back to its uuid, which cannot match the same spell from another
+      // installed package.
+      if ( spell ) bucket.push({
+        uuid: spell.uuid, id: spell.id, identifier: spell.identifier ?? "",
+        name: spell.name, img: spell.img, level: spell.level
+      });
     }
   },
 
@@ -131,7 +139,11 @@ export const spellsStep = {
     // always have. A spell already picked stays listed (so it can be un-picked) even if a later
     // origin change starts granting it; {@link module:build/spell-reconcile} tidies that case up.
     const grantedCards = await originGrantedSpellCards(state);
-    const granted = new Set(grantedCards.map(card => card.uuid));
+    // Keyed by spell *identity*, not uuid. A world with the Player's Handbook module and the
+    // system's packs holds two copies of every spell, so the class can grant one package's Hunter's
+    // Mark while this pool offers the other's — a uuid set matches neither, and the spell stays on
+    // the menu for a player who already has it always-prepared. See {@link originGrantedSpellKeys}.
+    const granted = new Set(grantedCards.map(card => spellKey(card)).filter(Boolean));
 
     // The running tally shown across the top of the step so the player can always
     // see (and read, via tooltip) what they've chosen so far. Kept in two groups —
@@ -152,7 +164,10 @@ export const spellsStep = {
     const atLimit = activeBucket.length >= activeMax;
     const pool = tab === "cantrips" ? cantrips : level1;
 
-    const list = pool.filter(s => !granted.has(s.uuid) || picked.has(s.uuid)).map(s => ({
+    const list = pool.filter(s => {
+      const key = spellKey(s);
+      return !key || !granted.has(key) || picked.has(s.uuid);
+    }).map(s => ({
       ...s,
       // Blank for a cantrip: "Lvl 0" is not what a player calls one, and the tab already says so.
       levelLabel: s.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: s.level }),

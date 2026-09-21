@@ -1,4 +1,4 @@
-import { t, log, levelUpEnabled, launchWindowOptions, fireHook, HOOKS } from "../config.mjs";
+import { t, log, launchWindowOptions, fireHook, HOOKS } from "../config.mjs";
 import { unresolvedByLevel } from "../data/advancement-util.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
@@ -229,9 +229,4 @@ export function repairOptions(actor) {
     level: g.level,
     label: t("levelup.repair.option", { class: classItem.name, level: g.level, titles: g.titles.join(", ") })
   })));
-}
-
-/** Whether the level-up flow is on at all, so the repair action follows the same master switch. */
-export function repairEnabled() {
-  return levelUpEnabled();
 }

@@ -1,5 +1,6 @@
 import { ABILITIES, formatMod, storeConfig, t } from "../config.mjs";
 import { cartSummary } from "../data/store-source.mjs";
+import { magicShopReview } from "../data/magic-shop-source.mjs";
 import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
 import { advancementArray, advancementTitle} from "../data/advancement-util.mjs";
 import { resolveChoices, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
@@ -318,6 +319,10 @@ export const reviewStep = {
       details: reviewDetails(state),
       pdf: pdfExportContext(state.exportPdf, "pdfExport.noteCreation"),
       purchases: reviewPurchases(state),
+      // Magic items, for a 1st-level character whose GM filled in that row of the wealth table.
+      // One starting higher sees the same block on the climb's review instead — same view-model,
+      // so the two pages cannot drift apart.
+      magicItems: magicShopReview(state),
       sections: await reviewSections(state, source, equipBySource, spells, featSpellsBySource)
     };
   }

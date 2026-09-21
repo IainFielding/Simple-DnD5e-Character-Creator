@@ -277,7 +277,12 @@ describe("pickSpells", () => {
   it("takes named preferences first, then backfills from the top", () => {
     const picks = pickSpells(pool, ["guiding bolt"], 2);
     expect(picks.map(s => s.name)).toEqual(["Guiding Bolt", "Bless"]);
-    expect(picks[0]).toEqual({ uuid: "u2", id: "i2", name: "Guiding Bolt", img: "x.webp", level: 1 });
+    // `identifier` is carried through deliberately: it is what `spellKey` matches a chosen spell
+    // against a granted one by, and dropping it here let a Wizard pick a cantrip Magic Initiate
+    // had already granted from a different package.
+    expect(picks[0]).toEqual({
+      uuid: "u2", id: "i2", identifier: "", name: "Guiding Bolt", img: "x.webp", level: 1
+    });
   });
 
   it("caps at max and never duplicates", () => {

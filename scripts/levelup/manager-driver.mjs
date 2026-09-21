@@ -1,5 +1,7 @@
 import { log, levelUpHpRollToChat, t } from "../config.mjs";
-import { withItemSegment, addedEntries } from "../data/advancement-util.mjs";
+import {
+  withItemSegment, addedEntries, applyDependents, grantItems, replacementGroups
+} from "../data/advancement-util.mjs";
 import { phbWeaponIcon } from "../data/weapon-source.mjs";
 import { bg3TraitIcon } from "../data/bg3-icons.mjs";
 import { findAsiFeats, classifyAsiFeats, evalContentPrereq } from "../data/choice-resolver.mjs";
@@ -1958,11 +1960,18 @@ export class LevelUpDriver {
    * *adds* (it skips a uuid already in `value.added`), so there is no subtractive call to make and
    * un-ticking a box has to go through a full reverse. Reversing deletes the granted items, which is
    * exactly what declining one should do.
+   *
+   * Dependents are settled here rather than at each call site because every writer funnels through
+   * this method — the two screens, the provider replaying a recorded answer, and the harness — and
+   * an invariant that only holds when the UI wrote the list is not an invariant. A grant with no
+   * dependents is left exactly as it was handed over.
    * @param {object} record     One of {@link optionalGrantSteps}.
    * @param {string[]} uuids    The uuids to end up holding; anything else offered is dropped.
    */
   async setOptionalGrant(record, uuids) {
     const adv = record.advancement;
+    const { dependents } = replacementGroups(record.replacements, grantItems(adv));
+    uuids = applyDependents(uuids.map(withItemSegment), dependents);
     // Both sides normalised, as {@link optionalGrantState} and the replacement-grant ingest already
     // are: this content stores its uuids in the pre-v10 shape while `value.added` records whatever
     // `apply` was handed, so comparing them raw never matched. The no-op short-circuit below then

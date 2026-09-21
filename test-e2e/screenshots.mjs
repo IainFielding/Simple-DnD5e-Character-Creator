@@ -71,10 +71,40 @@ if ( !WORLDS[worldId] ) throw new Error(`Unknown world "${worldId}"`);
 const SHOTS = {
   playwright: [
     {
-      name: "welcome",
-      note: "First render — the class grid, nothing chosen yet.",
+      // The creator opens on the chooser now, not the class grid — so this is genuinely the first
+      // thing a player sees, and the shot has to be taken before anything else touches the shell.
+      name: "entry-chooser",
+      note: "The three ways in: step by step, Quick Build, or a ready-made character.",
       async setup(call) {
         await call("openCreator");
+        await call("entry", "chooser");
+      }
+    },
+    {
+      name: "quick-build-screen",
+      note: "Quick Build: three choices, seeded, with everything else filled in below.",
+      async setup(call) {
+        // Species pinned rather than left to the seed's roll. The roll is right for a player and
+        // wrong for a picture: it changes every run, and it landed on the one AI-generated
+        // illustration in the installed content. Elf is hand-painted book art, like the rest.
+        await call("entry", { view: "threshold", species: "Elf" });
+      }
+    },
+    {
+      name: "ready-made",
+      note: "Ready-made characters, grouped by the book they came from, with one selected.",
+      async setup(call) {
+        await call("entry", "premade");
+        await call("premadeSelect", { index: 0 });
+      }
+    },
+    {
+      name: "welcome",
+      note: "The step-by-step build — the class grid, nothing chosen yet.",
+      async setup(call) {
+        // Back out of the entry overlays to the wizard underneath, which is what "custom" does.
+        await call("openCreator");
+        await call("goto", "class");
       }
     },
     {
@@ -94,12 +124,21 @@ const SHOTS = {
       async setup() { /* same screen as class-step */ }
     },
     {
+      name: "compare",
+      note: "Three classes pinned and laid out side by side.",
+      async setup(call) {
+        await call("compare", { category: "class", count: 3 });
+      }
+    },
+    {
       // Everything from here on shows a filled character. Quick Build is the fastest way to get
       // one, it is seeded, and it fills exactly the fields a player would have filled by hand.
       name: "abilities",
       note: "The ability-score panel, with points spent.",
       selector: ".creator-work-side",
       async setup(call) {
+        // Clears whatever overlay the previous shot left up — the comparison grid, here.
+        await call("closeOverlays");
         await call("quickBuild", { seed: 7, goTo: "class" });
         await call("details", {
           name: CHARACTER.name,
@@ -167,9 +206,24 @@ const SHOTS = {
       }
     },
     {
+      name: "magic-shop",
+      note: "The Magic Items step: free picks by rarity, rolled bonus gold, and a cart.",
+      async setup(call) {
+        // The shop ships empty and only appears on a level the wealth table grants something at,
+        // so both have to be arranged before the step is reachable at all.
+        await call("stockMagicShop", {});
+        await call("startAtLevel", 5);
+        await call("goto", "magicShop");
+        await call("pickMagicItems", { count: 3 });
+      }
+    },
+    {
       name: "review",
       note: "The review screen.",
-      async setup(call) { await call("goto", "review"); }
+      async setup(call) {
+        await call("startAtLevel", 1);
+        await call("goto", "review");
+      }
     },
     {
       name: "actor",
@@ -187,6 +241,12 @@ const SHOTS = {
       note: "The GM's store configuration window.",
       selector: ".application",
       async setup(call) { await call("storeConfig"); }
+    },
+    {
+      name: "magic-shop-config",
+      note: "The GM's magic-item shop: the per-level wealth table and the stocked inventory.",
+      selector: ".application",
+      async setup(call) { await call("magicShopConfig"); }
     }
   ],
 
@@ -269,6 +329,11 @@ try {
       continue;
     }
     await sleep(600);
+    // Last thing before the shutter. A step that loads asynchronously — the magic shop reads its
+    // whole index — re-renders after its `setup` returned, which puts back the `#{VERSION}#` pill
+    // and any toast that `depersonalise` had already cleared. Doing it here means no shot can be
+    // caught by that, rather than each helper having to remember.
+    await call("depersonalise");
     const path = new URL(`./${shot.name}.png`, OUT_DIR).pathname.slice(1);
     if ( shot.selector ) {
       const target = session.page.locator(shot.selector).last();

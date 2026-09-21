@@ -1,12 +1,13 @@
 import { MODULE_ID, SETTINGS, levelUpEnabled, log } from "../config.mjs";
 import {
-  RARITIES, normalizeRarity, itemRarity, sanitizeMagicEntry, sanitizeWealthTable, tierFor, tierGrantsAnything,
+  RARITIES, normalizeRarity, itemRarity, rarityLabel, sanitizeMagicEntry, sanitizeWealthTable, tierFor,
+  tierGrantsAnything,
   descendantFolderIds, filterMagicIndex, countPicks, withinAllowance, bonusGoldCp, attunementRestriction
 } from "./magic-shop.mjs";
 import { createItemData } from "./item-factory.mjs";
 // The shop now sells as well as grants, so it shares the Store's money maths rather than
 // growing its own: one set of conversion rates, one definition of what an item costs.
-import { priceCp, totalCp, fromCopper } from "./store-source.mjs";
+import { priceCp, totalCp, fromCopper, formatCp } from "./store-source.mjs";
 import {
   parseVariant, linkUuid, isTemplate, mightBeTemplate, linkedBaseUuids, templateVariants, templateProfiles,
   isShell, shellVariants, shellItemData, SHELL_PROFILE,
@@ -77,6 +78,41 @@ export function cartList(state) {
       uuid, link: linkUuid(uuid), name: line.name ?? "", img: line.img ?? "",
       qty: Number(line.qty), cp: Number(line.cp) || 0
     }));
+}
+
+/**
+ * The Magic Items step for a review page: the free picks coloured by rarity, anything bought, and
+ * the bonus gold. Null wherever the step had nothing to offer.
+ *
+ * Lives here rather than on either review step because both need it. A character starting above
+ * 1st level picks on the climb's rail and one starting at 1st picks on the creation rail, and the
+ * same summary has to appear either way.
+ *
+ * Purchases are listed apart from the picks and carry what they cost. They are a different kind of
+ * thing — a slot spent against coin spent — and a player checking this page before they commit
+ * should see the bill, not just the haul.
+ * @param {object|null} state  The creator state.
+ * @returns {{items: object[], bought: object[], gold: string|null, spent: string|null,
+ *            hasItems: boolean, hasBought: boolean}|null}
+ */
+export function magicShopReview(state) {
+  if ( !state ) return null;
+  const { tier, goldCp } = magicShopGrant(state, magicShopConfig());
+  if ( !tier ) return null;
+
+  const items = pickList(state)
+    .map(p => ({ ...p, count: p.qty > 1 ? p.qty : null, rarityLabel: rarityLabel(p.rarity) }));
+  const bought = cartList(state).map(p => ({ ...p, count: p.qty > 1 ? p.qty : null }));
+  const spentCp = magicCartCp(state);
+  const gold = (goldRolled(state, tier) && goldCp > 0) ? formatCp(goldCp) : null;
+  if ( !items.length && !bought.length && !gold ) return null;
+
+  return {
+    items, bought, gold,
+    spent: spentCp > 0 ? formatCp(spentCp) : null,
+    hasItems: items.length > 0,
+    hasBought: bought.length > 0
+  };
 }
 
 /**

@@ -5630,20 +5630,8 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-entry:focus-visible,
 .creator-threshold:focus-visible { outline: none; }
 
-/* Full width on purpose. This sentence is the whole argument for offering three paths at all —
-   that none of them costs the player anything — so it runs the width of the window rather than
-   being set as a narrow column beside empty space. */
-.creator-entry-head { max-width: none; }
-.creator-entry-head h2 {
-  margin: 0 0 0.2rem;
-  font-family: var(--cc-font-heading);
-  font-size: 1.3rem;
-  color: var(--cc-bright);
-}
-.creator-entry-head p { margin: 0; color: var(--cc-muted); line-height: 1.45; }
 .creator-entry-empty { margin: 0; color: var(--cc-text-faint); font-style: italic; }
 .creator-entry-foot { margin: auto 0 0; }
-.creator-entry-note { color: var(--cc-text-faint); font-size: 0.8rem; font-style: italic; }
 
 /* ---- Shared art plate --------------------------------------------------------------------
    Three tiers, and the difference between them is not decoration. A `banner` is a painted scene
@@ -5986,16 +5974,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-radius: var(--cc-radius);
 }
 .creator-threshold-identity { display: flex; gap: 0.85rem; align-items: center; }
-.creator-threshold-portrait {
-  position: relative;
-  flex: none;
-  width: 5.5rem;
-  height: 5.5rem;
-  overflow: hidden;
-  background: var(--cc-sunk);
-  border: 1px solid var(--cc-line-2);
-  border-radius: var(--cc-radius-sm);
-}
 .creator-threshold-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .creator-threshold-fields label {
   font-family: var(--cc-font-heading);

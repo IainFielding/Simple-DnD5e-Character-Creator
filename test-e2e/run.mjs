@@ -13,6 +13,8 @@
  *   node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
  *   node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
  *   node run.mjs --repair                 # a skipped-choice build, repaired, against the full build
+ *   node run.mjs --quick-build            # Quick Build every class; assert the finished character
+ *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
  *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
  *                                         # native only, per level, in a world without this module
  *   HEADED=1 node run.mjs                 # watch the native wizard being driven
@@ -184,6 +186,43 @@ try {
       for ( const s of c.spells ?? [] ) console.log(`      ${s}`);
     }
     if ( r.ok ) console.log("\nPASS   no granted spell is duplicated, and feat spells stay separate");
+    else {
+      console.log(`\nFAIL   ${r.failures.length} problem(s)`);
+      for ( const f of r.failures ) console.log(`  ${f}`);
+      exitCode = 1;
+    }
+  } else if ( flag("quick-build") ) {
+    // Quick Build has no native counterpart, so this asserts invariants on the finished character
+    // rather than diffing one. See in-world/quick-build.mjs.
+    const r = await harness("checkQuickBuild", { only: value("only") ?? null });
+    for ( const c of r.cases ) {
+      console.log(`${c.ok ? "PASS  " : "FAIL  "} ${c.label}`
+        + (c.error ? "" : ` — ${c.items} item(s), ${c.spells} spell(s)`));
+      if ( c.error ) console.log(`  error: ${c.error}`);
+      for ( const f of c.failures ?? [] ) console.log(`  ! ${f}`);
+    }
+    const passed = r.cases.filter(c => c.ok).length;
+    if ( r.ok ) console.log(`\nPASS   ${passed}/${r.cases.length} quick builds are complete and correct`);
+    else {
+      console.log(`\nFAIL   ${r.failures.length} problem(s) across ${r.cases.length} quick build(s)`);
+      for ( const f of r.failures ) console.log(`  ${f}`);
+      exitCode = 1;
+    }
+  } else if ( flag("pregens") ) {
+    // The Ready-made path. The compendium document is the expected result, which makes this an
+    // unusually strong oracle: a pregen is copied, not rebuilt. See in-world/pregens.mjs.
+    const r = await harness("checkPregens", {
+      only: value("only") ?? null,
+      limit: Number(value("limit")) || null
+    });
+    for ( const c of r.cases ) {
+      console.log(`${c.ok ? "PASS  " : "FAIL  "} ${c.label}${c.error ? "" : ` — ${c.items} item(s)`}`);
+      if ( c.error ) console.log(`  error: ${c.error}`);
+      for ( const f of c.failures ?? [] ) console.log(`  ! ${f}`);
+    }
+    const passed = r.cases.filter(c => c.ok).length;
+    if ( r.ok ) console.log(`\nPASS   ${passed}/${r.cases.length} ready-made character(s) imported whole`
+      + ` from ${r.groups} book(s)`);
     else {
       console.log(`\nFAIL   ${r.failures.length} problem(s)`);
       for ( const f of r.failures ) console.log(`  ${f}`);
