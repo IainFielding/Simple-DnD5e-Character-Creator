@@ -7,6 +7,7 @@ import { choicesStep } from "./choices-step.mjs";
 import { featSpellsStep } from "./feat-spells-step.mjs";
 import { equipmentStep } from "./equipment-step.mjs";
 import { storeStep } from "./store-step.mjs";
+import { creationMagicShopStep } from "./magic-shop-step.mjs";
 import { reviewStep } from "./review-step.mjs";
 
 /**
@@ -41,10 +42,15 @@ export const STEPS = [
   // The Store must follow Equipment: its budget is the currency the finished equipment
   // choice yields. Hidden (like Feat-Spells) until the GM enables it and gold exists.
   storeStep,
-  // Magic Items is NOT here: a character starting above level 1 picks its bonus gold and free magic
-  // items *after* the climb that gets it there, as the last step of the level-up rail
-  // ({@link module:levelup/steps/lvl-magic-shop-step}). The creator always builds a level-1
-  // character, and the DMG's bands start at level 2, so this rail could never offer it anything.
+  // Magic Items, for a character who starts at 1st level and so has no climb to hand it to. A
+  // character starting higher picks theirs on the level-up rail instead
+  // ({@link module:levelup/steps/lvl-magic-shop-step}), against the row for the level they start
+  // at; this step stands down in that case so nothing is asked or granted twice.
+  //
+  // It was absent entirely until the wealth table gained a 1st-level row. The old reasoning — "the
+  // DMG's bands start at level 2, so this rail could never offer anything" — was true of the book
+  // and is no longer true of the table a GM can edit.
+  creationMagicShopStep,
   reviewStep
 ];
 

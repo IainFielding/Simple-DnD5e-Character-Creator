@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
+import { creationMagicShopStep } from "../scripts/steps/magic-shop-step.mjs";
+import { INDEX_FIELDS } from "../scripts/data/magic-shop-source.mjs";
 import {
   BANDS, DEFAULT_WEALTH_TABLE, assignSlots, bonusGoldCp, canPick, countByRarity, countPicks,
   descendantFolderIds, filterMagicIndex, goldRange, highestSlotRank, mergeEntries, normalizeRarity,
@@ -40,18 +42,29 @@ describe("normalizeRarity", () => {
 describe("the wealth table", () => {
   it("defaults to the DMG", () => {
     expect(table).toEqual(JSON.parse(JSON.stringify(DEFAULT_WEALTH_TABLE)));
-    expect(table.t3).toMatchObject({ baseGp: 5000, perD10Gp: 250 });
-    expect(table.t4.allowance).toEqual(slots({ common: 2, uncommon: 4, rare: 3, veryrare: 1 }));
+    // One row per level, seeded from the DMG band that level falls in.
+    expect(table.l12).toMatchObject({ baseGp: 5000, perD10Gp: 250 });
+    expect(table.l20.allowance).toEqual(slots({ common: 2, uncommon: 4, rare: 3, veryrare: 1 }));
+    expect(Object.keys(table)).toHaveLength(20);
+    // Level 1 is present but empty: the book gives a 1st-level character nothing, and this is a
+    // row so a GM can overrule that rather than being told the table starts at 2nd.
+    expect(table.l1).toEqual({ baseGp: 0, perD10Gp: 0, allowance: slots({}) });
   });
 
-  it("puts each starting level in its band, and level 1 in none", () => {
+  it("gives every level its own row, level 1 included", () => {
     const at = level => tierFor(level, table)?.key ?? null;
-    expect(at(1)).toBeNull();
-    expect([at(2), at(4)]).toEqual(["t1", "t1"]);
-    expect([at(5), at(10)]).toEqual(["t2", "t2"]);
-    expect([at(11), at(16)]).toEqual(["t3", "t3"]);
-    expect([at(17), at(20)]).toEqual(["t4", "t4"]);
-    expect(BANDS.map(b => b.from)).toEqual([2, 5, 11, 17]);
+    // Level 1 has a row, and it grants nothing until a GM says otherwise — `tierGrantsAnything`
+    // is what keeps the step hidden, not the absence of a row.
+    expect(at(1)).toBe("l1");
+    expect(tierGrantsAnything(tierFor(1, table))).toBe(false);
+    expect([at(2), at(4)]).toEqual(["l2", "l4"]);
+    expect([at(5), at(10)]).toEqual(["l5", "l10"]);
+    expect([at(11), at(16)]).toEqual(["l11", "l16"]);
+    expect([at(17), at(20)]).toEqual(["l17", "l20"]);
+    // Every level from 2 has its own row, so a GM can give 7th what 5th does not.
+    expect(BANDS.map(b => b.from)).toEqual(
+      Array.from({ length: 20 }, (_, i) => i + 1));
+    expect(BANDS.every(b => b.from === b.to)).toBe(true);
   });
 
   it("prices the bonus gold from the stored d10", () => {
@@ -63,25 +76,64 @@ describe("the wealth table", () => {
   });
 
   it("follows a GM's override", () => {
-    const custom = sanitizeWealthTable({ t2: { baseGp: 1000, perD10Gp: 50, allowance: { uncommon: 2 } } });
+    const custom = sanitizeWealthTable({ l6: { baseGp: 1000, perD10Gp: 50, allowance: { uncommon: 2 } } });
     const tier = tierFor(6, custom);
     expect(bonusGoldCp(tier, 4)).toBe((1000 + 200) * 100);
     // A partial band keeps the DMG's value for everything it doesn't name.
     expect(tier.allowance).toEqual(slots({ common: 1, uncommon: 2 }));
     expect(tierFor(12, custom).baseGp).toBe(5000);
+    // The neighbouring level is untouched, which is the point of the split.
+    expect(tierFor(5, custom).baseGp).toBe(500);
+  });
+
+  it("lets a GM grant something at level 1, which the book does not", () => {
+    const generous = sanitizeWealthTable({ l1: { allowance: { common: 1 } } });
+    expect(tierGrantsAnything(tierFor(1, generous))).toBe(true);
+    expect(tierFor(1, generous).allowance.common).toBe(1);
+  });
+
+  it("reads a table stored in the old four-band shape, keeping the GM's numbers", () => {
+    // Worlds configured before the per-level split have `t1`..`t4`. Those values have to survive
+    // the upgrade, spread across the levels each band covered — losing a GM's tuned table to a
+    // refactor is the worst outcome here.
+    const migrated = sanitizeWealthTable({
+      t2: { baseGp: 1000, perD10Gp: 50, allowance: { uncommon: 2 } }
+    });
+    for ( const level of [5, 7, 10] ) {
+      expect(tierFor(level, migrated).baseGp, `level ${level}`).toBe(1000);
+      expect(tierFor(level, migrated).allowance.uncommon, `level ${level}`).toBe(2);
+    }
+    // Bands the GM never touched still read as the book.
+    expect(tierFor(12, migrated).baseGp).toBe(5000);
+    expect(tierFor(4, migrated).baseGp).toBe(0);
+    // Level 1 was never in the old table, so it stays empty rather than inheriting t1.
+    expect(tierGrantsAnything(tierFor(1, migrated))).toBe(false);
+  });
+
+  it("prefers the new shape when both are somehow present", () => {
+    const mixed = sanitizeWealthTable({
+      t2: { baseGp: 1000 },
+      l6: { baseGp: 7777 }
+    });
+    // A table carrying legacy keys is read as legacy throughout, so the migration is all-or-
+    // nothing rather than a per-row guess about which key the GM meant.
+    expect(tierFor(6, mixed).baseGp).toBe(1000);
   });
 
   it("guards a hand-edited setting field by field", () => {
-    const guarded = sanitizeWealthTable({ t1: { baseGp: -5, perD10Gp: "abc", allowance: { common: 2.7, rare: null } } });
-    expect(guarded.t1).toMatchObject({ baseGp: 0, perD10Gp: 0 });
-    expect(guarded.t1.allowance.common).toBe(2);
-    expect(guarded.t1.allowance.rare).toBe(0);
+    const guarded = sanitizeWealthTable({ l2: { baseGp: -5, perD10Gp: "abc", allowance: { common: 2.7, rare: null } } });
+    expect(guarded.l2).toMatchObject({ baseGp: 0, perD10Gp: 0 });
+    expect(guarded.l2.allowance.common).toBe(2);
+    expect(guarded.l2.allowance.rare).toBe(0);
     expect(sanitizeWealthTable("nonsense")).toEqual(table);
   });
 
   it("hides a band the GM zeroed out", () => {
-    const zeroed = sanitizeWealthTable({ t1: { baseGp: 0, perD10Gp: 0, allowance: { common: 0 } } });
-    expect(tierGrantsAnything(tierFor(3, zeroed))).toBe(false);
+    const zeroed = sanitizeWealthTable({ l2: { baseGp: 0, perD10Gp: 0, allowance: { common: 0 } } });
+    expect(tierGrantsAnything(tierFor(2, zeroed))).toBe(false);
+    // Only that level. Zeroing 2nd no longer silently zeroes 3rd and 4th with it, which is the
+    // whole reason the table is per level.
+    expect(tierGrantsAnything(tierFor(3, zeroed))).toBe(true);
     expect(tierGrantsAnything(tierFor(3, table))).toBe(true);
   });
 });
@@ -227,12 +279,57 @@ describe("the step's gate and grant", () => {
     game.settings.set(MODULE_ID, SETTINGS.magicShopConfig, { inventory: [], wealthTable: null, ...config });
   }
 
+  it("asks the index for every field the shelf reads", () => {
+    // The stock is built from a compendium index, which carries only the fields requested. Leaving
+    // `system.price` out did not make items free — it made them unpriced, and every row on the
+    // shelf read "Not for sale". Each entry here is read somewhere in the stock build.
+    for ( const field of ["system.rarity", "system.type", "system.price", "system.strength"] ) {
+      expect(INDEX_FIELDS, field).toContain(field);
+    }
+  });
+
+  it("puts the step on the creation rail only for a character with no climb", () => {
+    // A 1st-level character never reaches the level-up rail, so the step has to live on the
+    // creation one or the GM's 1st-level row is silently ignored. A character starting higher gets
+    // theirs from the climb instead, against the row for the level they start at — offering both
+    // would ask twice and grant twice.
+    enable({ wealthTable: { l1: { allowance: { legendary: 1 } } } });
+    expect(creationMagicShopStep.applicable({ targetLevel: 1 })).toBe(true);
+    expect(creationMagicShopStep.applicable({ targetLevel: 5 })).toBe(false);
+  });
+
+  it("counts as finished on a rail it is not on, so it cannot block Next", () => {
+    // The bug this guards: the step overrode `applicable` but inherited `isComplete`, which at 5th
+    // level saw the climb's tier and an unrolled d10 and answered "not finished". A hidden step
+    // that is permanently incomplete stops Next with nothing on screen to fix — a high-level custom
+    // build got stuck on the Store step and could go no further.
+    enable({ wealthTable: { l1: { allowance: { legendary: 1 } } } });
+    const climbing = { targetLevel: 5, magicShop: { d10: null, picks: {} } };
+    expect(creationMagicShopStep.applicable(climbing)).toBe(false);
+    expect(creationMagicShopStep.isComplete(climbing)).toBe(true);
+    expect(creationMagicShopStep.incompleteHint(climbing)).toBeNull();
+    expect(creationMagicShopStep.summary(climbing)).toBe("");
+  });
+
+  it("still gates properly on the rail it IS on", () => {
+    // The inverse: at 1st level with something to grant, an unrolled tier is genuinely unfinished.
+    enable({ wealthTable: { l1: { baseGp: 100, perD10Gp: 10, allowance: { common: 1 } } } });
+    const here = { targetLevel: 1, magicShop: { d10: null, picks: {} }, magicShopVisited: true };
+    expect(creationMagicShopStep.applicable(here)).toBe(true);
+    expect(creationMagicShopStep.isComplete(here)).toBe(false);
+  });
+
+  it("stays off the creation rail when the 1st-level row grants nothing", () => {
+    enable();
+    expect(creationMagicShopStep.applicable({ targetLevel: 1 })).toBe(false);
+  });
+
   it("is off by default and needs a level above 1", () => {
     expect(magicShopConfig().enabled).toBe(false);
     expect(magicShopTier({ targetLevel: 12 })).toBeNull();
     enable();
     expect(magicShopTier({ targetLevel: 1 })).toBeNull();
-    expect(magicShopTier({ targetLevel: 12 })?.key).toBe("t3");
+    expect(magicShopTier({ targetLevel: 12 })?.key).toBe("l12");
   });
 
   it("grants the picks and the gold, but no items once they no longer fit", () => {
@@ -278,8 +375,46 @@ describe("the step's gate and grant", () => {
     let update = null;
     const actor = { system: { currency: { gp: 15 } }, update: async data => { update = data; } };
     const state = { targetLevel: 5, magicShop: { d10: 7, picks: {} } };
-    expect(await grantMagicItems(actor, state)).toEqual({ d10: 7, baseGp: 500, perD10Gp: 25, gp: 675, items: [] });
-    expect(update).toEqual({ "system.currency.gp": 690 });
+    expect(await grantMagicItems(actor, state)).toEqual({
+      d10: 7, baseGp: 500, perD10Gp: 25, gp: 675, items: [], bought: [], spentCp: 0
+    });
+    // The whole purse is rewritten rather than gp nudged, because the shop can spend from it too.
+    expect(update).toEqual({ "system.currency": { pp: 69, gp: 0, sp: 0, cp: 0 } });
     expect(await grantMagicItems(actor, { targetLevel: 1 })).toBeNull();
+  });
+
+  it("charges the cart against the bonus gold and the purse together", async () => {
+    enable();
+    let update = null;
+    const actor = { system: { currency: { gp: 15 } }, update: async data => { update = data; } };
+    const state = {
+      targetLevel: 5,
+      magicShop: {
+        d10: 7, picks: {},
+        // 100 gp of shopping, bought twice.
+        cart: { "Compendium.x.y.Item.z": { qty: 2, cp: 10000, name: "Potion", img: "" } }
+      }
+    };
+    const grant = await grantMagicItems(actor, state);
+    // 675 gp rolled + 15 gp carried = 690 gp; 200 gp spent leaves 490 gp, i.e. 49 pp.
+    expect(grant.spentCp).toBe(20000);
+    expect(update).toEqual({ "system.currency": { pp: 49, gp: 0, sp: 0, cp: 0 } });
+  });
+
+  it("never leaves a character owing money, however stale the cart", async () => {
+    // The step gates the cart against the budget, so a shortfall here means state from an earlier
+    // render. A discount is a better outcome than a negative purse.
+    enable();
+    let update = null;
+    const actor = { system: { currency: {} }, update: async data => { update = data; } };
+    const state = {
+      targetLevel: 5,
+      magicShop: {
+        d10: 0, picks: {},
+        cart: { "Compendium.x.y.Item.z": { qty: 1, cp: 9999999, name: "Too dear", img: "" } }
+      }
+    };
+    await grantMagicItems(actor, state);
+    for ( const value of Object.values(update["system.currency"]) ) expect(value).toBeGreaterThanOrEqual(0);
   });
 });

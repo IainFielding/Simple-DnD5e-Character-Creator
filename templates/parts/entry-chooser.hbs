@@ -2,8 +2,9 @@
   The entry chooser, and the ready-made list behind one of its answers.
 
   One template for both because they are one screen to the player — a question and the longer
-  answer to its third option — and because they share the card shell, the art tiers and the Back
-  affordance. Which one renders is decided by `premades` being present in the context.
+  answer to its third option — and because they share the card shell and the art tiers. Which one
+  renders is decided by `premades` being present in the context. Neither carries a Back of its own:
+  that is the stage footer's, which knows to leave an entry screen before it tries to leave a step.
 
   Like source-details.hbs and compare.hbs, this covers the stage BODY only: the Back/Next footer
   stays reachable underneath, and the dossier beside it is untouched.
@@ -16,11 +17,7 @@
 
   {{#if premades}}
   {{!-- ---------------------------------------------------------------- ready-made --}}
-  <header class="creator-entry-head">
-    <h2>{{premades.heading}}</h2>
-    <p>{{premades.blurb}}</p>
-  </header>
-
+  {{!-- No heading here: it is in the stage's own band above, so the question is not asked twice. --}}
   {{#if premades.none}}
   <p class="creator-entry-empty">{{premades.none}}</p>
   {{else}}
@@ -35,8 +32,9 @@
     <ul class="creator-premade-grid">
       {{#each this.entries}}
       <li>
-        <button type="button" class="creator-premade" data-action="entryPremade"
-                data-id="{{this.id}}" data-uuid="{{this.uuid}}">
+        <button type="button" class="creator-premade{{#if this.chosen}} is-chosen{{/if}}"
+                data-action="entryPremade" data-id="{{this.id}}"
+                aria-pressed="{{#if this.chosen}}true{{else}}false{{/if}}">
           <span class="creator-premade-art">
             {{#if this.banner}}
             <img src="{{this.banner}}" alt="" loading="lazy">
@@ -59,20 +57,13 @@
   {{/each}}
   {{/if}}
 
-  <p class="creator-entry-foot">
-    <button type="button" class="creator-btn" data-action="entryBack">
-      <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
-      {{premades.back}}
-    </button>
-  </p>
+  {{!-- No buttons of its own. Back and Create are both the stage footer's — see _navBack and
+        #entryAction. Selecting a card does not create anything; the footer's Create does, and it
+        names who it is about to create, the one action in this window that cannot be undone from
+        inside it. --}}
 
   {{else}}
   {{!-- ------------------------------------------------------------------- chooser --}}
-  <header class="creator-entry-head">
-    <h2>{{heading}}</h2>
-    <p>{{blurb}}</p>
-  </header>
-
   <ul class="creator-entry-paths">
     {{#each paths}}
     <li class="creator-entry-path{{#if this.lead}} is-lead{{/if}}">
@@ -100,6 +91,5 @@
     {{/each}}
   </ul>
 
-  <p class="creator-entry-foot creator-entry-note">{{gmNote}}</p>
   {{/if}}
 </div>

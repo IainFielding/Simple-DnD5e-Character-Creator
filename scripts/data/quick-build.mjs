@@ -2,7 +2,8 @@ import { ABILITIES, log } from "../config.mjs";
 import { equipmentBudgetCp } from "./store-source.mjs";
 import { QUICK_BUILD, MI_SPELL_SUGGESTIONS, FEATURE_PREFERENCES } from "./quick-build-data.mjs";
 import { resolveChoices } from "./choice-resolver.mjs";
-import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
+import { resolveFeatSpells, originGrantedSpellKeys } from "../steps/feat-spells-step.mjs";
+import { spellKey } from "../data/spell-identity.mjs";
 import { spellInfoFor } from "../steps/spells-step.mjs";
 import { generateName } from "./name-generator.mjs";
 
@@ -130,8 +131,28 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
     state.spellInfo = await spellInfoFor(spells, state.classUuid);
     if ( !state.spellInfo?.isSpellcaster ) return;
     const data = await spells.forClass(state.classUuid);
-    state.selectedCantrips = pickSpells(data.cantrips ?? [], profile.cantrips, data.maxCantrips ?? 0);
-    state.selectedSpells = pickSpells(data.level1 ?? [], profile.spells, data.maxSpells ?? 0);
+
+    // Anything an origin already grants is off the menu, exactly as it is on the Spells step —
+    // which filters the same set (`originGrantedSpellCards`) out of the list a player sees.
+    //
+    // Without this the build could pick a spell the character is *also* handed by a feature, and
+    // the two are not interchangeable: the granted copy is always-prepared and carries its free
+    // casting, while the chosen copy eats a prepared slot for a spell they already have and burns
+    // a real slot when clicked. `reconcileGrantedSpells` cleans that up at build time, but it is a
+    // safety net for the case prevention cannot reach — a *later* level granting something chosen
+    // earlier — and leaning on it here would mean deliberately creating work for it, on a path
+    // where the player never even saw the choice being made.
+    // Matched by spell *identity*, not by uuid: the class grants one package's copy while the pool
+    // offers another's, so a uuid comparison matches nothing in any world running the Player's
+    // Handbook module beside the system's packs. See {@link originGrantedSpellKeys}.
+    const granted = await originGrantedSpellKeys(state).catch(() => new Set());
+    const free = list => (list ?? []).filter(spell => {
+      const key = spellKey(spell);
+      return !key || !granted.has(key);
+    });
+
+    state.selectedCantrips = pickSpells(free(data.cantrips), profile.cantrips, data.maxCantrips ?? 0);
+    state.selectedSpells = pickSpells(free(data.level1), profile.spells, data.maxSpells ?? 0);
   });
 
   // Feat spells (Magic Initiate and friends) — after choices, since a picked feat can grant one.
@@ -265,12 +286,17 @@ async function fillAdvancementChoices(state, source, profile) {
     }
     if ( !open.length ) return;
 
-    // Skills chosen this pass, so two sources resolved together (whose `disabled` flags
-    // can't yet see each other's new picks) never spend two choices on the same skill.
-    const takenSkills = new Set();
+    // What has been claimed this pass. Two sources resolved together cannot see each other's new
+    // picks — their `disabled` flags were computed before either chose — so without this a species
+    // and a background offering overlapping pools both take the same thing.
+    //
+    // Skills were the original case. Documents are the worse one: a High Elf's cantrip and a
+    // background's Magic Initiate draw from the same spell list, and two choices landing on
+    // Prestidigitation puts the spell on the character *twice*, as two items.
+    const taken = new Set();
     let progressed = false;
     for ( const req of open ) {
-      const picks = choosePicks(req, profile, takenSkills);
+      const picks = choosePicks(req, profile, taken);
       const current = state.advChoices[req.source]?.[req.selKey] ?? [];
       if ( picks.length && !sameKeys(picks, current) ) {
         state.advChoices[req.source][req.selKey] = picks;
@@ -292,7 +318,7 @@ function sameKeys(a, b) {
  * options (granted or chosen elsewhere) are never taken.
  * @param {object} req            A requirement from the choice resolver.
  * @param {object} profile        The class's quick-build profile.
- * @param {Set<string>} [taken]   Skill keys claimed by other requirements this pass.
+ * @param {Set<string>} [taken]   Keys claimed by other requirements this pass.
  * @returns {string[]}
  */
 export function choosePicks(req, profile, taken = new Set()) {
@@ -300,8 +326,12 @@ export function choosePicks(req, profile, taken = new Set()) {
   if ( !available.length ) return [];
 
   const isSkill = k => typeof k === "string" && k.startsWith("skills:");
+  // An ItemChoice hands out an actual document — a spell, a feat. Two sources choosing the same one
+  // is not a wasted proficiency, it is the same item on the character twice, and for a spell that
+  // means a second copy competing with the first for preparation and slots.
+  const isDocument = req.type === "ItemChoice";
   // Expertise legitimately re-picks a proficient skill, so only plain picks honour `taken`.
-  const claimed = k => !req.isExpertise && isSkill(k) && taken.has(k);
+  const claimed = k => !req.isExpertise && (isSkill(k) || isDocument) && taken.has(k);
 
   const chosen = [];
   const push = key => {
@@ -312,7 +342,7 @@ export function choosePicks(req, profile, taken = new Set()) {
   for ( const key of preferenceKeys(req, profile, available) ) push(key);
   for ( const o of available ) push(o.key);
 
-  if ( !req.isExpertise ) for ( const k of chosen ) if ( isSkill(k) ) taken.add(k);
+  if ( !req.isExpertise ) for ( const k of chosen ) if ( isSkill(k) || isDocument ) taken.add(k);
   return chosen;
 }
 
@@ -365,7 +395,14 @@ export function pickSpells(pool, names = [], max = 0) {
   const add = s => {
     if ( !s || seen.has(s.uuid) || picks.length >= max ) return;
     seen.add(s.uuid);
-    picks.push({ uuid: s.uuid, id: s.id, name: s.name, img: s.img, level: s.level });
+    // `identifier` rides along so a chosen spell keys the same way as a pool row and a granted
+    // card do — see {@link module:data/spell-identity.spellKey}. Dropping it here made every
+    // comparison against a selected spell fall back to its uuid, which is the one key that cannot
+    // match the same spell from another package.
+    picks.push({
+      uuid: s.uuid, id: s.id, identifier: s.identifier ?? "",
+      name: s.name, img: s.img, level: s.level
+    });
   };
   for ( const name of names ?? [] ) {
     add(pool.find(s => s.name?.toLowerCase() === String(name).toLowerCase()));
@@ -384,7 +421,17 @@ async function fillFeatSpells(state, source, spells, profile, classDoc) {
   state.featSpellCache = await resolveFeatSpells(state, source);
   if ( !state.featSpellCache.length ) return;
 
-  const known = new Set([...state.selectedCantrips, ...state.selectedSpells].map(s => s.uuid));
+  // Everything the character is already getting: the class spells chosen above, and every spell an
+  // origin's own advancement grants or has chosen. The second half is what was missing — a High Elf
+  // picks a wizard cantrip through an advancement choice, and Magic Initiate would then pick the
+  // same one from the same list, because this set only knew about the class's spells.
+  //
+  // Keyed by spell *identity* rather than uuid, for the reason {@link originGrantedSpellKeys}
+  // gives: two installed packages hold two copies of every spell, and a uuid set cannot see that
+  // the wizard cantrip an origin granted is the one Magic Initiate is about to pick again.
+  const known = new Set([...state.selectedCantrips, ...state.selectedSpells]
+    .map(s => spellKey(s)).filter(Boolean));
+  for ( const key of await originGrantedSpellKeys(state).catch(() => []) ) known.add(key);
   const classAbility = classDoc?.system?.spellcasting?.ability || null;
 
   for ( const grant of state.featSpellCache ) {
@@ -401,7 +448,10 @@ async function fillFeatSpells(state, source, spells, profile, classDoc) {
     const pickUuids = (pool, names, max) => {
       const out = [];
       const add = s => {
-        if ( s && !known.has(s.uuid) && out.length < max ) { known.add(s.uuid); out.push(s.uuid); }
+        const key = s ? spellKey(s) : null;
+        if ( !s || (key && known.has(key)) || (out.length >= max) ) return;
+        if ( key ) known.add(key);
+        out.push(s.uuid);
       };
       for ( const n of names ?? [] ) add(pool.find(x => x.name?.toLowerCase() === String(n).toLowerCase()));
       for ( const s of pool ) add(s);

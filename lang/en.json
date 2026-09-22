@@ -78,7 +78,7 @@
       "partial": "Quick Build finished with some gaps — check the remaining steps.",
       "failed": "Quick Build failed; your choices were left as they were.",
       "threshold": {
-        "title": "Begin",
+        "title": "Quick Build",
         "instruction": "Three choices. Everything else is filled in for you, and none of it is locked.",
         "create": "Create Character",
         "stepwise": "Build step by step instead",
@@ -101,8 +101,12 @@
         "editionAria": "Rules edition",
         "willPick": "Quick Build will pick",
         "returnToQuick": "Back to Quick Build",
-        "rollAll": "Roll everything"
-      }
+        "rollAll": "Roll everything",
+        "view": "View",
+        "level": "Level {level}",
+        "levelAria": "Starting level"
+      },
+      "climbPartial": "Quick Build reached level {reached} of {target}. The wrench on the sheet finishes the rest."
     },
     "pdfExport": {
       "label": "Export Character Sheet PDF",
@@ -391,7 +395,9 @@
         "bonusGoldValue": "{gp} gp (d10 rolled {die}: {base} gp + {die} × {per} gp)",
         "bonusGoldFlat": "{gp} gp",
         "magicItems": "Magic Items",
-        "magicItemQty": "{name} ×{qty}"
+        "magicItemQty": "{name} ×{qty}",
+        "magicBought": "Bought ({spent})",
+        "readyMade": "Ready-made"
       },
       "levelup": {
         "heading": "Level up",
@@ -607,10 +613,10 @@
       },
       "magicShop": {
         "label": "Magic Items",
-        "intro": "Starting above 1st level, you begin with a few magic items. Choose them free of charge within the rarity slots on the right. A slot can also hold an item of a lower rarity.",
+        "intro": "Your starting level begins with a few magic items. Choose them free of charge within the rarity slots on the right. A slot can also hold an item of a lower rarity.",
         "loading": "Loading magic items… {percent}%",
         "loadFailed": "The magic items could not be loaded. Leave the step and come back to try again.",
-        "tier": "Levels {from}–{to}",
+        "tier": "Level {level}",
         "goldLabel": "Bonus gold roll",
         "goldFormula": "{base} gp + {die} × {per} gp",
         "goldFormulaUnrolled": "{base} gp + d10 × {per} gp",
@@ -634,7 +640,17 @@
         "goldOnly": "Your starting level grants bonus gold but no magic items.",
         "allRarities": "All rarities",
         "filterRarityAria": "Filter by rarity",
-        "reviewHeading": "Magic Items"
+        "reviewHeading": "Magic Items",
+        "overBudget": "Your cart costs more than you can pay for.",
+        "buy": "Buy",
+        "buyPrice": "Buy for {price}",
+        "notForSale": "Not for sale",
+        "cartHeading": "Buying",
+        "cartClear": "Empty the cart",
+        "budget": "To spend",
+        "spent": "Spent",
+        "remaining": "Left",
+        "reviewBought": "Bought"
       },
       "review": {
         "label": "Review",
@@ -835,7 +851,7 @@
       },
       "magicShopEnabled": {
         "name": "Enable the magic item shop",
-        "hint": "Adds a Magic Items step for characters starting above 1st level. It rolls their bonus gold and lets them pick free magic items by rarity, using the wealth table below."
+        "hint": "Adds a Magic Items step for any starting level whose wealth-table row grants something. It rolls their bonus gold and lets them pick free magic items by rarity, and buy more with what they can afford."
       },
       "magicShopConfigMenu": {
         "name": "Magic Item Shop",
@@ -868,9 +884,10 @@
         "name": "Allow Manual Ability Scores",
         "hint": "Adds a fourth method to the Ability Scores panel where players type the six numbers in themselves. Off by default: manual entry ignores the point-buy budget, the standard array and the roll formula, so turn it on only where the scores are decided away from this window."
       },
-      "entryChooser": {
-        "name": "Ask how to build",
-        "hint": "Opens the creator on a choice of three ways in — build step by step, quick build, or start from a ready-made character — instead of going straight to the first step. Off by default; the step-by-step path is unchanged either way."
+      "recommendedPath": {
+        "name": "Recommended way to build",
+        "hint": "Which of the three ways into the creator is marked as recommended for a player who has not built a character before. Everything stays available whichever you pick.",
+        "none": "No recommendation"
       }
     },
     "storeConfig": {
@@ -905,12 +922,12 @@
       "title": "Magic Item Shop",
       "tabTable": "Wealth Table",
       "tabInventory": "Inventory",
-      "tableHint": "What a character starting above 1st level receives, per level band: bonus gold of base + 1d10 × per-die gp, and how many magic items of each rarity they may pick. Defaults to the Dungeon Master's Guide.",
-      "colLevels": "Levels",
+      "tableHint": "What a character starting above 1st level arrives with, per level: bonus gold on top of their normal starting equipment, and how many magic items of each rarity they may pick. Every level has its own row, so you can give 7th level something 5th level does not. Reset puts the Dungeon Master's Guide's own numbers back.",
+      "colLevels": "Level",
       "colBaseGp": "Base gp",
       "colPerD10": "gp per d10",
       "colRange": "Gold range",
-      "band": "Levels {from}–{to}",
+      "band": "Level {level}",
       "range": "{min}–{max} gp",
       "rangeFixed": "{gp} gp",
       "reset": {
@@ -972,7 +989,6 @@
       "heading": "How do you want to build this character?",
       "blurb": "All three end in the same place: a finished character on the Review page, with every choice still yours to change. They differ only in how much is decided for you.",
       "recommended": "Recommended",
-      "gmNote": "Your GM decides whether this screen appears at all.",
       "custom": {
         "title": "Custom build",
         "tagline": "Every choice is yours, in order, with the rules explained as you go.",
@@ -990,20 +1006,22 @@
         "point3": "Every pick still editable afterwards"
       },
       "premade": {
-        "title": "Ready-made",
-        "tagline": "Start from a finished character and be playing in a minute.",
-        "go": "Browse the ready-made",
-        "point1": "Complete characters, built and ready",
-        "point2": "Only the ones this world has the content for",
+        "title": "Premade",
+        "tagline": "A collection of ready-to-play premade characters",
+        "go": "Start browsing",
+        "point1": "Not sure how to create your first character?",
+        "point2": "Skip the complicated stuff and start playing in minutes.",
         "point3": "Still yours to edit before it is created",
-        "none": "No ready-made characters are available in this world.",
-        "heading": "Ready-made characters",
-        "blurb": "Finished characters, ready to play. Foundry's own pregenerated heroes are imported exactly as the system built them; anything below them is built the same way a hand-made character is.",
+        "none": "No premade characters are available in this world.",
+        "heading": "Premade Characters",
+        "blurb": "Not sure how to create your first character? Our premade characters let you skip the complicated stuff and start playing in minutes.",
         "back": "Back",
-        "fromFoundry": "From Foundry Virtual Tabletop",
+        "fromFoundry": "Foundry Virtual Tabletop",
         "fromModule": "From this module",
-        "importFailed": "That ready-made character could not be imported."
-      }
+        "importFailed": "That premade character could not be imported.",
+        "confirm": "Create {name}"
+      },
+      "returnToChooser": "Other ways to build"
     }
   }
 }

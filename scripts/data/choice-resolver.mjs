@@ -734,9 +734,11 @@ async function optionalGrantReq(adv, { source, ownerUuid, sel, level }) {
     };
   };
 
-  let options, groups = null;
+  let options, groups = null, dependents = {};
   if ( kind === "replacement" ) {
-    groups = replacementGroups(adv.configuration.replacements, items).groups
+    const grouped = replacementGroups(adv.configuration.replacements, items);
+    dependents = grouped.dependents;
+    groups = grouped.groups
       .map(({ base, members }) => ({
         label: t("choice.optionalGrant.insteadOf", { feature: docs.get(base)?.name ?? base }),
         options: members.map(uuid => option(uuid, members.join("|")))
@@ -762,7 +764,9 @@ async function optionalGrantReq(adv, { source, ownerUuid, sel, level }) {
     optional: true,
     keep: [...keep],
     options,
-    groups
+    groups,
+    // Items granted with a choice rather than as one, for the handler to settle after a pick.
+    dependents
   };
 }
 

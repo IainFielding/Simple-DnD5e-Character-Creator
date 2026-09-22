@@ -2,6 +2,7 @@ import { ABILITIES, t, log } from "../config.mjs";
 import { resolveArtFor, creditFor } from "../data/art-cache.mjs";
 import { QUICK_BUILD } from "../data/quick-build-data.mjs";
 import { allocateOriginAsi, applyQuickBuild } from "../data/quick-build.mjs";
+import { QUICK_LEVELS } from "../data/quick-climb.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { generateName } from "../data/name-generator.mjs";
 
@@ -347,7 +348,8 @@ export async function thresholdContext({ state, source }, rules = null) {
       seed: card?.identifier || card?.name || category,
       count: cardsFor(source, category, rules).length,
       browse: t("quickBuild.threshold.browse", { count: cardsFor(source, category, rules).length }),
-      roll: t("quickBuild.threshold.rollCategory", { category: t(`step.${category}.label`).toLowerCase() })
+      roll: t("quickBuild.threshold.rollCategory", { category: t(`step.${category}.label`).toLowerCase() }),
+      view: t("quickBuild.threshold.view")
     };
   });
 
@@ -363,6 +365,13 @@ export async function thresholdContext({ state, source }, rules = null) {
           { rules: "2014", label: t("quickBuild.threshold.edition2014"), active: String(rules) === "2014" }
         ]
       : null,
+    // The starting level. Three fixed rungs rather than a 1–20 spinner — see {@link QUICK_LEVELS}
+    // for why the profile can stand behind these and not behind every level.
+    levels: QUICK_LEVELS.map(level => ({
+      level,
+      label: t("quickBuild.threshold.level", { level }),
+      active: (state.targetLevel ?? 1) === level
+    })),
     name: state.details?.name ?? "",
     plates: abilities.plates,
     fills: t("quickBuild.threshold.fills", {

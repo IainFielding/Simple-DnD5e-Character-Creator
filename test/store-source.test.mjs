@@ -3,8 +3,8 @@ import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import {
   toCopper, totalCp, multiplyCp, priceCp, formatCp, fromCopper,
   sanitizeEntry, entryFromItem, effectiveCp, parsePriceInput, cpToPriceParts,
-  hydrateEntries, buildStock, cartTotalCp, remainingCurrency,
-  equipmentBudgetCp, purchasedItems
+  hydrateEntries, buildStock, cartTotalCp, remainingCurrency, applyCartToCurrency,
+  consolidateCurrency, equipmentBudgetCp, purchasedItems
 } from "../scripts/data/store-source.mjs";
 
 /**
@@ -62,9 +62,13 @@ describe("price math", () => {
     expect(formatCp(0)).toBe("0 cp");
   });
 
-  it("re-expresses copper as gp/sp/cp change", () => {
-    expect(fromCopper(7950)).toEqual({ gp: 79, sp: 5, cp: 0 });
-    expect(fromCopper(0)).toEqual({ gp: 0, sp: 0, cp: 0 });
+  it("re-expresses copper in the largest coins it can", () => {
+    // Platinum included: a character starting above first level can carry four figures of gold,
+    // and 7 pp 9 gp reads where 79 gp does not. Electrum deliberately not — see fromCopper.
+    expect(fromCopper(7950)).toEqual({ pp: 7, gp: 9, sp: 5, cp: 0 });
+    expect(fromCopper(999)).toEqual({ pp: 0, gp: 9, sp: 9, cp: 9 });
+    expect(fromCopper(1000)).toEqual({ pp: 1, gp: 0, sp: 0, cp: 0 });
+    expect(fromCopper(0)).toEqual({ pp: 0, gp: 0, sp: 0, cp: 0 });
   });
 });
 
@@ -189,10 +193,18 @@ describe("cart totals & deduction", () => {
     expect(cartTotalCp(null)).toBe(0);
   });
 
+  it("converts the currency up even when nothing was bought", () => {
+    // The common case, and the one that used to pass through untouched: a character above first
+    // level was handed their whole budget in gold rather than platinum.
+    const { cartCp, currency } = applyCartToCurrency({}, { gp: 1500 });
+    expect(cartCp).toBe(0);
+    expect(currency).toEqual({ pp: 150, gp: 0, sp: 0, cp: 0 });
+  });
+
   it("deducts a fitting cart and re-expresses the remainder as change", () => {
     const { spendable, remainder } = remainingCurrency({ gp: 125 }, 4550);
     expect(spendable).toBe(true);
-    expect(remainder).toEqual({ gp: 79, sp: 5, cp: 0 });
+    expect(remainder).toEqual({ pp: 7, gp: 9, sp: 5, cp: 0 });
   });
 
   it("declines a cart that exceeds the currency, leaving it untouched", () => {
@@ -309,5 +321,56 @@ describe("purchasedItems", () => {
     expect(byName["Longsword"].system.equipped).toBe(true);
     expect(byName["Chain Mail"].system.equipped).toBe(true);
     expect(byName["Rope"].system.equipped).toBeUndefined();
+  });
+});
+
+/**
+ * Consolidating the purse at the end of a build.
+ *
+ * The maths is dnd5e's, not ours — this is the same call as the Convert Currency button on the
+ * sheet. So what is worth testing is the wiring and the guards: that it delegates, that it cannot
+ * fail a build, and that it does nothing when there is nothing to do. Re-testing the system's
+ * arithmetic here would only pin our copy of an assumption we no longer make.
+ */
+describe("consolidating currency", () => {
+  beforeEach(() => installFoundryShims());
+
+  /** Install a stand-in for the system's converter and record what it is handed. */
+  const withConverter = impl => {
+    const calls = [];
+    globalThis.dnd5e = {
+      applications: {
+        CurrencyManager: {
+          convertCurrency: async doc => { calls.push(doc); return impl?.(doc); }
+        }
+      }
+    };
+    return calls;
+  };
+
+  it("hands the actor to the system's own conversion", async () => {
+    const calls = withConverter();
+    const actor = { system: { currency: { gp: 1500 } } };
+    await consolidateCurrency(actor);
+    expect(calls).toEqual([actor]);
+  });
+
+  it("does nothing for an actor with no currency", async () => {
+    const calls = withConverter();
+    await consolidateCurrency({ system: {} });
+    await consolidateCurrency({});
+    await consolidateCurrency(null);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("leaves the purse alone when the system offers no conversion", async () => {
+    // Guarded rather than assumed: the call is behind a namespace that a future system could move.
+    globalThis.dnd5e = {};
+    await expect(consolidateCurrency({ system: { currency: { gp: 5 } } })).resolves.toBeUndefined();
+  });
+
+  it("never fails the build over coin", async () => {
+    withConverter(() => { throw new Error("no"); });
+    await expect(consolidateCurrency({ system: { currency: { gp: 5 } } })).resolves.toBeUndefined();
   });
 });

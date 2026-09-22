@@ -191,7 +191,7 @@ export const SETTINGS = {
   storeEnabled: "storeEnabled",
   storeConfig: "storeConfig",
   magicShopEnabled: "magicShopEnabled",
-  entryChooser: "openOnChooser",
+  recommendedPath: "recommendedPath",
   magicShopConfig: "magicShopConfig",
   debug: "debugLogging"
 };
@@ -226,10 +226,10 @@ export const DEFAULTS = {
   },
   // Off by default: it changes a higher-level character's starting wealth, which a table opts into.
   magicShopEnabled: false,
-  // Off by default, and this one matters more than most: it changes the first thing a player sees.
-  // Every world that upgrades keeps opening straight on the wizard, exactly as it does today, until
-  // its GM says otherwise. See `entryChooserEnabled()`.
-  entryChooser: false,
+  // Which way in the entry chooser marks as recommended. Quick build, because the player this
+  // badge is for is the one who does not yet know which they want — and that is the path that
+  // asks least of them. A table that would rather everyone built by hand says so here.
+  recommendedPath: "quick",
   magicShopConfig: {
     inventory: [],
     wealthTable: null          // null = the DMG table; see data/magic-shop.mjs
@@ -355,26 +355,28 @@ export function manualAbilitiesEnabled() {
   }
 }
 
+/** The ways into the creator, in the order the chooser offers them. */
+export const ENTRY_PATHS = ["custom", "quick", "premade"];
+
 /**
- * Whether the creator opens on the entry chooser — "how do you want to build this character?" —
- * rather than straight on the first step.
+ * Which way in the entry chooser marks as recommended, or `"none"` for no recommendation at all.
  *
- * Off unless the GM says otherwise, and that default is the point: this is the only setting in the
- * module that changes the *first* thing a player sees, so no world may acquire it by upgrading.
- * With it off the creator behaves exactly as it always has, and Quick Build stays where it is — a
- * button in the class detail header.
- *
- * Meaningless under Ember, which owns creation outright and never reaches our first step; hence
- * `config: !ember` at registration. Read through here rather than off the setting directly so the
- * pre-registration case (an early hook, a unit test) answers "off" instead of throwing.
- * @returns {boolean}
+ * The badge is aimed squarely at the player who has not built a character before and cannot tell
+ * the three paths apart. Which one that should be is a table's decision, not ours: a group who
+ * want everyone to learn the rules will point at the step-by-step build, a one-shot will point at
+ * the ready-made characters. Guarded against a stored value that no longer names a path, so
+ * removing a way in later cannot leave a world recommending nothing by accident.
+ * @returns {"custom"|"quick"|"premade"|"none"}
  */
-export function entryChooserEnabled() {
+export function recommendedPath() {
+  let raw;
   try {
-    return !!game.settings.get(MODULE_ID, SETTINGS.entryChooser);
+    raw = game.settings.get(MODULE_ID, SETTINGS.recommendedPath);
   } catch {
-    return false;
+    return DEFAULTS.recommendedPath;
   }
+  if ( raw === "none" ) return "none";
+  return ENTRY_PATHS.includes(raw) ? raw : DEFAULTS.recommendedPath;
 }
 
 /**

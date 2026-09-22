@@ -181,6 +181,37 @@ describe("choosePicks", () => {
     expect(second).toEqual(["skills:prc"]);
   });
 
+  it("never lets two sources choose the same spell in one pass", () => {
+    // The High Elf + Magic Initiate case: a species cantrip choice and a background's, drawing on
+    // the same list. A skill taken twice is a wasted proficiency; a *document* taken twice is the
+    // same spell on the character as two items, competing for preparation and slots.
+    const cantripReq = () => ({
+      type: "ItemChoice", count: 1, isExpertise: false,
+      options: [
+        { key: "Compendium.x.y.Item.prestidigitation", label: "Prestidigitation" },
+        { key: "Compendium.x.y.Item.light", label: "Light" }
+      ]
+    });
+    const taken = new Set();
+    const first = choosePicks(cantripReq(), QUICK_BUILD.wizard, taken);
+    const second = choosePicks(cantripReq(), QUICK_BUILD.wizard, taken);
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(second[0]).not.toBe(first[0]);
+  });
+
+  it("still fills a second choice when the pool has only one option left", () => {
+    // Running out is not the same as duplicating: the requirement simply goes unfilled rather than
+    // quietly taking the spell the other source already has.
+    const only = () => ({
+      type: "ItemChoice", count: 1, isExpertise: false,
+      options: [{ key: "Compendium.x.y.Item.light", label: "Light" }]
+    });
+    const taken = new Set();
+    expect(choosePicks(only(), QUICK_BUILD.wizard, taken)).toEqual(["Compendium.x.y.Item.light"]);
+    expect(choosePicks(only(), QUICK_BUILD.wizard, taken)).toEqual([]);
+  });
+
   it("lets expertise re-pick a proficient skill despite the taken set", () => {
     const taken = new Set(["skills:ste"]);
     const req = {
@@ -246,7 +277,12 @@ describe("pickSpells", () => {
   it("takes named preferences first, then backfills from the top", () => {
     const picks = pickSpells(pool, ["guiding bolt"], 2);
     expect(picks.map(s => s.name)).toEqual(["Guiding Bolt", "Bless"]);
-    expect(picks[0]).toEqual({ uuid: "u2", id: "i2", name: "Guiding Bolt", img: "x.webp", level: 1 });
+    // `identifier` is carried through deliberately: it is what `spellKey` matches a chosen spell
+    // against a granted one by, and dropping it here let a Wizard pick a cantrip Magic Initiate
+    // had already granted from a different package.
+    expect(picks[0]).toEqual({
+      uuid: "u2", id: "i2", identifier: "", name: "Guiding Bolt", img: "x.webp", level: 1
+    });
   });
 
   it("caps at max and never duplicates", () => {

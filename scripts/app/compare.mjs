@@ -1,5 +1,6 @@
 import { ABILITIES, t, log } from "../config.mjs";
 import { advancementArray } from "../data/advancement-util.mjs";
+import { sourceBookText } from "./source-details.mjs";
 
 /**
  * Side-by-side comparison of pinned options — the one thing Quick Build cannot do for you.
@@ -323,15 +324,7 @@ export function compareRows(category, entries) {
   return rows.filter(Boolean);
 }
 
-/**
- * The book an item names as its source, for a document the SourceIndex has not already described.
- * `system.source.label` is dnd5e's own resolved wording (book name plus page); the raw book code is
- * the fallback for content that never set one.
- */
-function sourceBookText(doc) {
-  const source = doc?.system?.source;
-  return source?.label || source?.book || source?.custom || "";
-}
+/* `sourceBookText` moved to source-details.mjs, which is where the other consumer lives. */
 
 /**
  * One row per distinct trait granted across the pinned items.

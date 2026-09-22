@@ -160,5 +160,27 @@
   </div>
   {{/if}}
 
+  {{!-- Magic items, for a 1st-level character whose GM gave that row of the wealth table something.
+        A character starting higher gets the same block on the climb's review page. --}}
+  {{#if magicItems}}
+  <div class="creator-review-block creator-levelup-purchases">
+    <h2>{{localize "sogrom-dnd5e-character-creator.step.magicShop.reviewHeading"}}</h2>
+    <ul class="creator-review-spells creator-levelup-featlist">
+      {{#each magicItems.items}}<li><a class="content-link cc-rarity-text rarity-{{rarity}}" data-uuid="{{link}}" data-link data-tooltip="{{ccItemTooltip link}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{#if count}} ×{{count}}{{/if}}</li>{{/each}}
+      {{#if magicItems.gold}}<li class="creator-review-gold"><i class="fa-solid fa-coins"></i> +{{magicItems.gold}}</li>{{/if}}
+    </ul>
+
+    {{#if magicItems.hasBought}}
+    <h3 class="creator-review-subhead">
+      {{localize "sogrom-dnd5e-character-creator.step.magicShop.reviewBought"}}
+      {{#if magicItems.spent}}<span class="creator-review-gold">&minus;{{magicItems.spent}}</span>{{/if}}
+    </h3>
+    <ul class="creator-review-spells creator-levelup-featlist">
+      {{#each magicItems.bought}}<li><a class="content-link" data-uuid="{{link}}" data-link data-tooltip="{{ccItemTooltip link}}">{{#if img}}<img src="{{img}}" alt="">{{/if}}{{name}}</a>{{#if count}} ×{{count}}{{/if}}</li>{{/each}}
+    </ul>
+    {{/if}}
+  </div>
+  {{/if}}
+
   {{> "modules/sogrom-dnd5e-character-creator/templates/parts/pdf-export.hbs"}}
 </section>

@@ -25,7 +25,7 @@
         "compatibility": {
           "minimum": "5.3.3",
           "maximum": "6.99.99",
-          "verified": "6.0.3"
+          "verified": "6.0.4"
         }
       }
     ]
@@ -48,5 +48,6 @@
   "url": "#{URL}#",
   "manifest": "#{MANIFEST}#",
   "download": "#{DOWNLOAD}#",
-  "license": "LICENSE"
+  "license": "LICENSE",
+  "readme": "https://github.com/IainFielding/Simple-DnD5e-Character-Creator#readme"
 }

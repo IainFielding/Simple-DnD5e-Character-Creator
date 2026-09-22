@@ -9,6 +9,7 @@ import { resetWeaponIcons } from "./weapon-source.mjs";
 import { getEnabledPacks } from "./compendium-util.mjs";
 import { invalidateJournalIndex } from "./journal-source.mjs";
 import { invalidateRulesPages } from "./rules-source.mjs";
+import { invalidateArtCache } from "./art-cache.mjs";
 
 /**
  * Shared, warm-once compendium data for the builder.
@@ -131,9 +132,10 @@ export function isStale() {
  * The four data sources hang off `cache` and go with it, but several memos live at module scope in
  * their own files and would otherwise outlive the world they describe. Every one is built by
  * scanning the *enabled* packs — the `allowDrops` restriction scan, the tool-category expansion, the
- * PHB weapon-icon map, the package-type ranking behind duplicate collapsing, and the two journal
- * lookups — which is exactly the configuration whose change brought us here, so they are cleared on
- * the same beat rather than serving pre-change content for the rest of the session.
+ * PHB weapon-icon map, the package-type ranking behind duplicate collapsing, the two journal
+ * lookups and the origin-art directory listings — which is exactly the configuration whose change
+ * brought us here, so they are cleared on the same beat rather than serving pre-change content for
+ * the rest of the session.
  */
 export function invalidateSources() {
   cache = null;
@@ -151,4 +153,8 @@ export function invalidateSources() {
   // resolved from the same packs and answers to the same change.
   invalidateJournalIndex();
   invalidateRulesPages();
+  // The art listings are directory browses keyed off the *installed* packages — which book owns a
+  // card decides which directory is searched for its banner. Enabling a content module reveals art
+  // the last browse could not have seen, so the listings answer to this change like the rest.
+  invalidateArtCache();
 }

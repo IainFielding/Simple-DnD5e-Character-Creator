@@ -5614,7 +5614,12 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-threshold {
   position: absolute;
   inset: 0;
-  z-index: 6;
+  /* One below the book page and the compare grid, which both sit at 6.
+     They were all at 6, and these render later in stage.hbs, so an entry screen painted over the
+     very overlay it had just opened — the View button appeared to do nothing at all. An entry
+     screen covers the STEP; a book page opened from one covers everything, and closing it reveals
+     the entry screen again because opening it never cleared that state. */
+  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
@@ -5625,20 +5630,7 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-entry:focus-visible,
 .creator-threshold:focus-visible { outline: none; }
 
-/* Full width on purpose. This sentence is the whole argument for offering three paths at all —
-   that none of them costs the player anything — so it runs the width of the window rather than
-   being set as a narrow column beside empty space. */
-.creator-entry-head { max-width: none; }
-.creator-entry-head h2 {
-  margin: 0 0 0.2rem;
-  font-family: var(--cc-font-heading);
-  font-size: 1.3rem;
-  color: var(--cc-bright);
-}
-.creator-entry-head p { margin: 0; color: var(--cc-muted); line-height: 1.45; }
 .creator-entry-empty { margin: 0; color: var(--cc-text-faint); font-style: italic; }
-.creator-entry-foot { margin: auto 0 0; }
-.creator-entry-note { color: var(--cc-text-faint); font-size: 0.8rem; font-style: italic; }
 
 /* ---- Shared art plate --------------------------------------------------------------------
    Three tiers, and the difference between them is not decoration. A `banner` is a painted scene
@@ -5911,6 +5903,24 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border: none;
 }
 .creator-threshold-browse:hover { color: var(--cc-open-bright); }
+.creator-threshold-body { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+/* Reading about an option is not choosing it, so View is quieter than Browse and sits apart. */
+.creator-threshold-view {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0;
+  cursor: pointer;
+  color: var(--cc-muted);
+  background: none;
+  border: none;
+}
+.creator-threshold-view:hover { color: var(--cc-text); }
+
+/* A selected ready-made character, awaiting the confirm press. */
+.creator-premade.is-chosen {
+  border-color: var(--cc-settled);
+  box-shadow: var(--cc-bezel);
+}
 
 /* Two classes, not one: the blanket `height: auto` reset above is a class-plus-element selector
    and would otherwise out-specify this and flatten the dice out of round. */
@@ -5952,16 +5962,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-radius: var(--cc-radius);
 }
 .creator-threshold-identity { display: flex; gap: 0.85rem; align-items: center; }
-.creator-threshold-portrait {
-  position: relative;
-  flex: none;
-  width: 5.5rem;
-  height: 5.5rem;
-  overflow: hidden;
-  background: var(--cc-sunk);
-  border: 1px solid var(--cc-line-2);
-  border-radius: var(--cc-radius-sm);
-}
 .creator-threshold-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .creator-threshold-fields label {
   font-family: var(--cc-font-heading);
@@ -6032,21 +6032,8 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-threshold-plate .plate-base { display: block; font-size: 0.62rem; color: var(--cc-text-faint); }
 .creator-threshold-asi { margin: 0; font-size: 0.78rem; line-height: 1.4; color: var(--cc-muted); }
 
+/* Only the attribution line is left in here: Create and Back are the stage footer's now. */
 .creator-threshold-actions { display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap; }
-.creator-threshold-create {
-  font-family: var(--cc-font-heading);
-  font-size: 0.95rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 0.65rem 1.5rem;
-  font-weight: 600;
-  color: #12130f;
-  background: var(--cc-settled);
-  border-color: var(--cc-settled-bright);
-  box-shadow: 0 0 0 3px var(--cc-settled-glow);
-}
-.creator-threshold-create:hover:not(:disabled) { background: var(--cc-settled-bright); }
-.creator-threshold-create:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
 .creator-btn--quiet { border-color: transparent; background: none; color: var(--cc-muted); }
 .creator-btn--quiet:hover { color: var(--cc-text); }
 .creator-threshold-credit {
@@ -6085,6 +6072,27 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   background: var(--cc-open-soft);
   border-color: var(--cc-open);
 }
+/* The starting-level rungs, built as the edition switch is — same pill, same active treatment, so
+   the two controls in this row read as one family rather than two competing ideas. It keeps its own
+   `margin-left` off `auto`: the edition switch already claims the free space, and a second `auto`
+   would push the two apart to opposite ends of the row. */
+.creator-threshold-levels { display: flex; align-items: center; gap: 0.4rem; }
+.creator-threshold-level {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.65rem;
+  cursor: pointer;
+  color: var(--cc-muted);
+  background: none;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill, 999px);
+}
+.creator-threshold-level.is-active {
+  color: var(--cc-bright);
+  background: var(--cc-open-soft);
+  border-color: var(--cc-open);
+}
+
 .creator-threshold-head { display: flex; align-items: center; gap: 0.85rem; }
 /* Rolls the whole character. Deliberately not a round die like the three on the cards: those each
    change one thing, this changes everything, and a fourth identical die would invite the player to
@@ -6140,3 +6148,56 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-quick-return:hover { color: var(--cc-bright); background: var(--cc-settled-glow); }
 /* Next keeps the right-hand end; the return sits just inside it. */
 .creator-quick-return + .creator-btn-primary { margin-left: 0.6rem; }
+
+/* ---- Buying in the magic shop -------------------------------------------------------------
+   The rarity slots and the purse are two different budgets, and the layout has to say so: a
+   player who reads "3 left" as gold rather than as uncommon slots will make a pick they cannot
+   undo. Hence a separate panel with its own heading and its own sums, below the slots. */
+.creator-magic-buy { display: flex; align-items: center; gap: 0.3rem; margin-left: 0.5rem; }
+.creator-magic-buy-btn { font-size: 0.78rem; padding: 0.2rem 0.55rem; white-space: nowrap; }
+.creator-magic-buy-btn:disabled { opacity: 0.4; cursor: default; }
+
+.creator-magic-purse {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius-sm);
+  background: var(--cc-sunk);
+}
+.creator-magic-purse.is-over { border-color: var(--cc-danger); }
+.creator-magic-purse-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-family: var(--cc-font-heading);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+.creator-magic-purse-sums {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.6rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+}
+.creator-magic-purse-sums dt { color: var(--cc-muted); }
+.creator-magic-purse-sums dd { margin: 0; text-align: right; color: var(--cc-settled); }
+.creator-magic-purse.is-over .creator-magic-purse-sums dd:last-of-type { color: var(--cc-danger); }
+.creator-magic-cart-price { color: var(--cc-muted); font-size: 0.78rem; }
+
+/* The "Bought" heading inside the review's magic-items block, and the bill beside it. */
+.creator-review-subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.7rem 0 0.35rem;
+  font-family: var(--cc-font-heading);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+.creator-review-subhead .creator-review-gold { font-size: 0.8rem; letter-spacing: 0; }

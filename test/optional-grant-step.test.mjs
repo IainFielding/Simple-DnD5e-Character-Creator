@@ -28,6 +28,20 @@ describe("the optional-grant screen", () => {
   }
 
   beforeEach(() => {
+    // Tasha's own table, in its real shape: class -> level -> base -> [replacement, ...dependents].
+    // The module records only `toAdd[0]` on the advancement, so this table is the only statement
+    // anywhere that Canny belongs to Deft Explorer. Worlds without Tasha's have no CONFIG.TCOE.
+    globalThis.CONFIG ??= {};
+    globalThis.CONFIG.TCOE = {
+      replacementFeatures: {
+        ranger: {
+          1: {
+            [bare("naturalExplorer")]: [uuid("deftExplorer"), uuid("canny")],
+            [bare("favoredEnemy")]: [uuid("favoredFoe")]
+          }
+        }
+      }
+    };
     applied = null;
     driver = {
       optionalGrantState: rec => ({
@@ -41,9 +55,12 @@ describe("the optional-grant screen", () => {
 
   /* -------------------------------------------- */
 
-  it("keeps a base and its several replacements in one group", () => {
-    // Natural Explorer -> [Deft Explorer, Canny]: the map names only the first.
-    const rec = record({
+  it("never offers a dependent as a choice, with one base or with several", async () => {
+    // Tasha's swaps Natural Explorer for Deft Explorer *and* Canny but records only the first, so
+    // Canny reaches us looking like an unrelated optional extra. It is not a choice: their own flow
+    // locks its checkbox to Deft Explorer's radio. Picking Deft Explorer is what takes Canny, so
+    // the screen must not show it — with two bases the old code dropped it instead, which is the bug.
+    const oneBase = record({
       items: [
         { uuid: uuid("naturalExplorer"), optional: true },
         { uuid: uuid("deftExplorer"), optional: true },
@@ -53,18 +70,25 @@ describe("the optional-grant screen", () => {
       replacements: { [bare("naturalExplorer")]: uuid("deftExplorer") },
       selected: [uuid("naturalExplorer"), uuid("rangerArchetype")]
     });
-    state = { optionalGrantSteps: [rec] };
+    expect((await groupsOf(oneBase)).flat()).not.toContain(uuid("canny"));
 
-    // Picking Canny must drop *both* the base and the sibling replacement, and must leave the
-    // non-optional Ranger Archetype — which is in no group — exactly where it was.
-    optionalGrantStep.handle("optionalGrantPick", {
-      dataset: {
-        index: "0", uuid: uuid("canny"),
-        group: [uuid("naturalExplorer"), uuid("deftExplorer"), uuid("canny")].join("|")
-      }
-    }, { state, driver });
-
-    expect(applied).toEqual([uuid("canny"), uuid("rangerArchetype")]);
+    const twoBases = record({
+      items: [
+        { uuid: uuid("favoredEnemy"), optional: true },
+        { uuid: uuid("favoredFoe"), optional: true },
+        { uuid: uuid("naturalExplorer"), optional: true },
+        { uuid: uuid("deftExplorer"), optional: true },
+        { uuid: uuid("canny"), optional: true }
+      ],
+      replacements: {
+        [bare("favoredEnemy")]: uuid("favoredFoe"),
+        [bare("naturalExplorer")]: uuid("deftExplorer")
+      },
+      selected: [uuid("favoredEnemy"), uuid("naturalExplorer")]
+    });
+    const groups = await groupsOf(twoBases);
+    expect(groups).toHaveLength(2);
+    expect(groups.flat()).not.toContain(uuid("canny"));
   });
 
   it("toggles an independent optional item without touching its neighbours", () => {
@@ -107,13 +131,14 @@ describe("the optional-grant screen", () => {
   }
 
   it("folds an unnamed alternative into the group of the grant's only base", async () => {
-    // The map names Deft Explorer; Canny is a replacement for the same base that it never records.
-    // With one base there is only one group it can belong to, so it belongs there.
+    // An optional item the map names nowhere and no table claims as a dependent. With one base
+    // there is only one group it can belong to, so it belongs there — the fallback that still
+    // applies to content we have no dependency table for.
     const rec = record({
       items: [
         { uuid: uuid("naturalExplorer"), optional: true },
         { uuid: uuid("deftExplorer"), optional: true },
-        { uuid: uuid("canny"), optional: true },
+        { uuid: uuid("unclaimedExtra"), optional: true },
         { uuid: uuid("rangerArchetype") }
       ],
       replacements: { [bare("naturalExplorer")]: uuid("deftExplorer") },
@@ -123,7 +148,7 @@ describe("the optional-grant screen", () => {
     const groups = await groupsOf(rec);
     expect(groups).toHaveLength(1);
     expect(new Set(groups[0]))
-      .toEqual(new Set([uuid("naturalExplorer"), uuid("deftExplorer"), uuid("canny")]));
+      .toEqual(new Set([uuid("naturalExplorer"), uuid("deftExplorer"), uuid("unclaimedExtra")]));
     // The non-optional item is in no group — it is granted either way, not a choice.
     expect(groups[0]).not.toContain(uuid("rangerArchetype"));
   });
@@ -154,15 +179,16 @@ describe("the optional-grant screen", () => {
   });
 
   it("leaves an unattributable alternative out rather than sharing it between bases", async () => {
-    // Two bases and a Canny the map attributes to neither: it cannot be placed without guessing,
-    // and guessing wrong lets one group unpick the other. Dropping the option is the safe answer.
+    // Two bases and an extra the map attributes to neither and no table claims: it cannot be placed
+    // without guessing, and guessing wrong lets one group unpick the other. Dropping it is safe —
+    // which is *not* the right answer for a dependent, whose owner is known. See the test above.
     const rec = record({
       items: [
         { uuid: uuid("favoredEnemy"), optional: true },
         { uuid: uuid("favoredFoe"), optional: true },
         { uuid: uuid("naturalExplorer"), optional: true },
         { uuid: uuid("deftExplorer"), optional: true },
-        { uuid: uuid("canny"), optional: true }
+        { uuid: uuid("unclaimedExtra"), optional: true }
       ],
       replacements: {
         [bare("favoredEnemy")]: uuid("favoredFoe"),
@@ -172,7 +198,7 @@ describe("the optional-grant screen", () => {
     });
 
     const groups = await groupsOf(rec);
-    expect(groups.flat()).not.toContain(uuid("canny"));
+    expect(groups.flat()).not.toContain(uuid("unclaimedExtra"));
   });
 
   it("marks the currently-applied member of each group as selected", async () => {

@@ -4,10 +4,12 @@ import {
   thresholdRoll, thresholdRollAll
 } from "../scripts/app/threshold.mjs";
 import {
-  availablePremades, findCard, foundryPregens, invalidatePregenCache, portraitFor, profileFor
+  PREGEN_SOURCES, availablePremades, findCard, foundryPregens, invalidatePregenCache,
+  portraitFor, profileFor
 } from "../scripts/data/premades.mjs";
 import { CreatorState } from "../scripts/state/creator-state.mjs";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
+import { ENTRY_PATHS, SETTINGS, recommendedPath } from "../scripts/config.mjs";
 
 /**
  * The quick-build screen and the ready-made list.
@@ -216,6 +218,32 @@ describe("seedThreshold and thresholdRoll", () => {
   });
 });
 
+describe("the recommended way in", () => {
+  beforeEach(() => installFoundryShims());
+
+  it("defaults to quick build — the path for a player who cannot tell them apart", () => {
+    expect(recommendedPath()).toBe("quick");
+  });
+
+  it("follows the GM's choice", () => {
+    for ( const path of ENTRY_PATHS ) {
+      game.settings.set("x", SETTINGS.recommendedPath, path);
+      expect(recommendedPath()).toBe(path);
+    }
+  });
+
+  it("allows no recommendation at all", () => {
+    game.settings.set("x", SETTINGS.recommendedPath, "none");
+    expect(recommendedPath()).toBe("none");
+  });
+
+  it("falls back rather than badging nothing when the stored value names no path", () => {
+    // Guards the case where a way in is removed later and a world still names it.
+    game.settings.set("x", SETTINGS.recommendedPath, "telepathy");
+    expect(recommendedPath()).toBe("quick");
+  });
+});
+
 describe("QUICK_FILLED_STEPS", () => {
   it("names the steps the build answers for the player", () => {
     // These are what the dossier labels "Quick Build will pick" instead of leaving as an em-dash.
@@ -361,69 +389,103 @@ describe("the rules edition", () => {
 });
 
 describe("Foundry's pregenerated characters", () => {
-  const doc = (id, name, cls, race, bg, img = `systems/dnd5e/tokens/heroes/${cls}${race}.webp`) => ({
-    id, name, uuid: `Compendium.dnd5e.actors24.Actor.${id}`, img,
+  const doc = (id, name, cls, race, bg, img = `systems/dnd5e/tokens/heroes/${cls}${race}.webp`,
+               { levels = 1, bio = "" } = {}) => ({
+    id, name, uuid: `Compendium.dnd5e.actors24.Actor.${id}`, img, type: "character",
+    system: { details: { biography: { value: bio } } },
     items: [
-      { type: "class", name: cls, img: `systems/dnd5e/icons/classes/${cls.toLowerCase()}.webp` },
+      { type: "class", name: cls, system: { levels },
+        img: `systems/dnd5e/icons/classes/${cls.toLowerCase()}.webp` },
       { type: "race", name: race, img: "icons/x.webp" },
       { type: "background", name: bg, img: "icons/y.webp" }
     ]
   });
 
   const pack = docs => ({
-    getIndex: async () => docs.map(d => ({ _id: d.id, name: d.name })),
+    getIndex: async () => docs.map(d => ({ _id: d.id, name: d.name, type: d.type })),
     getDocument: async id => docs.find(d => d.id === id) ?? null
   });
+
+  /** Only the dnd5e pack exists in these tests; the other sources contribute nothing. */
+  const packs = docs => ({ get: id => (id === "dnd5e.actors24" ? pack(docs) : null) });
+  /** The entries of the one group, flattened — what the card list is built from. */
+  const entries = async () => (await foundryPregens()).flatMap(g => g.entries);
 
   beforeEach(() => invalidatePregenCache());
 
   it("offers only the level 1 pregens, not 5, 11 and 17", async () => {
-    game.packs = { get: () => pack([
-      doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte"),
-      doc("AkraLv0500000000", "Akra", "Cleric", "Dragonborn", "Acolyte"),
-      doc("AkraLv1700000000", "Akra", "Cleric", "Dragonborn", "Acolyte")
-    ]) };
-    const out = await foundryPregens();
+    // Level is read off the class items, not guessed from the id — the id only narrows the load.
+    game.packs = packs([
+      doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined, { levels: 1 }),
+      doc("AkraLv0500000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined, { levels: 5 }),
+      doc("AkraLv1700000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined, { levels: 17 })
+    ]);
+    const out = await entries();
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe("AkraLv0100000000");
   });
 
   it("describes each one by species, class and background", async () => {
-    game.packs = { get: () => pack([doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte")]) };
-    const [akra] = await foundryPregens();
+    game.packs = packs([doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte")]);
+    const [akra] = await entries();
     expect(akra.name).toBe("Akra");
     expect(akra.line).toBe("Dragonborn Cleric 1 \u00b7 Acolyte");
   });
 
   it("uses the character's own portrait", async () => {
-    game.packs = { get: () => pack([doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte")]) };
-    const [akra] = await foundryPregens();
+    game.packs = packs([doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte")]);
+    const [akra] = await entries();
     expect(akra.img).toBe("systems/dnd5e/tokens/heroes/ClericDragonborn.webp");
   });
 
   it("falls back to the class illustration for a character with no portrait", async () => {
-    game.packs = { get: () => pack([
-      doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte", null)
-    ]) };
-    expect((await foundryPregens())[0].img).toBe("systems/dnd5e/icons/classes/cleric.webp");
+    game.packs = packs([doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte", null)]);
+    expect((await entries())[0].img).toBe("systems/dnd5e/icons/classes/cleric.webp");
   });
 
   it("treats the generic silhouette as no portrait, not as one", async () => {
     // A character document with no image resolves to a placeholder rather than to nothing, so
     // `if ( doc.img )` is not the question — "is this actually a picture of them" is.
-    game.packs = { get: () => pack([
+    game.packs = packs([
       doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte",
           "systems/dnd5e/icons/svg/actors/character.svg")
-    ]) };
-    expect((await foundryPregens())[0].img).toBe("systems/dnd5e/icons/classes/cleric.webp");
+    ]);
+    expect((await entries())[0].img).toBe("systems/dnd5e/icons/classes/cleric.webp");
   });
 
   it("sorts by name, so the list does not follow pack order", async () => {
-    game.packs = { get: () => pack([
+    game.packs = packs([
       doc("ZannaLv010000000", "Zanna", "Wizard", "Gnome", "Sage"),
       doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte")
-    ]) };
-    expect((await foundryPregens()).map(p => p.name)).toEqual(["Akra", "Zanna"]);
+    ]);
+    expect((await entries()).map(e => e.name)).toEqual(["Akra", "Zanna"]);
+  });
+
+  it("takes a sentence of description from the biography", async () => {
+    game.packs = packs([doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined,
+      { bio: "<p>A <strong>dragonborn</strong> cleric of Bahamut.</p>" })]);
+    expect((await entries())[0].tagline).toBe("A dragonborn cleric of Bahamut.");
+  });
+
+  it("shows no description for a pack whose biographies are not descriptions", async () => {
+    // The PHB example characters all carry the same ~1,900 characters of the book's own
+    // character-creation walkthrough in their biography. There is nothing to trim that down to, so
+    // the source opts out rather than printing a sentence of someone else's instructions.
+    const phb = PREGEN_SOURCES.find(src => src.pack === "dnd-players-handbook.actors");
+    expect(phb.describe).toBe(false);
+  });
+
+  it("leaves the description empty where a pack ships no biographies", async () => {
+    // Heroes of the Borderlands is exactly this case, so the card treats it as optional.
+    game.packs = packs([doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte")]);
+    expect((await entries())[0].tagline).toBe("");
+  });
+
+  it("groups by the book, and names it", async () => {
+    game.packs = packs([doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte")]);
+    const [group] = await foundryPregens();
+    expect(group.pack).toBe("dnd5e.actors24");
+    expect(group.badge).toBe("icons/vtt-512.png");
   });
 
   it("survives a document with neither a portrait nor a class", () => {

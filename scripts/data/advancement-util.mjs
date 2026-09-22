@@ -304,22 +304,79 @@ export function defaultGrantKeep(adv) {
 }
 
 /**
+ * Which granted items ride along with another, as `{dependent: host}`.
+ *
+ * Tasha's replaces one 2014 feature with a *list* of items — Natural Explorer becomes Deft Explorer
+ * **and** Canny — but `configuration.replacements` records only the first of that list
+ * (`optional-features.mjs`: `replacements[toReplace] = toAdd[0]`, while every entry of `toAdd` is
+ * pushed onto `configuration.items` as `optional`). So from the advancement alone the rest of the
+ * list is indistinguishable from an unrelated optional extra, which is exactly why Tasha's own flow
+ * hard-codes Canny back onto Deft Explorer by uuid in `TCOEReplacementFlow#_onRender`.
+ *
+ * We read the table it hard-codes *from* instead. `CONFIG.TCOE.replacementFeatures` is
+ * class → level → base → `[replacement, ...dependents]`, so the tail of each list depends on its
+ * head. That covers whatever Tasha's adds next without another uuid in our source, and it is the
+ * same fact their UI encodes — theirs for one pair, ours for the table.
+ *
+ * Reads the global defensively: worlds without Tasha's have no `CONFIG.TCOE`, and a dependency map
+ * of nothing is the correct answer there.
+ * @param {object} [table]  Overridable for tests; defaults to Tasha's live config.
+ * @returns {Record<string, string>}  dependent uuid → the uuid it is granted with.
+ */
+export function replacementDependents(table = globalThis.CONFIG?.TCOE?.replacementFeatures) {
+  const out = {};
+  for ( const byLevel of Object.values(table ?? {}) ) {
+    for ( const pairs of Object.values(byLevel ?? {}) ) {
+      for ( const toAdd of Object.values(pairs ?? {}) ) {
+        if ( !Array.isArray(toAdd) || (toAdd.length < 2) ) continue;
+        const host = withItemSegment(toAdd[0]);
+        for ( const dep of toAdd.slice(1) ) out[withItemSegment(dep)] = host;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Apply a dependency map to a keep list: a dependent is kept exactly when its host is.
+ *
+ * The single definition of "rides with", used by both rails so the creation checklist and the
+ * level-up screen cannot write different keep lists for the same answer.
+ * @param {string[]} keep
+ * @param {Record<string, string>} dependents  From {@link replacementDependents}.
+ * @returns {string[]}
+ */
+export function applyDependents(keep, dependents) {
+  const set = new Set(keep);
+  for ( const [dep, host] of Object.entries(dependents ?? {}) ) {
+    if ( set.has(host) ) set.add(dep);
+    else set.delete(dep);
+  }
+  return [...set];
+}
+
+/**
  * Group a replacement grant's items into base-and-alternatives sets, one exclusive group per base.
  *
- * The `replacements` map is base→alternative, but one base can map to *several* items (Tasha's swaps
- * Natural Explorer for Deft Explorer **and** Canny) while the map records only the first. So a group
- * is built from what the map names, and the optional items it names nowhere are folded in as further
- * alternatives — but only when the grant carries a **single** base, the only arrangement in which they
- * can be attributed to one. With two or more bases they are left out rather than added to every group:
- * a group is exclusive, so an extra shown under one base would unpick a different base's choice.
+ * Three kinds of item come out of a grant. The **bases** and the alternatives the `replacements` map
+ * names them against form the exclusive groups — pick one side or the other. **Dependents** ride
+ * with an alternative rather than competing with it ({@link replacementDependents}); they are not
+ * offered at all, because the player does not choose them — picking Deft Explorer is what takes
+ * Canny. Anything else optional and unattributed is an **extra**, folded in as a further alternative
+ * when the grant carries a **single** base, the only arrangement in which it can be attributed to
+ * one. With two or more bases extras are left out rather than added to every group: a group is
+ * exclusive, so an extra shown under one base would unpick a different base's choice.
  *
  * Anything non-optional outside every pair is not offered at all.
  * @param {object} replacements   The grant's `configuration.replacements`.
  * @param {{uuid: string, optional: boolean}[]} items   From {@link grantItems}.
- * @returns {{groups: {base: string, members: string[]}[], unattributed: string[]}}
+ * @param {Record<string, string>} [dependents]  Overridable for tests.
+ * @returns {{groups: {base: string, members: string[]}[], dependents: Record<string, string>,
+ *            unattributed: string[]}}
+ *   `dependents` — narrowed to the pairs this grant actually offers, for {@link applyDependents}.
  *   `unattributed` — alternatives left out because several bases share the grant.
  */
-export function replacementGroups(replacements, items) {
+export function replacementGroups(replacements, items, dependents = replacementDependents()) {
   const flat = flattenKeys(replacements);
   const bases = new Set(Object.keys(flat).map(withItemSegment));
   const offered = new Set(items.map(i => i.uuid));
@@ -331,11 +388,20 @@ export function replacementGroups(replacements, items) {
     const alt = rawAlt ? withItemSegment(rawAlt) : null;
     if ( alt && offered.has(alt) && named.has(base) ) named.get(base).push(alt);
   }
+  // Both ends have to be on this grant. A dependent whose host is granted elsewhere is not this
+  // grant's business, and treating it as one would hide an item nothing here can switch back on.
+  const riders = {};
+  for ( const [dep, host] of Object.entries(dependents ?? {}) ) {
+    if ( offered.has(dep) && offered.has(host) ) riders[dep] = host;
+  }
   const attributed = new Set([...named.values()].flat());
-  const extras = items.filter(i => i.optional && !bases.has(i.uuid) && !attributed.has(i.uuid)).map(i => i.uuid);
+  const extras = items
+    .filter(i => i.optional && !bases.has(i.uuid) && !attributed.has(i.uuid) && !riders[i.uuid])
+    .map(i => i.uuid);
   const shareExtras = bases.size === 1;
   return {
     groups: [...bases].map(base => ({ base, members: [base, ...named.get(base), ...(shareExtras ? extras : [])] })),
+    dependents: riders,
     unattributed: shareExtras ? [] : extras
   };
 }

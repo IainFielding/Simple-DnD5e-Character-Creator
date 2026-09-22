@@ -1,6 +1,6 @@
 import {
   MODULE_ID, HOOKS, tpl, t, log, ABILITIES, formatMod, fireHook, fireCancellableHook,
-  entryChooserEnabled, emberActive, systemRulesEdition
+  emberActive, systemRulesEdition
 } from "../config.mjs";
 import { CreatorShellBase, shellOptions, dossierStageParts, SHELL_ACTIONS } from "./shell-base.mjs";
 import { illuminatePages, drawFrameSigils, fitCardArt } from "./page-illumination.mjs";
@@ -15,6 +15,8 @@ import { postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
 import { launchLevelUpTo } from "../levelup/intercept.mjs";
 import { chooserContext, premadeContext, applyPremade, takePregen } from "./entry-chooser.mjs";
+import { isQuickLevel, quickClimb } from "../data/quick-climb.mjs";
+import { foundryPregens } from "../data/premades.mjs";
 import {
   QUICK_FILLED_STEPS, thresholdClear, thresholdContext, thresholdCreate, thresholdRoll,
   thresholdRollAll, thresholdRollName, seedThreshold
@@ -54,15 +56,11 @@ export class CreatorShell extends CreatorShellBase {
       // of them touches the wizard's own step model — which is what keeps the chooser addable
       // without any step being able to notice it exists.
       entryPath(event, target) { return this._entryPath(target.dataset.path); },
-      entryBack() { return this._openEntry("chooser"); },
       entryReturn() { return this._returnToQuick(); },
-      entryPremade(event, target) {
-        // Foundry's own pregens carry a uuid and are imported whole; ours are built.
-        return target.dataset.uuid
-          ? takePregen(this._ctx(), target.dataset.uuid, target)
-          : applyPremade(this._ctx(), target.dataset.id, target);
-      },
+      entryPremade(event, target) { this._premadeSelect(target.dataset.id); },
+      entryPremadeConfirm(event, target) { return this._premadeConfirm(target); },
       thresholdEdition(event, target) { return this._thresholdEdition(target.dataset.rules); },
+      thresholdLevel(event, target) { return this._thresholdLevel(target.dataset.level); },
       thresholdRoll(event, target) { return this._thresholdRoll(target.dataset.category); },
       thresholdRollAll() { return this._thresholdRollAll(); },
       thresholdBrowse(event, target) { this._entryBrowse(target.dataset.category); },
@@ -124,14 +122,26 @@ export class CreatorShell extends CreatorShellBase {
    */
   #thresholdRules = null;
   /**
-   * Whether the player stepped out of the quick screen to browse a category in full, and so should
-   * be offered a way back to it.
+   * Which entry screen the player left, and so which one to offer them a way back to — or null
+   * when they did not arrive from one.
    *
-   * Set on the way out and cleared when they take it or finish. It survives moving between steps on
-   * purpose: someone who goes to the class grid, then wanders to Background to look something up,
-   * has not changed their mind about wanting to go back.
+   * Two cases, and they want different destinations. Leaving the quick screen to browse one
+   * category in full should come back to the quick screen, with the pick they went to make. Taking
+   * Custom build from the chooser should come back to the chooser, because the choice being
+   * reconsidered is which path to take, not which class.
+   *
+   * It survives moving between steps on purpose: someone who goes to the class grid, then wanders
+   * to Background to look something up, has not changed their mind about wanting to go back.
+   * @type {"threshold"|"chooser"|null}
    */
-  #returnToQuick = false;
+  #returnTo = null;
+  /**
+   * Whether this build came through the Quick Build screen, and so should climb to its starting
+   * level headlessly rather than by opening the level-up wizard. See {@link _thresholdCreate}.
+   */
+  #quickClimb = false;
+  /** The ready-made character the player has selected but not yet confirmed. */
+  #premadeChoice = null;
   /**
    * Whether this window's work belongs in a draft.
    *
@@ -272,7 +282,8 @@ export class CreatorShell extends CreatorShellBase {
     // threshold resolves origin ability increases into the state, and the dossier must show this
     // render rather than the previous one.
     const entry = this.#entry === "chooser" ? await chooserContext(this._ctx())
-      : this.#entry === "premade" ? { premades: await premadeContext(this._ctx()) }
+      : this.#entry === "premade"
+        ? { premades: await premadeContext(this._ctx(), this.#premadeChoice) }
         : null;
     const threshold = this.#entry === "threshold"
     ? await thresholdContext(this._ctx(), this.#thresholdRules ?? systemRulesEdition())
@@ -296,10 +307,25 @@ export class CreatorShell extends CreatorShellBase {
       threshold,
       version: game.modules.get(MODULE_ID)?.version ?? "",
       cancelLabel: t("nav.cancel"),
+      // The heading band. Normally the active step's, but an entry screen is not a step and must
+      // not wear one's name — "Class & Abilities" over the quick screen describes the step
+      // underneath rather than the screen on top of it. The chooser goes further and has no
+      // separate heading of its own: its question IS the heading, so it moves up into this band
+      // rather than repeating below it.
+      heading: this.#entryHeading() ?? {
+        title: t(step.labelKey),
+        instruction: step.instructionKey ? t(step.instructionKey) : null
+      },
+      // What the trailing footer button does on an entry screen. "Next" has no meaning there —
+      // there is no step to advance to, so it sat permanently greyed while the action the screen
+      // actually exists for was a separate button inside the overlay. The screen lends the footer
+      // its own primary action instead, which is the same move `navBack` makes: one set of
+      // navigation furniture, in the place the player already looks for it.
+      entryAction: this.#entryAction(threshold, entry),
       // The way back to the quick screen, for a player who left it to browse one category in full.
       // Shell chrome in the stage footer, so no step has to know the quick screen exists.
-      quickReturn: (this.#returnToQuick && !this.#entry && !this.#loading)
-        ? t("quickBuild.threshold.returnToQuick")
+      quickReturn: this.#canReturnToEntry()
+        ? t(this.#returnTo === "chooser" ? "entry.returnToChooser" : "quickBuild.threshold.returnToQuick")
         : null,
       dossier: this.#dossierContext(lines, threshold),
       progress: this._progressContext(lines, missing),
@@ -323,13 +349,22 @@ export class CreatorShell extends CreatorShellBase {
           index: this._stepIndex,
           total: visible.length,
           position: t("nav.position", { current: visible.indexOf(this._stepIndex) + 1, total: visible.length }),
-          canBack: this._prevIndex() >= 0,
+          // An entry screen is an overlay over the first step, so there is no earlier STEP behind
+          // it and this greyed out — on screens whose own way back was the last thing in a long
+          // scroll. While one is open the footer's Back belongs to the overlay instead, and the
+          // chooser is the one place behind them. The chooser itself is the front door: nothing
+          // is behind it, so it is the one entry screen where Back stays dead.
+          canBack: this.#entry ? (this.#entry !== "chooser")
+            : ((this._prevIndex() >= 0) || Boolean(this.#returnTo)),
           canNext: hasNext && flags[this._stepIndex],
           backLabel: t("nav.back"),
           nextLabel: t("nav.next"),
           // When Next is greyed because this step isn't finished, say what's still needed
           // instead of leaving the player guessing at a dead button.
-          hint: (hasNext && !flags[this._stepIndex])
+          // Suppressed behind an entry screen. "Spend all 27 remaining ability points" is advice
+          // about the step underneath, and on a screen that is about to spend them for you it is
+          // both wrong and alarming.
+          hint: (hasNext && !flags[this._stepIndex] && !this.#entry)
             ? (step.incompleteHint?.(this.state, this.source) ?? t("nav.incomplete"))
             : null
         };
@@ -804,19 +839,21 @@ export class CreatorShell extends CreatorShellBase {
   }
 
   /**
-   * Whether to open on the chooser: the world asked for it, Ember does not own creation here, and
-   * nothing has been chosen yet.
+   * Whether to open on the chooser: this is a fresh build and Ember does not own creation here.
    *
-   * The last condition is what makes it safe on a resumed draft — a player who got three steps in
-   * yesterday should land back on their work, not be asked how they would like to start.
+   * The chooser is the front door now, not an opt-in. It was built behind a world setting so that
+   * no existing world would acquire a new first screen by upgrading; that setting is gone, and
+   * every world gets it. Nothing about the step-by-step path changed — it is simply reached by
+   * choosing it rather than by default.
    *
-   * The Ember check is belt and braces: the setting is `config: !ember`, so in such a world no GM
-   * can have turned it on through the UI, but a stored value from before Ember was installed would
-   * otherwise survive and offer a chooser in front of a flow Ember owns outright.
+   * Two things still suppress it. **Ember** owns creation outright and has its own front end, so a
+   * chooser in front of it would be a door onto a room someone else furnished. And **a build
+   * already under way** — a resumed draft, an actor being finished — goes back to its work rather
+   * than being asked how the player would like to start something they already started.
    * @returns {boolean}
    */
   #shouldOfferEntry() {
-    if ( !entryChooserEnabled() || emberActive() ) return false;
+    if ( emberActive() ) return false;
     return !this.state.classUuid && !this.state.speciesUuid && !this.state.backgroundUuid;
   }
 
@@ -844,6 +881,72 @@ export class CreatorShell extends CreatorShellBase {
   }
 
   /**
+   * Whether to still offer the way back to an entry screen.
+   *
+   * Withdrawn from the Choices step onwards. Up to that point the player has only settled the same
+   * three things the entry screens are about, so going back costs nothing. Choices is where the
+   * build starts answering questions that belong to those three — a class's fighting style, a
+   * species' lineage — and an offer to start over from a different door, sitting in the footer
+   * beside that work, is an invitation to lose it.
+   *
+   * Hidden rather than disabled: a greyed control still reads as something the player might get
+   * back, and this one is simply finished with.
+   * @returns {boolean}
+   */
+  #canReturnToEntry() {
+    if ( !this.#returnTo || this.#entry || this.#loading ) return false;
+    const choices = STEPS.findIndex(step => step.id === "choices");
+    return (choices < 0) || (this._stepIndex < choices);
+  }
+
+  /**
+   * The heading band for whichever entry screen is open, or null when none is.
+   *
+   * The chooser's question is its heading, so it is lifted here and not drawn again in the body.
+   * @returns {{title: string, instruction: string|null}|null}
+   */
+  /**
+   * The primary action the open entry screen lends to the stage footer, if any.
+   *
+   * `enabled` rather than hiding it: on the quick screen the button is the goal of the screen, and
+   * a greyed Create that lights up when a class is picked says what is still needed. The ready-made
+   * list has nothing to grey — until a card is chosen there is no character to name — so it lends
+   * no action at all until then.
+   * @param {object|null} threshold  The quick screen's context, when it is the open one.
+   * @param {object|null} entry      The chooser/ready-made context, when one of those is open.
+   * @returns {{label: string, action: string, enabled: boolean}|null}
+   */
+  #entryAction(threshold, entry) {
+    if ( (this.#entry === "threshold") && threshold ) {
+      return {
+        label: t("quickBuild.threshold.create"),
+        action: "thresholdCreate",
+        enabled: Boolean(threshold.canCreate)
+      };
+    }
+    if ( (this.#entry === "premade") && entry?.premades?.confirm ) {
+      return { label: entry.premades.confirm, action: "entryPremadeConfirm", enabled: true };
+    }
+    return null;
+  }
+
+  #entryHeading() {
+    if ( this.#entry === "chooser" ) {
+      return { title: t("entry.heading"), instruction: t("entry.blurb") };
+    }
+    if ( this.#entry === "premade" ) {
+      return { title: t("entry.premade.heading"), instruction: t("entry.premade.blurb") };
+    }
+    if ( this.#entry === "threshold" ) {
+      return {
+        title: t("quickBuild.threshold.title"),
+        instruction: t("quickBuild.threshold.instruction")
+      };
+    }
+    return null;
+  }
+
+  /**
    * Show one entry screen, or dismiss them all with null. Clears the other overlays for the same
    * reason they clear each other: one absolute surface over the stage at a time.
    * @param {"chooser"|"premade"|"threshold"|null} view
@@ -863,6 +966,25 @@ export class CreatorShell extends CreatorShellBase {
   }
 
   /**
+   * Step back — or, with an entry screen open, leave that screen for the chooser.
+   *
+   * The footer's Back is the one the player reaches for, so it has to mean the obvious thing on
+   * whatever is actually on screen. Routing it here rather than giving each overlay its own Back
+   * keeps the rule the entry screens are built on: no step knows they exist, and they do not get
+   * their own navigation furniture when the window already has some.
+   * @override
+   */
+  _navBack() {
+    if ( this.#entry && (this.#entry !== "chooser") ) return this._openEntry("chooser");
+    // The first step of a build that came in through an entry screen: the screen it came from is
+    // what is behind it, so Back means that rather than nothing. Without this the custom path led
+    // to a greyed Back on its very first screen, which reads as "there is no way back" on the one
+    // screen where changing your mind is cheapest.
+    if ( (this._prevIndex() < 0) && this.#returnTo ) return this._returnToQuick();
+    return super._navBack();
+  }
+
+  /**
    * Take one of the three paths. Custom dismisses the entry screens onto the wizard, unchanged;
    * the other two open their own screen.
    * @param {"custom"|"quick"|"premade"} path
@@ -871,10 +993,11 @@ export class CreatorShell extends CreatorShellBase {
     if ( path === "quick" ) return this._openEntry("threshold");
     if ( path === "premade" ) return this._openEntry("premade");
     // Custom: dismiss onto the wizard. Anything the threshold already seeded is kept rather than
-    // discarded — the player carries their picks in with them. Choosing this is a decision to build
-    // by hand, so the offer of a way back to the quick screen goes with it.
+    // discarded — the player carries their picks in with them. The way back now points at the
+    // chooser rather than the quick screen: what they may want to reconsider is which path they
+    // took, not which class.
     this.#entry = null;
-    this.#returnToQuick = false;
+    this.#returnTo = "chooser";
     this._leaveStepFor(this.#firstIncompleteIndex());
   }
 
@@ -893,9 +1016,34 @@ export class CreatorShell extends CreatorShellBase {
     this.#dirty = true;
     await thresholdClear(this._ctx(), category);
     this.#entry = null;
-    this.#returnToQuick = true;
+    this.#returnTo = "threshold";
     const index = STEPS.findIndex(step => step.id === category);
     this._leaveStepFor(index >= 0 ? index : this.#firstIncompleteIndex());
+  }
+
+  /**
+   * Select a ready-made character. Selecting is not taking it: creating an actor is the one action
+   * in this window that cannot be undone from inside it, so it takes a second, deliberate press.
+   * @param {string} id
+   */
+  _premadeSelect(id) {
+    this.#premadeChoice = (this.#premadeChoice === id) ? null : id;
+    this.render();
+  }
+
+  /** Create the selected ready-made character. */
+  async _premadeConfirm(el) {
+    const id = this.#premadeChoice;
+    if ( !id ) return;
+    const official = (await foundryPregens())
+      .flatMap(group => group.entries)
+      .find(pc => pc.id === id);
+    this.#dirty = true;
+    if ( official ) return takePregen(this._ctx(), official.uuid, el);
+    this.#entry = null;
+    this.#returnTo = null;
+    const done = await applyPremade(this._ctx(), id, el);
+    if ( !done ) this.render();
   }
 
   /**
@@ -905,8 +1053,9 @@ export class CreatorShell extends CreatorShellBase {
    * slot still empty is re-seeded, so the screen is never reached with a blank card.
    */
   async _returnToQuick() {
-    this.#returnToQuick = false;
-    return this._openEntry("threshold");
+    const target = this.#returnTo ?? "chooser";
+    this.#returnTo = null;
+    return this._openEntry(target);
   }
 
   /**
@@ -928,6 +1077,22 @@ export class CreatorShell extends CreatorShellBase {
     this.state.resetSourceChoices("species");
     this.state.resetSourceChoices("background");
     await seedThreshold(this._ctx(), { rules });
+    this.render();
+  }
+
+  /**
+   * Set the starting level from the threshold's rungs.
+   *
+   * Only `targetLevel` changes — none of the three picks, and nothing `applyQuickBuild` fills. The
+   * level is consumed after the character is created, by the climb, so changing it here costs
+   * nothing and never invalidates a pick already made.
+   * @param {string|number} level
+   */
+  _thresholdLevel(level) {
+    const next = Number(level) || 1;
+    if ( !isQuickLevel(next) || (next === this.state.targetLevel) ) return;
+    this.state.targetLevel = next;
+    this.#dirty = true;
     this.render();
   }
 
@@ -986,7 +1151,12 @@ export class CreatorShell extends CreatorShellBase {
    */
   async _thresholdCreate(el) {
     this.#dirty = true;
-    this.#returnToQuick = false;
+    this.#returnTo = null;
+    // Remember that this build came from the quick screen, so `_finish` climbs headlessly instead
+    // of opening the level-up wizard. The flag rather than a look at `#entry`: by the time `_finish`
+    // runs the overlay has been dismissed, and "which door did this character come through" is the
+    // question being asked, not "which door is open now".
+    this.#quickClimb = true;
     const filled = await thresholdCreate(this._ctx(), el);
     this.#entry = null;
     if ( !filled ) { this.render(); return; }
@@ -1146,9 +1316,23 @@ export class CreatorShell extends CreatorShellBase {
     // The creator state rides along so that wizard can announce the finished character with the
     // same payload this one would have (see {@link module:levelup/intercept}).
     const targetLevel = this.state.targetLevel ?? 1;
-    const climbing = (actor && targetLevel > 1)
+    // A Quick Build climbs headlessly: the screen promised three choices, so handing back a
+    // multi-level wizard here would break that promise at the last moment. Every other route keeps
+    // the interactive climb, where the player asked for the levels a screen at a time.
+    // `climbing` stays false for the quick path because nothing downstream will post the card —
+    // the climb is already over by the time this returns, so the duty to announce stays here.
+    const climbing = (actor && targetLevel > 1 && !this.#quickClimb)
       ? await launchLevelUpTo(actor, targetLevel, { creationState: this.state })
       : false;
+    if ( actor && (targetLevel > 1) && this.#quickClimb ) {
+      const { reached } = await quickClimb(actor, targetLevel, this.source, this.spells);
+      // Said plainly when the climb fell short: the character is valid at the level it reached, and
+      // the repair wrench on the sheet offers the rest. Silence here would leave a player looking
+      // at a 3rd-level character they asked to be 5th with no idea why.
+      if ( reached < targetLevel ) {
+        ui.notifications?.warn(t("quickBuild.climbPartial", { reached, target: targetLevel }));
+      }
+    }
     // Announce the finished character — but only when it *is* finished. A climb to a higher
     // starting level isn't done yet, so that wizard owns the card and posts it on Apply (or on
     // abandon, since the level-1 character it leaves behind is still a character). When the climb
@@ -1159,7 +1343,7 @@ export class CreatorShell extends CreatorShellBase {
     // other modules and fires either way.
     if ( !climbing ) {
       fireHook(HOOKS.characterCreated, { actor, state: this.state, targetLevel });
-      await postCreationSummary(actor);
+      await postCreationSummary(actor, { magicShop: actor.sogromMagicShopGrant ?? null });
       // The sheet PDF, when it was asked for. Same rule as the card: a climb isn't finished here,
       // and that wizard prints it at the level the player actually asked for.
       if ( this.state.exportPdf ) await exportCharacterPdf(actor);

@@ -175,13 +175,19 @@ function registerSettings() {
   game.settings.register(MODULE_ID, SETTINGS.bannedAlignments, {
     scope: "world", config: false, type: Array, default: DEFAULTS.bannedAlignments
   });
-  // Dead under Ember, which owns creation outright and never reaches our first step. Registered
-  // either way, because `game.settings.get` on an unregistered setting throws and the creator
-  // shell reads this on every fresh build.
-  game.settings.register(MODULE_ID, SETTINGS.entryChooser, {
-    name: t("settings.entryChooser.name"),
-    hint: t("settings.entryChooser.hint"),
-    scope: "world", config: !ember, type: Boolean, default: DEFAULTS.entryChooser
+  // Which way in the chooser badges as recommended. Dead under Ember, which owns creation and
+  // never shows the chooser, but registered either way — reading an unregistered setting throws,
+  // and the chooser asks on every fresh build.
+  game.settings.register(MODULE_ID, SETTINGS.recommendedPath, {
+    name: t("settings.recommendedPath.name"),
+    hint: t("settings.recommendedPath.hint"),
+    scope: "world", config: !ember, type: String, default: DEFAULTS.recommendedPath,
+    choices: {
+      custom: t("entry.custom.title"),
+      quick: t("entry.quick.title"),
+      premade: t("entry.premade.title"),
+      none: t("settings.recommendedPath.none")
+    }
   });
   game.settings.registerMenu(MODULE_ID, "houseRulesMenu", {
     name: t("settings.houseRulesMenu.name"),
@@ -398,7 +404,10 @@ function injectLaunchButton(root) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "sogrom-launch";
-  button.innerHTML = t("menu.launch");
+  // `fa-d-and-d` is a Font Awesome *brand* glyph, so it needs `fa-brands`, not `fa-solid` — with
+  // the wrong family it renders as an empty box. Font Awesome ships with Foundry, so no asset of
+  // ours is involved.
+  button.innerHTML = `<i class="fa-brands fa-d-and-d" aria-hidden="true"></i> ${t("menu.launch")}`;
   button.addEventListener("click", ev => { ev.preventDefault(); launchCreator(); });
   container.appendChild(button);
 }

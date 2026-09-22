@@ -7,6 +7,7 @@ import {
 } from "../data/magic-shop.mjs";
 import {
   magicShopConfig, magicShopTier, magicShopSource, ensureMagicShopRoll, goldNeedsRoll, goldRolled, pickList,
+  magicShopBudgetCp, magicCartCp, cartList,
   usabilityProfile, proficiencyMaps
 } from "../data/magic-shop-source.mjs";
 
@@ -46,6 +47,9 @@ export const magicShopStep = {
     if ( !tier ) return true;
     if ( !withinAllowance(countPicks(state.magicShop?.picks), tier.allowance) ) return false;
     if ( !goldRolled(state, tier) ) return false;
+    // Overspending is blocked here rather than at the till. The grant clamps as a last resort, but
+    // a player should be told before they leave the step, not quietly given a discount after.
+    if ( magicCartCp(state) > magicShopBudgetCp(state, tier, state.actor ?? null) ) return false;
     return !!state.magicShopVisited;
   },
 
@@ -59,6 +63,9 @@ export const magicShopStep = {
       return t("step.magicShop.overAllowance");
     }
     if ( tier && !goldRolled(state, tier) ) return t("step.magicShop.rollFirst");
+    if ( tier && magicCartCp(state) > magicShopBudgetCp(state, tier, state.actor ?? null) ) {
+      return t("step.magicShop.overBudget");
+    }
     return null;
   },
 
@@ -74,7 +81,9 @@ export const magicShopStep = {
 
   async handle(action, el, { state }) {
     state.magicShop ??= { d10: null, picks: {} };
+    state.magicShop.cart ??= {};
     const picks = state.magicShop.picks;
+    const cart = state.magicShop.cart;
     if ( action === "magic-roll" ) {
       if ( !goldNeedsRoll(magicShopTier(state)) ) return false;
       await ensureMagicShopRoll(state);
@@ -98,6 +107,30 @@ export const magicShopStep = {
     }
     if ( action === "magic-clear" ) {
       state.magicShop.picks = {};
+      return;
+    }
+    // Buying, alongside the free picks. An item with no price is not for sale — that is the
+    // artifacts, and a couple of uniques — so there is nothing to guard beyond a price of zero.
+    if ( action === "magic-buy" ) {
+      const uuid = el.dataset.uuid;
+      const cp = Number(el.dataset.cp) || 0;
+      if ( !uuid || cp <= 0 ) return;
+      const line = cart[uuid] ??= { qty: 0, cp, name: el.dataset.name ?? "", img: el.dataset.img ?? "" };
+      // The price is re-read each time: the GM can have edited the item between renders, and the
+      // cart should charge what the shelf is showing rather than what it showed an hour ago.
+      line.cp = cp;
+      line.qty += 1;
+      return;
+    }
+    if ( action === "magic-unbuy" ) {
+      const line = cart[el.dataset.uuid];
+      if ( !line ) return;
+      line.qty -= 1;
+      if ( line.qty <= 0 ) delete cart[el.dataset.uuid];
+      return;
+    }
+    if ( action === "magic-cart-clear" ) {
+      state.magicShop.cart = {};
       return;
     }
     if ( action === "magic-category" ) {
@@ -128,6 +161,7 @@ export const magicShopStep = {
     if ( !tier ) return { unavailable: true };
 
     state.magicShop ??= { d10: null, picks: {} };
+    state.magicShop.cart ??= {};
     const d10 = Number.isInteger(state.magicShop.d10) ? state.magicShop.d10 : null;
     const counts = countPicks(state.magicShop.picks);
     const aside = asideContext(state, tier, d10, counts);
@@ -175,11 +209,21 @@ export const magicShopStep = {
     const maps = profile ? proficiencyMaps() : null;
 
     const picks = state.magicShop.picks;
+    const cart = state.magicShop.cart;
+    // The purse and the roll together, less whatever is already in the cart.
+    const budgetCp = magicShopBudgetCp(state, tier, actor);
+    const spentCp = magicCartCp(state);
+    const leftCp = budgetCp - spentCp;
+
     const cards = eligible
       .filter(e => (!category || e.type === category) && (!subtype || e.subtype === subtype)
         && (!rarity || e.rarity === rarity))
       .map(e => {
         const qty = picks[e.uuid]?.qty ?? 0;
+        const boughtQty = cart[e.uuid]?.qty ?? 0;
+        // An item with no price is not for sale. That is the artifacts and a few uniques, and it is
+        // the right answer for them: Blackrazor is a free pick or it is nothing.
+        const forSale = (e.priceCp ?? 0) > 0;
         const use = profile ? itemUsability(e, profile, maps) : null;
         const warnings = [];
         if ( use && !use.proficient ) warnings.push(t("step.magicShop.notProficient"));
@@ -193,11 +237,25 @@ export const magicShopStep = {
           typeLabel: itemTypeLabel(e.type),
           qty, picked: qty > 0,
           canAdd: canPick(counts, e.rarity, tier.allowance),
+          // Buying, alongside the free picks. Both can apply to the same item — a player may take
+          // one as their slot and buy a second.
+          cp: e.priceCp ?? 0,
+          forSale,
+          price: forSale ? formatCp(e.priceCp) : null,
+          buyLabel: forSale ? t("step.magicShop.buyPrice", { price: formatCp(e.priceCp) })
+            : t("step.magicShop.notForSale"),
+          boughtQty, bought: boughtQty > 0,
+          canBuy: forSale && (e.priceCp <= leftCp),
           warnings,
           warningLabel: warnings.join(" · "),
           warningTip: warnings.length ? t("step.magicShop.usableTip") : null
         };
       });
+
+    const cartLines = cartList(state).map(line => ({
+      ...line,
+      price: formatCp(line.cp * line.qty)
+    })).sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
 
     // Every section starts collapsed so a long shop scrolls as a short list of headings. A filter that
     // narrows the shelf to a single section opens it, since there is nothing else to scroll past.
@@ -227,7 +285,20 @@ export const magicShopStep = {
       subtypes,
       hasSubtypes: subtypes.length > 1,
       rarities,
-      hasRarities: rarities.length > 1
+      hasRarities: rarities.length > 1,
+      // Buying, alongside the free picks the tier grants.
+      cart: cartLines,
+      hasCart: cartLines.length > 0,
+      cartHeading: t("step.magicShop.cartHeading"),
+      cartClear: t("step.magicShop.cartClear"),
+      budgetLabel: t("step.magicShop.budget"),
+      budget: formatCp(budgetCp),
+      spentLabel: t("step.magicShop.spent"),
+      spent: formatCp(spentCp),
+      remainingLabel: t("step.magicShop.remaining"),
+      remaining: formatCp(Math.max(0, leftCp)),
+      canSpend: budgetCp > 0,
+      overBudget: spentCp > budgetCp
     };
   }
 };
@@ -243,7 +314,7 @@ function asideContext(state, tier, d10, counts) {
   const slots = slotsSummary(counts, tier.allowance).map(s => ({ ...s, label: rarityLabel(s.rarity) }));
   const fits = withinAllowance(counts, tier.allowance);
   return {
-    tierLabel: t("step.magicShop.tier", { from: tier.from, to: tier.to }),
+    tierLabel: t("step.magicShop.tier", { level: tier.level ?? tier.from }),
     hasGold,
     rollable,
     rolled,
@@ -259,3 +330,53 @@ function asideContext(state, tier, d10, counts) {
     overAllowance: !fits
   };
 }
+
+/**
+ * The same step, on the creation rail rather than the climb.
+ *
+ * It exists because the wealth table has a row for 1st level now. That row is empty by default —
+ * the book gives a 1st-level character nothing — but a GM who fills it in was previously ignored:
+ * the step lived only on the level-up rail, a 1st-level character has no climb, and so there was
+ * nowhere for the grant to happen.
+ *
+ * **Only when there is no climb.** A character starting at 5th passes through the level-up rail,
+ * which asks for its own picks against the 5th-level row and grants them at Apply. Offering this
+ * as well would ask twice and grant twice, which is the mistake the note in
+ * {@link module:build/actor-assembler} warns about. One row per starting level, and a starting
+ * character gets exactly the row for the level they start at.
+ */
+function creationShopApplies(state) {
+  return ((state.targetLevel ?? 1) === 1) && !!magicShopTier(state);
+}
+
+export const creationMagicShopStep = {
+  ...magicShopStep,
+  applicable: creationShopApplies,
+
+  /**
+   * Every gate has to agree with `applicable`, and overriding only `applicable` is not enough.
+   *
+   * The base step answers "am I finished?" by asking whether the tier's gold has been rolled. At
+   * 5th level there *is* a tier — the climb's — so the inherited answer was "no", while
+   * `applicable` said the step was not on this rail at all. A hidden step that is permanently
+   * incomplete is the worst shape a gate can take: Next simply stops working and there is nothing
+   * on screen to fix, which is exactly what it did to a high-level custom build stuck on the Store.
+   *
+   * Nothing to do is done.
+   */
+  isComplete(state) {
+    return creationShopApplies(state) ? magicShopStep.isComplete(state) : true;
+  },
+
+  incompleteHint(state) {
+    return creationShopApplies(state) ? magicShopStep.incompleteHint(state) : null;
+  },
+
+  summary(state) {
+    return creationShopApplies(state) ? magicShopStep.summary(state) : "";
+  },
+
+  onEnter(state) {
+    if ( creationShopApplies(state) ) magicShopStep.onEnter(state);
+  }
+};

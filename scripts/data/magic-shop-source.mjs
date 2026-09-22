@@ -1,9 +1,13 @@
 import { MODULE_ID, SETTINGS, levelUpEnabled, log } from "../config.mjs";
 import {
-  RARITIES, normalizeRarity, itemRarity, sanitizeMagicEntry, sanitizeWealthTable, tierFor, tierGrantsAnything,
+  RARITIES, normalizeRarity, itemRarity, rarityLabel, sanitizeMagicEntry, sanitizeWealthTable, tierFor,
+  tierGrantsAnything,
   descendantFolderIds, filterMagicIndex, countPicks, withinAllowance, bonusGoldCp, attunementRestriction
 } from "./magic-shop.mjs";
 import { createItemData } from "./item-factory.mjs";
+// The shop now sells as well as grants, so it shares the Store's money maths rather than
+// growing its own: one set of conversion rates, one definition of what an item costs.
+import { priceCp, totalCp, fromCopper, formatCp } from "./store-source.mjs";
 import {
   parseVariant, linkUuid, isTemplate, mightBeTemplate, linkedBaseUuids, templateVariants, templateProfiles,
   isShell, shellVariants, shellItemData, SHELL_PROFILE,
@@ -41,6 +45,77 @@ export function magicShopConfig() {
 }
 
 /**
+ * Everything the character can spend in the shop, in copper: the tier's bonus gold plus the coin
+ * they are already carrying.
+ *
+ * Both, because "spend their money" means their money. The bonus gold alone would make the purse
+ * they earned from their starting equipment unspendable for no reason a player could explain, and
+ * the purse alone would ignore the roll the step just made them do.
+ *
+ * The actor is optional: the step renders before one exists in some flows, and a budget of just
+ * the bonus gold is the right answer then rather than a crash.
+ * @param {object} state
+ * @param {object|null} tier
+ * @param {Actor|null} [actor]
+ * @returns {number}
+ */
+export function magicShopBudgetCp(state, tier, actor = null) {
+  const bonus = tier ? bonusGoldCp(tier, state?.magicShop?.d10) : 0;
+  return bonus + totalCp(actor?.system?.currency ?? {});
+}
+
+/** What the cart in the magic shop costs, in copper. */
+export function magicCartCp(state) {
+  return Object.values(state?.magicShop?.cart ?? {})
+    .reduce((sum, line) => sum + ((Number(line?.cp) || 0) * (Number(line?.qty) || 0)), 0);
+}
+
+/** The purchases as a list, for review screens and the grant. */
+export function cartList(state) {
+  return Object.entries(state?.magicShop?.cart ?? {})
+    .filter(([, line]) => (Number(line?.qty) || 0) > 0)
+    .map(([uuid, line]) => ({
+      uuid, link: linkUuid(uuid), name: line.name ?? "", img: line.img ?? "",
+      qty: Number(line.qty), cp: Number(line.cp) || 0
+    }));
+}
+
+/**
+ * The Magic Items step for a review page: the free picks coloured by rarity, anything bought, and
+ * the bonus gold. Null wherever the step had nothing to offer.
+ *
+ * Lives here rather than on either review step because both need it. A character starting above
+ * 1st level picks on the climb's rail and one starting at 1st picks on the creation rail, and the
+ * same summary has to appear either way.
+ *
+ * Purchases are listed apart from the picks and carry what they cost. They are a different kind of
+ * thing — a slot spent against coin spent — and a player checking this page before they commit
+ * should see the bill, not just the haul.
+ * @param {object|null} state  The creator state.
+ * @returns {{items: object[], bought: object[], gold: string|null, spent: string|null,
+ *            hasItems: boolean, hasBought: boolean}|null}
+ */
+export function magicShopReview(state) {
+  if ( !state ) return null;
+  const { tier, goldCp } = magicShopGrant(state, magicShopConfig());
+  if ( !tier ) return null;
+
+  const items = pickList(state)
+    .map(p => ({ ...p, count: p.qty > 1 ? p.qty : null, rarityLabel: rarityLabel(p.rarity) }));
+  const bought = cartList(state).map(p => ({ ...p, count: p.qty > 1 ? p.qty : null }));
+  const spentCp = magicCartCp(state);
+  const gold = (goldRolled(state, tier) && goldCp > 0) ? formatCp(goldCp) : null;
+  if ( !items.length && !bought.length && !gold ) return null;
+
+  return {
+    items, bought, gold,
+    spent: spentCp > 0 ? formatCp(spentCp) : null,
+    hasItems: items.length > 0,
+    hasBought: bought.length > 0
+  };
+}
+
+/**
  * The wealth tier this build is owed, or null when the step doesn't apply: the GM hasn't switched
  * it on, the creator isn't climbing past level 1 (which needs the level-up mode), or the band the
  * target level lands in grants nothing.
@@ -64,8 +139,11 @@ export function magicShopTier(state, config = magicShopConfig()) {
 // The description is read for one phrase, who the item's attunement is limited to ("Requires
 // Attunement by a Bard"), which dnd5e keeps nowhere else. It is the heaviest field here, paid once per
 // session on the first visit; only the parsed phrase is kept on the stock row.
-const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container",
-  "system.strength", "system.description.value"];
+// `system.price` is what the shop charges. The stock is built from a compendium *index*, and an
+// index carries only the fields asked for here — so leaving it out did not make items free, it made
+// them unpriced, and every row on the shelf read "Not for sale".
+export const INDEX_FIELDS = ["system.rarity", "system.rarities", "system.type", "system.container",
+  "system.strength", "system.price", "system.description.value"];
 
 /**
  * Split a uuid into where it lives. `Compendium.<pkg>.<pack>.Item.<id>` names a pack;
@@ -250,6 +328,17 @@ export class MagicShopSource {
           type: variant ? entry.type : (found.type || entry.type),
           subtype: variant ? entry.subtype : (found.system?.type?.value ?? entry.subtype),
           rarity: variant ? entry.rarity : (itemRarity(found) || entry.rarity),
+          // What it costs to buy outright, on top of the free picks the tier allows.
+          //
+          // Read from the item itself; the shop's inventory entries carry no price of their own
+          // (unlike the Store's, where the GM sets one per item). Most magic items have one — 379
+          // of 401 in the Dungeon Master's Guide — and the ones that do not are artifacts and a
+          // handful of uniques. Those come out as 0 and are simply not purchasable, which is the
+          // right answer for Blackrazor: it is a free pick or it is nothing.
+          //
+          // A variant is a GM-built enchantment over a base item, and what that should cost is a
+          // judgement no data here can make, so it stays a free pick too.
+          priceCp: variant ? 0 : priceCp(found.system?.price),
           // What {@link itemUsability} reads. A variant takes these from the base it is built on
           // rather than from the template, which is filled in below.
           baseItem: variant ? "" : (found.system?.type?.baseItem ?? ""),
@@ -624,14 +713,32 @@ export async function grantMagicItems(actor, state) {
   }
   if ( data.length ) await actor.createEmbeddedDocuments("Item", data, { keepId: true, render: false });
 
-  const gp = Math.floor(goldCp / 100);
-  if ( gp > 0 ) {
-    await actor.update({ "system.currency.gp": (actor.system?.currency?.gp ?? 0) + gp }, { render: false });
+  // Purchases, on top of the free picks. Created the same way, so a bought item and a granted one
+  // are indistinguishable on the sheet — which they should be.
+  const bought = cartList(state);
+  const boughtData = [];
+  for ( const line of bought ) {
+    if ( parseVariant(line.uuid) ) boughtData.push(...await variantItemData(line.uuid, line.qty, line.name));
+    else boughtData.push(...await createItemData(line.uuid, { qty: line.qty, stampSource: true, context: "magic item" }));
+  }
+  if ( boughtData.length ) {
+    await actor.createEmbeddedDocuments("Item", boughtData, { keepId: true, render: false });
   }
 
+  // Pay for it. The bonus gold goes in first and the bill comes out of the total, so a cart can be
+  // funded by either purse or roll without the order mattering. Guarded against going negative:
+  // the step's own gate keeps the cart inside the budget, so a shortfall here means stale state,
+  // and a character who ends the build owing money is a worse outcome than one who got a discount.
+  const spentCp = Math.min(magicCartCp(state), goldCp + totalCp(actor.system?.currency ?? {}));
+  const purseCp = totalCp(actor.system?.currency ?? {}) + goldCp - spentCp;
+  await actor.update({ "system.currency": fromCopper(purseCp) }, { render: false });
+
+  const gp = Math.floor(goldCp / 100);
   return {
     d10, baseGp: tier.baseGp, perD10Gp: tier.perD10Gp, gp,
-    items: items.map(p => ({ name: p.name, uuid: p.link, qty: p.qty }))
+    items: items.map(p => ({ name: p.name, uuid: p.link, qty: p.qty })),
+    bought: bought.map(p => ({ name: p.name, uuid: p.link, qty: p.qty })),
+    spentCp
   };
 }
 

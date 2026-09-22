@@ -4,6 +4,7 @@
  *   node screenshots.mjs                     # every shot from the base world
  *   node screenshots.mjs --only=class,review # just those
  *   node screenshots.mjs --world=playwright-ember
+ *   node screenshots.mjs --world=playwright-bare    # no content modules; writes to no-content/
  *   HEADED=1 node screenshots.mjs --only=class --hold   # watch it, then poke at the result
  *
  * Why this exists: the README's pictures are the module's shop window, and they go stale the
@@ -13,7 +14,8 @@
  * match the rest of the set.
  *
  * Output goes straight to `docs/screenshots/`, overwriting in place — review the diff in git
- * before keeping it.
+ * before keeping it. The bare world writes to `docs/screenshots/no-content/` instead, so the two
+ * sets never overwrite one another.
  */
 
 import { mkdirSync } from "node:fs";
@@ -31,7 +33,16 @@ import { ensureWorld } from "./lib/worlds.mjs";
 const VIEWPORT = { width: 1667, height: 957 };
 const SCALE = 2;
 
-const OUT_DIR = new URL("../docs/screenshots/", import.meta.url);
+/**
+ * Where each world's pictures land. The bare world writes to its own folder rather than over the
+ * main set: the two are both wanted, and they answer different questions — "what does this look
+ * like" and "what does this look like before you have bought anything".
+ */
+const OUT_DIRS = {
+  playwright: new URL("../docs/screenshots/", import.meta.url),
+  "playwright-ember": new URL("../docs/screenshots/", import.meta.url),
+  "playwright-bare": new URL("../docs/screenshots/no-content/", import.meta.url)
+};
 
 /**
  * The character every base-world picture is of — a Bard, so the spell screens have something to
@@ -71,10 +82,46 @@ if ( !WORLDS[worldId] ) throw new Error(`Unknown world "${worldId}"`);
 const SHOTS = {
   playwright: [
     {
-      name: "welcome",
-      note: "First render — the class grid, nothing chosen yet.",
+      // The creator opens on the chooser now, not the class grid — so this is genuinely the first
+      // thing a player sees, and the shot has to be taken before anything else touches the shell.
+      name: "entry-chooser",
+      note: "The three ways in: step by step, Quick Build, or a ready-made character.",
       async setup(call) {
         await call("openCreator");
+        await call("entry", "chooser");
+      }
+    },
+    {
+      name: "quick-build-screen",
+      note: "Quick Build: three choices, seeded, with everything else filled in below.",
+      async setup(call) {
+        // Species pinned rather than left to the seed's roll. The roll is right for a player and
+        // wrong for a picture: it changes every run, and it landed on the one AI-generated
+        // illustration in the installed content. Elf is hand-painted book art, like the rest.
+        await call("entry", { view: "threshold", species: "Elf" });
+      }
+    },
+    {
+      name: "ready-made",
+      note: "Ready-made characters, grouped by the book they came from, with one selected.",
+      async setup(call) {
+        await call("entry", "premade");
+        await call("premadeSelect", { index: 0 });
+      }
+    },
+    {
+      name: "welcome",
+      note: "The step-by-step build — the class grid, nothing chosen yet.",
+      async setup(call) {
+        // A *fresh* creator first: taking the Custom path deliberately keeps whatever the quick
+        // screen seeded, so coming straight from the shot above would show a class already chosen
+        // on a screen captioned "nothing chosen yet".
+        await call("openCreator");
+        // Then the chooser's Custom path, which is what dismisses it. `goto` alone moves the step
+        // *underneath* the overlay and leaves it up, so this shot and every one after it came out
+        // as a picture of the chooser.
+        await call("entryPath", "custom");
+        await call("goto", "class");
       }
     },
     {
@@ -94,12 +141,21 @@ const SHOTS = {
       async setup() { /* same screen as class-step */ }
     },
     {
+      name: "compare",
+      note: "Three classes pinned and laid out side by side.",
+      async setup(call) {
+        await call("compare", { category: "class", count: 3 });
+      }
+    },
+    {
       // Everything from here on shows a filled character. Quick Build is the fastest way to get
       // one, it is seeded, and it fills exactly the fields a player would have filled by hand.
       name: "abilities",
       note: "The ability-score panel, with points spent.",
       selector: ".creator-work-side",
       async setup(call) {
+        // Clears whatever overlay the previous shot left up — the comparison grid, here.
+        await call("closeOverlays");
         await call("quickBuild", { seed: 7, goTo: "class" });
         await call("details", {
           name: CHARACTER.name,
@@ -167,9 +223,24 @@ const SHOTS = {
       }
     },
     {
+      name: "magic-shop",
+      note: "The Magic Items step: free picks by rarity, rolled bonus gold, and a cart.",
+      async setup(call) {
+        // The shop ships empty and only appears on a level the wealth table grants something at,
+        // so both have to be arranged before the step is reachable at all.
+        await call("stockMagicShop", {});
+        await call("startAtLevel", 5);
+        await call("goto", "magicShop");
+        await call("pickMagicItems", { count: 3 });
+      }
+    },
+    {
       name: "review",
       note: "The review screen.",
-      async setup(call) { await call("goto", "review"); }
+      async setup(call) {
+        await call("startAtLevel", 1);
+        await call("goto", "review");
+      }
     },
     {
       name: "actor",
@@ -187,6 +258,12 @@ const SHOTS = {
       note: "The GM's store configuration window.",
       selector: ".application",
       async setup(call) { await call("storeConfig"); }
+    },
+    {
+      name: "magic-shop-config",
+      note: "The GM's magic-item shop: the per-level wealth table and the stocked inventory.",
+      selector: ".application",
+      async setup(call) { await call("magicShopConfig"); }
     }
   ],
 
@@ -195,6 +272,112 @@ const SHOTS = {
    * which this module claims — so the Ember pictures are of *our* wizard wearing Ember's skin.
    * See `scripts/levelup/ember-creation.mjs`.
    */
+  /**
+   * The same screens with **no content modules at all** — only what the dnd5e system ships free.
+   *
+   * Its own list rather than a reuse of the one above, because the base list is full of things a
+   * bare world does not have: a portrait path into the Player's Handbook module, an equipment pick
+   * named "Instrument of Illusions", a Ready-made group per book. Pointing the base list at this
+   * world would not fail loudly — it would quietly produce pictures of a half-set-up character,
+   * which is worse than no pictures.
+   *
+   * What is deliberately kept is every screen where the *absence* of content is the point: the
+   * background grid (4 of 16 resolve to art, so most cards wear the frame tier), the species and
+   * class grids, and the entry screens a new player meets first.
+   */
+  "playwright-bare": [
+    {
+      name: "entry-chooser",
+      note: "The three ways in, with only the system's free content installed.",
+      async setup(call) {
+        await call("openCreator");
+        await call("entry", "chooser");
+      }
+    },
+    {
+      name: "quick-build-screen",
+      note: "Quick Build on a bare install — art-free frames where no book supplies a picture.",
+      // No species pinned: the point of this set is what the world actually offers, and the free
+      // content's species list is short enough that the seed's roll is representative of it.
+      async setup(call) { await call("entry", { view: "threshold" }); }
+    },
+    {
+      name: "ready-made",
+      note: "Ready-made characters — the twelve the system itself ships.",
+      async setup(call) {
+        await call("entry", "premade");
+        await call("premadeSelect", { index: 0 });
+      }
+    },
+    {
+      name: "welcome",
+      note: "The class grid with free content only — twelve of the thirteen classes.",
+      async setup(call) {
+        // See the base list's `welcome`: a fresh creator, then the Custom path, which is what
+        // dismisses the chooser without carrying the quick screen's seeded picks in with it.
+        await call("openCreator");
+        await call("entryPath", "custom");
+        await call("goto", "class");
+      }
+    },
+    {
+      name: "class-step",
+      note: "A class chosen, with its detail panel.",
+      async setup(call) {
+        await call("choose", { class: CHARACTER.class });
+        await call("picker", false);
+      }
+    },
+    {
+      name: "background",
+      note: "The background grid — the case where most cards have no art to show.",
+      async setup(call) {
+        // Filled first so the rest of the set shows a real character, as the base list does.
+        await call("quickBuild", { seed: 7, goTo: "background" });
+        await call("picker", true);
+      }
+    },
+    {
+      name: "species",
+      note: "The species grid on a bare install.",
+      async setup(call) {
+        await call("goto", "species");
+        await call("picker", true);
+      }
+    },
+    {
+      name: "spells",
+      note: "The spell browser, drawing on the system's own spell list.",
+      async setup(call) {
+        await call("goto", "spells");
+        await call("focusSpell", { index: 0 });
+      }
+    },
+    {
+      name: "choices",
+      note: "The gathered choices step.",
+      async setup(call) { await call("goto", "choices"); }
+    },
+    {
+      // No `pickEquipment`: its option labels are the Player's Handbook's. The default selection is
+      // what a bare world offers, and is what this set is for.
+      name: "equipment",
+      note: "Starting equipment, at its default selection.",
+      async setup(call) { await call("goto", "equipment"); }
+    },
+    {
+      name: "review",
+      note: "The review screen.",
+      async setup(call) { await call("goto", "review"); }
+    },
+    {
+      name: "actor",
+      note: "The finished character sheet.",
+      selector: ".app.sheet, .application.sheet",
+      async setup(call) { await call("buildActor"); }
+    }
+  ],
+
   "playwright-ember": [
     {
       name: "ember-handoff",
@@ -235,6 +418,7 @@ const SHOTS = {
 /*  Runner                                      */
 /* -------------------------------------------- */
 
+const OUT_DIR = OUT_DIRS[worldId] ?? OUT_DIRS.playwright;
 mkdirSync(OUT_DIR, { recursive: true });
 ensureWorld(worldId);
 
@@ -269,6 +453,11 @@ try {
       continue;
     }
     await sleep(600);
+    // Last thing before the shutter. A step that loads asynchronously — the magic shop reads its
+    // whole index — re-renders after its `setup` returned, which puts back the `#{VERSION}#` pill
+    // and any toast that `depersonalise` had already cleared. Doing it here means no shot can be
+    // caught by that, rather than each helper having to remember.
+    await call("depersonalise");
     const path = new URL(`./${shot.name}.png`, OUT_DIR).pathname.slice(1);
     if ( shot.selector ) {
       const target = session.page.locator(shot.selector).last();

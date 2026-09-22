@@ -22,6 +22,8 @@ const { sweepScenarios } = await import(`./sweep.mjs${BUST}`);
 const { checkHooks } = await import(`./hooks.mjs${BUST}`);
 const deleteErrors = await import(`./delete-errors.mjs${BUST}`);
 const { checkRepair } = await import(`./repair.mjs${BUST}`);
+const { checkQuickBuild } = await import(`./quick-build.mjs${BUST}`);
+const { checkPregens } = await import(`./pregens.mjs${BUST}`);
 
 // The module under test, imported *without* a buster — the same instance the world already loaded.
 const { SourceIndex } = await import("/modules/sogrom-dnd5e-character-creator/scripts/data/source-index.mjs");
@@ -191,6 +193,12 @@ export { checkHooks };
 
 /** "Repair this level" end to end — see `in-world/repair.mjs`. */
 export { checkRepair };
+
+/** Quick Build across every class in the world — see `in-world/quick-build.mjs`. */
+export { checkQuickBuild };
+
+/** The Ready-made path: pregens are imported whole — see `in-world/pregens.mjs`. */
+export { checkPregens };
 
 /* -------------------------------------------- */
 

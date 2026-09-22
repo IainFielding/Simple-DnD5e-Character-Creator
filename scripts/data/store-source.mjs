@@ -27,6 +27,18 @@ import { createItemData } from "./item-factory.mjs";
 /*  Price math (pure)                           */
 /* -------------------------------------------- */
 
+/* A note on which coins this splits into, since "the largest denominations" has two readings.
+ *
+ * Platinum is included: a character starting above first level can be carrying thousands of copper
+ * pieces' worth, and writing that as four figures of gold is a worse answer than 12 pp.
+ *
+ * **Electrum is deliberately not**, though the rates below know it. The 2024 Player's Handbook
+ * drops it from the standard coinage, most tables ignore it, and a player handed 1 ep in change
+ * has to look up what it is worth. Strictly it would make some totals shorter; it would also make
+ * them harder to read, which is the whole point of converting up. Splitting on it is one line here
+ * if a table ever wants it.
+ */
+
 /** Copper pieces per one unit of each denomination, dnd5e's standard rates. */
 const FALLBACK_CONVERSION = { pp: 0.1, gp: 1, ep: 2, sp: 10, cp: 100 };
 
@@ -111,7 +123,12 @@ export function formatCp(cp) {
  */
 export function fromCopper(cp) {
   const value = Math.max(0, Math.round(Number(cp) || 0));
-  return { gp: Math.floor(value / 100), sp: Math.floor((value % 100) / 10), cp: value % 10 };
+  return {
+    pp: Math.floor(value / 1000),
+    gp: Math.floor((value % 1000) / 100),
+    sp: Math.floor((value % 100) / 10),
+    cp: value % 10
+  };
 }
 
 /* -------------------------------------------- */
@@ -301,6 +318,45 @@ export function remainingCurrency(currency, cartCp) {
 }
 
 /**
+ * Re-express everything in an actor's purse in the largest coins it will make, once the build is
+ * finished.
+ *
+ * **This is dnd5e's own conversion**, the one behind the Convert Currency button on the sheet
+ * (`CurrencyManager.convertCurrency`, present since 5.3.3, which is our floor). Calling it rather
+ * than doing the arithmetic here means a character built by this module ends up with exactly the
+ * coin the system would have given them, including in a world that has edited
+ * `CONFIG.DND5E.currencies` — a house rule about money is then honoured for free instead of being
+ * quietly overridden by us. It converts into every denomination the world has configured, so a
+ * world that still defines electrum will see electrum; that is the system's answer to "the largest
+ * denomination", and disagreeing with it is the GM's call to make in CONFIG, not ours to make here.
+ *
+ * Converting each contributor as it is written would not be enough, which is why this runs at the
+ * end. A character starting above first level is paid three times — the starting-equipment choice,
+ * whatever is left of the shop budget, then the Magic Items step's bonus gold, which a different
+ * module writes straight to `system.currency.gp` at a later stage. Each can be tidy on its own and
+ * still total four figures of gold, because the last one lands after the others were counted.
+ * Consolidating once, at the end, is the only place that sees the total.
+ *
+ * @param {Actor} actor
+ * @returns {Promise<void>}
+ */
+export async function consolidateCurrency(actor) {
+  if ( !actor?.system?.currency ) return;
+  const convert = globalThis.dnd5e?.applications?.CurrencyManager?.convertCurrency;
+  if ( !convert ) {
+    log("dnd5e's currency conversion is unavailable; leaving the purse as it is");
+    return;
+  }
+  try {
+    await convert(actor);
+  } catch ( err ) {
+    // Coin is cosmetic next to the character it belongs to: a failure here must not fail a build
+    // that has otherwise succeeded.
+    log("could not consolidate the character's currency", err);
+  }
+}
+
+/**
  * Apply the shop cart to the currency a starting-equipment choice yielded: what there is to
  * spend, and the coin left afterwards. Both wizards ask this — the creation grant and the Ember
  * hand-off — and must answer it identically, since the cart was filled against one budget.
@@ -315,12 +371,17 @@ export function remainingCurrency(currency, cartCp) {
  */
 export function applyCartToCurrency(purchases, currency) {
   let cartCp = storeConfig().enabled ? cartTotalCp(purchases) : 0;
-  const { spendable, remainder } = remainingCurrency(currency, cartCp);
-  if ( cartCp > 0 && !spendable ) {
+  const total = totalCp(currency);
+  if ( cartCp > total ) {
     log("store cart exceeds the starting currency; purchases skipped");
     cartCp = 0;
   }
-  return { cartCp, currency: cartCp > 0 ? remainder : currency };
+  // Re-expressed in the largest coins whether or not anything was bought. It used to pass the
+  // original map straight through when the cart was empty, which is the common case and the worst
+  // one: a character starting above first level is handed their whole budget as gold, so a purse
+  // of 150 pp arrived as 1500 gp. Converting on both paths means the coin a character ends up
+  // with never depends on whether they happened to visit the shop.
+  return { cartCp, currency: fromCopper(total - cartCp) };
 }
 
 /**

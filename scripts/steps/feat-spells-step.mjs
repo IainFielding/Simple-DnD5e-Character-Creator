@@ -1,6 +1,7 @@
 import { t } from "../config.mjs";
 import { advancementArray, advancementTitle} from "../data/advancement-util.mjs";
 import { MAGIC_INITIATE_LISTS } from "../data/spell-source.mjs";
+import { spellKey } from "../data/spell-identity.mjs";
 
 /**
  * The Feat Spells step: the spell picks a feat defers to the player — the Magic Initiate shape and
@@ -391,7 +392,12 @@ export async function grantedSpellCards(doc, sel = {}, seen = new Set(), depth =
       const d = await fromUuid(uuid).catch(() => null);
       if ( !d ) continue;
       if ( d.type === "spell" ) {
-        out.push({ uuid, name: d.name, img: d.img || "icons/svg/daze.svg", level: d.system?.level ?? 0 });
+        out.push({
+          uuid, name: d.name, img: d.img || "icons/svg/daze.svg", level: d.system?.level ?? 0,
+          // Carried so a card can be matched by {@link module:data/spell-identity.spellKey} rather
+          // than by uuid — see {@link originGrantedSpellKeys} for why that distinction matters.
+          identifier: d.system?.identifier ?? ""
+        });
       } else if ( advancementArray(d).length ) {
         out.push(...await grantedSpellCards(d, sel, seen, depth + 1));
       }
@@ -431,6 +437,30 @@ export async function originGrantedSpellCards(state) {
 /** The same set, by uuid, for callers that only need the membership test. */
 export async function originGrantedSpellUuids(state) {
   return new Set((await originGrantedSpellCards(state)).map(card => card.uuid));
+}
+
+/**
+ * The same grants keyed by **spell identity** rather than by uuid — the set to filter a spell pool
+ * against.
+ *
+ * A uuid is the wrong key here, and wrong in the direction that hides the bug rather than showing
+ * it. A world running the Player's Handbook module beside the system's own packs holds two copies
+ * of every spell: the class grants `dnd5e.spells24`'s Hunter's Mark while the pool offers the PHB
+ * module's, the two uuids differ, the filter matches nothing, and the player is handed a spell they
+ * already have always-prepared for free. That is the common arrangement, not an edge case — see the
+ * note atop {@link module:data/spell-identity}, which exists because of exactly this.
+ *
+ * Found by the Quick Build e2e check: every 2024 Ranger arrived holding two Hunter's Marks.
+ * @param {object} state
+ * @returns {Promise<Set<string>>}
+ */
+export async function originGrantedSpellKeys(state) {
+  const keys = new Set();
+  for ( const card of await originGrantedSpellCards(state) ) {
+    const key = spellKey(card);
+    if ( key ) keys.add(key);
+  }
+  return keys;
 }
 
 /**

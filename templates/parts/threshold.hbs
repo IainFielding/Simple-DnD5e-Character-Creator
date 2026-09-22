@@ -37,6 +37,17 @@
       {{/each}}
     </div>
     {{/if}}
+
+    {{!-- The starting level. Three rungs, not a spinner: the suggestion profile can stand behind a
+          subclass and an ability priority, and cannot stand behind eleven levels of invocations. --}}
+    <div class="creator-threshold-levels" role="group"
+         aria-label="{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.levelAria"}}">
+      {{#each levels}}
+      <button type="button" class="creator-threshold-level{{#if this.active}} is-active{{/if}}"
+              data-action="thresholdLevel" data-level="{{this.level}}"
+              aria-pressed="{{this.active}}">{{this.label}}</button>
+      {{/each}}
+    </div>
   </div>
 
   <ul class="creator-threshold-cards">
@@ -65,6 +76,15 @@
       </button>
 
       <span class="creator-threshold-body">
+        {{!-- Read about this one without leaving the screen. The same overlay the wizard's detail
+              panes use, so a class shows its own book page and everything else its description. --}}
+        {{#if this.uuid}}
+        <button type="button" class="creator-threshold-view" data-action="openSourceDetails"
+                data-uuid="{{this.uuid}}">
+          <span class="creator-btn-icon"><i class="fa-solid fa-book-open"></i></span>
+          {{this.view}}
+        </button>
+        {{/if}}
         <button type="button" class="creator-threshold-browse" data-action="thresholdBrowse"
                 data-category="{{this.category}}">
           {{this.browse}}
@@ -76,10 +96,10 @@
   </ul>
 
   <div class="creator-threshold-lower">
+    {{!-- No portrait plate. It drew a sigil seeded from the name, which changed as the name did
+          and told the player nothing they could act on — decoration standing where information
+          belongs. The name and its die are the whole of this panel now. --}}
     <div class="creator-threshold-identity">
-      <div class="creator-threshold-portrait">
-        <canvas class="creator-sigil" data-seed="{{name}}" aria-hidden="true"></canvas>
-      </div>
       <div class="creator-threshold-fields">
         <label for="threshold-name">{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.name"}}</label>
         <div class="creator-threshold-namerow">
@@ -115,19 +135,13 @@
     </div>
   </div>
 
+  {{!-- No buttons of its own. Create is the stage footer's trailing action (#entryAction), and its
+        Back leads out of this screen (_navBack) — this carried a third, "build step by step",
+        which is now the chooser's Custom card one Back away. What is left is the attribution. --}}
+  {{#if credit}}
   <div class="creator-threshold-actions">
-    <button type="button" class="creator-btn creator-btn-primary creator-threshold-create"
-            data-action="thresholdCreate" {{#unless canCreate}}disabled{{/unless}}>
-      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.create"}}
-    </button>
-    <button type="button" class="creator-btn" data-action="entryPath" data-path="custom">
-      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.stepwise"}}
-    </button>
-    <button type="button" class="creator-btn creator-btn--quiet" data-action="entryBack">
-      <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
-      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.otherWays"}}
-    </button>
-    {{#if credit}}<p class="creator-threshold-credit">{{credit}}</p>{{/if}}
+    <p class="creator-threshold-credit">{{credit}}</p>
   </div>
+  {{/if}}
   {{/if}}
 </div>

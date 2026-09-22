@@ -18,6 +18,13 @@
     <img src="{{img}}" alt="" draggable="false">
     <div class="creator-source-details-title">
       <h2>{{name}}</h2>
+      {{!-- Same pill the wizard's detail pane shows, so an item reads the same wherever it is
+            opened from. Absent for content that declares no source, which is most homebrew. --}}
+      {{#if source}}
+      <span class="creator-detail-source" title="{{source}}">
+        <i class="fa-solid fa-book" aria-hidden="true"></i>{{source}}
+      </span>
+      {{/if}}
       {{#if pageName}}<p>{{pageName}}</p>{{/if}}
       {{#if fallback}}<p class="creator-source-details-fallback">{{localize "sogrom-dnd5e-character-creator.common.sourceDetails.fallback"}}</p>{{/if}}
     </div>

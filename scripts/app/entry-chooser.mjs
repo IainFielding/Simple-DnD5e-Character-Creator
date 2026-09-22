@@ -1,5 +1,6 @@
-import { t, log } from "../config.mjs";
+import { t, log, recommendedPath, MODULE_ID } from "../config.mjs";
 import { resolveArtFor } from "../data/art-cache.mjs";
+import { postCreationSummary } from "../build/chat-summary.mjs";
 import { availablePremades, foundryPregens, importPregen, profileFor } from "../data/premades.mjs";
 import { applyQuickBuild } from "../data/quick-build.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
@@ -17,34 +18,48 @@ import { resolveChoices } from "../data/choice-resolver.mjs";
  *
  * This shape exists because the quick screen on its own was a *second* front door onto a flow that
  * already had one, which is the objection the module's own `headerMenu` default was written to
- * avoid. Behind a chooser it is a first-class choice instead of a hidden setting, and the setting
- * shrinks to one question: does the creator open on this, or straight on the wizard as it always
- * has? Off by default, so no world acquires a new first screen by upgrading.
+ * avoid. Behind a chooser it is a first-class choice instead. It shipped behind a world setting so
+ * that no world would acquire a new first screen by upgrading; that setting is gone and this is
+ * simply where the creator opens. The step-by-step path is unchanged — it is now reached by
+ * choosing it.
  *
  * ## The art
  *
- * Three journal scenes from whichever book the world has, resolved through the same cache as the
- * origin cards but with no icon tier — these are our own concepts, not compendium content, so
- * nothing has an icon for them and the honest fallback is our own frame. The filenames are verified
- * against the directory listing like everything else; a world without the Player's Handbook gets
- * the frame treatment and no broken images.
+ * Journal scenes from whichever book the world has, resolved through the same cache as the origin
+ * cards but with no icon tier — these are our own concepts, not compendium content, so nothing has
+ * an icon for them and the honest fallback is our own frame. The filenames are verified against the
+ * directory listing like everything else; a world without the Player's Handbook gets the frame
+ * treatment and no broken images — and so does a world that merely has it *disabled*, which needs
+ * its own check: Foundry serves module files from the filesystem regardless of whether the world
+ * enables them, so an existence check alone cannot tell the two apart. See {@link sceneArt}.
+ *
+ * A path may instead name its own image with `src`, relative to this module's directory. That tier
+ * needs no lookup and no book, so it resolves whatever the world has installed. Those files live in
+ * `img/`, which is in the release archive — `docs/` is not, so a screenshot referenced where it sits
+ * would render in a checkout and be a missing image in an installed copy.
  */
 
 /**
- * The three paths. `art` names a Player's Handbook journal scene; `id` is both the action payload
- * and the sigil seed for the art-free fallback.
+ * The three paths. `art` names a Player's Handbook journal scene, `src` a path relative to this
+ * module's own directory; a path carries one or the other. `id` is both the action payload and the
+ * sigil seed for the art-free fallback.
+ *
+ * Which one is badged as recommended is the GM's setting, not a constant here — see
+ * {@link recommendedPath}.
  */
 const PATHS = [
   { id: "custom", art: "consider-choices-sketch.webp" },
-  { id: "quick", art: "adventurers-ready-for-new-adventure.webp", lead: true },
-  { id: "premade", art: "heroes-of-the-forgotten-realm.webp" }
+  { id: "quick", art: "adventurers-ready-for-new-adventure.webp" },
+  // The ready-made room is the one path whose subject is the creator itself rather than a scene of
+  // adventuring, so it is illustrated with our own shot of it instead of a book's artwork.
+  { id: "premade", src: "img/premade.webp" }
 ];
 
 /** The package the chooser's own scenes come from, when it is installed. */
 const SCENE_PACKAGE = "dnd-players-handbook";
 
 /**
- * Resolve the chooser's three scenes in one browse.
+ * Resolve the chooser's book scenes in one browse.
  *
  * Reuses `resolveArtFor` by handing it synthetic "cards" whose uuid points at the PHB and whose
  * identifier is the bare filename — the resolver matches `<identifier>.webp` in `journal-art/` for
@@ -53,7 +68,18 @@ const SCENE_PACKAGE = "dnd-players-handbook";
  * @returns {Promise<Map<string, {path: string}>>}  Keyed by path id.
  */
 async function sceneArt() {
-  const requests = PATHS.map(p => ({
+  // Installed is not the same as enabled, and only the existence check would notice the difference.
+  // Foundry serves a module's files from disk whether or not the world has it switched on, so the
+  // `FilePicker.browse` below happily finds these scenes in a world that deliberately excludes the
+  // Player's Handbook — and the chooser then illustrates itself with a book the GM turned off.
+  // This is the one lookup that names a package outright; the origin cards take theirs from the
+  // item's own uuid, so a card can only ever be drawn from a package the world is already using.
+  if ( !game.modules.get(SCENE_PACKAGE)?.active ) return new Map();
+
+  // Paths that ship their own image are not looked up at all, so a world without the Player's
+  // Handbook still loses only the cards whose art came from it.
+  const scenes = PATHS.filter(p => p.art);
+  const requests = scenes.map(p => ({
     card: {
       uuid: `Compendium.${SCENE_PACKAGE}.journals.Item.${p.id}`,
       identifier: p.art.replace(/\.webp$/, ""),
@@ -63,7 +89,7 @@ async function sceneArt() {
   }));
   const found = await resolveArtFor(requests);
   const out = new Map();
-  for ( const [i, p] of PATHS.entries() ) {
+  for ( const [i, p] of scenes.entries() ) {
     const hit = found.get(requests[i].card.uuid);
     if ( hit ) out.set(p.id, hit);
   }
@@ -77,25 +103,29 @@ async function sceneArt() {
  */
 export async function chooserContext({ source }) {
   const art = await sceneArt();
-  const premades = [...await foundryPregens(), ...availablePremades(source)];
+  const officialCount = (await foundryPregens()).reduce((n, g) => n + g.entries.length, 0);
+  const premadeCount = officialCount + availablePremades(source).length;
+  // A world that recommends the ready-made path but has no ready-made characters would badge a
+  // card that is not on screen, so the recommendation falls back to the default in that case.
+  let lead = recommendedPath();
+  if ( lead === "premade" && !premadeCount ) lead = "quick";
   return {
     heading: t("entry.heading"),
     blurb: t("entry.blurb"),
-    gmNote: t("entry.gmNote"),
     paths: PATHS.map(p => ({
       id: p.id,
-      lead: !!p.lead,
+      lead: p.id === lead,
       title: t(`entry.${p.id}.title`),
       tagline: t(`entry.${p.id}.tagline`),
       go: t(`entry.${p.id}.go`),
-      recommended: p.lead ? t("entry.recommended") : null,
+      recommended: (p.id === lead) ? t("entry.recommended") : null,
       points: [1, 2, 3].map(n => t(`entry.${p.id}.point${n}`)),
-      banner: art.get(p.id)?.path ?? null,
+      banner: p.src ? `modules/${MODULE_ID}/${p.src}` : (art.get(p.id)?.path ?? null),
       seed: p.id,
       // A world with no ready-made characters it can build should not be offered the room.
       // Hiding it beats opening an empty list, which is the same rule the premades themselves
       // follow when their content is missing.
-      hidden: p.id === "premade" && !premades.length
+      hidden: p.id === "premade" && !premadeCount
     })).filter(p => !p.hidden)
   };
 }
@@ -111,7 +141,7 @@ export async function chooserContext({ source }) {
  * @param {object} ctx
  * @returns {Promise<object>}
  */
-export async function premadeContext({ source }) {
+export async function premadeContext({ source }, chosenId = null) {
   const official = await foundryPregens();
   const configured = availablePremades(source);
 
@@ -119,30 +149,30 @@ export async function premadeContext({ source }) {
   // themselves, which beats anything we could infer about them, so they need no lookup.
   const art = await resolveArtFor(configured.map(e => ({ card: e.species, category: "species" })));
 
-  const groups = [];
-  if ( official.length ) {
-    groups.push({
-      id: "official",
-      label: t("entry.premade.fromFoundry"),
-      // Foundry's own mark, served from core. Not bundled, and not a brand being borrowed:
-      // it labels content the platform itself ships.
-      badge: "icons/vtt-512.png",
-      entries: official.map(pc => ({
-        id: pc.id,
-        uuid: pc.uuid,
-        name: pc.name,
-        line: pc.line,
-        tagline: "",
-        // The character's own portrait, so it fills the plate rather than sitting on it as an
-        // emblem would. `portraitFor` has already fallen back to the class illustration for any
-        // document that turns out to have only a placeholder.
-        banner: pc.img,
-        icon: null,
-        seed: pc.id,
-        official: true
-      }))
-    });
-  }
+  // One group per book that ships ready-made characters, labelled with that book — a player
+  // picking "Akra" is getting the system's Akra, and one picking a Borderlands hero is getting
+  // that adventure's, and the heading says which.
+  const groups = official.map(group => ({
+    id: group.pack,
+    label: group.label,
+    badge: group.badge,
+    entries: group.entries.map(pc => ({
+      id: pc.id,
+      uuid: pc.uuid,
+      name: pc.name,
+      line: pc.line,
+      tagline: pc.tagline ?? "",
+      // The character's own portrait, so it fills the plate rather than sitting on it as an emblem
+      // would. `portraitFor` has already fallen back to the class illustration for any document
+      // that turns out to have only a placeholder.
+      banner: pc.img,
+      icon: null,
+      seed: pc.id,
+      official: true,
+      chosen: pc.id === chosenId
+    }))
+  }));
+
   if ( configured.length ) {
     groups.push({
       id: "configured",
@@ -157,17 +187,24 @@ export async function premadeContext({ source }) {
         banner: art.get(cards.species.uuid)?.path ?? null,
         icon: art.get(cards.species.uuid) ? null : (cards.species.img ?? null),
         seed: premade.id,
-        official: false
+        official: false,
+        chosen: premade.id === chosenId
       }))
     });
   }
 
+  // Picking a card selects it; a second, deliberate press creates the character. Creating an
+  // actor on a single click of a browsing grid is too easy to do by accident, and unlike every
+  // other path here it cannot be undone from inside the window.
+  const chosen = groups.flatMap(g => g.entries).find(e => e.chosen) ?? null;
+
   return {
     heading: t("entry.premade.heading"),
     blurb: t("entry.premade.blurb"),
-    back: t("entry.premade.back"),
     none: groups.length ? null : t("entry.premade.none"),
-    groups
+    groups,
+    chosen,
+    confirm: chosen ? t("entry.premade.confirm", { name: chosen.name }) : null
   };
 }
 
@@ -187,6 +224,11 @@ export async function takePregen({ app }, uuid, el) {
   try {
     const actor = await importPregen(uuid);
     if ( !actor ) throw new Error(`could not read ${uuid}`);
+    // Announced like any other character this module makes. Taking a ready-made one is still
+    // making one, and a table that watches the creation cards should not have a player quietly
+    // appear with a finished character and no card. Obeys the same summary setting as the rest.
+    const group = (await foundryPregens()).find(g => g.entries.some(e => e.uuid === uuid));
+    await postCreationSummary(actor, { readyMade: group?.label ?? null });
     app.markFinished?.();
     await app.close();
     actor.sheet?.render(true);
