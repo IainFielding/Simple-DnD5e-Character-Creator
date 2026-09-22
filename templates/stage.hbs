@@ -67,7 +67,15 @@
       {{quickReturn}}
     </button>
     {{/if}}
-    {{#if isReview}}
+    {{!-- An entry screen lends the footer its own primary action: "Next" cannot mean anything on a
+          screen that is not a step, and a permanently greyed Next beside a Create button inside
+          the overlay was two controls for one decision. See #entryAction. --}}
+    {{#if entryAction}}
+    <button type="button" class="creator-btn creator-btn-primary creator-btn-finish"
+            data-action="{{entryAction.action}}" {{#unless entryAction.enabled}}disabled{{/unless}}>
+      {{entryAction.label}}
+    </button>
+    {{else if isReview}}
     <button type="button" class="creator-btn creator-btn-primary creator-btn-finish" data-action="finish" {{#unless canFinish}}disabled{{/unless}}>
       {{finishLabel}}
     </button>

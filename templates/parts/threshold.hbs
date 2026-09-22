@@ -135,19 +135,13 @@
     </div>
   </div>
 
+  {{!-- No buttons of its own. Create is the stage footer's trailing action (#entryAction), and its
+        Back leads out of this screen (_navBack) — this carried a third, "build step by step",
+        which is now the chooser's Custom card one Back away. What is left is the attribution. --}}
+  {{#if credit}}
   <div class="creator-threshold-actions">
-    <button type="button" class="creator-btn creator-btn-primary creator-threshold-create"
-            data-action="thresholdCreate" {{#unless canCreate}}disabled{{/unless}}>
-      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.create"}}
-    </button>
-    <button type="button" class="creator-btn" data-action="entryPath" data-path="custom">
-      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.stepwise"}}
-    </button>
-    <button type="button" class="creator-btn creator-btn--quiet" data-action="entryBack">
-      <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
-      {{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.otherWays"}}
-    </button>
-    {{#if credit}}<p class="creator-threshold-credit">{{credit}}</p>{{/if}}
+    <p class="creator-threshold-credit">{{credit}}</p>
   </div>
+  {{/if}}
   {{/if}}
 </div>

@@ -1,4 +1,4 @@
-import { t, log, recommendedPath } from "../config.mjs";
+import { t, log, recommendedPath, MODULE_ID } from "../config.mjs";
 import { resolveArtFor } from "../data/art-cache.mjs";
 import { postCreationSummary } from "../build/chat-summary.mjs";
 import { availablePremades, foundryPregens, importPregen, profileFor } from "../data/premades.mjs";
@@ -25,18 +25,24 @@ import { resolveChoices } from "../data/choice-resolver.mjs";
  *
  * ## The art
  *
- * Three journal scenes from whichever book the world has, resolved through the same cache as the
- * origin cards but with no icon tier — these are our own concepts, not compendium content, so
- * nothing has an icon for them and the honest fallback is our own frame. The filenames are verified
- * against the directory listing like everything else; a world without the Player's Handbook gets
- * the frame treatment and no broken images — and so does a world that merely has it *disabled*,
- * which needs its own check: Foundry serves module files from the filesystem regardless of whether
- * the world enables them, so an existence check alone cannot tell the two apart. See {@link sceneArt}.
+ * Journal scenes from whichever book the world has, resolved through the same cache as the origin
+ * cards but with no icon tier — these are our own concepts, not compendium content, so nothing has
+ * an icon for them and the honest fallback is our own frame. The filenames are verified against the
+ * directory listing like everything else; a world without the Player's Handbook gets the frame
+ * treatment and no broken images — and so does a world that merely has it *disabled*, which needs
+ * its own check: Foundry serves module files from the filesystem regardless of whether the world
+ * enables them, so an existence check alone cannot tell the two apart. See {@link sceneArt}.
+ *
+ * A path may instead name its own image with `src`, relative to this module's directory. That tier
+ * needs no lookup and no book, so it resolves whatever the world has installed. Those files live in
+ * `img/`, which is in the release archive — `docs/` is not, so a screenshot referenced where it sits
+ * would render in a checkout and be a missing image in an installed copy.
  */
 
 /**
- * The three paths. `art` names a Player's Handbook journal scene; `id` is both the action payload
- * and the sigil seed for the art-free fallback.
+ * The three paths. `art` names a Player's Handbook journal scene, `src` a path relative to this
+ * module's own directory; a path carries one or the other. `id` is both the action payload and the
+ * sigil seed for the art-free fallback.
  *
  * Which one is badged as recommended is the GM's setting, not a constant here — see
  * {@link recommendedPath}.
@@ -44,14 +50,16 @@ import { resolveChoices } from "../data/choice-resolver.mjs";
 const PATHS = [
   { id: "custom", art: "consider-choices-sketch.webp" },
   { id: "quick", art: "adventurers-ready-for-new-adventure.webp" },
-  { id: "premade", art: "heroes-of-the-forgotten-realm.webp" }
+  // The ready-made room is the one path whose subject is the creator itself rather than a scene of
+  // adventuring, so it is illustrated with our own shot of it instead of a book's artwork.
+  { id: "premade", src: "img/premade.webp" }
 ];
 
 /** The package the chooser's own scenes come from, when it is installed. */
 const SCENE_PACKAGE = "dnd-players-handbook";
 
 /**
- * Resolve the chooser's three scenes in one browse.
+ * Resolve the chooser's book scenes in one browse.
  *
  * Reuses `resolveArtFor` by handing it synthetic "cards" whose uuid points at the PHB and whose
  * identifier is the bare filename — the resolver matches `<identifier>.webp` in `journal-art/` for
@@ -68,7 +76,10 @@ async function sceneArt() {
   // item's own uuid, so a card can only ever be drawn from a package the world is already using.
   if ( !game.modules.get(SCENE_PACKAGE)?.active ) return new Map();
 
-  const requests = PATHS.map(p => ({
+  // Paths that ship their own image are not looked up at all, so a world without the Player's
+  // Handbook still loses only the cards whose art came from it.
+  const scenes = PATHS.filter(p => p.art);
+  const requests = scenes.map(p => ({
     card: {
       uuid: `Compendium.${SCENE_PACKAGE}.journals.Item.${p.id}`,
       identifier: p.art.replace(/\.webp$/, ""),
@@ -78,7 +89,7 @@ async function sceneArt() {
   }));
   const found = await resolveArtFor(requests);
   const out = new Map();
-  for ( const [i, p] of PATHS.entries() ) {
+  for ( const [i, p] of scenes.entries() ) {
     const hit = found.get(requests[i].card.uuid);
     if ( hit ) out.set(p.id, hit);
   }
@@ -109,7 +120,7 @@ export async function chooserContext({ source }) {
       go: t(`entry.${p.id}.go`),
       recommended: (p.id === lead) ? t("entry.recommended") : null,
       points: [1, 2, 3].map(n => t(`entry.${p.id}.point${n}`)),
-      banner: art.get(p.id)?.path ?? null,
+      banner: p.src ? `modules/${MODULE_ID}/${p.src}` : (art.get(p.id)?.path ?? null),
       seed: p.id,
       // A world with no ready-made characters it can build should not be offered the room.
       // Hiding it beats opening an empty list, which is the same rule the premades themselves
@@ -190,7 +201,6 @@ export async function premadeContext({ source }, chosenId = null) {
   return {
     heading: t("entry.premade.heading"),
     blurb: t("entry.premade.blurb"),
-    back: t("entry.premade.back"),
     none: groups.length ? null : t("entry.premade.none"),
     groups,
     chosen,

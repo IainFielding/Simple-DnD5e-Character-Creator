@@ -15,8 +15,27 @@ vi.mock("../scripts/data/art-cache.mjs", () => ({
   creditFor: () => []
 }));
 
+/**
+ * One ready-made character, so the ready-made card is on screen at all.
+ *
+ * It hides itself in a world that has none, and a hidden card is not in `ctx.paths` — so without
+ * this every assertion about its artwork below would pass vacuously, on a card that was never
+ * drawn. Only the count is read here, so one entry with an id is enough.
+ */
+vi.mock("../scripts/data/premades.mjs", async importOriginal => ({
+  ...(await importOriginal()),
+  foundryPregens: async () => [{ pack: "dnd5e.actors24", label: "Starter", badge: null,
+    entries: [{ id: "pc", uuid: "Actor.pc", name: "Pregen", line: "", img: "pregen.webp" }] }]
+}));
+
 const { chooserContext } = await import("../scripts/app/entry-chooser.mjs");
 const { invalidatePregenCache } = await import("../scripts/data/premades.mjs");
+
+/** The ready-made card's art ships with this module rather than coming from a book. */
+const OWN_ART = "modules/sogrom-dnd5e-character-creator/img/premade.webp";
+
+/** The cards whose art is a Player's Handbook journal scene, and so subject to the guard. */
+const bookCards = ctx => ctx.paths.filter(p => p.id !== "premade");
 
 /**
  * The entry chooser illustrates its three cards with journal scenes from the Player's Handbook
@@ -57,15 +76,15 @@ describe("the entry chooser's own artwork", () => {
   it("draws no scenes when the Player's Handbook is installed but disabled", async () => {
     withPhb({ installed: true, active: false });
     const ctx = await chooserContext({ source });
-    // Every card falls back to the frame tier, which is what `seed` drives.
-    expect(ctx.paths.length).toBeGreaterThan(0);
-    for ( const path of ctx.paths ) expect(path.banner, path.id).toBeNull();
+    // The book's cards fall back to the frame tier, which is what `seed` drives.
+    expect(bookCards(ctx).length).toBeGreaterThan(0);
+    for ( const path of bookCards(ctx) ) expect(path.banner, path.id).toBeNull();
   });
 
   it("draws no scenes when the Player's Handbook is not installed at all", async () => {
     withPhb({ installed: false, active: false });
     const ctx = await chooserContext({ source });
-    for ( const path of ctx.paths ) expect(path.banner, path.id).toBeNull();
+    for ( const path of bookCards(ctx) ) expect(path.banner, path.id).toBeNull();
   });
 
   it("draws them when the Player's Handbook is actually enabled", async () => {
@@ -75,6 +94,21 @@ describe("the entry chooser's own artwork", () => {
     withPhb({ installed: true, active: true });
     const ctx = await chooserContext({ source });
     for ( const path of ctx.paths ) expect(path.banner, path.id).toBeTruthy();
+  });
+
+  it("illustrates the ready-made card from this module whatever the world has installed", async () => {
+    // This card's art is a shot of the creator's own ready-made screen, not a scene from a book,
+    // so it is the one card that does not go through the lookup — and the one card that should
+    // look the same in a world with the Player's Handbook and a world without it.
+    for ( const phb of [{ installed: true, active: true }, { installed: true, active: false },
+                        { installed: false, active: false }] ) {
+      invalidatePregenCache();
+      withPhb(phb);
+      const ctx = await chooserContext({ source });
+      const premade = ctx.paths.find(p => p.id === "premade");
+      expect(premade, `phb ${JSON.stringify(phb)}`).toBeTruthy();
+      expect(premade.banner, `phb ${JSON.stringify(phb)}`).toBe(OWN_ART);
+    }
   });
 
   it("still offers the three ways in without any artwork", async () => {

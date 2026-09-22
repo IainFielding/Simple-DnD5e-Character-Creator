@@ -56,7 +56,6 @@ export class CreatorShell extends CreatorShellBase {
       // of them touches the wizard's own step model — which is what keeps the chooser addable
       // without any step being able to notice it exists.
       entryPath(event, target) { return this._entryPath(target.dataset.path); },
-      entryBack() { return this._openEntry("chooser"); },
       entryReturn() { return this._returnToQuick(); },
       entryPremade(event, target) { this._premadeSelect(target.dataset.id); },
       entryPremadeConfirm(event, target) { return this._premadeConfirm(target); },
@@ -317,6 +316,12 @@ export class CreatorShell extends CreatorShellBase {
         title: t(step.labelKey),
         instruction: step.instructionKey ? t(step.instructionKey) : null
       },
+      // What the trailing footer button does on an entry screen. "Next" has no meaning there —
+      // there is no step to advance to, so it sat permanently greyed while the action the screen
+      // actually exists for was a separate button inside the overlay. The screen lends the footer
+      // its own primary action instead, which is the same move `navBack` makes: one set of
+      // navigation furniture, in the place the player already looks for it.
+      entryAction: this.#entryAction(threshold, entry),
       // The way back to the quick screen, for a player who left it to browse one category in full.
       // Shell chrome in the stage footer, so no step has to know the quick screen exists.
       quickReturn: this.#canReturnToEntry()
@@ -344,7 +349,13 @@ export class CreatorShell extends CreatorShellBase {
           index: this._stepIndex,
           total: visible.length,
           position: t("nav.position", { current: visible.indexOf(this._stepIndex) + 1, total: visible.length }),
-          canBack: this._prevIndex() >= 0,
+          // An entry screen is an overlay over the first step, so there is no earlier STEP behind
+          // it and this greyed out — on screens whose own way back was the last thing in a long
+          // scroll. While one is open the footer's Back belongs to the overlay instead, and the
+          // chooser is the one place behind them. The chooser itself is the front door: nothing
+          // is behind it, so it is the one entry screen where Back stays dead.
+          canBack: this.#entry ? (this.#entry !== "chooser")
+            : ((this._prevIndex() >= 0) || Boolean(this.#returnTo)),
           canNext: hasNext && flags[this._stepIndex],
           backLabel: t("nav.back"),
           nextLabel: t("nav.next"),
@@ -894,6 +905,31 @@ export class CreatorShell extends CreatorShellBase {
    * The chooser's question is its heading, so it is lifted here and not drawn again in the body.
    * @returns {{title: string, instruction: string|null}|null}
    */
+  /**
+   * The primary action the open entry screen lends to the stage footer, if any.
+   *
+   * `enabled` rather than hiding it: on the quick screen the button is the goal of the screen, and
+   * a greyed Create that lights up when a class is picked says what is still needed. The ready-made
+   * list has nothing to grey — until a card is chosen there is no character to name — so it lends
+   * no action at all until then.
+   * @param {object|null} threshold  The quick screen's context, when it is the open one.
+   * @param {object|null} entry      The chooser/ready-made context, when one of those is open.
+   * @returns {{label: string, action: string, enabled: boolean}|null}
+   */
+  #entryAction(threshold, entry) {
+    if ( (this.#entry === "threshold") && threshold ) {
+      return {
+        label: t("quickBuild.threshold.create"),
+        action: "thresholdCreate",
+        enabled: Boolean(threshold.canCreate)
+      };
+    }
+    if ( (this.#entry === "premade") && entry?.premades?.confirm ) {
+      return { label: entry.premades.confirm, action: "entryPremadeConfirm", enabled: true };
+    }
+    return null;
+  }
+
   #entryHeading() {
     if ( this.#entry === "chooser" ) {
       return { title: t("entry.heading"), instruction: t("entry.blurb") };
@@ -927,6 +963,25 @@ export class CreatorShell extends CreatorShellBase {
       this.#nameTouched = false;
     }
     this.render();
+  }
+
+  /**
+   * Step back — or, with an entry screen open, leave that screen for the chooser.
+   *
+   * The footer's Back is the one the player reaches for, so it has to mean the obvious thing on
+   * whatever is actually on screen. Routing it here rather than giving each overlay its own Back
+   * keeps the rule the entry screens are built on: no step knows they exist, and they do not get
+   * their own navigation furniture when the window already has some.
+   * @override
+   */
+  _navBack() {
+    if ( this.#entry && (this.#entry !== "chooser") ) return this._openEntry("chooser");
+    // The first step of a build that came in through an entry screen: the screen it came from is
+    // what is behind it, so Back means that rather than nothing. Without this the custom path led
+    // to a greyed Back on its very first screen, which reads as "there is no way back" on the one
+    // screen where changing your mind is cheapest.
+    if ( (this._prevIndex() < 0) && this.#returnTo ) return this._returnToQuick();
+    return super._navBack();
   }
 
   /**

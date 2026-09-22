@@ -5631,7 +5631,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-threshold:focus-visible { outline: none; }
 
 .creator-entry-empty { margin: 0; color: var(--cc-text-faint); font-style: italic; }
-.creator-entry-foot { margin: auto 0 0; }
 
 /* ---- Shared art plate --------------------------------------------------------------------
    Three tiers, and the difference between them is not decoration. A `banner` is a painted scene
@@ -5922,17 +5921,6 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   border-color: var(--cc-settled);
   box-shadow: var(--cc-bezel);
 }
-.creator-premade-confirm {
-  margin-left: 0.6rem;
-  font-family: var(--cc-font-heading);
-  font-size: 0.82rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #12130f;
-  background: var(--cc-settled);
-  border-color: var(--cc-settled-bright);
-}
-.creator-premade-confirm:hover { background: var(--cc-settled-bright); }
 
 /* Two classes, not one: the blanket `height: auto` reset above is a class-plus-element selector
    and would otherwise out-specify this and flatten the dice out of round. */
@@ -6044,21 +6032,8 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-threshold-plate .plate-base { display: block; font-size: 0.62rem; color: var(--cc-text-faint); }
 .creator-threshold-asi { margin: 0; font-size: 0.78rem; line-height: 1.4; color: var(--cc-muted); }
 
+/* Only the attribution line is left in here: Create and Back are the stage footer's now. */
 .creator-threshold-actions { display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap; }
-.creator-threshold-create {
-  font-family: var(--cc-font-heading);
-  font-size: 0.95rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 0.65rem 1.5rem;
-  font-weight: 600;
-  color: #12130f;
-  background: var(--cc-settled);
-  border-color: var(--cc-settled-bright);
-  box-shadow: 0 0 0 3px var(--cc-settled-glow);
-}
-.creator-threshold-create:hover:not(:disabled) { background: var(--cc-settled-bright); }
-.creator-threshold-create:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
 .creator-btn--quiet { border-color: transparent; background: none; color: var(--cc-muted); }
 .creator-btn--quiet:hover { color: var(--cc-text); }
 .creator-threshold-credit {

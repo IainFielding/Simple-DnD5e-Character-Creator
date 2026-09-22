@@ -2,8 +2,9 @@
   The entry chooser, and the ready-made list behind one of its answers.
 
   One template for both because they are one screen to the player — a question and the longer
-  answer to its third option — and because they share the card shell, the art tiers and the Back
-  affordance. Which one renders is decided by `premades` being present in the context.
+  answer to its third option — and because they share the card shell and the art tiers. Which one
+  renders is decided by `premades` being present in the context. Neither carries a Back of its own:
+  that is the stage footer's, which knows to leave an entry screen before it tries to leave a step.
 
   Like source-details.hbs and compare.hbs, this covers the stage BODY only: the Back/Next footer
   stays reachable underneath, and the dossier beside it is untouched.
@@ -56,19 +57,10 @@
   {{/each}}
   {{/if}}
 
-  <p class="creator-entry-foot">
-    <button type="button" class="creator-btn" data-action="entryBack">
-      <span class="creator-btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
-      {{premades.back}}
-    </button>
-    {{!-- Selecting a card does not create anything. This does, and it names who it is about to
-          create — the one action in this window that cannot be undone from inside it. --}}
-    {{#if premades.chosen}}
-    <button type="button" class="creator-btn creator-premade-confirm" data-action="entryPremadeConfirm">
-      {{premades.confirm}}
-    </button>
-    {{/if}}
-  </p>
+  {{!-- No buttons of its own. Back and Create are both the stage footer's — see _navBack and
+        #entryAction. Selecting a card does not create anything; the footer's Create does, and it
+        names who it is about to create, the one action in this window that cannot be undone from
+        inside it. --}}
 
   {{else}}
   {{!-- ------------------------------------------------------------------- chooser --}}
