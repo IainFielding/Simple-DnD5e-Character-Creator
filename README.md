@@ -1,6 +1,4 @@
-![](https://github.com/IainFielding/Simple-DnD5e-Character-Creator/blob/main/docs/screenshots/entry-chooser.png)
-
-<img src="https://user-images.githubusercontent.com/IainFielding/sample.png" width="300" height="200">
+<img src="https://github.com/IainFielding/Simple-DnD5e-Character-Creator/blob/main/docs/screenshots/entry-chooser.png" width="600" height="400">
 
 
 ![GitHub release](https://img.shields.io/github/v/release/IainFielding/Simple-DnD5e-Character-Creator)
