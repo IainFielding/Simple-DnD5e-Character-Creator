@@ -301,6 +301,147 @@ export async function emberActor({ classUuid = "Compendium.dnd-players-handbook.
   return built.uuid;
 }
 
+/* -------------------------------------------- */
+/*  3.3.0: party, XP glow, blank sheets         */
+/* -------------------------------------------- */
+
+/** The party the Review and chat-card shots add to. A plain name, since it is on screen. */
+const PARTY_NAME = "The Company";
+/** The blank character the Build Character shots are of. */
+const BLANK_NAME = "New Recruit";
+
+/**
+ * Make sure the world has a primary party the GM owns, so the Review page shows its
+ * "Add to {party}" switch and the creation card its button. Reused across runs rather than created
+ * each time, so repeated captures don't fill the world with parties.
+ */
+export async function ensureParty() {
+  let party = game.actors.find(a => (a.type === "group") && (a.name === PARTY_NAME));
+  party ??= await Actor.implementation.create({ name: PARTY_NAME, type: "group" }, { renderSheet: false });
+  await game.settings.set("dnd5e", "primaryParty", { actor: party.id });
+  if ( shell ) { shell.render(); await settleRender(); }
+  return party.id;
+}
+
+/**
+ * The built character's sheet once they have the XP for their next level: the Level Up button
+ * wears its golden outline. The glow animates, so any frame of it is a fair picture.
+ */
+export async function xpReadySheet() {
+  await closeAll();
+  if ( !built ) throw new Error("no built character: run buildActor first");
+  const max = built.system.details.xp.max;
+  if ( Number.isFinite(max) ) await built.update({ "system.details.xp.value": max });
+  await built.sheet.render(true);
+  await pause(2000);
+  return built.uuid;
+}
+
+/**
+ * The creation chat card for the built character, with its "Add to {party}" button.
+ *
+ * Rendered on its own rather than photographed in the chat log: `closeAll` closes the sidebar with
+ * everything else, and a card cropped out of a scrolled log is at the mercy of whatever else was
+ * posted. `renderHTML` runs the same hooks the log does, so the button is filled in exactly as a
+ * GM would see it.
+ */
+export async function creationCard() {
+  await closeAll();
+  if ( !built ) throw new Error("no built character: run buildActor first");
+  const message = [...game.messages].reverse().find(m =>
+    (m.getFlag(MODULE_ID, "summary") === "creation") && (m.speaker?.actor === built.id));
+  if ( !message ) throw new Error("the built character has no creation card (is the summary setting off?)");
+  const html = await message.renderHTML();
+  const box = document.createElement("div");
+  box.id = "sogrom-shot-chat";
+  box.className = "themed theme-dark";
+  Object.assign(box.style, {
+    position: "fixed", left: "40%", top: "12%", width: "320px", zIndex: 1000,
+    padding: "8px", background: "var(--color-cool-5, #1a1d24)", borderRadius: "6px"
+  });
+  box.append(html);
+  document.body.append(box);
+  await pause(1000);
+  return message.id;
+}
+
+/** Set the Review page's "Add to {party}" switch — the state the next Create honours. */
+export async function joinParty(on = true) {
+  if ( !shell ) throw new Error("no creator open");
+  shell.state.joinParty = !!on;
+  shell.render();
+  await settleRender();
+  return shell.state.joinParty;
+}
+
+/** A blank character the GM has prepared: no class, species or background. Reused across runs. */
+async function blankCharacter() {
+  let actor = game.actors.find(a => (a.type === "character") && (a.name === BLANK_NAME));
+  actor ??= await Actor.implementation.create({ name: BLANK_NAME, type: "character" }, { renderSheet: false });
+  const origins = actor.items.filter(i => ["class", "race", "background"].includes(i.type)).map(i => i.id);
+  if ( origins.length ) await actor.deleteEmbeddedDocuments("Item", origins);
+  return actor;
+}
+
+/** The blank character's sheet, with the gold Build Character hammer in its header. */
+export async function blankSheet() {
+  await closeAll();
+  const actor = await blankCharacter();
+  await actor.sheet.render(true);
+  await pause(2000);
+  return actor.uuid;
+}
+
+/**
+ * The Actors sidebar's right-click menu on the blank character, offering Build Character.
+ *
+ * `closeAll` takes the sidebar down with everything else, so it is put back and switched to the
+ * Actors tab before the right-click. The click is a real `contextmenu` event on the row, so the menu
+ * is the one Foundry builds, not a copy of it.
+ */
+export async function blankMenu() {
+  await closeAll();
+  const actor = await blankCharacter();
+  await ui.sidebar.render({ force: true });
+  ui.sidebar.expand?.();
+  await ui.sidebar.changeTab?.("actors", "primary");
+  await ui.actors.render({ force: true });
+  await pause(1000);
+  const row = ui.actors.element?.querySelector(`.directory-item[data-entry-id="${actor.id}"]`);
+  if ( !row ) throw new Error("the blank character has no row in the Actors sidebar");
+  row.scrollIntoView({ block: "center" });
+  await pause(300);
+  const box = row.getBoundingClientRect();
+  row.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true, cancelable: true, button: 2, clientX: box.left + 40, clientY: box.top + (box.height / 2)
+  }));
+  await pause(800);
+  return actor.uuid;
+}
+
+/** The GM's Level-Up Options window, where "Maximum only" hit points is chosen. */
+export async function levelUpOptions() {
+  await closeAll();
+  const { LevelUpOptionsApp } = await import(`${MODULE}/app/levelup-options.mjs`);
+  await new LevelUpOptionsApp().render(true);
+  await pause(1500);
+  return true;
+}
+
+/**
+ * Put the world back: drop the party and the blank character this file created, and leave no
+ * primary party set. Run last, so the next capture starts from the same world.
+ */
+export async function cleanupShots() {
+  await closeAll();
+  await game.settings.set("dnd5e", "primaryParty", { actor: null });
+  const ids = game.actors
+    .filter(a => ((a.type === "group") && (a.name === PARTY_NAME)) || ((a.type === "character") && (a.name === BLANK_NAME)))
+    .map(a => a.id);
+  if ( ids.length ) await Actor.implementation.deleteDocuments(ids);
+  return ids.length;
+}
+
 /** Open the GM's store configuration window. */
 export async function storeConfig() {
   await closeAll();
@@ -442,6 +583,8 @@ export async function gotoRail(label) {
 
 /** Close every open application, so one picture never has the last one's window in it. */
 export async function closeAll() {
+  // The staged chat card (see {@link creationCard}) is not an application; it goes with them.
+  document.getElementById("sogrom-shot-chat")?.remove();
   for ( const app of Object.values(ui.windows ?? {}) ) await app.close?.().catch(() => {});
   for ( const app of foundry.applications.instances.values() ) await app.close?.().catch(() => {});
   shell = null;

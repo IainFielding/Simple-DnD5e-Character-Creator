@@ -432,6 +432,21 @@ async function artWithoutBrowse(r) {
     delete game.user.isGM;
     invalidateArtCache();
   }
+
+  // The Forge case, as the GM: every listing comes back empty although the files are served (Bazaar
+  // packages live outside the plain `data` source). The art must still be found, file by file.
+  Picker.browse = async () => ({ files: [], dirs: [] });
+  invalidateArtCache();
+  try {
+    const art = await resolveArtFor([{ card: cls, category: "class" }, { card: bg, category: "background" }]);
+    for ( const [label, card] of [["Wizard", cls], ["Acolyte", bg]] ) {
+      if ( !art.get(card.uuid) ) r.failures.push(`GM with empty listings (as on The Forge): no art for the ${label}`);
+    }
+    if ( art.size === 2 ) r.notes.push("GM with empty listings (as on The Forge): both still resolved");
+  } finally {
+    Picker.browse = realBrowse;
+    invalidateArtCache();
+  }
 }
 
 /**

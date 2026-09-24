@@ -46,7 +46,9 @@ All notable changes to the Simple D&D Character Creator.
 - **Players see the book artwork too.** The class, species and background art on the Quick screen
   and the entry chooser found its images by listing the art folders, which Foundry only allows for
   users with the "Use File Browser" permission. Most players don't have it, so they saw plain icons
-  where the GM saw the Player's Handbook's paintings. Players now get the same artwork.
+  where the GM saw the Player's Handbook's paintings. Players now get the same artwork. The same
+  change covers hosts such as The Forge, where the folder listing can come back empty for a GM too
+  and module files may be served from another domain: the art is now found either way.
 - **The Quick screen keeps the name you type.** A name typed into the Quick screen's name box never
   reached the character. The box only noticed its contents when clicked, and Create then rolled a
   new name anyway. The character is now created with the name in the box.

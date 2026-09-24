@@ -15,8 +15,11 @@ Copy `config.example.mjs` to `config.mjs` and edit the paths before the setup st
 > currently says. The 6.0.0 findings after it are kept because the later ones build on them; where
 > the two disagree, the newer section wins. Everything from **Historical reference** onward is kept for
 > the reasoning and the mechanisms it documents, not as a statement of current state.
+>
+> **Current state (2026-09-24): dnd5e 6.0.5 on Foundry 14.368.** Subclass sweep 135/135 identical, base
+> suite 10/10, and every assertion suite passing; the first rows of *The result* table below.
 
-## Master findings — dnd5e 6.0.3, 2026-09-19
+## Master findings — dnd5e 6.0.5 (2026-09-24), on the 6.0.3 findings of 2026-09-19
 
 Foundry **14.368**, dnd5e **6.0.3**, Tasha's Cauldron **4.0.0**, with Arcana Unleashed and Operation
 Deadfall at **1.0.1** (both updated 2026-09-19, mid-way through the day's runs). The subclass sweep is
@@ -456,12 +459,27 @@ wrong file is worth fixing together (open item 5).
 | `run.mjs` | Runs the suite and prints the diff |
 | `shell.mjs` | Diagnostics; `--hold` leaves Playwright's browser open, `--serve` opens none |
 | `screenshots.mjs` | Recaptures the README's `docs/screenshots/` images from a live world |
+| `compare-baseline.mjs` | Diffs a sweep results file against an archived baseline, scenario by scenario |
+| `baselines.mjs` | Which archived results files count as references (never a `+dirty` run) |
+| `report.mjs`, `watch-report.mjs` | HTML reports of a sweep, once or refreshing as it runs |
 | `in-world/*.mjs` | Everything that runs **inside** the world |
+| `in-world/harness.mjs` | The in-world entry point `run.mjs` calls into; re-exports every suite |
+| `in-world/native.mjs` | The reference build, through dnd5e's own AdvancementManager |
+| `in-world/creator.mjs` | The build under test, through the creator's own pipeline |
+| `in-world/normalize.mjs` | Canonicalises an actor so the two builds can be compared |
+| `in-world/scenarios.mjs` | The base suite's hand-written scenarios |
 | `in-world/answers.mjs` | The answer book: one decision-answering strategy, both adapters |
-| `in-world/sweep.mjs` | Generates one scenario per subclass in the world |
-| `in-world/shots.mjs` | Opens and drives the real wizard, for `screenshots.mjs` |
-| `in-world/hooks.mjs` | Asserts the public hook/API surface against the real wizards |
+| `in-world/provider.mjs` | Answers the level-up driver's decisions from the answer book |
+| `in-world/sweep.mjs` | Generates one scenario per subclass (or species, or background) in the world |
 | `in-world/delete-errors.mjs` | Attributes failed deletions to the side and level that caused them |
+| `in-world/hooks.mjs` | `--hooks`: the public hook/API surface against the real wizards |
+| `in-world/repair.mjs` | `--repair`: skipped-choice builds, repaired, against the full build |
+| `in-world/quick-build.mjs` | `--quick-build`: Quick Build for every class, invariants on the result |
+| `in-world/pregens.mjs` | `--pregens`: every ready-made character imported whole |
+| `in-world/blank-build.mjs` | `--blank-build`: Build Character on a GM-prepared blank sheet |
+| `in-world/features.mjs` | `--features`: the 3.3.0 features through real clicks and real chat cards |
+| `in-world/ember.mjs` | Stages Ember's creation hand-off, for the Ember world |
+| `in-world/shots.mjs` | Opens and drives the real wizard, for `screenshots.mjs` |
 
 ## Screenshots
 
@@ -469,16 +487,61 @@ wrong file is worth fixing together (open item 5).
 whenever the UI is restyled instead of being recaptured by hand:
 
 ```bash
-npm run screenshots                        # every base-world shot
-node screenshots.mjs --only=review,actor   # just these two
-npm run screenshots:ember                  # the Ember hand-off and level-up
+npm run screenshots                                    # every base-world shot
+node screenshots.mjs --only=review,actor               # just these two
+npm run screenshots:ember                              # the Ember hand-off, store, review and level-up
+node screenshots.mjs --world=playwright-bare           # free content only; writes docs/screenshots/no-content/
+HEADED=1 node screenshots.mjs --only=class-step --hold # watch it, then leave the browser open to poke at
 ```
 
-The character is filled by Quick Build with a fixed seed, so re-running produces the same Wizard
-and a single picture can be retaken without the others drifting out of step. `--only` filters what
-is *captured*, not what runs: the shots are one continuous walk through the wizard, so every
-preceding step's setup still executes. Files land in `docs/screenshots/`, overwriting in place —
-check `git diff` before keeping them.
+| Option | Effect |
+| --- | --- |
+| `--world=<id>` | Which world's shot list to take: `playwright` (default), `playwright-ember` or `playwright-bare` |
+| `--only=a,b` | Capture only the named shots. Every earlier step still runs (see below), and nothing after the last named one does |
+| `--hold` | Keep the browser and server up after the last shot, for an hour or until Ctrl+C |
+| `HEADED=1` | Show the browser instead of running it headless |
+
+The character is a Bard, "Aria Nightbreeze", filled by Quick Build with a fixed seed and given the
+Player's Handbook's own portrait and token, so re-running produces the same character and a single
+picture can be retaken without the others drifting out of step. `--only` filters what is
+*captured*, not what runs: the shots are one continuous walk through the wizard, so every preceding
+step's setup still executes. Files land in `docs/screenshots/` (the bare world's in
+`docs/screenshots/no-content/`), overwriting in place — check `git diff` before keeping them.
+
+Every picture is taken at 1667×957 with a 2× pixel ratio (3334×1914 files). Just before each one,
+`depersonalise` clears Foundry's toasts and hides the version pill, which reads `#{VERSION}#` in a
+source checkout. A shot with a `selector` is cropped to that element; the rest are the whole screen.
+
+**The base-world shots, in walk order:**
+
+| File | What it shows | Crop |
+| --- | --- | --- |
+| `entry-chooser` | The three ways in | screen |
+| `quick-build-screen` | Quick Build's three picks (species pinned to Elf), with the class guide line | screen |
+| `ready-made` | Ready-made characters, one selected | screen |
+| `welcome` | The class grid, nothing chosen | screen |
+| `class-guide` | The class grid's complexity dots and one-line summaries | `.creator-drawer-grid` |
+| `class-step` | A class chosen, with its page | screen |
+| `quick-build` | The Quick Build button on the class page | `.creator-work-page` |
+| `compare` | Three classes pinned side by side | screen |
+| `abilities` | The ability panel with points spent and the Suggest button | `.creator-work-side` |
+| `background`, `species` | The two origin grids, one chosen | screen |
+| `details`, `spells`, `choices`, `equipment` | Those steps, filled | screen |
+| `store` | The starting-gold store, mid-shop | screen |
+| `magic-shop` | The Magic Items step at level 5 | screen |
+| `review` | Review, with the Add to party box ticked (a primary party is set up first) | screen |
+| `actor` | The finished sheet (built outside the party, for the card below) | sheet |
+| `levelup` | The level-up wizard on that character | screen |
+| `levelup-ready` | The sheet's Level Up button with its golden outline, XP at the threshold | sheet |
+| `chat-card` | The creation chat card with its Add to party button, rendered on its own | `#sogrom-shot-chat` |
+| `blank-sheet` | A blank character with the gold Build Character hammer | sheet |
+| `blank-menu` | Build Character in the Actors sidebar's right-click menu | screen |
+| `store-config`, `magic-shop-config`, `levelup-options` | The GM's three configuration windows | window |
+| `cleanup` | Not a picture (`capture: false`): removes the party and the blank character | — |
+
+The party ("The Company") and the blank character ("New Recruit") are created once and reused, and
+`cleanup` removes them at the end of a full run. A run cut short by `--only` stops before `cleanup`
+and leaves both in the world; the next full run reuses and then removes them.
 
 The Ember creation shot renders the hand-off manager staged by `in-world/ember.mjs` rather than one
 Ember's own builder produced; see that file's header for why, and what that does not cover.
@@ -696,9 +759,10 @@ npm run provision           # create + configure both worlds
 
 | World | Modules |
 | --- | --- |
-| `playwright` | creator + dice-so-nice, dnd-dungeon-masters-guide, dnd-forge-artificer, dnd-heroes-faerun, dnd-monster-manual, dnd-players-handbook, dnd-ravenloft-horrors-within, dnd-tashas-cauldron |
+| `playwright` | creator + dice-so-nice, dnd-dungeon-masters-guide, dnd-forge-artificer, dnd-heroes-faerun, dnd-monster-manual, dnd-players-handbook, dnd-ravenloft-horrors-within, dnd-tashas-cauldron, dnd-arcana-unleashed, dnd-deadfall |
 | `playwright-ember` | the same plus `ember`, with the Ember adventure imported |
 | `playwright-clean` | the same content **without** the creator — for deciding whether a difference is dnd5e's or ours |
+| `playwright-bare` | the creator and dice-so-nice only — the free-content floor, for `screenshots.mjs --world=playwright-bare` |
 
 `playwright-clean` exists because several findings come down to timing around writes the system makes
 from un-awaited hooks, and "does this still happen with our module absent" is the question that
@@ -707,33 +771,72 @@ alone and counts an item at each level. The module stays junction-linked into `D
 harness's own files are still served: Foundry's static routes come from the filesystem, not from the
 world's module list.
 
-Both run dnd5e **6.0.0** on Foundry 14.367, on port 30099 (not 30000) — see "dnd5e 6.0.0 (early release)" below for what that changed. The recorded baselines above were taken on 5.3.3.
+All run dnd5e **6.0.5** on Foundry **14.368** (as of 2026-09-24), on port 30099 (not 30000). `config.mjs`'s
+`SYSTEM_VERSION`/`CORE_VERSION` only go into *new* world manifests; see "Running it against a new core
+build" for bumping an existing one. Earlier baselines were taken on 6.0.0–6.0.3 and on 5.3.3, and say so.
 
 **Foundry locks its data directory**, so the harness cannot run while the Foundry desktop app is
 open. A crashed run leaves a lock that goes stale after ~10s; `startFoundry` retries through that.
 
 ## Running
 
+**The equivalence suite** (build both ways, diff):
+
 ```bash
 node run.mjs                          # base world, all scenarios
 node run.mjs playwright-ember         # the Ember world
 node run.mjs --only human-fighter-sage
 node run.mjs --keep                   # leave both built actors in the world to inspect
-node run.mjs --list
+node run.mjs --debug                  # also dump every choice the creator's resolver raised
+node run.mjs --keep-riders            # don't strip empty rider flags before comparing
+node run.mjs --list                   # list scenarios and exit
+HEADED=1 node run.mjs                 # watch the native wizard being driven
+```
+
+**The assertion suites** (no native counterpart, so they assert rather than diff). Before a release, run
+every one of these:
+
+```bash
+node run.mjs --hooks                  # the public hook/API surface, through the real wizards
+node run.mjs --granted-spells         # an always-prepared grant is never duplicated
+node run.mjs --sidekicks              # Tasha's sidekicks are not offered as classes
+node run.mjs --repair                 # skipped-choice builds, repaired, against the full build
+node run.mjs --quick-build            # Quick Build for every class, at level 1
+node run.mjs --quick-build --level 5  # ...and climbed headlessly to 3 and 5
+node run.mjs --pregens                # every ready-made character imported whole, not rebuilt
+node run.mjs --blank-build            # Build Character on a blank sheet: gate, real right-click, build, rollback, ready-made
+node run.mjs --features               # party switch + card, level-up-ready card + XP glow, Suggest, class guide,
+                                      # typed quick name, art without file-browse, Maximum only HP
+```
+
+`--only <text>` and `--limit <n>` narrow `--quick-build` and `--pregens` to matching classes or pregens.
+
+**The sweeps** (see "The subclass sweep" below):
+
+```bash
+node run.mjs --sweep                  # every subclass in the world, one level at a time to 20 (hours)
+node run.mjs --sweep --level 6        # shallower
+node run.mjs --sweep --jump           # the whole span in one manager, compared once at the end
+node run.mjs --sweep --axis species   # vary the species instead, on a fixed Wizard/Evoker
+node run.mjs --sweep --axis background  # vary the background, taking a feat at every ASI
+node run.mjs --sweep --shard 1/20     # one twentieth of it, for a smoke test
+node run.mjs --sweep --resume         # skip scenarios already in sweep-results.jsonl
+node run.mjs --sweep --fresh          # start a new results file over an unarchived one
+node run.mjs --sweep --plan           # list what it would run, and what it skips
+```
+
+**Lookups and probes** (for writing scenarios and chasing a difference):
+
+```bash
 node run.mjs --ids <compendium-uuid>  # dump an item's advancement ids + options
 node run.mjs --find "feat:Actor"      # find items by name (optionally type-prefixed)
 node run.mjs --subclasses wizard      # subclasses for a class identifier
-node run.mjs --sidekicks              # assert Tasha's sidekicks are not offered as classes
-node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
-node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
-node run.mjs --repair                 # skipped-choice builds, repaired, against the full build
-node run.mjs --blank-build            # Build Character on a GM-prepared blank sheet: button, build, rollback, ready-made
-node run.mjs --features               # party switch + card button, Suggest, class guide, typed quick name
-node run.mjs --sweep                  # every subclass in the world, at level 20 (see below)
-node run.mjs --sweep --axis species   # vary the species instead, on a fixed Wizard/Evoker
-node run.mjs --sweep --axis background  # vary the background, taking a feat at every ASI
-HEADED=1 node run.mjs                 # watch the native wizard being driven
+node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
+                                      # native only, per level, in a world without this module
 ```
+
+`run.mjs` also carries a set of narrower `--probe-*` flags, each written to chase one finding recorded
+below.
 
 ## Verified by hand
 

@@ -125,6 +125,14 @@ const SHOTS = {
       }
     },
     {
+      // Cropped to the grid itself: the complexity dots under each icon and the one-line role are
+      // what the caption is about, and at full width they are too small to read.
+      name: "class-guide",
+      note: "The class grid's complexity dots and one-line summaries.",
+      selector: ".creator-drawer-grid",
+      async setup() { /* same screen as welcome */ }
+    },
+    {
       name: "class-step",
       note: "A class chosen, with its detail panel.",
       async setup(call) {
@@ -151,7 +159,7 @@ const SHOTS = {
       // Everything from here on shows a filled character. Quick Build is the fastest way to get
       // one, it is seeded, and it fills exactly the fields a player would have filled by hand.
       name: "abilities",
-      note: "The ability-score panel, with points spent.",
+      note: "The ability-score panel, with points spent and the Suggest button.",
       selector: ".creator-work-side",
       async setup(call) {
         // Clears whatever overlay the previous shot left up — the comparison grid, here.
@@ -236,8 +244,10 @@ const SHOTS = {
     },
     {
       name: "review",
-      note: "The review screen.",
+      note: "The review screen, with the Add to party option ticked.",
       async setup(call) {
+        // A primary party the GM owns is what puts the "Add to {party}" switch on this page.
+        await call("ensureParty");
         await call("startAtLevel", 1);
         await call("goto", "review");
       }
@@ -246,12 +256,40 @@ const SHOTS = {
       name: "actor",
       note: "The finished character sheet.",
       selector: ".app.sheet, .application.sheet",
-      async setup(call) { await call("buildActor"); }
+      async setup(call) {
+        // Built outside the party, so the chat-card shot below shows its "Add to" button rather
+        // than the spent "In The Company" state.
+        await call("joinParty", false);
+        await call("buildActor");
+      }
     },
     {
       name: "levelup",
       note: "The level-up wizard on the character just built.",
       async setup(call) { await call("levelUp"); }
+    },
+    {
+      name: "levelup-ready",
+      note: "The Level Up button's golden outline once the character has the XP for their next level.",
+      selector: ".app.sheet, .application.sheet",
+      async setup(call) { await call("xpReadySheet"); }
+    },
+    {
+      name: "chat-card",
+      note: "The creation chat card, with the GM's Add to party button.",
+      selector: "#sogrom-shot-chat",
+      async setup(call) { await call("creationCard"); }
+    },
+    {
+      name: "blank-sheet",
+      note: "A blank character the GM prepared, with the gold Build Character hammer.",
+      selector: ".app.sheet, .application.sheet",
+      async setup(call) { await call("blankSheet"); }
+    },
+    {
+      name: "blank-menu",
+      note: "Build Character in the Actors sidebar's right-click menu.",
+      async setup(call) { await call("blankMenu"); }
     },
     {
       name: "store-config",
@@ -264,6 +302,18 @@ const SHOTS = {
       note: "The GM's magic-item shop: the per-level wealth table and the stocked inventory.",
       selector: ".application",
       async setup(call) { await call("magicShopConfig"); }
+    },
+    {
+      name: "levelup-options",
+      note: "The GM's Level-Up Options, including the hit-point choices.",
+      selector: ".application",
+      async setup(call) { await call("levelUpOptions"); }
+    },
+    {
+      // Not a picture: puts the world back (no party, no blank character) for the next run.
+      name: "cleanup",
+      capture: false,
+      async setup(call) { await call("cleanupShots"); }
     }
   ],
 
@@ -445,7 +495,8 @@ try {
   const lastWanted = only ? shots.findLastIndex(s => only.includes(s.name)) : shots.length - 1;
 
   for ( const shot of shots.slice(0, lastWanted + 1) ) {
-    const capture = !only || only.includes(shot.name);
+    // `capture: false` marks a step that only changes the world (the cleanup at the end of a list).
+    const capture = (shot.capture !== false) && (!only || only.includes(shot.name));
     process.stdout.write(`  ${shot.name} … `);
     await shot.setup(call);
     if ( !capture ) {
