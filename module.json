@@ -49,5 +49,12 @@
   "manifest": "#{MANIFEST}#",
   "download": "#{DOWNLOAD}#",
   "license": "LICENSE",
-  "readme": "https://github.com/IainFielding/Simple-DnD5e-Character-Creator#readme"
+  "readme": "https://github.com/IainFielding/Simple-DnD5e-Character-Creator#readme",
+  "media": [
+    {
+      "type": "setup",
+      "url": "modules/sogrom-dnd5e-character-creator/img/premade.webp",
+      "loop": false
+    }
+  ]
 }
