@@ -510,7 +510,9 @@ step's setup still executes. Files land in `docs/screenshots/` (the bare world's
 
 Every picture is taken at 1667×957 with a 2× pixel ratio (3334×1914 files). Just before each one,
 `depersonalise` clears Foundry's toasts and hides the version pill, which reads `#{VERSION}#` in a
-source checkout. A shot with a `selector` is cropped to that element; the rest are the whole screen.
+source checkout. A shot with a `selector` is cropped to that element, one with a `clip` to that rectangle
+(for a fixed-position menu, which no element crop can hold together with its row); the rest are the
+whole screen.
 
 **The base-world shots, in walk order:**
 
@@ -529,15 +531,16 @@ source checkout. A shot with a `selector` is cropped to that element; the rest a
 | `details`, `spells`, `choices`, `equipment` | Those steps, filled | screen |
 | `store` | The starting-gold store, mid-shop | screen |
 | `magic-shop` | The Magic Items step at level 5 | screen |
-| `review` | Review, with the Add to party box ticked (a primary party is set up first) | screen |
+| `review` | Review (a primary party is set up first) | screen |
+| `review-finish` | The foot of Review: the Add to party box, ticked (and Export PDF with its module) | `.creator-review-finish` |
 | `actor` | The finished sheet (built outside the party, for the card below) | sheet |
 | `levelup` | The level-up wizard on that character | screen |
-| `levelup-ready` | The sheet's Level Up button with its golden outline, XP at the threshold | sheet |
-| `chat-card` | The creation chat card with its Add to party button, rendered on its own | `#sogrom-shot-chat` |
+| `levelup-ready` | The sheet's Level Up button with its golden outline, XP at the threshold (the world is switched to XP levelling for it, and put back by `cleanup`) | sheet header |
+| `chat-card` | The creation chat card with its Add to party button, in the real chat log | the message |
 | `blank-sheet` | A blank character with the gold Build Character hammer | sheet |
-| `blank-menu` | Build Character in the Actors sidebar's right-click menu | screen |
+| `blank-menu` | Build Character in the Actors sidebar's right-click menu (game unpaused) | sidebar strip (`clip`) |
 | `store-config`, `magic-shop-config`, `levelup-options` | The GM's three configuration windows | window |
-| `cleanup` | Not a picture (`capture: false`): removes the party and the blank character | — |
+| `cleanup` | Not a picture (`capture: false`): removes the party, the blank character and the screenshot character, restores the levelling mode | — |
 
 The party ("The Company") and the blank character ("New Recruit") are created once and reused, and
 `cleanup` removes them at the end of a full run. A run cut short by `--only` stops before `cleanup`

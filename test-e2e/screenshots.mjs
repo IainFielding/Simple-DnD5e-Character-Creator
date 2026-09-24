@@ -253,6 +253,14 @@ const SHOTS = {
       }
     },
     {
+      // The finishing options sit at the foot of the scrolling Review page, below what the full-screen
+      // shot shows; the crop scrolls them into view.
+      name: "review-finish",
+      note: "The Review page's finishing options: Add to party (and Export PDF when its module is installed).",
+      selector: ".creator-review-finish",
+      async setup() { /* same screen as review */ }
+    },
+    {
       name: "actor",
       note: "The finished character sheet.",
       selector: ".app.sheet, .application.sheet",
@@ -269,15 +277,16 @@ const SHOTS = {
       async setup(call) { await call("levelUp"); }
     },
     {
+      // Cropped to the sheet's header: at full-sheet scale the outline is a few pixels wide.
       name: "levelup-ready",
       note: "The Level Up button's golden outline once the character has the XP for their next level.",
-      selector: ".app.sheet, .application.sheet",
+      selector: ".application.sheet .sheet-header",
       async setup(call) { await call("xpReadySheet"); }
     },
     {
       name: "chat-card",
       note: "The creation chat card, with the GM's Add to party button.",
-      selector: "#sogrom-shot-chat",
+      selector: ".sogrom-shot-target",
       async setup(call) { await call("creationCard"); }
     },
     {
@@ -287,8 +296,11 @@ const SHOTS = {
       async setup(call) { await call("blankSheet"); }
     },
     {
+      // Clipped to the sidebar strip: the menu is fixed-position and appended to the page body, so no
+      // element crop would include both the row and the menu.
       name: "blank-menu",
       note: "Build Character in the Actors sidebar's right-click menu.",
+      clip: { x: 1290, y: 0, width: 377, height: 820 },
       async setup(call) { await call("blankMenu"); }
     },
     {
@@ -510,7 +522,9 @@ try {
     // caught by that, rather than each helper having to remember.
     await call("depersonalise");
     const path = new URL(`./${shot.name}.png`, OUT_DIR).pathname.slice(1);
-    if ( shot.selector ) {
+    if ( shot.clip ) {
+      await session.page.screenshot({ path, clip: shot.clip });
+    } else if ( shot.selector ) {
       const target = session.page.locator(shot.selector).last();
       await target.waitFor({ timeout: 15_000 });
       await target.screenshot({ path });

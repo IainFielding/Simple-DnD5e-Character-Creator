@@ -215,9 +215,14 @@ let built = null;
 
 /** Build the character for real and open its sheet — the "finished actor" picture. */
 export async function buildActor() {
+  // Found by diffing the directory, not by name: the screenshot world keeps characters from earlier
+  // runs, and a name lookup returns the first "Aria Nightbreeze" — an old one, whose creation card is
+  // not from this run.
+  const before = new Set(game.actors.map(a => a.id));
   await shell._finish(null);
   await pause(2500);
-  built = game.actors.find(a => a.name === shell.state.details.name)
+  built = game.actors.find(a => !before.has(a.id) && (a.type === "character"))
+    ?? game.actors.find(a => a.name === shell.state.details.name)
     ?? game.actors.contents.at(-1);
   await closeAll();
   await built.sheet.render(true);
@@ -309,6 +314,8 @@ export async function emberActor({ classUuid = "Compendium.dnd-players-handbook.
 const PARTY_NAME = "The Company";
 /** The blank character the Build Character shots are of. */
 const BLANK_NAME = "New Recruit";
+/** The screenshot character's name (screenshots.mjs CHARACTER.name), removed by cleanup. */
+const CHARACTER_NAME = "Aria Nightbreeze";
 
 /**
  * Make sure the world has a primary party the GM owns, so the Review page shows its
@@ -327,9 +334,18 @@ export async function ensureParty() {
  * The built character's sheet once they have the XP for their next level: the Level Up button
  * wears its golden outline. The glow animates, so any frame of it is a fair picture.
  */
+/** The world's levelling mode before `xpReadySheet` changed it, so `cleanupShots` can put it back. */
+let levelingModeBefore = null;
+
 export async function xpReadySheet() {
   await closeAll();
   if ( !built ) throw new Error("no built character: run buildActor first");
+  // The glow only exists in a world that levels by XP; a milestone world ("noxp") never lights it.
+  const mode = game.settings.get("dnd5e", "levelingMode");
+  if ( mode === "noxp" ) {
+    levelingModeBefore ??= mode;
+    await game.settings.set("dnd5e", "levelingMode", "xp");
+  }
   const max = built.system.details.xp.max;
   if ( Number.isFinite(max) ) await built.update({ "system.details.xp.value": max });
   await built.sheet.render(true);
@@ -351,17 +367,16 @@ export async function creationCard() {
   const message = [...game.messages].reverse().find(m =>
     (m.getFlag(MODULE_ID, "summary") === "creation") && (m.speaker?.actor === built.id));
   if ( !message ) throw new Error("the built character has no creation card (is the summary setting off?)");
-  const html = await message.renderHTML();
-  const box = document.createElement("div");
-  box.id = "sogrom-shot-chat";
-  box.className = "themed theme-dark";
-  Object.assign(box.style, {
-    position: "fixed", left: "40%", top: "12%", width: "320px", zIndex: 1000,
-    padding: "8px", background: "var(--color-cool-5, #1a1d24)", borderRadius: "6px"
-  });
-  box.append(html);
-  document.body.append(box);
+  // The real message in the real chat log, as a GM sees it — a card rendered on its own elsewhere
+  // loses the log's theme, and its text came out pale on the parchment.
+  ui.sidebar.expand?.();
+  await ui.sidebar.changeTab?.("chat", "primary");
   await pause(1000);
+  const el = document.querySelector(`#chat [data-message-id="${message.id}"], .chat-log [data-message-id="${message.id}"]`);
+  if ( !el ) throw new Error("the creation card is not in the chat log");
+  el.scrollIntoView({ block: "center" });
+  el.classList.add("sogrom-shot-target");
+  await pause(800);
   return message.id;
 }
 
@@ -395,25 +410,33 @@ export async function blankSheet() {
 /**
  * The Actors sidebar's right-click menu on the blank character, offering Build Character.
  *
- * `closeAll` takes the sidebar down with everything else, so it is put back and switched to the
- * Actors tab before the right-click. The click is a real `contextmenu` event on the row, so the menu
+ * The sidebar is switched to its Actors tab (and expanded) before the right-click. The click is a real `contextmenu` event on the row, so the menu
  * is the one Foundry builds, not a copy of it.
  */
 export async function blankMenu() {
   await closeAll();
   const actor = await blankCharacter();
-  await ui.sidebar.render({ force: true });
+  await actor.sheet?.close({ force: true }).catch(() => {});
+  // The sidebar is on screen in this one, so it should not advertise the harness: drop the actors
+  // other runs left behind (the `[e2e] ` prefix is the harness's own, and older copies of the
+  // screenshot character), keeping the one this run built.
+  const stale = game.actors.filter(a => a.name.startsWith("[e2e] ")
+    || ((a.name === CHARACTER_NAME) && (a.id !== built?.id))).map(a => a.id);
+  if ( stale.length ) await Actor.implementation.deleteDocuments(stale);
   ui.sidebar.expand?.();
   await ui.sidebar.changeTab?.("actors", "primary");
-  await ui.actors.render({ force: true });
+  await ui.actors.render();
   await pause(1000);
   const row = ui.actors.element?.querySelector(`.directory-item[data-entry-id="${actor.id}"]`);
   if ( !row ) throw new Error("the blank character has no row in the Actors sidebar");
   row.scrollIntoView({ block: "center" });
   await pause(300);
+  // The world opens paused, and the banner would fill the middle of the picture.
+  if ( game.paused ) game.togglePause(false, { broadcast: true });
+  // Right-clicked near the row's bottom edge, so the menu opens beneath the name rather than over it.
   const box = row.getBoundingClientRect();
   row.dispatchEvent(new MouseEvent("contextmenu", {
-    bubbles: true, cancelable: true, button: 2, clientX: box.left + 40, clientY: box.top + (box.height / 2)
+    bubbles: true, cancelable: true, button: 2, clientX: box.left + 60, clientY: box.bottom - 3
   }));
   await pause(800);
   return actor.uuid;
@@ -429,14 +452,20 @@ export async function levelUpOptions() {
 }
 
 /**
- * Put the world back: drop the party and the blank character this file created, and leave no
- * primary party set. Run last, so the next capture starts from the same world.
+ * Put the world back: drop the party, the blank character and the screenshot character this file
+ * created, leave no primary party set, and restore the levelling mode. Run last, so the next
+ * capture starts from the same world.
  */
 export async function cleanupShots() {
   await closeAll();
   await game.settings.set("dnd5e", "primaryParty", { actor: null });
+  if ( levelingModeBefore ) {
+    await game.settings.set("dnd5e", "levelingMode", levelingModeBefore);
+    levelingModeBefore = null;
+  }
   const ids = game.actors
-    .filter(a => ((a.type === "group") && (a.name === PARTY_NAME)) || ((a.type === "character") && (a.name === BLANK_NAME)))
+    .filter(a => ((a.type === "group") && (a.name === PARTY_NAME))
+      || ((a.type === "character") && [BLANK_NAME, CHARACTER_NAME].includes(a.name)))
     .map(a => a.id);
   if ( ids.length ) await Actor.implementation.deleteDocuments(ids);
   return ids.length;
@@ -585,8 +614,17 @@ export async function gotoRail(label) {
 export async function closeAll() {
   // The staged chat card (see {@link creationCard}) is not an application; it goes with them.
   document.getElementById("sogrom-shot-chat")?.remove();
-  for ( const app of Object.values(ui.windows ?? {}) ) await app.close?.().catch(() => {});
-  for ( const app of foundry.applications.instances.values() ) await app.close?.().catch(() => {});
+  document.querySelectorAll(".sogrom-shot-target").forEach(el => el.classList.remove("sogrom-shot-target"));
+  // Foundry's own interface (the sidebar and its tabs, chat, hotbar…) is everything reachable from
+  // `ui`, and is left alone: closing it and rendering it back fails ("Failed to render Sidebar tab
+  // chat"), which is what stopped the right-click shot. hooks.mjs `closeAll` learned the same.
+  const core = new Set(Object.values(ui).filter(v => v && (typeof v === "object")));
+  const closeOne = async app => {
+    if ( !app || core.has(app) || (typeof app.close !== "function") ) return;
+    await Promise.resolve(app.close({ force: true })).catch(() => {});
+  };
+  for ( const app of Object.values(ui.windows ?? {}) ) await closeOne(app);
+  for ( const app of [...foundry.applications.instances.values()] ) await closeOne(app);
   shell = null;
   await pause(400);
   return true;
