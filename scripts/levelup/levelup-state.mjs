@@ -489,7 +489,7 @@ export class LevelUpState {
     // On the Class step nothing exists to lose: a bare class pick costs one click to redo.
     if ( !d ) return false;
     return this.hasStagedSpells()
-      || this.hpSteps.some(r => r.mode !== "avg")
+      || this.hpSteps.some(r => r.mode !== (r.seedMode ?? "avg"))
       || this.subclassSteps.some(r => d.subclassState(r).chosen)
       || this.traitSteps.some(r => d.traitState(r).chosen.size > 0)
       || this.choiceSteps.some(r => {

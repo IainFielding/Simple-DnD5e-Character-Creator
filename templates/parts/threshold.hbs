@@ -67,6 +67,16 @@
         <span class="creator-threshold-scrim">
           <span class="creator-threshold-kicker">{{this.label}}</span>
           <span class="creator-threshold-name">{{this.name}}</span>
+          {{#if this.guide}}
+          <span class="creator-threshold-guide">
+            {{#if this.guide.pips.length}}
+            <span class="creator-complexity" role="img" aria-label="{{this.guide.label}}" data-tooltip="{{this.guide.label}}">
+              {{#each this.guide.pips}}<i class="{{#if on}}is-on{{/if}}"></i>{{/each}}
+            </span>
+            {{/if}}
+            <span>{{this.guide.role}}</span>
+          </span>
+          {{/if}}
         </span>
       </span>
 
@@ -103,8 +113,9 @@
       <div class="creator-threshold-fields">
         <label for="threshold-name">{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.name"}}</label>
         <div class="creator-threshold-namerow">
-          <input type="text" id="threshold-name" name="thresholdName" value="{{name}}"
-                 data-action="thresholdName">
+          {{!-- Wired by an "input" listener in CreatorShell#_onRender, not a data-action: actions
+                fire on click, which read the box before anything was typed into it. --}}
+          <input type="text" id="threshold-name" name="thresholdName" value="{{name}}">
           <button type="button" class="creator-threshold-die" data-action="thresholdRoll"
                   data-category="name"
                   title="{{localize "sogrom-dnd5e-character-creator.quickBuild.threshold.rollName"}}"

@@ -222,7 +222,8 @@ export async function premadeContext({ source }, chosenId = null) {
 export async function takePregen({ app }, uuid, el) {
   if ( el ) { el.disabled = true; el.classList.add("is-busy"); }
   try {
-    const actor = await importPregen(uuid);
+    // A blank sheet the GM prepared is filled rather than a new actor created beside it.
+    const actor = await importPregen(uuid, { into: app.state?.actor ?? null });
     if ( !actor ) throw new Error(`could not read ${uuid}`);
     // Announced like any other character this module makes. Taking a ready-made one is still
     // making one, and a table that watches the creation cards should not have a player quietly

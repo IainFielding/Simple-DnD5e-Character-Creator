@@ -45,4 +45,9 @@
     {{/each}}
   </dl>
   {{/if}}
+
+  {{!-- "Add to the party". Shipped hidden and empty: build/chat-summary.mjs `registerPartyButton()`
+        fills it in at render time for anyone who owns dnd5e's primary party, and removes it for
+        everyone else — so the label always names the party as it is now, not as it was at post. --}}
+  <button type="button" class="sogrom-chat-levelup-btn sogrom-chat-party-btn" data-sogrom-party-actor="{{actorId}}" hidden></button>
 </div>

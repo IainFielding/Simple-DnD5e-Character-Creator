@@ -7,6 +7,7 @@ import { resolveChoices, traitChoiceTitle, traitKeyLabel } from "../data/choice-
 import { resolveFeatSpells, grantedSpellCards } from "./feat-spells-step.mjs";
 import { summarizeEquipment } from "../data/equipment-source.mjs";
 import { pdfExportContext } from "../build/pdf-export.mjs";
+import { partyJoinContext } from "../build/party.mjs";
 
 /*
  * The Review step (the step module itself is at the bottom of the file). It's read-only: it gathers
@@ -277,8 +278,9 @@ export const reviewStep = {
    * character to print.
    */
   handle(action, _el, { state }) {
-    if ( action !== "toggle-pdf" ) return;
-    state.exportPdf = !state.exportPdf;
+    if ( action === "toggle-pdf" ) state.exportPdf = !state.exportPdf;
+    // Same shape as the PDF switch: an answer recorded now, acted on at Create.
+    else if ( action === "toggle-party" ) state.joinParty = !state.joinParty;
   },
 
   async context({ state, source, equipment }) {
@@ -318,6 +320,8 @@ export const reviewStep = {
       }),
       details: reviewDetails(state),
       pdf: pdfExportContext(state.exportPdf, "pdfExport.noteCreation"),
+      // Null unless this user owns dnd5e's primary party, which hides the switch.
+      party: partyJoinContext(state.joinParty),
       purchases: reviewPurchases(state),
       // Magic items, for a 1st-level character whose GM filled in that row of the wealth table.
       // One starting higher sees the same block on the climb's review instead — same view-model,

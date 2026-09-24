@@ -251,8 +251,9 @@ export const MODES = ["creation", "creation-levelup", "levelup"];
  *  - `"choice"`       — average, roll, max, or a manually-typed value (the module's original behaviour).
  *  - `"average-roll"` — average or roll only (the 2024 rules as written); no max, no manual entry.
  *  - `"average"`      — average only; the buttons collapse to a single pre-made decision.
+ *  - `"max"`          — maximum only; every gained level takes the full hit die, as a done deal.
  */
-export const HP_MODES = ["choice", "average-roll", "average"];
+export const HP_MODES = ["choice", "average-roll", "average", "max"];
 
 /**
  * How much freedom players get on the level-up hit-point decision, per the world setting.
@@ -262,6 +263,16 @@ export const HP_MODES = ["choice", "average-roll", "average"];
 export function levelUpHpMode() {
   const raw = game.settings.get(MODULE_ID, SETTINGS.levelUpHpMode);
   return HP_MODES.includes(raw) ? raw : DEFAULTS.levelUpHpMode;
+}
+
+/**
+ * The hit-point decision a gained level starts on: the maximum in a "Maximum only" world, the
+ * average everywhere else (dnd5e's own default). Also what a headless climb takes, so a Quick Build
+ * to level 5 follows the table's rule rather than always taking the average.
+ * @returns {"avg"|"max"}
+ */
+export function levelUpHpDefault() {
+  return levelUpHpMode() === "max" ? "max" : "avg";
 }
 
 /**

@@ -334,40 +334,73 @@ function renderLevelUpButton(root, actor) {
   // brings fresh HTML, so this is a no-op there).
   const existing = root.querySelector(".sogrom-levelup-btn");
   if ( !show ) { existing?.remove(); return; }
-  if ( existing ) return;
+  if ( !existing ) {
+    placeHeaderButton(root, {
+      className: "sogrom-levelup-btn",
+      icon: "fa-solid fa-trophy-star",
+      label: t("levelup.button"),
+      onClick: () => triggerLevelUp(actor)
+    });
+  }
+  // Lit when the XP is there. Applied to an existing button too, since Tidy's sheets keep theirs
+  // across renders and the XP that lights it arrives in one of those renders.
+  const button = root.querySelector(".sogrom-levelup-btn");
+  if ( !button ) return;
+  const ready = hasLevelUpXp(actor);
+  button.classList.toggle("is-xp-ready", ready);
+  const label = t(ready ? "levelup.buttonReady" : "levelup.button");
+  if ( button.hasAttribute("aria-label") ) button.setAttribute("aria-label", label);
+}
 
+/**
+ * Put a gold icon button in a character sheet's header, where the rest buttons live — the Level Up
+ * trophy's placement, shared with the creator's Build Character button (see
+ * {@link module:app/blank-build}). The two never appear together: one needs a class, the other its
+ * absence.
+ *
+ * Tidy 5e Sheets get their own action row ({@link tidyActionRow}). Otherwise the system's
+ * rest-button row is preferred; it only exists when dnd5e sets `showRests`
+ * (`game.user.isGM || (actor.isOwner && allowRests)`), so a plain player who owns the character but
+ * lacks the "allow rests" world setting has no row — one is synthesised in the same spot so they get
+ * the same gold icon, not the labelled fallback. A sheet with no such structure at all (a legacy
+ * sheet) gets a labelled title-bar button.
+ * @param {HTMLElement} root
+ * @param {object} spec
+ * @param {string} spec.className  Our marker class, also the "already placed" test.
+ * @param {string} spec.icon       Font Awesome classes.
+ * @param {string} spec.label      Tooltip and accessible name.
+ * @param {Function} spec.onClick
+ */
+export function placeHeaderButton(root, { className, icon, label, onClick }) {
   const button = document.createElement("button");
   button.type = "button";
   button.addEventListener("click", ev => {
     ev.preventDefault();
-    triggerLevelUp(actor);
+    onClick();
   });
+  const iconHtml = `<i class="${icon}" inert></i>`;
 
   const tidyRow = tidyActionRow(root);
   if ( tidyRow ) {
     // Match Tidy's own short/long rest buttons: an icon-only gold button whose empty data-tooltip
     // makes the tooltip system fall back to the aria-label.
-    button.className = "sogrom-levelup-btn button button-icon-only button-gold";
+    button.className = `${className} button button-icon-only button-gold`;
     button.dataset.tooltip = "";
-    button.setAttribute("aria-label", t("levelup.button"));
-    button.innerHTML = "<i class=\"fa-solid fa-trophy-star\" inert></i>";
+    button.setAttribute("aria-label", label);
+    button.innerHTML = iconHtml;
     tidyRow.append(button);
     return;
   }
 
-  // Prefer the system's rest-button row. It only exists when dnd5e sets `showRests`
-  // (`game.user.isGM || (actor.isOwner && allowRests)`), so a plain player who owns the
-  // character but lacks the "allow rests" world setting has no row — synthesize one in the
-  // same spot so they get the same gold trophy, not the labelled fallback.
   const existingRow = root.querySelector(".sheet-header-buttons");
   const row = existingRow ?? buildHeaderButtonRow(root);
   if ( row ) {
     // Match the rest buttons exactly: a .gold-button icon whose empty data-tooltip makes the
     // tooltip system fall back to the aria-label, just like the system's own header buttons.
-    button.className = "sogrom-levelup-btn gold-button";
+    button.className = `${className} gold-button`;
     button.dataset.tooltip = "";
-    button.setAttribute("aria-label", t("levelup.button"));
-    button.innerHTML = "<i class=\"fa-solid fa-trophy-star\" inert></i>";
+    button.setAttribute("aria-label", label);
+    button.innerHTML = iconHtml;
     row.append(button);
     // The populated system row is absolutely positioned with no spare room, so this class shifts
     // it left one icon-width (see creator.css, which also handles the Action Tracker module's own
@@ -376,8 +409,8 @@ function renderLevelUpButton(root, actor) {
   } else {
     const header = root.querySelector(".window-header");
     if ( !header ) return;
-    button.className = "sogrom-levelup-btn sogrom-levelup-btn--window";
-    button.innerHTML = `<i class="fa-solid fa-trophy-star"></i> ${t("levelup.button")}`;
+    button.className = `${className} sogrom-levelup-btn--window`;
+    button.innerHTML = `${iconHtml} ${label}`;
     header.prepend(button);
   }
 }
@@ -429,6 +462,25 @@ export function canLevelUp(actor) {
   if ( actor?.type !== "character" || !actor.isOwner ) return false;
   if ( !actor.items.some(i => i.type === "class") ) return false;       // nothing to level yet
   return (actor.system?.details?.level ?? 0) < (CONFIG.DND5E?.maxLevel ?? 20);
+}
+
+/**
+ * Whether the character has earned the XP for their next level — what lights the sheet's Level Up
+ * button up. Read off dnd5e's own derived data, as the XP notice is: `xp.max` is the XP needed for
+ * the next level, and Infinity at the cap.
+ *
+ * Always false in a world that doesn't level by XP (dnd5e's "noxp" milestone mode): there is no
+ * threshold to have reached, so the button simply shows, unlit, whenever the character can level.
+ * @param {Actor5e} actor
+ * @param {object} [options]
+ * @param {boolean} [options.usesXp]  Whether the world levels by XP; injectable for tests.
+ * @returns {boolean}
+ */
+export function hasLevelUpXp(actor, { usesXp = game.settings.get("dnd5e", "levelingMode") !== "noxp" } = {}) {
+  if ( !usesXp ) return false;
+  const xp = actor?.system?.details?.xp;
+  const max = xp?.max;
+  return Number.isFinite(max) && ((xp?.value ?? 0) >= max);
 }
 
 /**

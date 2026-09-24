@@ -109,6 +109,14 @@
   {{/if}}
 
   <div class="creator-ability-actions">
+    {{!-- Lays the current method's scores out in the chosen class's priority order — the same order
+          Quick Build uses. Absent with no class, for manual entry, and before a roll. --}}
+    {{#if suggest}}
+    <button type="button" class="creator-btn creator-btn-ghost creator-ability-suggest" data-action="stepAction" data-step-action="ability-suggest"
+            {{#if suggest.hint}}data-tooltip="{{suggest.hint}}"{{/if}}>
+      <i class="fa-solid fa-wand-magic-sparkles"></i> {{suggest.label}}
+    </button>
+    {{/if}}
     {{#if isRoll}}
     <button type="button" class="creator-btn creator-btn-ghost" data-action="stepAction" data-step-action="ability-roll">
       <i class="fa-solid fa-dice"></i>

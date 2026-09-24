@@ -1,5 +1,5 @@
 import { log } from "../config.mjs";
-import { artDirectoriesFor, resolveOriginArt } from "./origin-art.mjs";
+import { artDirectoriesFor, artPathsFor, resolveOriginArt } from "./origin-art.mjs";
 
 /**
  * The Foundry half of the art lookup: browse each art directory once, remember what was in it, and
@@ -17,6 +17,16 @@ import { artDirectoriesFor, resolveOriginArt } from "./origin-art.mjs";
  * there is a broken image on the first screen a new player sees, and a browse costs one request per
  * directory per session — three, in a typical Player's Handbook world.
  *
+ * ## Players who may not browse
+ *
+ * `FilePicker.browse` needs the "Use File Browser" permission, which Foundry withholds from players
+ * by default — so for most players every browse failed, read as "no art here", and every card fell
+ * back to its icon. For a user without that permission each candidate file is checked on its own
+ * instead, with a `HEAD` request: module assets are served to anyone, so no permission is involved.
+ * It costs a handful of requests per card rather than one per directory, which is fine for the few
+ * cards that carry art (the entry chooser's paths, the quick screen's three), and each answer is
+ * cached for the session just as a listing is.
+ *
  * ## Lifetime
  *
  * Module-level, and deliberately not per-window: a player who opens the creator, closes it and
@@ -27,6 +37,41 @@ import { artDirectoriesFor, resolveOriginArt } from "./origin-art.mjs";
 
 /** directory path -> Promise<Set<string>> of the filenames in it. */
 const listings = new Map();
+
+/** file path -> Promise<boolean>: whether it exists, for users who can't browse. */
+const probes = new Map();
+
+/** Whether this user may list directories (the "Use File Browser" permission). */
+function canBrowse() {
+  return game.user?.isGM || !!game.user?.can?.("FILES_BROWSE");
+}
+
+/**
+ * Whether one file exists, by asking the server for its headers. Routed through `getRoute` so a
+ * world served under a route prefix is asked at the right address.
+ * @param {string} path  A Data-relative path, e.g. `modules/x/assets/art/wizard.webp`.
+ * @returns {Promise<boolean>}
+ */
+function exists(path) {
+  if ( probes.has(path) ) return probes.get(path);
+  const url = foundry.utils.getRoute?.(path) ?? `/${path}`;
+  const promise = fetch(url, { method: "HEAD" })
+    .then(response => response.ok)
+    .catch(() => false);
+  probes.set(path, promise);
+  return promise;
+}
+
+/**
+ * One card's art without a directory listing: every candidate checked at once, and the first in
+ * the plan's preference order that exists is the answer — the same answer a listing gives.
+ * @returns {Promise<object|null>}
+ */
+async function probeArt(card, category) {
+  const candidates = artPathsFor(card, category);
+  const found = await Promise.all(candidates.map(c => exists(c.path)));
+  return candidates[found.indexOf(true)] ?? null;
+}
 
 /**
  * Browse one directory and remember its contents. A directory that does not exist — a class module
@@ -72,6 +117,14 @@ export async function resolveArtFor(requests) {
   const wanted = (requests ?? []).filter(r => r?.card?.uuid);
   if ( !wanted.length ) return out;
 
+  if ( !canBrowse() ) {
+    await Promise.all(wanted.map(async ({ card, category }) => {
+      const art = await probeArt(card, category);
+      if ( art ) out.set(card.uuid, art);
+    }));
+    return out;
+  }
+
   const dirs = artDirectoriesFor(wanted);
   const sets = new Map();
   await Promise.all(dirs.map(async dir => sets.set(dir, await browse(dir))));
@@ -104,4 +157,5 @@ export function creditFor(art) {
 /** Drop everything, so the next lookup re-browses. Called when the installed content may have changed. */
 export function invalidateArtCache() {
   listings.clear();
+  probes.clear();
 }

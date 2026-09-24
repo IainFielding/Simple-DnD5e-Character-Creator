@@ -1,4 +1,4 @@
-import { log } from "../config.mjs";
+import { log, levelUpHpDefault } from "../config.mjs";
 import { QUICK_BUILD, FEATURE_PREFERENCES } from "./quick-build-data.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { reconcileGrantedSpells } from "../build/spell-reconcile.mjs";
@@ -142,12 +142,13 @@ export class QuickClimbProvider {
   /* -------------------------------------------- */
 
   /**
-   * Hit points: the average, which is what the level-up screen defaults to and what a player who
-   * declined to make any decisions should get. Rolling would make the same three choices produce a
-   * different character each time, which the screen's "seeded" promise rules out.
+   * Hit points: whatever the level-up screen starts on — the average, or the maximum in a world set
+   * to "Maximum only" — which is what a player who declined to make any decisions should get.
+   * Rolling would make the same three choices produce a different character each time, which the
+   * screen's "seeded" promise rules out.
    */
   hp() {
-    return "avg";
+    return levelUpHpDefault();
   }
 
   /** No opinion — a size decision above 1st level is content we have no suggestion for. */

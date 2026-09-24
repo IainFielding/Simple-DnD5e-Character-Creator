@@ -25,7 +25,7 @@
         "compatibility": {
           "minimum": "5.3.3",
           "maximum": "6.99.99",
-          "verified": "6.0.4"
+          "verified": "6.0.5"
         }
       }
     ]

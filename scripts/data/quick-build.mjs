@@ -472,6 +472,19 @@ async function fillFeatSpells(state, source, spells, profile, classDoc) {
 /* -------------------------------------------- */
 
 /**
+ * The class's ability priorities, highest first: the Quick Build profile's order when the table
+ * knows the class, else the generic order built from its own `primaryAbility`. Shared with the
+ * ability panel's "Suggest" button, so a suggested spread and a Quick Build always agree.
+ * @param {string} classUuid
+ * @param {import("./source-index.mjs").SourceIndex} source
+ * @returns {Promise<string[]>}  All six ability keys.
+ */
+export async function abilityPriorities(classUuid, source) {
+  const identifier = source.card(classUuid)?.identifier ?? "";
+  return QUICK_BUILD[identifier]?.abilities ?? (await genericProfile(classUuid)).abilities;
+}
+
+/**
  * A minimal profile for a class the table doesn't know (homebrew, 2014 content): its own
  * `primaryAbility` first, then a sensible generic order. No skill/spell preferences — the
  * engine's deterministic backfill covers those.

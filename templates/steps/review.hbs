@@ -182,5 +182,24 @@
   </div>
   {{/if}}
 
+  {{!-- The finishing options, side by side on one row: join the party, and export a sheet PDF. --}}
+  <div class="creator-review-finish">
+  {{!-- Join the primary party at Create. Shown only to someone who owns that party (usually the GM);
+        anyone else's character can still be added from the button on its chat card. --}}
+  {{#if party}}
+  <div class="creator-review-block creator-pdf-export creator-party-join">
+    <button type="button"
+            class="creator-btn creator-btn-ghost creator-pdf-toggle {{#if party.active}}is-active{{/if}}"
+            data-action="stepAction" data-step-action="toggle-party"
+            aria-pressed="{{#if party.active}}true{{else}}false{{/if}}">
+      <i class="fa-solid {{#if party.active}}fa-square-check{{else}}fa-square{{/if}}"></i>
+      <i class="fa-solid fa-users"></i>
+      {{party.label}}
+    </button>
+    <p class="creator-pdf-note">{{party.note}}</p>
+  </div>
+  {{/if}}
+
   {{> "modules/sogrom-dnd5e-character-creator/templates/parts/pdf-export.hbs"}}
+  </div>
 </section>

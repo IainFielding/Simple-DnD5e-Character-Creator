@@ -232,22 +232,35 @@ export function artPlan(category, packageId, keys) {
  *   `null` when nothing matched, which is the signal to fall back to the icon tier.
  */
 export function resolveOriginArt(card, category, listingFor) {
-  if ( !card ) return null;
-  const packageId = packageOf(card.uuid);
-  if ( !packageId ) return null;
-
-  // The identifier is the primary key; the name is a fallback for content that ships without one.
-  const keys = [slugify(card.identifier), slugify(card.name)].filter((v, i, a) => v && a.indexOf(v) === i);
-
   // Listings are memoised per directory by the caller, so asking repeatedly across the plan costs
   // nothing. A directory that does not exist in this package, and one that exists but is empty,
   // both mean "not here" and both move on rather than throwing.
-  for ( const { dir, file } of artPlan(category, packageId, keys) ) {
-    const listing = listingFor(dir);
+  for ( const candidate of artPathsFor(card, category) ) {
+    const listing = listingFor(candidate.dir);
     if ( !listing || !listing.size ) continue;
-    if ( listing.has(file) ) return { path: `${dir}/${file}`, dir, file, packageId };
+    if ( listing.has(candidate.file) ) return candidate;
   }
   return null;
+}
+
+/**
+ * Every file that could be this card's art, most preferred first — the same plan
+ * {@link resolveOriginArt} walks, as full paths.
+ *
+ * For a user who may not browse directories (see art-cache.mjs): with no listing to check against,
+ * each candidate is tested on its own, and the first that exists wins, exactly as it would have
+ * against a listing.
+ * @param {object} card                     A source-index card: `{uuid, name, identifier}`.
+ * @param {"class"|"species"|"background"} category
+ * @returns {{path: string, dir: string, file: string, packageId: string}[]}
+ */
+export function artPathsFor(card, category) {
+  if ( !card ) return [];
+  const packageId = packageOf(card.uuid);
+  if ( !packageId ) return [];
+  // The identifier is the primary key; the name is a fallback for content that ships without one.
+  const keys = [slugify(card.identifier), slugify(card.name)].filter((v, i, a) => v && a.indexOf(v) === i);
+  return artPlan(category, packageId, keys).map(({ dir, file }) => ({ path: `${dir}/${file}`, dir, file, packageId }));
 }
 
 /**

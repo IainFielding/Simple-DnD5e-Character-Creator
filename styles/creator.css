@@ -1690,6 +1690,47 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-drawer .creator-pickrow:has(.creator-pickrow-rules) .creator-pickrow-name { grid-area: name; }
 .creator-drawer .creator-pickrow:has(.creator-pickrow-rules) .creator-pickrow-tick { grid-area: tick; }
 
+/* A class's guide: complexity pips under the icon, and a one-line role as a third line
+   beside them, so the role has the whole text column. Declared after the two-line rule so
+   that, at equal specificity, it wins where both apply. */
+.creator-drawer .creator-pickrow:has(.creator-pickrow-guide) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "img name tick" "img rules tick" "pips guide tick";
+  align-items: center;
+  column-gap: 0.75rem;
+  row-gap: 0.1rem;
+}
+.creator-drawer .creator-pickrow-complexity {
+  grid-area: pips;
+  justify-self: center;
+  align-self: start;
+  margin-top: 0.3rem;
+}
+.creator-drawer .creator-pickrow:has(.creator-pickrow-guide) .creator-pickrow-img { grid-area: img; }
+.creator-drawer .creator-pickrow:has(.creator-pickrow-guide) .creator-pickrow-name { grid-area: name; }
+.creator-drawer .creator-pickrow:has(.creator-pickrow-guide) .creator-pickrow-tick { grid-area: tick; }
+.creator-pickrow-guide {
+  grid-area: guide;
+  min-width: 0;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--cc-muted);
+}
+.creator-pickrow-role { min-width: 0; }
+
+/* Complexity as three pips, filled up to the rating. The words are the tooltip and the
+   accessible name; the pips are for scanning a grid of twenty-six classes at a glance. */
+.creator-complexity { display: inline-flex; gap: 3px; flex: 0 0 auto; }
+.creator-complexity i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--cc-muted);
+  display: inline-block;
+}
+.creator-complexity i.is-on { background: var(--cc-select); border-color: var(--cc-select); }
+
 /* ---------------------------------------------- List + description layout
 
    The two-column layout: a list you scan beside a description you read. Still used by
@@ -2277,7 +2318,10 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   color: var(--cc-text);
 }
 .creator-manual-score:focus { border-color: var(--cc-accent); outline: none; }
-.creator-ability-actions { display: flex; flex-wrap: nowrap; gap: 0.6rem; margin-top: 1.25rem; }
+.creator-ability-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.25rem; }
+/* Suggest takes a row of its own above Roll and Reset. Its label carries the class name
+   ("Suggest for Artificer"), which cannot share the aside's width with two more buttons. */
+.creator-ability-actions .creator-ability-suggest { flex-basis: 100%; }
 /* Keep both buttons on one row inside the narrow aside: shrink padding and let them
    share the width rather than wrapping Reset onto a second line. */
 .creator-ability-actions .creator-btn {
@@ -3904,6 +3948,47 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   transform: translateX(-152px);
 }
 
+/* The Level Up button once the character has the XP for their next level (hasLevelUpXp in
+   levelup/intercept.mjs): a gold ring that turns and a glow that breathes. The ring is a masked
+   conic gradient on ::before, so it follows the button's own rounding whatever shape the sheet
+   gives it. (There were twinkling sparkles on ::after too; they were too much, and went.) */
+@property --sogrom-spark-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.sogrom-levelup-btn.is-xp-ready {
+  position: relative;
+  overflow: visible;
+  animation: sogrom-xp-glow 1.8s ease-in-out infinite;
+}
+.sogrom-levelup-btn.is-xp-ready::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from var(--sogrom-spark-angle),
+    #fff4c2, #f5c542 20%, #a8741a 40%, #f5c542 60%, #fff4c2 80%, #f5c542);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: sogrom-xp-spin 2.4s linear infinite;
+}
+@keyframes sogrom-xp-spin { to { --sogrom-spark-angle: 360deg; } }
+@keyframes sogrom-xp-glow {
+  0%, 100% { box-shadow: 0 0 4px 1px rgba(245, 197, 66, 0.55); }
+  50% { box-shadow: 0 0 12px 4px rgba(255, 214, 92, 0.95); }
+}
+/* No motion: a steady gold ring and glow, still unmistakable. */
+@media (prefers-reduced-motion: reduce) {
+  .sogrom-levelup-btn.is-xp-ready,
+  .sogrom-levelup-btn.is-xp-ready::before { animation: none; }
+  .sogrom-levelup-btn.is-xp-ready { box-shadow: 0 0 8px 2px rgba(245, 197, 66, 0.8); }
+}
+
 /* Fallback placement for sheets without the v2 header row: a labelled title-bar button. */
 .sogrom-levelup-btn--window {
   display: inline-flex;
@@ -5360,6 +5445,12 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 }
 .sogrom-chat-levelup-btn:hover { background: rgba(201, 162, 39, 0.22); border-color: var(--sc-brass); }
 .sogrom-chat-levelup-btn i { color: var(--sc-brass); }
+/* The party button sits under the creation card's rows rather than straight under its header. */
+.sogrom-chat-party-btn { margin-top: 0.55rem; }
+/* `display: flex` above out-ranks the user-agent `[hidden]` rule; keep a player from seeing it flash. */
+.sogrom-chat-party-btn[hidden] { display: none; }
+.sogrom-chat-party-btn.is-member { cursor: default; opacity: 0.7; }
+.sogrom-chat-party-btn.is-member:hover { background: rgba(201, 162, 39, 0.12); border-color: rgba(201, 162, 39, 0.5); }
 
 /* --- header: portrait, who they are, what changed ------------------------ */
 
@@ -5562,6 +5653,29 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   gap: 0.5rem 1rem;
 }
 .creator-pdf-toggle { gap: 0.55rem; }
+/* The creation review's finishing options (Add to party, Export PDF) share one row and one rule,
+   so the blocks inside drop their own. Each keeps its note beneath its own button; they wrap onto
+   separate lines only when the window is too narrow for both. An empty row (neither offered)
+   collapses to nothing. */
+.creator-review-finish {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 2rem;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cc-line);
+}
+.creator-review-finish:empty,
+.creator-review-finish:not(:has(.creator-review-block)) { display: none; }
+.creator-review-finish > .creator-review-block {
+  flex: 1 1 18rem;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  flex-direction: column;
+  align-items: flex-start;
+}
 /* The tick box leads the label; the accent marks it as chosen the same way a picked card is. */
 .creator-pdf-toggle.is-active { border-color: var(--cc-select); color: var(--cc-text); }
 .creator-pdf-note { margin: 0; color: var(--cc-muted); font-size: 0.9rem; }
@@ -5731,6 +5845,18 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   color: #fff;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
 }
+
+/* The class card's guide line, on the scrim under the name. */
+.creator-threshold-guide {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95);
+}
+.creator-threshold-guide .creator-complexity i { border-color: rgba(255, 255, 255, 0.7); }
 
 /* ---- The chooser's three paths ---- */
 .creator-entry-paths {

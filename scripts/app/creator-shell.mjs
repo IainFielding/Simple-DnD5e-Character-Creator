@@ -13,6 +13,7 @@ import { getSources, warmSources, onWarmProgress, isStale, invalidateSources } f
 import { assembleActor } from "../build/actor-assembler.mjs";
 import { postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
+import { addToParty, editableParty } from "../build/party.mjs";
 import { launchLevelUpTo } from "../levelup/intercept.mjs";
 import { chooserContext, premadeContext, applyPremade, takePregen } from "./entry-chooser.mjs";
 import { isQuickLevel, quickClimb } from "../data/quick-climb.mjs";
@@ -64,8 +65,7 @@ export class CreatorShell extends CreatorShellBase {
       thresholdRoll(event, target) { return this._thresholdRoll(target.dataset.category); },
       thresholdRollAll() { return this._thresholdRollAll(); },
       thresholdBrowse(event, target) { this._entryBrowse(target.dataset.category); },
-      thresholdCreate(event, target) { return this._thresholdCreate(target); },
-      thresholdName(event, target) { this._thresholdName(target.value); }
+      thresholdCreate(event, target) { return this._thresholdCreate(target); }
     }
   };
 
@@ -394,6 +394,11 @@ export class CreatorShell extends CreatorShellBase {
     drawFrameSigils(root);
     fitCardArt(root);
     this.#wireEntryEscape(root);
+    // The quick screen's name box. ApplicationV2 dispatches `data-action` on *click* only, so the
+    // box's action read its value when the player clicked into it — before they typed — and a typed
+    // name never reached the state unless they clicked the box again afterwards.
+    root.querySelector("#threshold-name")
+      ?.addEventListener("input", ev => this._thresholdName(ev.currentTarget.value));
     // Above the guard below, and deliberately: a pending focus request has to be *consumed* on the
     // very next render whatever kind it is, or a rail-only render would carry it forward and move
     // focus during some later, unrelated one.
@@ -1277,6 +1282,12 @@ export class CreatorShell extends CreatorShellBase {
     // of re-running assembly on top of the partial one (which duplicates every already-written item).
     // A resumed character's actor pre-exists in state, so this stays false and we never delete it.
     let createdActor = false;
+    // A sheet we didn't make — a blank character the GM prepared — can't be deleted on failure, but
+    // it can be put back: note what was on it, and a failed build removes only what it added.
+    const before = actor ? {
+      items: new Set(actor.items.map(i => i.id)),
+      effects: new Set(actor.effects.map(e => e.id))
+    } : null;
     try {
       // The draft actor is created only now, at Create — so a cancelled build never leaves an
       // orphan "New Character" in the directory. Resuming an existing character reuses its actor.
@@ -1300,6 +1311,8 @@ export class CreatorShell extends CreatorShellBase {
           log("failed to clean up half-built actor", cleanupErr);
         }
         this.state.actor = null;
+      } else if ( before ) {
+        await this.#rollBackInto(actor, before);
       }
       this.#reopenForRetry(target);
       return;
@@ -1307,6 +1320,10 @@ export class CreatorShell extends CreatorShellBase {
     // The draft has become a character, so it has nothing left to protect. Cleared before the
     // close so the close's own prompt — which `force` skips anyway — can never re-save it.
     if ( this.#draftable ) await clearDraft();
+    // Join the party now rather than after any climb: membership doesn't depend on level, and the
+    // creation card (posted here or at the end of the climb) then already reads "In {party}".
+    // Re-checked against ownership here, not only when Review rendered, since it can have changed.
+    if ( this.state.joinParty && editableParty() ) await addToParty(actor);
     await this.close();
     actor?.sheet?.render(true);
     // The build above always produces a level-1 character. When the player asked for more on the
@@ -1347,6 +1364,24 @@ export class CreatorShell extends CreatorShellBase {
       // The sheet PDF, when it was asked for. Same rule as the card: a climb isn't finished here,
       // and that wizard prints it at the level the player actually asked for.
       if ( this.state.exportPdf ) await exportCharacterPdf(actor);
+    }
+  }
+
+  /**
+   * Remove what a failed build added to a sheet it didn't create, so a retry starts from the sheet
+   * the GM handed over rather than stacking a second class on a half-built one. The actor-level
+   * update (scores, details, portrait) is left: the retry writes every one of those again.
+   * @param {Actor5e} actor
+   * @param {{items: Set<string>, effects: Set<string>}} before  What was on the sheet beforehand.
+   */
+  async #rollBackInto(actor, before) {
+    try {
+      const items = actor.items.filter(i => !before.items.has(i.id)).map(i => i.id);
+      if ( items.length ) await actor.deleteEmbeddedDocuments("Item", items);
+      const effects = actor.effects.filter(e => !before.effects.has(e.id)).map(e => e.id);
+      if ( effects.length ) await actor.deleteEmbeddedDocuments("ActiveEffect", effects);
+    } catch ( err ) {
+      log("failed to roll back the half-built character", err);
     }
   }
 

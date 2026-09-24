@@ -1,4 +1,4 @@
-import { log, levelUpHpRollToChat, t } from "../config.mjs";
+import { log, levelUpHpRollToChat, levelUpHpDefault, t } from "../config.mjs";
 import {
   withItemSegment, addedEntries, applyDependents, grantItems, replacementGroups
 } from "../data/advancement-util.mjs";
@@ -728,9 +728,13 @@ export class LevelUpDriver {
     return flow.advancement.apply(flow.level, {}, { initial: true });
   }
 
-  /** Seed a hit-point decision with its average and apply it so the clone stays valid. */
+  /**
+   * Seed a hit-point decision and apply it so the clone stays valid: the average, or the maximum in
+   * a world set to "Maximum only" (see {@link levelUpHpDefault}).
+   */
   #recordHitPoints(flow) {
     const adv = flow.advancement;
+    const seed = levelUpHpDefault();
     const record = {
       level: flow.level,
       screenLevel: flow.level,
@@ -738,13 +742,15 @@ export class LevelUpDriver {
       item: adv.item,
       average: adv.average,
       hitDie: adv.hitDie,
-      value: "avg",
-      // Which control the value came from: "avg" | "roll" | "manual". Drives the UI highlight.
-      mode: "avg"
+      value: seed,
+      // Which control the value came from: "avg" | "max" | "roll" | "manual". Drives the UI highlight.
+      mode: seed,
+      // What it started as, so "has the player changed anything?" compares against this, not "avg".
+      seedMode: seed
     };
     this.hpSteps.push(record);
     // apply() reverses any prior value first, so re-applying on every change is safe.
-    return adv.apply(flow.level, { [flow.level]: "avg" });
+    return adv.apply(flow.level, { [flow.level]: seed });
   }
 
   /**

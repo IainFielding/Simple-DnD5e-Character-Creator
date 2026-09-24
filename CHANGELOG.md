@@ -2,6 +2,62 @@
 
 All notable changes to the Simple D&D Character Creator.
 
+## 3.3.0
+
+### New
+
+- **Build into a blank character.** Tables that don't let players create actors can still use the
+  creator. The GM makes an empty character and gives the player ownership of it, and the sheet
+  gets a **Build Character** button (the gold hammer, also in the sheet's ⋯ menu and the Actors
+  sidebar's right-click menu). The creator builds straight into that sheet, so the character keeps its
+  folder and permissions. Anything else the GM left on the sheet, such as starting gold, stays. A
+  ready-made character fills the sheet the same way. The button only appears on a character with no
+  class, species or background.
+- **Add to the party.** If your world has a primary party and you own it, the review screen has an
+  **Add to [party]** tick box beside the PDF export, and the character joins as soon as it's created.
+  The creation chat card also has an **Add to [party]** button for anyone who owns the party, so a
+  GM can add a character a player built. Both are hidden from anyone who can't change the party.
+- **Suggest for [class].** Once you've picked a class, one click arranges your ability scores in the
+  order that class relies on, the same order Quick Build uses. It works with point buy, the standard
+  array and a set you've already rolled.
+- **Class guide.** Every class in the list shows a one-line summary of what it does and a rating of
+  how much there is to keep track of, from one dot to three. The ratings are the 2024 Player's
+  Handbook's own. The Artificer, which the book doesn't rate, is rated high.
+- **The Level Up button lights up when it's time.** Once a character has the XP for their next
+  level, the Level Up button on their sheet gets a glowing golden outline. The button still shows
+  whenever the character can level. In a milestone world it never lights, because there's no XP
+  to reach.
+- **Maximum only hit points.** A fourth choice for the level-up hit points setting: every level
+  gained takes the full hit die, applied automatically, including the levels Quick Build climbs
+  for you. The default is still Player's choice.
+
+### Improved
+
+- **Chat card buttons wait for dnd5e.** The Add to party and Level Up buttons on this module's chat
+  cards are now attached after the D&D system has finished preparing each card, using the system's
+  own `dnd5e.renderChatMessage` hook.
+- **Complexity dots sit under the class icon** in the class list, leaving the summary line the whole
+  width of the row.
+- **Right-click entries use Foundry v14's menu format.** The Level Up, Repair and Build Character
+  entries no longer trigger v14's deprecation warnings, and keep working when v16 drops the old format.
+
+### Fixed
+
+- **Players see the book artwork too.** The class, species and background art on the Quick screen
+  and the entry chooser found its images by listing the art folders, which Foundry only allows for
+  users with the "Use File Browser" permission. Most players don't have it, so they saw plain icons
+  where the GM saw the Player's Handbook's paintings. Players now get the same artwork.
+- **The Quick screen keeps the name you type.** A name typed into the Quick screen's name box never
+  reached the character. The box only noticed its contents when clicked, and Create then rolled a
+  new name anyway. The character is now created with the name in the box.
+- **A failed build into an existing character is undone.** If a build stopped part-way, anything it
+  had added to the sheet is removed, so trying again doesn't give the character two classes.
+
+### Compatibility
+
+- Verified against **dnd5e 6.0.5** on Foundry **14.368**: 135 of 135 subclasses built identically to
+  the system's own advancement, levels 1 to 20.
+
 ## 3.2.0 — Quick Build & Ready-Made Characters
 
 ### New

@@ -1,5 +1,6 @@
 import { log, t } from "../config.mjs";
 import { slugify } from "./origin-art.mjs";
+import { isPlaceholderName } from "../state/creator-state.mjs";
 
 /**
  * Ready-made characters: the third way into the creator.
@@ -214,25 +215,59 @@ export function invalidatePregenCache() {
 }
 
 /**
- * Import one of Foundry's pregenerated characters into the world as a new actor.
+ * Import one of Foundry's pregenerated characters into the world as a new actor — or, given `into`,
+ * onto a blank character the GM prepared (see {@link module:app/blank-build}).
  *
  * A straight import, on purpose. The document is already a finished, correct character; running it
  * back through our own build engine could only introduce differences, and there is nothing for that
  * engine to decide that the pregen has not already decided.
  *
  * @param {string} uuid  The compendium actor's uuid.
+ * @param {object} [options]
+ * @param {Actor|null} [options.into]  A blank character to fill instead of creating a new one. The
+ *   player building into a GM's sheet may lack permission to create actors at all.
  * @returns {Promise<Actor|null>}
  */
-export async function importPregen(uuid) {
+export async function importPregen(uuid, { into = null } = {}) {
   const doc = await fromUuid(uuid).catch(() => null);
   if ( !doc ) return null;
   const data = doc.toObject();
+  if ( into ) return importPregenInto(into, data);
   delete data._id;
   // The player who built it should be able to play it. A GM doing this for someone else can
   // reassign ownership afterwards; leaving it GM-only would mean the character they just made is
   // one they cannot open.
   data.ownership = { ...(data.ownership ?? {}), [game.user.id]: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
   return Actor.implementation.create(data, { renderSheet: false });
+}
+
+/**
+ * Fill a blank character with a pregen's contents: its system data, portrait, token art, items and
+ * effects. The sheet itself — its id, its ownership, the folder the GM filed it in — stays the GM's.
+ *
+ * Items and effects keep their ids. A pregen's advancements record the ids of the items they
+ * granted, so fresh ids would leave every class feature orphaned from the advancement that gave it;
+ * a blank sheet has nothing those ids could collide with. The name is taken only when the sheet
+ * still has a placeholder one — a GM who named it after the player meant that name.
+ * @param {Actor} actor
+ * @param {object} data   The pregen's `toObject()`.
+ * @returns {Promise<Actor>}
+ */
+async function importPregenInto(actor, data) {
+  const update = {
+    system: data.system,
+    img: data.img,
+    "prototypeToken.texture": data.prototypeToken?.texture ?? {},
+    "prototypeToken.ring": data.prototypeToken?.ring ?? {}
+  };
+  if ( isPlaceholderName(actor.name) ) {
+    update.name = data.name;
+    update["prototypeToken.name"] = data.name;
+  }
+  await actor.update(update);
+  if ( data.items?.length ) await actor.createEmbeddedDocuments("Item", data.items, { keepId: true });
+  if ( data.effects?.length ) await actor.createEmbeddedDocuments("ActiveEffect", data.effects, { keepId: true });
+  return actor;
 }
 
 /**

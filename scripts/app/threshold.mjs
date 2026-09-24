@@ -1,6 +1,7 @@
 import { ABILITIES, t, log } from "../config.mjs";
 import { resolveArtFor, creditFor } from "../data/art-cache.mjs";
 import { QUICK_BUILD } from "../data/quick-build-data.mjs";
+import { classGuide } from "../data/class-guide.mjs";
 import { allocateOriginAsi, applyQuickBuild } from "../data/quick-build.mjs";
 import { QUICK_LEVELS } from "../data/quick-climb.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
@@ -346,6 +347,8 @@ export async function thresholdContext({ state, source }, rules = null) {
       banner: banner?.path ?? null,
       icon: banner ? null : (card?.img ?? null),
       seed: card?.identifier || card?.name || category,
+      // What the class does and how hard it is to play, under its name. Classes only.
+      guide: (category === "class" && card) ? classGuide(card.identifier) : null,
       count: cardsFor(source, category, rules).length,
       browse: t("quickBuild.threshold.browse", { count: cardsFor(source, category, rules).length }),
       roll: t("quickBuild.threshold.rollCategory", { category: t(`step.${category}.label`).toLowerCase() }),
@@ -404,7 +407,10 @@ export async function thresholdCreate({ state, source, spells, equipment }, el) 
   try {
     const result = await applyQuickBuild({ state, source, spells, equipment }, {
       speciesUuid: state.speciesUuid,
-      backgroundUuid: state.backgroundUuid
+      backgroundUuid: state.backgroundUuid,
+      // The name in the field is the one the character gets. Without this the fill rolled a fresh
+      // one over it — whatever the player typed, or the name a GM gave the blank sheet.
+      name: state.details.name?.trim() || null
     });
     if ( !result.ok ) ui.notifications?.warn(t("quickBuild.partial"));
   } catch ( err ) {

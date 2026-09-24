@@ -4,7 +4,7 @@
 ![GitHub release](https://img.shields.io/github/v/release/IainFielding/Simple-DnD5e-Character-Creator)
 ![GitHub Downloads (specific asset, all releases)](<https://img.shields.io/github/downloads/IainFielding/Simple-DnD5e-Character-Creator/module.zip?&label=Downloads>)
 ![](https://img.shields.io/badge/Foundry-v14.368-informational) 
-![](https://img.shields.io/badge/D&D-v6.0.3-informational)
+![](https://img.shields.io/badge/D&D-v6.0.5-informational)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-sogrom?logo=ko-fi&logoColor=white)](https://ko-fi.com/sogrom)<br>
 ![D&D5E Version](https://img.shields.io/endpoint?url=https%3A%2F%2Ffoundryshields.com%2Fsystem%3FnameType%3Dfull%26showVersion%3D1%26style%3Dflat%26url%3Dhttps%3A%2F%2Fraw.githubusercontent.com%2FIainFielding%2FSimple-DnD5e-Character-Creator%2Frefs%2Fheads%2Fmain%2Fmodule.json)
 
@@ -41,6 +41,8 @@ If you can pick from a menu, you can build a character.
 1. In Foundry VTT, open the **Actors** sidebar.
 2. Click the **Simple Character Builder** button at the top.
 3. Follow the steps, then click **Create Character** at the end.
+
+No builder button? Your GM may not let players create actors. Ask them for a blank character instead, and it will have a **Build Character** button (the hammer) on its sheet.
 
 That's the whole trick. Everything below is just detail for when you want it.
 
@@ -90,6 +92,10 @@ Choose what your character *does*: fighter, wizard, rogue, and the rest. You'll 
 - **Manual Entry** lets you type the six numbers straight in — for scores rolled at the table, carried over from another game, or handed out by your GM. Your GM has to turn this one on.
 
 Whichever you use, switching between them keeps what you had under the others, so you can try point buy, roll a set, and go back without losing either.
+
+Not sure where your numbers should go? Once you've picked a class, **Suggest for [class]** arranges your scores in the order that class relies on most, the same order Quick Build uses. It works with Point Buy, the Standard Array, and a set you've already rolled. Hover over it to see the order before you click.
+
+Each class in the list shows a one-line summary of what it does, and a rating of how much there is to keep track of when you play it (one dot for low, three for high). The ratings come from the 2024 Player's Handbook. The Artificer isn't rated there, so the creator rates it high.
 
 Starting above 1st level? If your GM allows it, pick a **Starting Level** here. You'll build level 1 in the creator, then finish the climb to your chosen level in the level-up wizard.
 
@@ -148,6 +154,8 @@ A final summary of everything you've built. Happy with it? Click **Create Charac
 
 Want it on paper? If you have the companion [Simple D&D PDF Character sheet](https://foundryvtt.com/packages/sogrom-dnd5e-character-sheet-pdf) module (2.2.0 or later), an **Export Character Sheet PDF** tick box appears here — leave it ticked and a filled-in official character sheet is produced the moment your character is finished, in the 2014 or the 2024 layout to match the edition your class was written for. The same tick box sits on the level-up review, so you can print a fresh sheet each time your character grows. Without that module the tick box simply isn't there, and the review screen reads exactly as it always did.
 
+If your world has a primary party and you have Owner permission on it (the GM always does), the review screen also has an **Add to [party]** tick box. It starts ticked, and your character joins the party as soon as it's created.
+
 ![Reviewing the finished character](docs/screenshots/review.png)
 *Screenshot: the review screen.*
 
@@ -166,6 +174,8 @@ Characters grow, and this module makes that just as painless as building them. W
 **How to level up:**
 - Click the **Level Up** button on your character sheet's header, or
 - Right-click your character in the Actors sidebar and choose **Level Up**.
+
+Once your character has enough XP for their next level, the sheet's Level Up button gets a glowing golden outline, so you can see at a glance that it's time. In a world that uses milestone levelling, the button is always there but never lights up, because there's no XP to reach.
 
 The level-up wizard walks you through everything that new level brings, one screen per level gained:
 
@@ -217,7 +227,7 @@ These sit directly in the module's settings list.
 - **Module mode.** Choose what the module owns: **Creation only**, **Creation + Level-Up** (the default), or **Level-Up only**, which hides the creator and keeps just the guided level-up flow.
 - **Display mode.** Open the creator **fullscreen** for an immersive, distraction-free build, or in a **draggable, resizable window** if you like to keep an eye on the rest of your screen.
 - **Show launch button.** Show or hide the "Simple Character Builder" button in the Actors sidebar.
-- **Post a character summary to chat.** A card with the character's portrait, class and level, species, background, the six ability scores, hit points and armour class. It appears once the character is genuinely finished — if the player is starting above 1st level, the card waits until they've climbed to the level they asked for, so it shows the hero they actually made. Choose **Post to everyone**, **Whisper to the GM**, or **Don't post**.
+- **Post a character summary to chat.** A card with the character's portrait, class and level, species, background, the six ability scores, hit points and armour class. It appears once the character is genuinely finished — if the player is starting above 1st level, the card waits until they've climbed to the level they asked for, so it shows the hero they actually made. Choose **Post to everyone**, **Whisper to the GM**, or **Don't post**. If your world has a primary party, the card also shows an **Add to [party]** button that adds the new character to it. This is how a GM adds a character built by a player who doesn't own the party. Only people with Owner permission on the party actor see the button: the GM always does, and so does any player you've given ownership. Once the character is in the party, the button reads **In [party]** instead.
 - **Debug logging.** Off by default, and set per person rather than for the whole world — it only affects your own browser console. Turn it on if you've been asked for details about a problem, then reproduce it and share what the console prints.
 
 > In an Ember world the creation card isn't posted. Ember finishes the character after this module's part is done, so announcing it here would be jumping the gun — level-up cards work as normal.
@@ -248,7 +258,7 @@ Each of these also carries **Repair skipped choices** while a character has a le
 
 **Hit points:**
 
-- **Level-up hit points.** Decide what HP options players see: **Player's choice** (average, max, roll, or manual), **Average or roll** (matching the written rules), or **Average only** (applied automatically).
+- **Level-up hit points.** Decide what HP options players see: **Player's choice** (average, max, roll, or manual; the default), **Average or roll** (matching the written rules), **Average only**, or **Maximum only**. The last two are applied automatically, and Maximum only also covers the levels Quick Build climbs for you.
 - **Post hit-die rolls to chat.** When a player rolls for HP, share the result with the whole table.
 
 **Announcements:**
@@ -290,6 +300,16 @@ The window has two tabs:
 - **Inventory.** What's on offer. The shop starts empty, so stock it first. **Drag in** a single magic item, a compendium folder (subfolders included) or a whole compendium, and only items with a rarity are added. Search the list, **hide** or **remove** anything you don't want on offer, or **Clear All** to start again. The Dungeon Master's Guide's enchantment templates, such as *+1 Weapon* or *Wand of the War Mage*, are expanded into one item for every enchantment and base item they allow.
 
 As with the Store, nothing is saved until you press **Save Changes**.
+
+### Players who can't create actors
+
+Plenty of tables don't give players the Create Actor permission. You don't have to change that for them to use the creator:
+
+1. Create an empty character (**Actors**, then **Create Actor**, then **Character**) and give the player **Owner** permission on it.
+2. The player opens it and clicks **Build Character**: the gold hammer in the sheet header, also in the sheet's ⋯ menu and the Actors sidebar's right-click menu.
+3. The creator builds straight into that sheet, so the character keeps its place in your folders and the permissions you set. Choosing a ready-made character fills the sheet with that character.
+
+The button only appears on a character with no class, species or background, so it can't build on top of an existing character. Anything else you've put on the sheet, like starting gold or an item, stays. Give the sheet a name and the creator keeps it. If you leave Foundry's default name ("Player Character"), the player chooses one.
 
 ---
 
@@ -351,7 +371,7 @@ Hooks.on(api.HOOKS.characterCreated, ({ actor, targetLevel }) => {
 ## Requirements
 
 - **Foundry VTT** version 14.359 or later (verified against 14.368). Foundry v14 only — this release deliberately won't install on v15, which hasn't been tested against yet.
-- The **D&D Fifth Edition (dnd5e)** game system, version 5.3.3 or later (verified against 6.0.3)
+- The **D&D Fifth Edition (dnd5e)** game system, version 5.3.3 or later (verified against 6.0.5)
 - Your character content (classes, species, backgrounds, spells, and equipment) enabled in your compendiums
 
 ---

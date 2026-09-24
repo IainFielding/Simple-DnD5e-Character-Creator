@@ -1,12 +1,14 @@
 import {
   abilitiesContext, abilitiesHandle, abilitiesComplete, abilitiesHint,
-  ABILITY_ACTIONS, POINT_BUY_LIVE_ACTIONS, patchPointBuy, patchManual
+  ABILITY_ACTIONS, POINT_BUY_LIVE_ACTIONS, patchPointBuy, patchManual, applySuggestion
 } from "./abilities-step.mjs";
 import { spellInfoFor } from "./spells-step.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { hasSourcePage } from "../data/journal-source.mjs";
 import { hasRulesPage } from "../data/rules-source.mjs";
-import { applyQuickBuild } from "../data/quick-build.mjs";
+import { applyQuickBuild, abilityPriorities } from "../data/quick-build.mjs";
+import { QUICK_BUILD } from "../data/quick-build-data.mjs";
+import { classGuide } from "../data/class-guide.mjs";
 import { t, log, levelUpEnabled, systemRulesEdition } from "../config.mjs";
 import { pinContext } from "../app/compare.mjs";
 import { matchesRules } from "../data/source-index.mjs";
@@ -92,6 +94,14 @@ export const classStep = {
       app.gotoStep("review");
       return false;                               // gotoStep rendered; skip the dispatch render
     }
+    if ( action === "ability-suggest" ) {
+      // The same priorities Quick Build lays the standard array out by, so the two never disagree.
+      // Only the scores change: unlike Quick Build this touches nothing else the player has picked.
+      if ( !state.classUuid ) return false;
+      const priorities = await abilityPriorities(state.classUuid, source);
+      if ( !applySuggestion(state, priorities) ) return false;
+      return;
+    }
     if ( ABILITY_ACTIONS.has(action) ) {
       await abilitiesHandle(action, el, state);
       // Two ability interactions patch the panel in place rather than re-rendering the stage:
@@ -154,7 +164,10 @@ export const classStep = {
     const selected = state.classUuid;
     const detail = selected ? await source.detail(selected) : null;
     const groups = selected ? await source.advancementGroups(selected) : null;
-    const cards = source.classes().map(c => ({ ...c, selected: c.uuid === selected }));
+    // `guide` is the complexity rating and one-line role under each class's name; null for a class
+    // the table doesn't know, which leaves the card as it always was.
+    const cards = source.classes().map(c => ({ ...c, selected: c.uuid === selected, guide: classGuide(c.identifier) }));
+    const selectedCard = selected ? source.card(selected) : null;
     // Marks the off-edition cards hidden in place, so the first paint is already filtered.
     const rulesFilter = editionFilterContext(state, cards);
     return {
@@ -180,7 +193,11 @@ export const classStep = {
       // rather than offered as a button that opens nothing.
       rulesTopic: (await hasRulesPage("class", source.rulesOf(selected))) ? "class" : null,
       rulesEdition: source.rulesOf(selected) ?? null,
-      abilities: abilitiesContext(state),
+      abilities: abilitiesContext(state, {
+        suggest: selectedCard
+          ? { className: selectedCard.name, order: QUICK_BUILD[selectedCard.identifier]?.abilities ?? null }
+          : null
+      }),
       targetLevel: targetLevelContext(state)
     };
   }

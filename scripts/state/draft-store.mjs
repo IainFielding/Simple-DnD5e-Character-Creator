@@ -89,7 +89,9 @@ const DRAFT_FIELDS = {
   storeVisited: "value",
   magicShopVisited: "value",
   // Whether they asked for a sheet PDF once the build finishes.
-  exportPdf: "value"
+  exportPdf: "value",
+  // Whether the character joins the primary party at Create.
+  joinParty: "value"
 };
 
 /* -------------------------------------------- */

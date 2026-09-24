@@ -10,11 +10,13 @@
 
     <div class="creator-hp-controls">
       <div class="creator-hp-buttons">
+        {{#if ../allowAverage}}
         <button type="button" class="creator-hp-btn {{#if isAverage}}is-selected{{/if}}"
                 data-action="stepAction" data-step-action="hpAverage" data-index="{{index}}">
           <span class="creator-hp-btn-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.hp.average"}}</span>
           <span class="creator-hp-btn-value">+{{average}}</span>
         </button>
+        {{/if}}
 
         {{#if ../allowMax}}
         <button type="button" class="creator-hp-btn {{#if isMax}}is-selected{{/if}}"

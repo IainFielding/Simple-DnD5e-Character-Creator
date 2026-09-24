@@ -16,6 +16,8 @@
  *   node run.mjs --quick-build            # Quick Build every class; assert the finished character
  *   node run.mjs --quick-build --level 5  # ...and again at each higher starting rung (3, 5)
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
+ *   node run.mjs --blank-build            # Build Character on a GM-prepared blank sheet, end to end
+ *   node run.mjs --features               # party switch + card button, Suggest, class guide, quick name
  *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
  *                                         # native only, per level, in a world without this module
  *   HEADED=1 node run.mjs                 # watch the native wizard being driven
@@ -229,6 +231,43 @@ try {
       + ` from ${r.groups} book(s)`);
     else {
       console.log(`\nFAIL   ${r.failures.length} problem(s)`);
+      for ( const f of r.failures ) console.log(`  ${f}`);
+      exitCode = 1;
+    }
+  } else if ( flag("features") ) {
+    // The 3.3.0 creation features, through real clicks and a real chat card. See in-world/features.mjs.
+    const r = await harness("checkFeatures");
+    for ( const c of r.cases ) {
+      console.log(`
+${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);
+      for ( const n of c.notes ?? [] ) console.log(`  ${n}`);
+      for ( const f of c.failures ) console.log(`  ! ${f}`);
+    }
+    const passed = r.cases.filter(c => c.ok).length;
+    if ( r.ok ) console.log(`
+PASS   ${passed}/${r.cases.length} feature cases`);
+    else {
+      console.log(`
+FAIL   ${r.failures.length} problem(s)`);
+      for ( const f of r.failures ) console.log(`  ${f}`);
+      exitCode = 1;
+    }
+  } else if ( flag("blank-build") ) {
+    // Building into a blank character the GM prepared: where the character lands, what the button
+    // does, rollback on failure, and Ready-made into the sheet. See in-world/blank-build.mjs.
+    const r = await harness("checkBlankBuild");
+    for ( const c of r.cases ) {
+      console.log(`
+${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);
+      for ( const n of c.notes ?? [] ) console.log(`  ${n}`);
+      for ( const f of c.failures ) console.log(`  ! ${f}`);
+    }
+    const passed = r.cases.filter(c => c.ok).length;
+    if ( r.ok ) console.log(`
+PASS   ${passed}/${r.cases.length} blank-sheet cases`);
+    else {
+      console.log(`
+FAIL   ${r.failures.length} problem(s)`);
       for ( const f of r.failures ) console.log(`  ${f}`);
       exitCode = 1;
     }

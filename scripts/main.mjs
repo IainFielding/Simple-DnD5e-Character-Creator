@@ -7,6 +7,8 @@ import { warmSources } from "./data/source-cache.mjs";
 import { registerLevelUp, triggerLevelUp, canLevelUp } from "./levelup/intercept.mjs";
 import { canRepair, promptRepair } from "./levelup/repair.mjs";
 import { registerXpNotice } from "./levelup/xp-notice.mjs";
+import { registerPartyButton } from "./build/chat-summary.mjs";
+import { registerBlankBuild, registerBlankBuildMenu } from "./app/blank-build.mjs";
 import { StoreConfigApp } from "./app/store-config.mjs";
 import { MagicShopConfigApp } from "./app/magic-shop-config.mjs";
 import { magicShopSource } from "./data/magic-shop-source.mjs";
@@ -304,6 +306,14 @@ Hooks.once("ready", () => {
   // reason: it self-gates on the `mode` and notice settings, and on being the one active GM.
   registerXpNotice();
 
+  // The creation card's "Add to party" button. Render-time only, and a no-op for anyone who doesn't
+  // own the primary party.
+  registerPartyButton();
+
+  // "Build Character" on a blank character the GM prepared — the way in for a player who may not
+  // create actors. Self-gates on the module offering creation and on ownership of the sheet.
+  registerBlankBuild();
+
   // Pre-warm the shared compendium index in the background, so the builder opens instantly
   // instead of showing its loading screen on first use. Gated to the audiences that will
   // actually open a window — users who can create actors (the launch button), and, when the
@@ -343,6 +353,10 @@ Hooks.on("renderActorDirectory", (_app, html) => {
   injectLaunchButton(rootElement(html));
 });
 
+// "Build Character" on a blank character, in the same right-click menu. At load rather than in
+// `ready` for the reason given on registerBlankBuildMenu: the menu is built before `ready` fires.
+registerBlankBuildMenu();
+
 // Add a right-click "Level Up" entry to character actors in the sidebar. Foundry passes
 // us the menu's option array and we push our own entry onto it; `condition` decides per-actor
 // whether the entry shows, `callback` runs when it's clicked. It rides the same trigger path
@@ -350,30 +364,32 @@ Hooks.on("renderActorDirectory", (_app, html) => {
 Hooks.on("getActorContextOptions", (_directory, options) => {
   if ( game.system?.id !== "dnd5e" ) return;
   if ( !game.settings.get(MODULE_ID, SETTINGS.contextMenu) ) return;
+  // Foundry v14's entry shape — `label`, `visible`, `onClick(event, target)`. The older `name`,
+  // `condition` and `callback` still work but log a deprecation warning, and go in v16.
   options.push({
-    name: t("levelup.button"),
-    icon: "<i class=\"fa-solid fa-trophy-star\"></i>",
-    condition: li => {
+    label: t("levelup.button"),
+    icon: "fa-solid fa-trophy-star",
+    visible: li => {
       // Re-check the gate per-render: the mode setting may have changed since this entry
       // was registered (a reload normally follows, but stay safe).
       if ( !levelUpEnabled() ) return false;
       const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
       return canLevelUp(actor);
     },
-    callback: li => {
+    onClick: (_event, li) => {
       const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
       if ( actor ) triggerLevelUp(actor);
     }
   });
   // Beside it, and only while one of the character's levels has an unanswered choice.
   options.push({
-    name: t("levelup.repair.button"),
-    icon: "<i class=\"fa-solid fa-wrench\"></i>",
-    condition: li => {
+    label: t("levelup.repair.button"),
+    icon: "fa-solid fa-wrench",
+    visible: li => {
       if ( !levelUpEnabled() ) return false;
       return canRepair(game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId));
     },
-    callback: li => {
+    onClick: (_event, li) => {
       const actor = game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
       if ( actor ) promptRepair(actor);
     }

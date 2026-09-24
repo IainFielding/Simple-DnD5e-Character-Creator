@@ -26,6 +26,10 @@ now **131** scenarios; the Arcana Unleashed subclasses are among them.
 
 | Suite | System | Result | Archive |
 | --- | --- | --- | --- |
+| Subclass axis, incremental, level 20 (2026-09-24, Foundry 14.368) | 6.0.5 | **135 / 135 identical, 0 errored** | `sweep-results-605-subclass.jsonl` |
+| Base suite (2026-09-24) | 6.0.5 | **10 / 10 identical** | `base-suite-605.log` |
+| `--blank-build` (2026-09-24) | 6.0.5 | **5 / 5** | `blank-build-605.log` |
+| `--features` (2026-09-24) | 6.0.5 | **8 / 8**, incl. Maximum only level-up HP, origin art for a player without file-browse permission, the level-up-ready card, the sheet button's XP glow and the pip layout; the typed-name case A/B-checked to fail without its fix | `features-605.log` |
 | Subclass axis, incremental, level 20 | 6.0.3 | **131 / 131 identical, 0 errored** — the first sweep with no difference at all | `sweep-results-603-subclass-final.jsonl` |
 | Arcana Unleashed 1.0.1 subclasses, re-swept after the update | 6.0.3 | **8 / 8 identical** | `sweep-results-603-au101-subclass.jsonl` |
 | 2014 Tasha's Rangers and Clerics, level 5 (after the creation optional-feature change) | 6.0.3 | **6 / 6 identical** | `sweep-results-603-optional-2014-l5.jsonl` |
@@ -723,6 +727,8 @@ node run.mjs --sidekicks              # assert Tasha's sidekicks are not offered
 node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
 node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
 node run.mjs --repair                 # skipped-choice builds, repaired, against the full build
+node run.mjs --blank-build            # Build Character on a GM-prepared blank sheet: button, build, rollback, ready-made
+node run.mjs --features               # party switch + card button, Suggest, class guide, typed quick name
 node run.mjs --sweep                  # every subclass in the world, at level 20 (see below)
 node run.mjs --sweep --axis species   # vary the species instead, on a fixed Wizard/Evoker
 node run.mjs --sweep --axis background  # vary the background, taking a feat at every ASI

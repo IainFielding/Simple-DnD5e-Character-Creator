@@ -71,6 +71,28 @@
       },
       "unknownTime": "recently"
     },
+    "classGuide": {
+      "complexity": {
+        "low": "Low complexity",
+        "average": "Average complexity",
+        "high": "High complexity"
+      },
+      "role": {
+        "artificer": "Inventor who infuses gear with magic",
+        "barbarian": "Front-line bruiser powered by rage",
+        "bard": "Versatile performer who inspires allies",
+        "cleric": "Divine caster who heals and protects",
+        "druid": "Nature caster who takes on beast shapes",
+        "fighter": "Weapons expert who can take a hit",
+        "monk": "Fast, mobile unarmed striker",
+        "paladin": "Holy warrior in heavy armour",
+        "ranger": "Wilderness scout and skilled archer",
+        "rogue": "Stealthy skill expert with a deadly strike",
+        "sorcerer": "Born spellcaster who bends their spells",
+        "warlock": "Caster who draws power from a patron",
+        "wizard": "Scholar with the widest range of spells"
+      }
+    },
     "quickBuild": {
       "button": "Quick Build",
       "confirmTitle": "Overwrite current choices?",
@@ -107,6 +129,18 @@
         "levelAria": "Starting level"
       },
       "climbPartial": "Quick Build reached level {reached} of {target}. The wrench on the sheet finishes the rest."
+    },
+    "blankBuild": {
+      "button": "Build Character",
+      "notBlank": "This character already has a class, species or background, so it can't be built from scratch."
+    },
+    "party": {
+      "join": "Add to {party}",
+      "joinNote": "The character joins the party once it has been created.",
+      "add": "Add to {party}",
+      "member": "In {party}",
+      "missing": "There is no primary party, or that character no longer exists.",
+      "failed": "Could not add the character to {party}."
     },
     "pdfExport": {
       "label": "Export Character Sheet PDF",
@@ -181,6 +215,7 @@
         "emberApply": "Finish Character"
       },
       "button": "Level Up",
+      "buttonReady": "Level Up — you have enough XP",
       "multiclass": {
         "score": "{ability} {score}",
         "requires": "{class} requires {abilities}",
@@ -683,7 +718,9 @@
         "manual": "Manual Entry",
         "manualNote": "Type each score in directly. Anything from {min} to {max} is accepted — no budget, no array, no dice.",
         "manualEntry": "{ability} score",
-        "hintManual": "Give every ability a score from {min} to {max}."
+        "hintManual": "Give every ability a score from {min} to {max}.",
+        "suggest": "Suggest for {name}",
+        "suggestHint": "Arranges your scores in this order: {order}"
       },
       "originAbilities": {
         "label": "Ability Increase",
@@ -817,10 +854,11 @@
       },
       "levelUpHpMode": {
         "name": "Level-up hit points",
-        "hint": "Which hit-point options players see when levelling up. Player's choice also offers taking the maximum or typing a value; Average or roll matches the written rules; Average only applies the average automatically.",
+        "hint": "Which hit-point options players see when levelling up. Player's choice also offers taking the maximum or typing a value; Average or roll matches the written rules; Average only and Maximum only apply that value automatically.",
         "choice": "Player's choice (average, max, roll, or manual)",
         "averageRoll": "Average or roll",
-        "average": "Average only"
+        "average": "Average only",
+        "max": "Maximum only"
       },
       "levelUpHpRollToChat": {
         "name": "Post hit-die rolls to chat",
@@ -828,7 +866,7 @@
       },
       "creationSummary": {
         "name": "Character summary to chat",
-        "hint": "When a character is finished, post a card to chat showing who they are — class and level, species, background, ability scores, hit points and armour class. Whisper to the GM keeps it out of the players' chat log.",
+        "hint": "When a character is finished, post a card to chat showing who they are — class and level, species, background, ability scores, hit points and armour class. Whisper to the GM keeps it out of the players' chat log. When the world has a primary party, the card gives anyone who owns the party a button to add the character to it.",
         "public": "Post to everyone",
         "gm": "Whisper to the GM",
         "off": "Don't post"
