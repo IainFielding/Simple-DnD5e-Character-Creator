@@ -1,0 +1,278 @@
+/* Simple D&D 5e Character Creator
+   The creator's styles are one stylesheet cut into the numbered files of styles/creator/,
+   one per area of the UI. module.json loads them in number order, and that order is
+   the cascade: a later file may override an earlier one at equal specificity, exactly
+   as a later rule in a single file would. A new file therefore takes the number of
+   where its rules belong, and must be added to module.json's "styles" list (the unit
+   test test/stylesheets.test.mjs fails if it is not).
+
+   Every rule below is scoped under the .sogrom-creator root class. That scoping is
+   what keeps this stylesheet from leaking into the rest of Foundry's UI, so always
+   add new selectors as descendants of .sogrom-creator rather than styling bare
+   element or generic class names.
+
+   Two window shapes share these rules, and which one you get is decided by the PARTS
+   the application renders (see scripts/app/shell-base.mjs):
+
+     topbar + dossier + stage   character creation, including the Ember hand-off.
+                                A full-width band across the top carrying a progress
+                                meter, a fixed 292px dossier column that is both the
+                                character so far and the step navigation, and the
+                                stage beside it.
+     rail + stage               a level-up. The step list is a horizontal row of
+                                numbered markers in the top band instead, because a
+                                level-up has no "character so far" to show.
+
+   The grid that produces the first shape keys on `:has(.creator-dossier)` rather than
+   on a root class, so a window opts in simply by rendering the dossier part. Note the
+   level-up markers still use `.creator-rail-*` class names — that's historical, from
+   when the stepper was a vertical rail down the left side.
+
+   Theme — "Arcane Midnight": the colour and type system used throughout. Colour
+   carries one meaning and one only — warm (brass, --cc-settled) is a decision the
+   player has already committed, cool (teal, --cc-open) is something still asking for
+   input. Headings use Cinzel (carved-caps look), body text uses Spectral. All of
+   these values come from the CSS custom properties (--cc-*) defined next, so change a
+   colour there and it updates everywhere — which is exactly how styles/ember-skin.css
+   re-themes the whole UI for an Ember world without touching a single rule below.
+
+   Cinzel and Spectral are self-hosted — their @font-face rules live in fonts.css,
+   loaded ahead of this file via module.json so the creator renders correctly
+   offline / on a LAN with no Google Fonts round-trip. */
+
+.sogrom-creator {
+  /* --- Semantic colour: one rule for the whole creator -----------------
+     Warm means settled. Cool means outstanding.
+
+     --cc-settled   brass. Anything the player has already committed: a
+                    selected row, a completed step, a filled dossier line,
+                    a decision whose quota is met.
+     --cc-open      teal. Anything still asking for input: an unresolved
+                    choice, the Next button, the keyboard focus ring.
+
+     Before this the palette carried two accents — violet as "UI accent,
+     primary action and focus ring", gold as "selected" — with no rule
+     mapping either colour to a meaning. On the class step that put five
+     weights of emphasis on screen at once, and the two systems collided
+     directly: the violet focus ring and the gold selection ring drew a
+     double halo around the same element, which `.is-selected:focus-visible
+     { outline: none }` existed purely to suppress. Split by job instead,
+     they can never land on the same control, so that patch is gone — and a
+     player can scan for cool colour to find everything still to do.
+
+     The two differ in hue *and* in value, so the distinction survives
+     colour blindness rather than resting on red/green discrimination.
+     Neither is ever the only cue: a settled row also carries a tick, an
+     outstanding one also carries a count. */
+  --cc-settled: #c9a227;
+  --cc-settled-bright: #e3bf4b;
+  --cc-settled-soft: rgba(201, 162, 39, 0.15);
+  --cc-settled-glow: rgba(201, 162, 39, 0.30);
+  --cc-open: #4fb3a8;
+  --cc-open-bright: #6fd0c5;
+  --cc-open-soft: rgba(79, 179, 168, 0.14);
+  --cc-open-glow: rgba(79, 179, 168, 0.32);
+
+  /* Legacy names, aliased rather than swept, so the three thousand rules
+     below (and the whole level-up sheet) keep working while the meaning
+     changes in exactly one place. Each maps to whichever semantic token
+     matches the job it was already doing:
+       accent → open   (it was the focus ring and the primary action)
+       gold / select → settled  (it was "this one is chosen")
+       good → settled  ("full", "complete" and "settled" are one idea; a
+                        third green accent next to the teal would only be
+                        a third thing to learn). */
+  --cc-accent: var(--cc-open);
+  --cc-accent-soft: var(--cc-open-soft);
+  --cc-accent-glow: var(--cc-open-glow);
+  --cc-gold: var(--cc-settled);
+  --cc-gold-bright: var(--cc-settled-bright);
+  --cc-gold-glow: var(--cc-settled-glow);
+  --cc-select: var(--cc-settled);
+  --cc-select-soft: var(--cc-settled-soft);
+  --cc-good: var(--cc-settled);
+
+  /* --- Surfaces --------------------------------------------------------
+     Two surfaces, and the borders — not the fills — carrying the separation.
+
+     The Codex build stacked an index leaf (#100e17), a page (#15141e) and a
+     margin gloss (#1b1926) within about 5% luminance of each other, and let
+     1px hairlines carry the separation. On an uncalibrated monitor at the
+     brightness Foundry actually gets played at, those collapse into one flat
+     field.
+
+     An earlier pass here claimed to have fixed that by putting the surfaces
+     "roughly 30% apart". They are — in relative luminance (0.0044 vs 0.0081) —
+     but that is 1.07:1 *perceptually*, because both are essentially black. Two
+     near-black fills cannot be told apart at any brightness, and no amount of
+     nudging the hexes changes that without turning the room grey.
+
+     So the fills stay dark and the *edges* do the work, which is also what
+     WCAG 1.4.11 asks for: a component may be bounded by contrast in its border
+     rather than its fill. --cc-line-2 now clears 3:1 against every surface it
+     is drawn on, so the dossier/work split, the work-side column and the option
+     cards all have a boundary that resolves before the fills do. The fills got
+     a small supporting lift so the ladder is still legible on a good monitor.
+
+     The hue also moved off violet-black onto a cool neutral, so the warm
+     parchment text sits against it rather than in it. */
+  --cc-bg: #15161a;
+  --cc-panel: #212429;
+  --cc-panel-2: #2a2e35;
+  /* Ordinary rules: row separators inside a table, block dividers. These are
+     decoration — the thing they divide is identified by its content, not by
+     them — so they aim only to be *visible* (~1.8:1 on panel), not to hit the
+     3:1 component threshold, which at this value would read as a wireframe. */
+  --cc-line: #474d57;
+  /* Structural edges: anything that is the boundary of a component or a
+     surface — the dossier's right edge, the work-side column, the option-card
+     grid, focusable control borders. Clears 3:1 on bg, sunk and panel. */
+  --cc-line-2: #656e7b;
+  /* Warm parchment against the cool ground. */
+  --cc-text: #d9d5cc;
+  /* Secondary text. Clears WCAG AA (4.5:1) on every surface here, including
+     the lightest raised one (--cc-panel-2), where it measures ~4.7:1. */
+  --cc-muted: #9a978f;
+  /* Brightest text, for headings and active labels. */
+  --cc-bright: #f2eee5;
+  /* Placeholders and struck-out values: an em-dash where a step has no answer
+     yet, "Not applicable" on a step this character skips. These used to borrow
+     --cc-line-2, a *border* token, which put real words on screen at 1.8:1.
+     They are text, so they get a text colour: 4.56:1 on --cc-sunk, the only
+     surface they are drawn on. */
+  --cc-text-faint: #767b88;
+  /* Single semantic red for destructive actions and required-field markers, so the
+     two reds that used to drift (the asterisk and the danger button) stay in sync.
+     Lightened from #d9586a, which fell to 4.0:1 on --cc-panel-2 — the surface the
+     required-field asterisk is actually drawn on. */
+  --cc-danger: #ec7082;
+
+  /* The sunk column: the dossier, and the window's own chrome bands. */
+  --cc-sunk: #0d0e11;
+
+  /* Subtle engraved-panel sheen reused across raised surfaces. */
+  /* Tracks --cc-panel-2 → --cc-panel; kept as literals because a gradient between two
+     var()s re-resolves on every paint for no benefit here. */
+  --cc-panel-grad: linear-gradient(180deg, #2a2e35, #1c1f24);
+
+  /* The window's chrome bands — the top bar. A token rather than a literal on the rule
+     because the Ember skin repaints it: overriding a hard-coded gradient meant the same
+     surface was declared in two files, and the second one had to know it was fighting
+     the first. */
+  --cc-chrome-grad: linear-gradient(180deg, #1b1d22, #101116);
+
+  /* Legacy leaf names. The bound-spread metaphor is gone with the third
+     column (see the work-surface section), but these are still referenced by
+     the spell browser, which keeps the two-column pick layout. */
+  --cc-leaf: var(--cc-bg);
+  --cc-leaf-index: var(--cc-sunk);
+  --cc-leaf-gloss: var(--cc-panel);
+  --cc-gutter: linear-gradient(90deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0) 14px);
+  --cc-page-pad: clamp(1.5rem, 3.5vw, 3rem);
+  /* Square is the point: manuscript leaves have square corners, and the 10px
+     rounding is most of what made the old build read as generic dark-mode UI.
+     A single token so the sweep stays reversible. */
+  --cc-radius: 0px;
+  --cc-radius-sm: 0px;
+  /* Pills (chips, tabs, the stepper markers) get their own token so the
+     capsule shapes can be restored independently of the card corners. */
+  --cc-radius-pill: 0px;
+
+  /* Haptic depth — a faint top-edge highlight stamped into raised surfaces so they
+     read as lit from above (machined) rather than printed flat. */
+  --cc-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* Double-bezel — a focal card's own border is the inner core; these layered
+     shadows wrap it in a concentric tray (4px body + 1px edge) so it reads as a
+     glass plate seated in a machined frame. Applied to focal cards only, not the
+     dense scan lists. The element keeps its own border + (distinct) background. */
+  --cc-bezel:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 0 4px var(--cc-panel),
+    0 0 0 5px var(--cc-line-2),
+    0 12px 28px -18px rgba(0, 0, 0, 0.75);
+  /* Spring easing reused for all motion — heavy, physical, never linear/ease-in-out. */
+  --cc-ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --cc-font-heading: 'Cinzel', 'Palatino Linotype', Georgia, serif;
+  --cc-font-body: 'Spectral', 'Palatino Linotype', Georgia, serif;
+
+  color: var(--cc-text);
+  font-family: var(--cc-font-body);
+}
+
+.sogrom-creator * { box-sizing: border-box; }
+
+/* Strip the inherited list-item margin from every list in the creator's own UI.
+   Foundry's core styling gives `li` a bottom margin and removes it on `:last-child`. In a
+   grid or flex list that is not cosmetic: tracks size to an item's *margin* box while the
+   item stretches to the track minus its own margins, so every item sits short of its row
+   and the last one — with no margin to subtract — renders visibly taller than the rest.
+   That is what made the final card in the picker drawer look bigger than the other
+   twenty-three, and resetting the `<ul>` (which each list already did) never reached it.
+   Applied once here so the next list added to this file cannot inherit the bug. */
+.sogrom-creator :is(ul, ol) > li { margin: 0; }
+
+/* Definition lists: take back the colours Foundry sets on the elements themselves.
+   `@layer elements.typography` in foundry2.css contains
+
+       dl dt { color: var(--color-text-emphatic); text-shadow: 1px 1px #000; }
+       dl dd { color: var(--color-text-primary); margin: 0 0 1rem 1rem; }
+
+   and `--color-text-primary` resolves to Foundry's *dark* body colour outside a themed
+   scope. This is the one shape of host rule that inheritance cannot survive: setting
+   `color` on `.sogrom-creator` and letting it flow down does nothing here, because any
+   declaration that matches the element beats an inherited value no matter how specific
+   the ancestor. (Layer order is not the problem — this file is unlayered, so it wins
+   whenever it declares at all. It simply wasn't declaring.)
+
+   It cost the store's budget panel two of its three numbers: "Starting gold" and "Cart"
+   rendered in near-black on the near-black cart, i.e. blank, while "Remaining" showed
+   because it happened to set a gold of its own. Declared once here so a `<dl>` added to
+   this file later starts out visible. */
+.sogrom-creator :is(dt, dd) { color: var(--cc-text); }
+.sogrom-creator dt { text-shadow: none; }
+.sogrom-creator dd { margin-left: 0; }
+/* Prose enriched from the compendium is the exception: its lists are read, not laid out,
+   and want their spacing. Stated explicitly rather than via `revert`, which would restore
+   whatever Foundry happened to set rather than a value we chose. */
+.sogrom-creator .creator-detail-body :is(ul, ol) > li { margin-block: 0.25em; }
+
+/* Placeholder text — pin it to the muted token (which clears AA) at full opacity so
+   it doesn't inherit the browser default grey or Firefox's reduced-opacity placeholder,
+   either of which would drop below the contrast floor. */
+.sogrom-creator ::placeholder { color: var(--cc-muted); opacity: 1; }
+
+/* Keyboard focus ring — one visible, consistent indicator for every interactive
+   control so keyboard and screen-magnifier users can always see where they are.
+   Uses :focus-visible (not :focus) so it shows on Tab/arrow navigation but stays
+   out of the way on mouse clicks. Outline (not box-shadow) so it never collides
+   with the tinted shadows on primary/finish buttons and follows each control's
+   own corner radius. The [tabindex] arm of :is() also lifts this rule's
+   specificity above the per-control :focus rules later in the file. */
+.sogrom-creator :is(a, button, input, select, textarea, [tabindex], [data-action]):focus-visible {
+  outline: 2px solid var(--cc-accent);
+  outline-offset: 2px;
+}
+/* There is deliberately no `.is-selected:focus-visible { outline: none }` here any
+   more. It used to exist because selection and focus were both drawn in the same
+   family of colour, so focusing an already-selected row stacked two rings. Now
+   selection is brass and focus is teal — warm inside, cool outside — and the two
+   read as what they are: "this one is chosen" and "you are here". Suppressing the
+   focus ring on exactly the rows a keyboard user is most likely to be sitting on
+   was always the wrong half of that trade. */
+
+/* Inscriptional caps for every heading inside the creator. Specific rules later
+   in the file (gold section eyebrows, aside titles) still override the colour;
+   this only establishes the family, weight and engraved relief. */
+/* h5 and h6 are in the list for the same reason the `dl` rule above exists: Foundry colours every
+   heading level directly, so any level this selector omits falls through to the host's colour. Our
+   own markup stops at h3, but enriched compendium prose is someone else's HTML and routinely goes
+   deeper. */
+.sogrom-creator :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--cc-font-heading);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--cc-bright);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+

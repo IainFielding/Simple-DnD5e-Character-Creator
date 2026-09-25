@@ -219,11 +219,6 @@ export function readDraft() {
   };
 }
 
-/** Whether the player currently has a draft worth offering. @returns {boolean} */
-export function hasDraft() {
-  return !!readDraft();
-}
-
 /**
  * Forget the player's draft — the build finished, or they chose to throw it away.
  * @returns {Promise<void>}

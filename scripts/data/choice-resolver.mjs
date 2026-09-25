@@ -462,252 +462,281 @@ async function decorateTraitIcons(options) {
     : { ...o, img: (await phbWeaponIcon(o.key)) ?? traitKeyIcon(o.key) }));
 }
 
-/** Parse a single advancement into zero or more requirements, appended to `reqs`. */
+/**
+ * The parsers for each kind of advancement creation surfaces as a choice, tried in order; the first
+ * whose test matches handles the advancement. Order matters in one place: an optional or
+ * replacement grant is recognised by its configuration, not its type, so it is tested before the
+ * plain ItemGrant parser can claim it.
+ * @type {Array<[(adv: object, ctx: object) => boolean, (adv: object, ctx: object, level: number) => Promise<void>]>}
+ */
+const CHOICE_PARSERS = [
+  [adv => adv.type === "Subclass", parseSubclassChoice],
+  [adv => adv.type === "Size", parseSizeChoice],
+  [adv => adv.type === "Trait", parseTraitChoice],
+  [(adv, ctx) => isClassOptionalGrant(adv, ctx.ownerItem), parseOptionalGrantChoice],
+  [adv => adv.type === "ItemGrant", parseSpellAbilityChoice],
+  [adv => adv.type === "ItemChoice", parseItemChoice]
+];
+
+/** Parse a single advancement into zero or more requirements, appended to `ctx.reqs`. */
 async function parseAdvancementChoice(adv, ctx) {
-  const { source, ownerUuid, sel, reqs, expertiseSkillPool, crossTaken, spellAbilityHint, index, ownerItem, rules } = ctx;
-  let level = adv.level ?? 0;
-  if ( level > 1 || !appliesToClass(adv, ownerItem) ) return;
+  const level = adv.level ?? 0;
+  if ( level > 1 || !appliesToClass(adv, ctx.ownerItem) ) return;
+  const parse = CHOICE_PARSERS.find(([test]) => test(adv, ctx))?.[1];
+  await parse?.(adv, ctx, level);
+}
 
-  // Subclass: only reachable for a class that unlocks one at level ≤1 — the 2014-rules Cleric,
-  // Sorcerer and Warlock. Under the 2024 rules every class takes its subclass at level 3, so this
-  // never fires and creation had no reason to handle it; in a world holding 2014 classes it does,
-  // and without this the character was built with no subclass at all.
-  if ( adv.type === "Subclass" ) {
-    // From the owning item rather than `adv.item`: `advancementArray` also yields raw advancement
-    // *data* (no back-reference) when a document arrives un-prepared.
-    const identifier = ownerItem?.system?.identifier ?? ownerItem?.identifier;
-    // Scoped to the class's own edition — a 2014 Cleric must not be offered the 2024 domains, which
-    // grant their features on the 2024 progression. See `SourceIndex#subclasses`.
-    const rules = ownerItem?.system?.source?.rules ?? null;
-    const cards = identifier ? await index?.subclasses(identifier, { rules }) ?? [] : [];
-    if ( !cards.length ) return;
+/**
+ * Subclass: only reachable for a class that unlocks one at level ≤1 — the 2014-rules Cleric,
+ * Sorcerer and Warlock. Under the 2024 rules every class takes its subclass at level 3, so this
+ * never fires and creation had no reason to handle it; in a world holding 2014 classes it does,
+ * and without this the character was built with no subclass at all.
+ */
+async function parseSubclassChoice(adv, ctx, level) {
+  const { source, ownerUuid, sel, reqs, crossTaken } = ctx;
+  // From the owning item rather than `adv.item`: `advancementArray` also yields raw advancement
+  // *data* (no back-reference) when a document arrives un-prepared.
+  const identifier = ctx.ownerItem?.system?.identifier ?? ctx.ownerItem?.identifier;
+  // Scoped to the class's own edition — a 2014 Cleric must not be offered the 2024 domains, which
+  // grant their features on the 2024 progression. See `SourceIndex#subclasses`.
+  const rules = ctx.ownerItem?.system?.source?.rules ?? null;
+  const cards = identifier ? await ctx.index?.subclasses(identifier, { rules }) ?? [] : [];
+  if ( !cards.length ) return;
+  reqs.push(buildChoiceReq({
+    advId: adv._id, source, ownerUuid, type: "Subclass", level,
+    title: advancementTitle(adv) || t("advancement.subclass"), hint: adv.hint, count: 1,
+    options: cards.map(c => ({ key: c.uuid, label: c.name, img: c.img })),
+    sel, crossTaken
+  }));
+}
+
+/**
+ * Size: a species offering a choice of token size (e.g. Small or Medium). A single
+ * fixed size is not a decision, so only pools of more than one size become a requirement.
+ */
+async function parseSizeChoice(adv, ctx, level) {
+  const { source, ownerUuid, sel, reqs, crossTaken } = ctx;
+  const sizes = Array.from(adv.configuration?.sizes ?? []);
+  if ( sizes.length > 1 ) {
+    const options = sizes.map(s => ({ key: s, label: CONFIG.DND5E.actorSizes?.[s]?.label ?? s }));
     reqs.push(buildChoiceReq({
-      advId: adv._id, source, ownerUuid, type: "Subclass", level,
-      title: advancementTitle(adv) || t("advancement.subclass"), hint: adv.hint, count: 1,
-      options: cards.map(c => ({ key: c.uuid, label: c.name, img: c.img })),
-      sel, crossTaken
+      advId: adv._id, source, ownerUuid, type: "Size", level,
+      title: advancementTitle(adv) || t("advancement.size"), hint: adv.hint, count: 1, options, sel, crossTaken
     }));
-    return;
   }
+}
 
-  // Size: a species offering a choice of token size (e.g. Small or Medium). A single
-  // fixed size is not a decision, so only pools of more than one size become a requirement.
-  if ( adv.type === "Size" ) {
-    const sizes = Array.from(adv.configuration?.sizes ?? []);
-    if ( sizes.length > 1 ) {
-      const options = sizes.map(s => ({ key: s, label: CONFIG.DND5E.actorSizes?.[s]?.label ?? s }));
-      reqs.push(buildChoiceReq({
-        advId: adv._id, source, ownerUuid, type: "Size", level,
-        title: advancementTitle(adv) || t("advancement.size"), hint: adv.hint, count: 1, options, sel, crossTaken
-      }));
-    }
-    return;
-  }
+/**
+ * Trait: proficiency / language / expertise picks. One advancement can hold several
+ * independent "choose N from this pool" groups, so each `choices` entry becomes its own row.
+ */
+async function parseTraitChoice(adv, ctx, level) {
+  const { source, ownerUuid, sel, reqs, crossTaken, expertiseSkillPool } = ctx;
+  const mode = adv.configuration?.mode || "default";
+  const isExpertise = mode === "expertise";
+  const choices = Array.from(adv.configuration?.choices ?? []);
+  const grants = new Set(adv.configuration?.grants ?? []);
+  for ( let ci = 0; ci < choices.length; ci++ ) {
+    const c = choices[ci];
+    const pool = Array.from(c.pool ?? []);
+    const count = c.count ?? 1;
+    if ( !count ) continue;
+    const selKey = `${adv._id}#${ci}`;
 
-  // Trait: proficiency / language / expertise picks. One advancement can hold several
-  // independent "choose N from this pool" groups, so each `choices` entry becomes its own row.
-  if ( adv.type === "Trait" ) {
-    const mode = adv.configuration?.mode || "default";
-    const isExpertise = mode === "expertise";
-    const choices = Array.from(adv.configuration?.choices ?? []);
-    const grants = new Set(adv.configuration?.grants ?? []);
-    for ( let ci = 0; ci < choices.length; ci++ ) {
-      const c = choices[ci];
-      const pool = Array.from(c.pool ?? []);
-      const count = c.count ?? 1;
-      if ( !count ) continue;
-      const selKey = `${adv._id}#${ci}`;
-
-      if ( isExpertise ) {
-        // dnd5e intersects an expertise pool with what the *character* is already proficient in, so
-        // `expertiseSkillPool` is the character side — but the advancement's own pool still decides
-        // what kind of proficiency is eligible. A 2024 Rogue pools `skills:*` and may take expertise
-        // in skills alone; the 2014 Rogue pools `[tool:thief, skills:*]` and may take it in thieves'
-        // tools too. Offering the character's whole proficiency set to both would hand a 2024 Rogue
-        // a tool the rules do not allow; offering only skills to both left the 2014 Rogue's second
-        // pick unfillable, and the resolver's fixed-point loop never settled.
-        // The module's own expansion, so a tool key is shaped the same way it is everywhere else
-        // (`expandToolPool` keeps the category prefix — see the tool-proficiency note in the e2e
-        // README, where flattening it broke `unfulfilledChoices`).
-        const expanded = new Set((await expandTraitPool(pool)).map(o => o.key));
-        const options = expertiseSkillPool.filter(o => expanded.has(o.key));
-        const valid = new Set(options.map(o => o.key));
-        if ( sel[selKey] ) sel[selKey] = sel[selKey].filter(k => valid.has(k));
-        const req = buildChoiceReq({
-          advId: adv._id, choiceIndex: ci, source, ownerUuid, type: "Trait", level,
-          title: advancementTitle(adv) || t("advancement.expertise"), hint: adv.hint, count, options, sel, crossTaken,
-          mode
-        });
-        req.isExpertise = true;
-        if ( !options.length ) req.emptyNote = t("choice.emptyNoteSkills");
-        reqs.push(req);
-        continue;
-      }
-
-      let options = await expandTraitPool(pool);
-      options = options.filter(o => !grants.has(o.key));
-      if ( !options.length ) continue;
-      // Drop a pick another source now grants for free, reopening the slot.
-      const allGrants = crossTaken?.grants;
-      if ( allGrants?.size && sel[selKey]?.some(k => allGrants.has(`${mode}|${k}`)) ) {
-        sel[selKey] = sel[selKey].filter(k => !allGrants.has(`${mode}|${k}`));
-      }
-      reqs.push(buildChoiceReq({
+    if ( isExpertise ) {
+      // dnd5e intersects an expertise pool with what the *character* is already proficient in, so
+      // `expertiseSkillPool` is the character side — but the advancement's own pool still decides
+      // what kind of proficiency is eligible. A 2024 Rogue pools `skills:*` and may take expertise
+      // in skills alone; the 2014 Rogue pools `[tool:thief, skills:*]` and may take it in thieves'
+      // tools too. Offering the character's whole proficiency set to both would hand a 2024 Rogue
+      // a tool the rules do not allow; offering only skills to both left the 2014 Rogue's second
+      // pick unfillable, and the resolver's fixed-point loop never settled.
+      // The module's own expansion, so a tool key is shaped the same way it is everywhere else
+      // (`expandToolPool` keeps the category prefix — see the tool-proficiency note in the e2e
+      // README, where flattening it broke `unfulfilledChoices`).
+      const expanded = new Set((await expandTraitPool(pool)).map(o => o.key));
+      const options = expertiseSkillPool.filter(o => expanded.has(o.key));
+      const valid = new Set(options.map(o => o.key));
+      if ( sel[selKey] ) sel[selKey] = sel[selKey].filter(k => valid.has(k));
+      const req = buildChoiceReq({
         advId: adv._id, choiceIndex: ci, source, ownerUuid, type: "Trait", level,
-        title: advancementTitle(adv) || traitChoiceTitle(pool), hint: adv.hint,
-        count, options, sel, crossDedupe: true, dedupeGroup: mode, crossTaken,
-        mode, poolType: (pool[0] ?? "").split(":")[0]
-      }));
-    }
-    return;
-  }
-
-  // Optional class features (Tasha's): a grant the player may decline part of. Applied by default —
-  // both dnd5e and the driver seed it — so the row is complete on sight and never gates Next; it is
-  // here so a 2014 Ranger can take Favored Foe at creation rather than only at a later level-up.
-  if ( isClassOptionalGrant(adv, ownerItem) ) {
-    const req = await optionalGrantReq(adv, { source, ownerUuid, sel, level });
-    if ( req ) reqs.push(req);
-    return;
-  }
-
-  // ItemGrant: items handed out automatically (no pick to make) — except when a granted spell
-  // lets the player choose which ability casts it, which is the only decision we surface here.
-  if ( adv.type === "ItemGrant" ) {
-    const abilities = Array.from(adv.configuration?.spell?.ability ?? []);
-    if ( abilities.length > 1 ) {
-      const options = abilities.map(a => {
-        const opt = { key: a, label: CONFIG.DND5E.abilities?.[a]?.label ?? a };
-        // Mark the class's configured spellcasting ability as the recommended pick.
-        if ( spellAbilityHint && a === spellAbilityHint.ability ) {
-          opt.recommended = true;
-          opt.recommendTip = t("choice.recommendedAbility", { class: spellAbilityHint.className });
-        }
-        return opt;
+        title: advancementTitle(adv) || t("advancement.expertise"), hint: adv.hint, count, options, sel, crossTaken,
+        mode
       });
-      // The advancement's own title is usually the trait name ("Otherworldly Presence"),
-      // which doesn't read as an ability choice. Name it for the granted spell instead, so
-      // it's plainly a spellcasting-ability pick and several from one source stay distinct.
-      const spellNames = [];
-      for ( const ref of Array.from(adv.configuration?.items ?? []) ) {
-        const uuid = typeof ref === "string" ? ref : ref?.uuid;
-        const spell = uuid ? await fromUuid(uuid).catch(() => null) : null;
-        if ( spell ) spellNames.push(spell.name);
-      }
-      const title = spellNames.length
-        ? t("advancement.spellAbilityFor", { spell: spellNames.join(", ") })
-        : t("advancement.spellAbility");
-      reqs.push(buildChoiceReq({
-        advId: adv._id, source, ownerUuid, type: "SpellAbility", level,
-        title, hint: adv.hint, count: 1, options, sel, crossTaken
-      }));
+      req.isExpertise = true;
+      if ( !options.length ) req.emptyNote = t("choice.emptyNoteSkills");
+      reqs.push(req);
+      continue;
     }
-    return;
+
+    let options = await expandTraitPool(pool);
+    options = options.filter(o => !grants.has(o.key));
+    if ( !options.length ) continue;
+    // Drop a pick another source now grants for free, reopening the slot.
+    const allGrants = crossTaken?.grants;
+    if ( allGrants?.size && sel[selKey]?.some(k => allGrants.has(`${mode}|${k}`)) ) {
+      sel[selKey] = sel[selKey].filter(k => !allGrants.has(`${mode}|${k}`));
+    }
+    reqs.push(buildChoiceReq({
+      advId: adv._id, choiceIndex: ci, source, ownerUuid, type: "Trait", level,
+      title: advancementTitle(adv) || traitChoiceTitle(pool), hint: adv.hint,
+      count, options, sel, crossDedupe: true, dedupeGroup: mode, crossTaken,
+      mode, poolType: (pool[0] ?? "").split(":")[0]
+    }));
   }
+}
 
-  // ItemChoice: choose N items/features from a pool (e.g. a feat, or a fighting style).
-  if ( adv.type === "ItemChoice" ) {
-    const cfg = adv.configuration ?? {};
-    // ItemChoice levels live in `choices` keyed by character level; take the lowest ≤ 1.
-    const choiceLevel = Object.keys(cfg.choices ?? {})
-      .map(Number).filter(l => Number.isFinite(l) && l <= 1).sort((a, b) => a - b)[0];
-    if ( choiceLevel === undefined ) return;
+/**
+ * Optional class features (Tasha's): a grant the player may decline part of. Applied by default —
+ * both dnd5e and the driver seed it — so the row is complete on sight and never gates Next; it is
+ * here so a 2014 Ranger can take Favored Foe at creation rather than only at a later level-up.
+ */
+async function parseOptionalGrantChoice(adv, ctx, level) {
+  const { source, ownerUuid, sel, reqs } = ctx;
+  const req = await optionalGrantReq(adv, { source, ownerUuid, sel, level });
+  if ( req ) reqs.push(req);
+}
 
-    // Spell-type ItemChoice — the Magic Initiate shape (choose N cantrips/spells from a class
-    // list). Surfaced as a lightweight `SpellChoice` requirement rather than an item pool: the
-    // dedicated feat-spells step renders it (`spellStep`), and its `ownerUuid` makes the granting
-    // feature a takeover target so the AdvancementManager never prompts for it (§7 of the plan).
-    if ( cfg.type === "spell" ) {
-      const count = Number(cfg.choices[choiceLevel]?.count ?? cfg.choices[choiceLevel] ?? 0);
-      if ( !count ) return;
-      const chosen = sel[adv._id] ?? [];
-      reqs.push({
-        advId: adv._id, selKey: adv._id, source, ownerUuid, type: "SpellChoice", spellStep: true,
-        level: choiceLevel,
-        spellLevel: Number(cfg.restriction?.level ?? 0),
-        count,
-        classList: Array.from(cfg.restriction?.list ?? []).map(k => String(k).replace(/^class:/, "")),
-        abilityKeys: Array.from(cfg.spell?.ability ?? []),
-        title: advancementTitle(adv) || t("advancement.chooseItems"),
-        chosenCount: chosen.length,
-        complete: chosen.length >= count
-      });
-      return;
-    }
-    level = choiceLevel;
-    const levelChoices = cfg.choices[choiceLevel];
-    const count = Number(levelChoices?.count ?? levelChoices ?? 0);
-    if ( !count ) return;
-
-    // Prerequisite gate: an option the character can't legitimately pick is dropped, whether the
-    // bar is a `system.prerequisites.level` above the character's level (a Warlock's level-5
-    // Eldritch Invocation offered at creation) or a `system.prerequisites.items` feature the build
-    // hasn't taken (Improved Pact Weapon needing Pact of the Blade). Creation always builds a
-    // level-1 character (a class-linked ItemChoice may key at level 0, so floor at 1). An option
-    // whose *item* prerequisite the build satisfies is flagged `recommended` — the build unlocked
-    // it, so it earns the "recommended" panel. The native ItemChoice flow skips all of this for its
-    // static pool, which is why ineligible options otherwise leak in.
-    const maxPrereqLevel = choiceLevel || 1;
-    const owned = ctx.owned ?? new Set();
-    // Returns null when the option is gated out; otherwise `{ recommended }` — true when the build
-    // satisfies an item prerequisite the option carries.
-    const gate = (prereq = {}) => {
-      if ( Number(prereq.level ?? 0) > maxPrereqLevel ) return null;
-      const { hasReq, met } = evalItemPrereq(prereq.items, owned);
-      if ( hasReq && !met ) return null;
-      return { recommended: hasReq && met };
-    };
-
-    const options = [];
-    const seen = new Set();
-    // Also track option names: `allowDrops` scans every enabled pack, so an item the pool
-    // already lists (e.g. a PHB-module fighting style) can reappear as a same-named SRD copy
-    // with a different UUID. Dedupe by name too so those don't double up.
-    const seenNames = new Set();
-    const nameKey = n => (n ?? "").trim().toLowerCase();
-    // A non-repeatable feat another origin grants is not a legal pick — see
-    // {@link collectGrantedFeatNames}. A pick of one, made before the granting origin was chosen, is
-    // dropped below so the slot reopens, as a trait pick another source now grants already is.
-    const granted = ctx.grantedFeats ?? new Set();
-    const dropped = new Set();
-    for ( const p of Array.from(cfg.pool ?? []) ) {
-      const uuid = typeof p === "string" ? p : p?.uuid;
-      if ( !uuid || seen.has(uuid) ) continue;
-      const doc = await fromUuid(uuid).catch(() => null);
-      if ( !doc ) continue;
-      if ( granted.has(nameKey(doc.name)) ) { dropped.add(uuid); dropped.add(doc.uuid); continue; }
-      const g = gate(doc.system?.prerequisites);
-      if ( !g ) continue;
-      seen.add(uuid);
-      seenNames.add(nameKey(doc.name));
-      options.push({ key: uuid, uuid, label: doc.name, img: doc.img, recommended: g.recommended });
-    }
-    if ( cfg.allowDrops && cfg.restriction?.subtype ) {
-      for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel, rules) ) {
-        if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
-        if ( granted.has(nameKey(opt.label)) ) { dropped.add(opt.key); dropped.add(opt.uuid); continue; }
-        const g = gate({ items: opt.prereqItems });   // level already filtered by the scan
-        if ( !g ) continue;
-        seen.add(opt.key);
-        seenNames.add(nameKey(opt.label));
-        options.push({ key: opt.key, uuid: opt.uuid, label: opt.label, img: opt.img, recommended: g.recommended });
+/**
+ * ItemGrant: items handed out automatically (no pick to make) — except when a granted spell
+ * lets the player choose which ability casts it, which is the only decision we surface here.
+ */
+async function parseSpellAbilityChoice(adv, ctx, level) {
+  const { source, ownerUuid, sel, reqs, crossTaken, spellAbilityHint } = ctx;
+  const abilities = Array.from(adv.configuration?.spell?.ability ?? []);
+  if ( abilities.length > 1 ) {
+    const options = abilities.map(a => {
+      const opt = { key: a, label: CONFIG.DND5E.abilities?.[a]?.label ?? a };
+      // Mark the class's configured spellcasting ability as the recommended pick.
+      if ( spellAbilityHint && a === spellAbilityHint.ability ) {
+        opt.recommended = true;
+        opt.recommendTip = t("choice.recommendedAbility", { class: spellAbilityHint.className });
       }
-    }
-    const pickKey = k => (typeof k === "string" ? k : k?.uuid);
-    if ( dropped.size && sel[adv._id]?.some(k => dropped.has(pickKey(k))) ) {
-      sel[adv._id] = sel[adv._id].filter(k => !dropped.has(pickKey(k)));
-    }
-    if ( !options.length ) return;
-    options.sort((a, b) => a.label.localeCompare(b.label, game.i18n.lang));
-    const req = buildChoiceReq({
-      advId: adv._id, source, ownerUuid, type: "ItemChoice", level,
-      title: advancementTitle(adv) || t("advancement.chooseItems"), hint: adv.hint, count, options, sel, crossTaken
+      return opt;
     });
-    // Split into a "Recommended" + "Other" panel when the build unlocked any option (an item
-    // prerequisite it satisfies); otherwise leaves the single ungrouped grid untouched.
-    req.groups = groupRecommended(req.options) ?? req.groups;
-    reqs.push(req);
+    // The advancement's own title is usually the trait name ("Otherworldly Presence"),
+    // which doesn't read as an ability choice. Name it for the granted spell instead, so
+    // it's plainly a spellcasting-ability pick and several from one source stay distinct.
+    const spellNames = [];
+    for ( const ref of Array.from(adv.configuration?.items ?? []) ) {
+      const uuid = typeof ref === "string" ? ref : ref?.uuid;
+      const spell = uuid ? await fromUuid(uuid).catch(() => null) : null;
+      if ( spell ) spellNames.push(spell.name);
+    }
+    const title = spellNames.length
+      ? t("advancement.spellAbilityFor", { spell: spellNames.join(", ") })
+      : t("advancement.spellAbility");
+    reqs.push(buildChoiceReq({
+      advId: adv._id, source, ownerUuid, type: "SpellAbility", level,
+      title, hint: adv.hint, count: 1, options, sel, crossTaken
+    }));
   }
+}
+
+/**
+ * ItemChoice: choose N items/features from a pool (e.g. a feat, or a fighting style).
+ */
+async function parseItemChoice(adv, ctx) {
+  const { source, ownerUuid, sel, reqs, crossTaken } = ctx;
+  const cfg = adv.configuration ?? {};
+  // ItemChoice levels live in `choices` keyed by character level; take the lowest ≤ 1.
+  const choiceLevel = Object.keys(cfg.choices ?? {})
+    .map(Number).filter(l => Number.isFinite(l) && l <= 1).sort((a, b) => a - b)[0];
+  if ( choiceLevel === undefined ) return;
+
+  // Spell-type ItemChoice — the Magic Initiate shape (choose N cantrips/spells from a class
+  // list). Surfaced as a lightweight `SpellChoice` requirement rather than an item pool: the
+  // dedicated feat-spells step renders it (`spellStep`), and its `ownerUuid` makes the granting
+  // feature a takeover target so the AdvancementManager never prompts for it (§7 of the plan).
+  if ( cfg.type === "spell" ) {
+    const count = Number(cfg.choices[choiceLevel]?.count ?? cfg.choices[choiceLevel] ?? 0);
+    if ( !count ) return;
+    const chosen = sel[adv._id] ?? [];
+    reqs.push({
+      advId: adv._id, selKey: adv._id, source, ownerUuid, type: "SpellChoice", spellStep: true,
+      level: choiceLevel,
+      spellLevel: Number(cfg.restriction?.level ?? 0),
+      count,
+      classList: Array.from(cfg.restriction?.list ?? []).map(k => String(k).replace(/^class:/, "")),
+      abilityKeys: Array.from(cfg.spell?.ability ?? []),
+      title: advancementTitle(adv) || t("advancement.chooseItems"),
+      chosenCount: chosen.length,
+      complete: chosen.length >= count
+    });
+    return;
+  }
+  const levelChoices = cfg.choices[choiceLevel];
+  const count = Number(levelChoices?.count ?? levelChoices ?? 0);
+  if ( !count ) return;
+
+  // Prerequisite gate: an option the character can't legitimately pick is dropped, whether the
+  // bar is a `system.prerequisites.level` above the character's level (a Warlock's level-5
+  // Eldritch Invocation offered at creation) or a `system.prerequisites.items` feature the build
+  // hasn't taken (Improved Pact Weapon needing Pact of the Blade). Creation always builds a
+  // level-1 character (a class-linked ItemChoice may key at level 0, so floor at 1). An option
+  // whose *item* prerequisite the build satisfies is flagged `recommended` — the build unlocked
+  // it, so it earns the "recommended" panel. The native ItemChoice flow skips all of this for its
+  // static pool, which is why ineligible options otherwise leak in.
+  const maxPrereqLevel = choiceLevel || 1;
+  const owned = ctx.owned ?? new Set();
+  // Returns null when the option is gated out; otherwise `{ recommended }` — true when the build
+  // satisfies an item prerequisite the option carries.
+  const gate = (prereq = {}) => {
+    if ( Number(prereq.level ?? 0) > maxPrereqLevel ) return null;
+    const { hasReq, met } = evalItemPrereq(prereq.items, owned);
+    if ( hasReq && !met ) return null;
+    return { recommended: hasReq && met };
+  };
+
+  const options = [];
+  const seen = new Set();
+  // Also track option names: `allowDrops` scans every enabled pack, so an item the pool
+  // already lists (e.g. a PHB-module fighting style) can reappear as a same-named SRD copy
+  // with a different UUID. Dedupe by name too so those don't double up.
+  const seenNames = new Set();
+  const nameKey = n => (n ?? "").trim().toLowerCase();
+  // A non-repeatable feat another origin grants is not a legal pick — see
+  // {@link collectGrantedFeatNames}. A pick of one, made before the granting origin was chosen, is
+  // dropped below so the slot reopens, as a trait pick another source now grants already is.
+  const granted = ctx.grantedFeats ?? new Set();
+  const dropped = new Set();
+  for ( const p of Array.from(cfg.pool ?? []) ) {
+    const uuid = typeof p === "string" ? p : p?.uuid;
+    if ( !uuid || seen.has(uuid) ) continue;
+    const doc = await fromUuid(uuid).catch(() => null);
+    if ( !doc ) continue;
+    if ( granted.has(nameKey(doc.name)) ) { dropped.add(uuid); dropped.add(doc.uuid); continue; }
+    const g = gate(doc.system?.prerequisites);
+    if ( !g ) continue;
+    seen.add(uuid);
+    seenNames.add(nameKey(doc.name));
+    options.push({ key: uuid, uuid, label: doc.name, img: doc.img, recommended: g.recommended });
+  }
+  if ( cfg.allowDrops && cfg.restriction?.subtype ) {
+    for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel, ctx.rules) ) {
+      if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
+      if ( granted.has(nameKey(opt.label)) ) { dropped.add(opt.key); dropped.add(opt.uuid); continue; }
+      const g = gate({ items: opt.prereqItems });   // level already filtered by the scan
+      if ( !g ) continue;
+      seen.add(opt.key);
+      seenNames.add(nameKey(opt.label));
+      options.push({ key: opt.key, uuid: opt.uuid, label: opt.label, img: opt.img, recommended: g.recommended });
+    }
+  }
+  const pickKey = k => (typeof k === "string" ? k : k?.uuid);
+  if ( dropped.size && sel[adv._id]?.some(k => dropped.has(pickKey(k))) ) {
+    sel[adv._id] = sel[adv._id].filter(k => !dropped.has(pickKey(k)));
+  }
+  if ( !options.length ) return;
+  options.sort((a, b) => a.label.localeCompare(b.label, game.i18n.lang));
+  const req = buildChoiceReq({
+    advId: adv._id, source, ownerUuid, type: "ItemChoice", level: choiceLevel,
+    title: advancementTitle(adv) || t("advancement.chooseItems"), hint: adv.hint, count, options, sel, crossTaken
+  });
+  // Split into a "Recommended" + "Other" panel when the build unlocked any option (an item
+  // prerequisite it satisfies); otherwise leaves the single ungrouped grid untouched.
+  req.groups = groupRecommended(req.options) ?? req.groups;
+  reqs.push(req);
 }
 
 /**

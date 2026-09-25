@@ -300,7 +300,7 @@ function renderRepairButton(root, actor) {
   }
 
   // The same row the trophy uses. A row synthesised for the trophy is ours and has room; the
-  // system's own populated row is shifted left one more icon-width (see creator.css).
+  // system's own populated row is shifted left one more icon-width (see styles/creator/12-levelup.css).
   const systemRow = root.querySelector(".sheet-header-buttons:not(.sogrom-synth-row)");
   const row = systemRow ?? root.querySelector(".sheet-header-buttons") ?? buildHeaderButtonRow(root);
   if ( row ) {
@@ -403,7 +403,7 @@ export function placeHeaderButton(root, { className, icon, label, onClick }) {
     button.innerHTML = iconHtml;
     row.append(button);
     // The populated system row is absolutely positioned with no spare room, so this class shifts
-    // it left one icon-width (see creator.css, which also handles the Action Tracker module's own
+    // it left one icon-width (see styles/creator/12-levelup.css, which also handles the Action Tracker module's own
     // shift). A row we synthesized holds only our button, so it fits without shifting.
     if ( existingRow ) row.classList.add("sogrom-has-levelup");
   } else {

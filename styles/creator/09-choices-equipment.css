@@ -1,0 +1,293 @@
+/* ---------------------------------------------- Choices step
+
+   Gathers every outstanding choice the character's selections create (skill/tool
+   proficiencies, languages, etc.). Choices are grouped into cards by their source
+   (the class, background, or species that introduced them), each listing its options
+   as selectable pills. The equipment picker below shares this step. */
+
+.creator-choices { height: 100%; min-height: 0; overflow-y: auto; }
+/* Keep the checklist to a comfortable reading column centred in the stage, rather than
+   letting rows stretch the full width. The progress bar shares the same column so it lines
+   up with the rows beneath it. */
+.creator-choices-progress,
+.creator-choices-list { max-width: 760px; margin-inline: auto; }
+.creator-choices-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+/* Overall progress bar across the top of the checklist: a thin track that fills as gating
+   decisions are made, turning gold once every one is satisfied, with a "n / m decisions"
+   readout alongside. Mirrors the rail's summary so the player always sees what remains. */
+.creator-choices-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.creator-choices-progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--cc-radius-pill);
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  overflow: hidden;
+}
+.creator-choices-progress-bar {
+  height: 100%;
+  background: var(--cc-select);
+  border-radius: var(--cc-radius-pill);
+  transition: width 0.25s ease;
+}
+.creator-choices-progress-bar.is-full { background: var(--cc-good); }
+.creator-choices-progress-label { font-size: 0.8rem; color: var(--cc-muted); white-space: nowrap; }
+
+/* Guided checklist: each decision is an accordion row inside a panel. Collapsed it reads as
+   a single line — status glyph, origin chip, title, and a count/"Optional" tag — so the whole
+   list of decisions is scannable at a glance; the open row reveals its option pills below. */
+.creator-decision {
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  overflow: hidden;
+  box-shadow: var(--cc-sheen);
+  transition: border-color 0.25s var(--cc-ease), background 0.25s var(--cc-ease);
+}
+.creator-decision.is-open { border-color: var(--cc-select); }
+.creator-decision.is-complete:not(.is-open) { background: var(--cc-panel-2); }
+.creator-decision-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  background: transparent;
+  border: none;
+  color: var(--cc-text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.creator-decision-head:hover { background: var(--cc-panel-2); }
+.creator-decision-status { width: 1rem; text-align: center; color: var(--cc-muted); font-size: 0.85rem; }
+.creator-decision.is-complete .creator-decision-status { color: var(--cc-good); }
+.creator-decision-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  color: var(--cc-muted);
+  font-size: 0.78rem;
+}
+.creator-decision-chip img { width: 22px; height: 22px; border-radius: var(--cc-radius); object-fit: cover; }
+.creator-decision-title { flex: 1; min-width: 0; font-size: 0.95rem; font-weight: 500; }
+.creator-decision-count { font-size: 0.8rem; color: var(--cc-muted); white-space: nowrap; }
+.creator-decision-count.is-complete { color: var(--cc-good); }
+.creator-decision-chevron {
+  color: var(--cc-muted);
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+}
+.creator-decision.is-open .creator-decision-chevron { transform: rotate(180deg); }
+.creator-decision-body { padding: 0 0.9rem 0.9rem 0.9rem; }
+@media (prefers-reduced-motion: reduce) {
+  .creator-choices-progress-bar,
+  .creator-decision-chevron { transition: none; }
+}
+
+.creator-choice-source-img { width: 32px; height: 32px; border-radius: var(--cc-radius); object-fit: cover; }
+.creator-choice { padding: 0.75rem 0; border-top: 1px solid var(--cc-line); }
+.creator-choice:first-of-type { border-top: none; }
+.creator-choice-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.creator-choice-head h3 { margin: 0; font-size: 0.95rem; color: var(--cc-text); }
+.creator-choice-count { font-size: 0.8rem; color: var(--cc-muted); white-space: nowrap; }
+.creator-choice-count.is-complete { color: var(--cc-good); }
+.creator-choice-hint { color: var(--cc-muted); font-size: 0.85rem; margin: 0.4rem 0; }
+.creator-choice-empty { color: var(--cc-muted); font-style: italic; font-size: 0.85rem; }
+.creator-choice-group { margin-top: 0.5rem; }
+.creator-choice-group-label { font-size: 0.75rem; text-transform: uppercase; color: var(--cc-muted); }
+/* Options are rendered as the same image-forward cards as the level-up selections page
+   (`.creator-choice-card`, defined in the level-up section below), sized to the same tiers so
+   the two screens read the same. Creation's mostly-text options (proficiencies, abilities,
+   languages) use the level-up "chip" tier; decisions that carry item art ("choose a feature")
+   get the full standard level-up card. */
+.creator-choices .creator-choice-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+.creator-choices .creator-choice-card {
+  min-height: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  padding: 0.55rem 0.8rem;
+}
+.creator-choices .creator-choice-card-img { width: 40px; height: 40px; }
+.creator-choices .creator-choice-card-name { font-size: 0.9rem; text-align: left; }
+/* Decisions that offer item art (a "choose a feature" pick) match the level-up standard card. */
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img) {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 1rem;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img) .creator-choice-card {
+  min-height: 170px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 1.5rem 1rem;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img) .creator-choice-card-img {
+  width: 72px;
+  height: 72px;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img) .creator-choice-card-name {
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+/* A long iconned pick (Weapon Mastery's many weapons) would sprawl as full 72px cards, so once a
+   grid runs past nine options it drops to the same five-wide chip layout the level-up screen uses —
+   small icon then name. The `:nth-child(10)` probe fires only when a tenth option exists, matching
+   the level-up ">9" threshold; columns step down as the window narrows. */
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) .creator-choice-card {
+  min-height: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) .creator-choice-card-img {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+.creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) .creator-choice-card-name {
+  font-size: 0.82rem;
+  text-align: left;
+  line-height: 1.2;
+  min-width: 0;
+}
+@media (max-width: 1000px) {
+  .creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .creator-choices .creator-choice-grid:has(.creator-choice-card-img):has(> li:nth-child(10)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.creator-choices .creator-choice-card.is-disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* A recommended option (e.g. the class's default spellcasting ability): a soft gold glow, a
+   corner star, and a slow shine sweep so the suggested pick stands out tastefully. */
+.creator-choices .creator-choice-card.is-recommended,
+.creator-levelup-grant .creator-choice-card.is-recommended,
+.creator-levelup-choices .creator-choice-card.is-recommended {
+  overflow: hidden;
+  border-color: var(--cc-gold);
+  box-shadow: 0 0 8px -2px var(--cc-gold);
+}
+/* The recommendation star.
+
+   In the row-shaped cards — the creation choices grid, and the level-up compact/chip densities —
+   it is an inline flex item sitting before the label, so it reads as "★ Charisma" on one line.
+   That is the layout it was written for.
+
+   The default card is a flex *column*, and there the same inline star claimed a line of its own
+   above the label, with the card's 0.85rem gap under it. On the level-up spell-grant ability
+   picker that is the whole bug: Charisma is the recommended ability for a Sorcerer and therefore
+   the only starred option, so it rendered two lines tall — and clipped — beside an Intelligence
+   and a Wisdom that stayed one. A marker must not change the shape of the thing it marks, so in
+   the column card it becomes a corner marker instead, mirroring the tick already pinned opposite
+   it at top-right.
+
+   Top-left is free wherever a star can appear: the "Current"/"Known" badge that also sits there
+   belongs to the owned-card branch of levelup/choices.hbs, which never renders a star. */
+.creator-choice-card-star {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.45rem;
+  flex-shrink: 0;
+  color: var(--cc-gold);
+  font-size: 0.75rem;
+}
+/* Row-shaped cards: back into the flow, ahead of the label, where it always worked. */
+.creator-choices .creator-choice-card-star,
+[data-density="compact"] .creator-choice-card-star,
+[data-density="chip"] .creator-choice-card-star {
+  position: static;
+}
+.creator-choices .creator-choice-card.is-recommended::after,
+.creator-levelup-grant .creator-choice-card.is-recommended::after,
+.creator-levelup-choices .creator-choice-card.is-recommended::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 240, 200, 0.22) 50%, transparent 65%);
+  transform: translateX(-130%);
+  /* Slow cadence: a brief sweep with a long rest between, so the suggested pick is
+     hinted at without a sliver of motion perpetually catching the eye. */
+  animation: cc-recommend-shine 9s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes cc-recommend-shine {
+  0%, 80% { transform: translateX(-130%); }
+  92%, 100% { transform: translateX(130%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .creator-choices .creator-choice-card.is-recommended::after,
+  .creator-levelup-grant .creator-choice-card.is-recommended::after,
+  .creator-levelup-choices .creator-choice-card.is-recommended::after { animation: none; }
+}
+
+/* ---------------------------------------------- Equipment step
+
+   Starting-equipment picker — its own wizard step. Each source (class, background) is a
+   card offering the bundles the player chooses between (tabs), with rows of items,
+   "either/or" pill groups for swappable items, and a gold-piece alternative where the
+   rules allow it. Reads as the rest of the wizard: a centred reading column of panels. */
+
+.creator-equipment { max-width: 760px; margin-inline: auto; }
+.creator-equipment-intro { color: var(--cc-muted); font-size: 0.9rem; margin: 0 0 1.25rem; }
+.creator-equipment-list { display: flex; flex-direction: column; gap: 1rem; }
+
+.creator-equip-source {
+  padding: 1rem 1.25rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+}
+.creator-equip-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.creator-equip-head h2 { margin: 0; font-size: 1.1rem; border: none; }
+.creator-equip-head .creator-choice-source-img { width: 32px; height: 32px; }
+.creator-equip-options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0; }
+.creator-equip-tab {
+  padding: 0.35rem 0.7rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-muted);
+  cursor: pointer;
+}
+.creator-equip-tab.is-selected { border-color: var(--cc-select); color: var(--cc-text); background: var(--cc-select-soft); }
+.creator-equip-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.creator-equip-row { display: flex; align-items: center; gap: 0.5rem; }
+.creator-equip-row img, .creator-equip-pill img { width: 22px; height: 22px; border-radius: var(--cc-radius); object-fit: cover; }
+.creator-equip-orgroup { display: flex; flex-direction: column; gap: 0.35rem; }
+.creator-equip-orlabel { font-size: 0.8rem; color: var(--cc-muted); }
+.creator-equip-orpills { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.creator-equip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  color: var(--cc-text);
+  cursor: pointer;
+}
+.creator-equip-pill.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-equip-gold { color: var(--cc-gold); font-weight: 600; margin: 0.5rem 0 0; }
+

@@ -10,6 +10,7 @@ import { getEnabledPacks } from "./compendium-util.mjs";
 import { invalidateJournalIndex } from "./journal-source.mjs";
 import { invalidateRulesPages } from "./rules-source.mjs";
 import { invalidateArtCache } from "./art-cache.mjs";
+import { invalidatePregenCache } from "./premades.mjs";
 
 /**
  * Shared, warm-once compendium data for the builder.
@@ -157,4 +158,6 @@ export function invalidateSources() {
   // card decides which directory is searched for its banner. Enabling a content module reveals art
   // the last browse could not have seen, so the listings answer to this change like the rest.
   invalidateArtCache();
+  // The Ready-made shelf lists whichever pregen packs are enabled, so it answers to the same change.
+  invalidatePregenCache();
 }

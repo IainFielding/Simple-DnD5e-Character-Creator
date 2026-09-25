@@ -301,23 +301,6 @@ export function cartTotalCp(purchases) {
 }
 
 /**
- * Deduct a cart total from a starting-currency map. When the cart fits, the remainder
- * comes back re-expressed as gp/sp/cp change (the denominations collapse — starting
- * wealth is a fresh grant, not an existing coin pouch); when it doesn't, `spendable` is
- * false and the currency is returned untouched so the caller can decline the purchase.
- * @param {Record<string, number>} currency
- * @param {number} cartCp
- * @returns {{spendable: boolean, remainder: Record<string, number>}}
- */
-export function remainingCurrency(currency, cartCp) {
-  const cost = Math.max(0, Math.round(Number(cartCp) || 0));
-  if ( cost <= 0 ) return { spendable: true, remainder: { ...(currency ?? {}) } };
-  const total = totalCp(currency);
-  if ( cost > total ) return { spendable: false, remainder: { ...(currency ?? {}) } };
-  return { spendable: true, remainder: fromCopper(total - cost) };
-}
-
-/**
  * Re-express everything in an actor's purse in the largest coins it will make, once the build is
  * finished.
  *

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { multiclassBlockers, meetsMulticlassPrereqs, formatBlockers } from "../scripts/levelup/multiclass.mjs";
+import { multiclassBlockers, formatBlockers } from "../scripts/levelup/multiclass.mjs";
 
 /**
  * The rules-as-written multiclass prerequisite — 13+ in the primary ability of both the current
@@ -24,7 +24,6 @@ describe("multiclassBlockers", () => {
   it("passes when both classes' requirements are met", () => {
     const actor = makeActor({ str: 15, int: 13 }, [makeClass("Fighter", ["str"])]);
     expect(multiclassBlockers(actor, makeClass("Wizard", ["int"]))).toEqual([]);
-    expect(meetsMulticlassPrereqs(actor, makeClass("Wizard", ["int"]))).toBe(true);
   });
 
   it("blocks on the new class's unmet requirement", () => {

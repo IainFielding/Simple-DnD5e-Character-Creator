@@ -1,0 +1,244 @@
+/* ==========================================================================
+   Chat summary cards
+   --------------------------------------------------------------------------
+   The one creator stylesheet that is NOT scoped under .sogrom-creator, because
+   it cannot be: these cards render inside Foundry's chat log, far outside the
+   creator window. `.sogrom-chat-card` is the scope instead — every selector
+   below is a descendant of it, so the rules reach our cards and nothing else.
+
+   The chat log follows the *user's* Foundry theme (light or dark), which the
+   creator's fixed Arcane Midnight palette does not. So this block asserts
+   almost no colour: text inherits, and every tint is a translucent wash of
+   `currentColor` or of the module's brass accent, both of which sit correctly
+   on a light and a dark log. Cinzel and Spectral are already loaded globally
+   via module.json, so the card can carry the module's typography for free.
+   ========================================================================== */
+
+.sogrom-chat-card {
+  --sc-brass: #c9a227;
+  font-family: 'Spectral', var(--font-primary, serif);
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* The "Read the Rules" control. Shares the ghost-button look with "Full Details" — to a player they
+   are the same affordance, differing only in which page they open — but sits in the work bar rather
+   than a detail header, so it needs its own margin rather than inheriting that header's gap. */
+.creator-rules-link-btn { margin-left: auto; flex: 0 0 auto; }
+.creator-details-form .creator-rules-link-btn { margin: 0 0 0.6rem; align-self: flex-start; }
+
+/* The XP-ready card is a prompt, not a report: its header carries no bottom rule, since there is no
+   body below it for the rule to separate — just the button. */
+.sogrom-chat-card--prompt .sogrom-chat-head { border-bottom: none; padding-bottom: 0; }
+
+.sogrom-chat-levelup-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid rgba(201, 162, 39, 0.5);
+  border-radius: 3px;
+  background: rgba(201, 162, 39, 0.12);
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.sogrom-chat-levelup-btn:hover { background: rgba(201, 162, 39, 0.22); border-color: var(--sc-brass); }
+.sogrom-chat-levelup-btn i { color: var(--sc-brass); }
+/* The party button sits under the creation card's rows rather than straight under its header. */
+.sogrom-chat-party-btn { margin-top: 0.55rem; }
+/* `display: flex` above out-ranks the user-agent `[hidden]` rule; keep a player from seeing it flash. */
+.sogrom-chat-party-btn[hidden] { display: none; }
+.sogrom-chat-party-btn.is-member { cursor: default; opacity: 0.7; }
+.sogrom-chat-party-btn.is-member:hover { background: rgba(201, 162, 39, 0.12); border-color: rgba(201, 162, 39, 0.5); }
+
+/* --- header: portrait, who they are, what changed ------------------------ */
+
+.sogrom-chat-card .sogrom-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
+}
+
+.sogrom-chat-card .sogrom-chat-portrait {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border: 1px solid rgba(201, 162, 39, 0.5);
+  border-radius: 3px;
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.sogrom-chat-card .sogrom-chat-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.sogrom-chat-card .sogrom-chat-eyebrow {
+  font-family: 'Cinzel', var(--font-primary, serif);
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sc-brass);
+}
+
+/* `h3` inside a chat message picks up Foundry's own heading rules, which carry a
+   border and margins this layout does not want — hence the explicit reset. */
+.sogrom-chat-card .sogrom-chat-name {
+  font-family: 'Cinzel', var(--font-primary, serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.sogrom-chat-card .sogrom-chat-sub,
+.sogrom-chat-card .sogrom-chat-level {
+  font-size: 0.82rem;
+  opacity: 0.8;
+}
+
+/* --- ability strip (creation card only) ---------------------------------- */
+
+.sogrom-chat-card .sogrom-chat-abilities {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sogrom-chat-card .sogrom-chat-ability {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.05rem;
+  padding: 0.3rem 0.1rem;
+  border: 1px solid rgba(127, 127, 127, 0.28);
+  border-radius: 3px;
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.sogrom-chat-card .sogrom-chat-ability-abbr {
+  font-family: 'Cinzel', var(--font-primary, serif);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.sogrom-chat-card .sogrom-chat-ability-score {
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sogrom-chat-card .sogrom-chat-ability-mod {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--sc-brass);
+}
+
+/* --- label/value rows ---------------------------------------------------- */
+
+.sogrom-chat-card .sogrom-chat-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+}
+
+.sogrom-chat-card .sogrom-chat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  padding: 0.12rem 0;
+  border-bottom: 1px dotted rgba(127, 127, 127, 0.3);
+}
+
+.sogrom-chat-card .sogrom-chat-row:last-child { border-bottom: none; }
+
+.sogrom-chat-card .sogrom-chat-row dt {
+  opacity: 0.75;
+  margin: 0;
+  font-weight: 400;
+}
+
+.sogrom-chat-card .sogrom-chat-row dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- feature / spell lists (level-up card only) -------------------------- */
+
+.sogrom-chat-card .sogrom-chat-list-title {
+  font-family: 'Cinzel', var(--font-primary, serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sc-brass);
+  margin: 0 0 0.15rem;
+  padding: 0;
+  border: none;
+}
+
+.sogrom-chat-card .sogrom-chat-list ul {
+  margin: 0;
+  padding-left: 1.05rem;
+  font-size: 0.85rem;
+}
+
+.sogrom-chat-card .sogrom-chat-list li { margin: 0; }
+
+/* --- links --------------------------------------------------------------
+   Everything the card names that has a compendium entry behind it is a content
+   link (see templates/chat/value.hbs). Foundry's global styling for those is a
+   boxed chip — its own background, border, padding and radius — sized for a link
+   sitting in a paragraph of journal prose. A card that is mostly a list of names
+   turns into a wall of chips under it, so the box comes off and what is left is
+   text that happens to be clickable.
+
+   Only what actually applies. These anchors are written by our own template, not
+   produced by Foundry's enricher, so they carry no `<i>` glyph to hide and are
+   never given the `.broken` class — rules for either would be dead the day they
+   were written.
+
+   No fixed colours: the chat log follows the *user's* Foundry theme, so the
+   resting state inherits and only the hover asserts the card's own brass, which
+   reads on a light and a dark log alike. */
+.sogrom-chat-card .content-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  /* Faint enough to read as texture rather than as a row of blue links, which is
+     what a card with a dozen of them would otherwise look like. */
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+.sogrom-chat-card .content-link:hover {
+  color: var(--sc-brass);
+  text-decoration-color: var(--sc-brass);
+}
+

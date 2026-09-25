@@ -4,8 +4,7 @@ import {
   PHYSICAL_TYPES, sanitizeEntry, entryFromItem, hydrateEntries,
   effectiveCp, parsePriceInput, cpToPriceParts, priceCp, formatCp
 } from "../data/store-source.mjs";
-
-const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
+import { InventoryConfigApp } from "./inventory-config-base.mjs";
 
 /** Currency keys offered by the override inputs when the system config is unavailable. */
 const FALLBACK_DENOMINATIONS = ["pp", "gp", "ep", "sp", "cp"];
@@ -29,7 +28,7 @@ const FALLBACK_DENOMINATIONS = ["pp", "gp", "ep", "sp", "cp"];
  * into nested objects. Only `enabled` and `priceMultiplier` are real form fields; the rows
  * are read by `data-` attribute instead.
  */
-export class StoreConfigApp extends HandlebarsApplicationMixin(ApplicationV2) {
+export class StoreConfigApp extends InventoryConfigApp {
 
   static DEFAULT_OPTIONS = {
     id: "sogrom-store-config",
@@ -68,9 +67,6 @@ export class StoreConfigApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** The live search needle, restored into the input after every re-render. */
   #search = "";
-
-  /** Whether the root drag-and-drop listeners are attached (the form element persists). */
-  #dndWired = false;
 
   /** @override */
   async _prepareContext() {
@@ -122,7 +118,7 @@ export class StoreConfigApp extends HandlebarsApplicationMixin(ApplicationV2) {
       img: entry.img,
       broken: !resolved,
       hidden: entry.hidden,
-      sourceLabel: this.#sourceLabel(entry.uuid),
+      sourceLabel: this._sourceLabel(entry.uuid),
       basePrice: entry.baseCp > 0 ? formatCp(entry.baseCp) : "—",
       overrideValue: override?.value ?? "",
       effective: formatCp(effectiveCp(entry, this.#multiplier)),
@@ -135,31 +131,11 @@ export class StoreConfigApp extends HandlebarsApplicationMixin(ApplicationV2) {
     try { return fromUuidSync(uuid); } catch { return null; }
   }
 
-  /** Where a row's item lives, for the badge under its name: the pack's title, or the world. */
-  #sourceLabel(uuid) {
-    if ( uuid.startsWith("Compendium.") ) {
-      const [, pkg, packName] = uuid.split(".");
-      return game.packs.get(`${pkg}.${packName}`)?.title ?? `${pkg}.${packName}`;
-    }
-    return t("storeConfig.worldSource");
-  }
-
   /** @override */
   _onRender(context, options) {
     super._onRender(context, options);
-    const root = this.element;
-    // The form element persists across re-renders, so the drop zone is wired once; the
-    // part content (and with it the search input) is rebuilt every render, so that isn't.
-    if ( !this.#dndWired ) {
-      this.#dndWired = true;
-      root.addEventListener("dragover", ev => { ev.preventDefault(); root.classList.add("is-dragover"); });
-      root.addEventListener("dragleave", ev => {
-        if ( ev.relatedTarget && root.contains(ev.relatedTarget) ) return;
-        root.classList.remove("is-dragover");
-      });
-      root.addEventListener("drop", ev => this.#onDrop(ev));
-    }
-    const search = root.querySelector("[data-inv-search]");
+    // The part content (and with it the search input) is rebuilt every render.
+    const search = this.element.querySelector("[data-inv-search]");
     if ( search ) {
       search.value = this.#search;
       search.addEventListener("input", () => this.#applySearch(search.value));
@@ -202,13 +178,10 @@ export class StoreConfigApp extends HandlebarsApplicationMixin(ApplicationV2) {
    * An item dropped anywhere on the window joins the inventory: Foundry's drag payload is
    * resolved back to the item, validated as priced physical gear, deduped by uuid, and
    * snapshotted into a row. Nothing is saved yet — the drop only edits the working copy.
+   * @override
    */
-  async #onDrop(event) {
-    event.preventDefault();
-    this.element.classList.remove("is-dragover");
-    let data = null;
-    try { data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event); } catch { data = null; }
-    if ( data?.type !== "Item" ) return;
+  async _onDropData(data) {
+    if ( data.type !== "Item" ) return;
     const item = await Item.implementation.fromDropData(data).catch(() => null);
     if ( !item ) return void ui.notifications.warn(t("storeConfig.dropNotItem"));
     if ( !PHYSICAL_TYPES.includes(item.type) ) {
@@ -229,10 +202,9 @@ export class StoreConfigApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** Restore the factory default list (working copy only — Save still decides). */
   static async #onResetDefaults() {
-    const proceed = await DialogV2.confirm({
-      window: { title: t("storeConfig.reset.title"), icon: "fa-solid fa-rotate-left" },
-      content: `<p>${t("storeConfig.reset.body")}</p>`,
-      rejectClose: false
+    const proceed = await this._confirm({
+      title: t("storeConfig.reset.title"), icon: "fa-solid fa-rotate-left",
+      content: `<p>${t("storeConfig.reset.body")}</p>`
     });
     if ( !proceed ) return;
     this.#syncFormToWorkingCopy();

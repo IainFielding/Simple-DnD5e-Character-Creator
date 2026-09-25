@@ -103,7 +103,7 @@ export function levelStep(level, className = "") {
             // The header pill: a count/value while choosing, a tick once the block is satisfied.
             status: part.blockStatus ?? null,
             showStatus: complete || (part.blockStatus != null),
-            // Drives the card/icon size tier for option grids (see creator.css [data-density]).
+            // Drives the card/icon size tier for option grids (see styles/creator/09-choices-equipment.css [data-density]).
             density: part.density ?? "standard",
             ...part,
             // After the spread: the block's own identity and state win over the component's raw data.

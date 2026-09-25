@@ -1,0 +1,157 @@
+/* ---------------------------------------------- Magic items
+
+   Item rarity as a text colour, shared by the Magic Items step, its review panel and the GM's
+   Magic Item Shop window. The hues are taken verbatim from sogrom-simple-dnd5e-magic-shop
+   (styles/shop.css), itself taken from sogrom-dms-toolkit, so an item wears the same colour
+   everywhere: green, blue, purple, orange, gold. Each token is an RGB triple so a rule can
+   pick its own alpha.
+
+   Common gets no rule. Its shop colour is ivory, which is the plain text colour on our dark
+   ground anyway and unreadable on a light one. The selectors are doubled with the
+   content-link rules they override, which would otherwise repaint the name in --cc-text. */
+:root {
+  --cc-rarity-uncommon: 0, 255, 0;
+  --cc-rarity-rare: 0, 128, 255;
+  --cc-rarity-veryrare: 153, 51, 255;
+  --cc-rarity-legendary: 255, 128, 0;
+  --cc-rarity-artifact: 255, 225, 0;
+}
+.cc-rarity-text.rarity-uncommon,
+.creator-store-row .content-link.cc-rarity-text.rarity-uncommon,
+.creator-store-cart-row .content-link.cc-rarity-text.rarity-uncommon,
+.creator-review .content-link.cc-rarity-text.rarity-uncommon { color: rgb(var(--cc-rarity-uncommon)); }
+.cc-rarity-text.rarity-rare,
+.creator-store-row .content-link.cc-rarity-text.rarity-rare,
+.creator-store-cart-row .content-link.cc-rarity-text.rarity-rare,
+.creator-review .content-link.cc-rarity-text.rarity-rare { color: rgb(var(--cc-rarity-rare)); }
+.cc-rarity-text.rarity-veryrare,
+.creator-store-row .content-link.cc-rarity-text.rarity-veryrare,
+.creator-store-cart-row .content-link.cc-rarity-text.rarity-veryrare,
+.creator-review .content-link.cc-rarity-text.rarity-veryrare { color: rgb(var(--cc-rarity-veryrare)); }
+.cc-rarity-text.rarity-legendary,
+.creator-store-row .content-link.cc-rarity-text.rarity-legendary,
+.creator-store-cart-row .content-link.cc-rarity-text.rarity-legendary,
+.creator-review .content-link.cc-rarity-text.rarity-legendary { color: rgb(var(--cc-rarity-legendary)); }
+.cc-rarity-text.rarity-artifact,
+.creator-store-row .content-link.cc-rarity-text.rarity-artifact,
+.creator-store-cart-row .content-link.cc-rarity-text.rarity-artifact,
+.creator-review .content-link.cc-rarity-text.rarity-artifact { color: rgb(var(--cc-rarity-artifact)); }
+/* Hover still lifts to gold, as every other shelf name does. */
+.creator-store-row .content-link.cc-rarity-text:hover,
+.creator-store-cart-row .content-link.cc-rarity-text:hover { color: var(--cc-gold); }
+
+/* Collapsible shelf sections. Closed by default so a long shop scrolls as a list of headings; the
+   whole heading is the toggle. While a search is typed the shell marks the shelf `is-filtering`,
+   and every section with a match shows its rows, so a search never hides what it found. */
+.creator-magic-group-toggle {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.creator-magic-group-toggle:hover { color: var(--cc-text); }
+.creator-magic-group-toggle:focus-visible { outline: 2px solid var(--cc-accent); outline-offset: 2px; }
+.creator-magic-group-chevron { width: 0.8em; transition: transform 0.15s var(--cc-ease); }
+.creator-magic-group.is-open .creator-magic-group-chevron,
+.creator-store-shelf.is-filtering .creator-magic-group-chevron { transform: rotate(90deg); }
+.creator-magic-group-count { font-weight: 400; color: var(--cc-muted); letter-spacing: 0; }
+.creator-magic-group-picked { margin-left: auto; color: var(--cc-gold); letter-spacing: 0; }
+.creator-magic-group:not(.is-open) .creator-store-list { display: none; }
+.creator-store-shelf.is-filtering .creator-magic-group .creator-store-list { display: grid; }
+.creator-magic-group + .creator-magic-group { margin-top: 0.3rem; }
+
+/* The step's loading panel sits in the shelf column, so the aside stays usable while it loads. */
+.creator-magic-loading { min-height: 12rem; }
+
+.creator-magic-slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.creator-magic-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--cc-text);
+}
+.creator-magic-slot-count { color: var(--cc-muted); font-variant-numeric: tabular-nums; }
+.creator-magic-slot.is-full { opacity: 0.6; }
+.creator-magic-slots-hint { margin: 0.3rem 0 0.4rem; color: var(--cc-muted); font-size: 0.72rem; }
+.creator-magic-die { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; }
+/* The bonus-gold roll, before it is made: a small button in the gold panel, styled like the HP roll. */
+.creator-magic-roll-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: auto;
+  padding: 0.2rem 0.7rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-gold-bright);
+  font-weight: 600;
+  cursor: pointer;
+}
+.creator-magic-roll-btn:hover { border-color: var(--cc-select); background: var(--cc-select-soft); }
+
+/* The GM's Magic Item Shop window: Foundry chrome, like the store window above. */
+.sogrom-magic-config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  height: 100%;
+  min-height: 0;
+}
+.sogrom-magic-shop-config.is-dragover .sogrom-magic-config-fields {
+  outline: 2px dashed var(--color-border-highlight, #ff6400);
+  outline-offset: -2px;
+  border-radius: var(--cc-radius);
+}
+.sogrom-magic-tabs { flex: 0 0 auto; }
+.sogrom-magic-tabs .item { cursor: pointer; }
+.sogrom-magic-tab-count { font-size: 0.75rem; opacity: 0.7; margin-left: 0.25rem; }
+.sogrom-magic-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.sogrom-magic-panel[hidden] { display: none; }
+.sogrom-magic-panel > .hint { margin: 0; }
+
+.sogrom-magic-table-scroll { overflow-x: auto; }
+.sogrom-magic-table { margin: 0; width: 100%; border-collapse: collapse; }
+.sogrom-magic-table th { text-align: left; font-size: 0.75rem; padding: 0.2rem 0.25rem; white-space: nowrap; }
+.sogrom-magic-table td { padding: 0.2rem 0.25rem; }
+.sogrom-magic-table input[type="number"] { width: 4.2em; text-align: right; }
+.sogrom-magic-table tbody tr { border-top: 1px solid var(--color-border-light-2, rgba(120, 120, 120, 0.3)); }
+.sogrom-magic-range { font-size: 0.8rem; white-space: nowrap; opacity: 0.8; }
+.sogrom-magic-table-actions { display: flex; justify-content: flex-end; }
+.sogrom-magic-table-actions button { width: auto; }
+
+.sogrom-magic-inventory .sogrom-store-inv-toolbar select { flex: 0 0 auto; width: auto; }
+.sogrom-magic-counts { margin: 0; font-size: 0.8rem; opacity: 0.8; }
+.sogrom-magic-group { border-top: 1px solid var(--color-border-light-2, rgba(120, 120, 120, 0.3)); }
+.sogrom-magic-group.is-hidden { display: none; }
+.sogrom-magic-group > summary { cursor: pointer; padding: 0.35rem 0.2rem; font-weight: 600; }
+.sogrom-magic-group-count { font-weight: 400; font-size: 0.75rem; opacity: 0.7; }
+.sogrom-magic-rows { list-style: none; margin: 0; padding: 0 0 0.3rem; }
+.sogrom-magic-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0.2rem; }
+.sogrom-magic-row.is-hidden { display: none; }
+.sogrom-magic-row img { width: 28px; height: 28px; border-radius: var(--cc-radius); object-fit: cover; flex: 0 0 auto; }
+.sogrom-magic-row-main { flex: 1 1 auto; min-width: 0; }
+.sogrom-magic-row.is-broken .sogrom-magic-row-name { opacity: 0.6; text-decoration: line-through; }
+.sogrom-magic-row.is-broken .fa-link-slash { color: var(--color-level-error, #ce0707); margin-left: 0.3rem; }
+.sogrom-magic-row-hide { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.75rem; }
+.sogrom-magic-drop-breakdown { margin: 0.25rem 0; padding-left: 1.2rem; }
+

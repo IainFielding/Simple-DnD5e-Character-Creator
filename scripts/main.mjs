@@ -61,6 +61,7 @@ Hooks.once("init", () => {
     // and level-up spell steps, so the two screens can't drift apart.
     tpl("parts/spell-filters.hbs"),
     tpl("parts/spell-row.hbs"),
+    tpl("parts/spell-detail-head.hbs"),
     tpl("parts/spell-list-notice.hbs"),
     // Spells a feat hands out, shown on the level-up spell page. Registered here with the other
     // spell partials because a partial is resolved from the registry at render time, not fetched.

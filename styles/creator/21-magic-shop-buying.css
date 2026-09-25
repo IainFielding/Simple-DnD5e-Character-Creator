@@ -1,0 +1,52 @@
+/* ---- Buying in the magic shop -------------------------------------------------------------
+   The rarity slots and the purse are two different budgets, and the layout has to say so: a
+   player who reads "3 left" as gold rather than as uncommon slots will make a pick they cannot
+   undo. Hence a separate panel with its own heading and its own sums, below the slots. */
+.creator-magic-buy { display: flex; align-items: center; gap: 0.3rem; margin-left: 0.5rem; }
+.creator-magic-buy-btn { font-size: 0.78rem; padding: 0.2rem 0.55rem; white-space: nowrap; }
+.creator-magic-buy-btn:disabled { opacity: 0.4; cursor: default; }
+
+.creator-magic-purse {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius-sm);
+  background: var(--cc-sunk);
+}
+.creator-magic-purse.is-over { border-color: var(--cc-danger); }
+.creator-magic-purse-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-family: var(--cc-font-heading);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+.creator-magic-purse-sums {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.6rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+}
+.creator-magic-purse-sums dt { color: var(--cc-muted); }
+.creator-magic-purse-sums dd { margin: 0; text-align: right; color: var(--cc-settled); }
+.creator-magic-purse.is-over .creator-magic-purse-sums dd:last-of-type { color: var(--cc-danger); }
+.creator-magic-cart-price { color: var(--cc-muted); font-size: 0.78rem; }
+
+/* The "Bought" heading inside the review's magic-items block, and the bill beside it. */
+.creator-review-subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.7rem 0 0.35rem;
+  font-family: var(--cc-font-heading);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+.creator-review-subhead .creator-review-gold { font-size: 0.8rem; letter-spacing: 0; }

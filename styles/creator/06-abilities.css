@@ -1,0 +1,210 @@
+/* ---------------------------------------------- Abilities
+
+   The ability-score step. A row of method tabs (point-buy, standard array, etc.)
+   sits above either a points counter or a pool of draggable score chips, followed
+   by the six ability rows where scores are assigned. */
+
+.creator-method-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+/* All four method pills are the same size, each on one line.
+
+   The labels are wildly uneven — "Roll" against "Standard Array" — so pills sized to their own
+   text came out ragged, and once House Rules adds Manual Entry as a fourth, three of the four
+   wrapped to two lines while "Roll" stayed on one. `flex: 1 1 0` makes the row divide evenly, so
+   every pill takes the width of the widest label; `nowrap` keeps each label on its single line.
+   The slightly smaller type and tighter side padding buy back the width that costs. */
+.creator-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  color: var(--cc-muted);
+  cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
+}
+.creator-tab:hover:not(.is-active) { border-color: var(--cc-select); color: var(--cc-text); }
+.creator-tab:active { transform: scale(0.97); }
+.creator-tab.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
+
+/* The allocator's head: title on the left, method tabs pushed to the right. */
+.creator-abilities-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+.creator-abilities-head .creator-work-block-title { margin: 0; }
+.creator-abilities-head .creator-method-tabs { margin: 0 0 0 auto; }
+
+/* --- The point-buy budget ---
+   A bar plus the numbers, rather than the numbers alone.
+
+   Point-buy used to show one large figure counting down. That answers "how many
+   points are left" but not "how far through the budget am I", which is the question
+   a player is actually asking while they push scores around. The bar is the sense of
+   a resource draining; the figures stay for the exact answer. Brass, because what the
+   fill measures is what has been committed. */
+.creator-budget { margin-bottom: 1rem; }
+.creator-budget-track {
+  position: relative;
+  height: 8px;
+  background: var(--cc-sunk);
+  border: 1px solid var(--cc-line);
+}
+.creator-budget-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--cc-settled);
+  transition: width 0.18s var(--cc-ease);
+}
+.creator-budget-read {
+  margin: 0.45rem 0 0;
+  font-size: 0.85rem;
+  color: var(--cc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.creator-points-spent { color: var(--cc-settled); font-weight: 700; font-size: 1.05rem; }
+/* Points still to spend: outstanding, so teal — until there are none, at which point
+   the whole thing is settled and it turns brass with the rest of the step. */
+.creator-points-value { font-size: 1.05rem; font-weight: 700; color: var(--cc-open); }
+.creator-points-value.is-zero { color: var(--cc-settled); }
+.creator-points-label { color: var(--cc-muted); }
+
+/* The origin-increase panels still use the plain counter (they allocate one or two
+   points, where a bar would be three-quarters empty and say nothing). */
+.creator-points { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 1rem; }
+.creator-points .creator-points-value { font-size: 1.6rem; }
+
+/* Available-score pool — sits in the same slot point-buy uses for "points remaining". */
+.creator-pool {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.creator-pool-chip {
+  min-width: 2.4rem;
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--cc-gold);
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  font-variant-numeric: tabular-nums;
+  cursor: grab;
+  box-shadow: var(--cc-sheen);
+  transition: opacity 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    transform 0.25s var(--cc-ease);
+}
+.creator-pool-chip:hover { border-color: var(--cc-select); transform: translateY(-2px); }
+.creator-pool-chip.is-dragging { opacity: 0.5; cursor: grabbing; }
+/* A value already assigned to an ability dims out, so the remaining pool reads at a glance. */
+.creator-pool-chip.is-used { opacity: 0.3; color: var(--cc-muted); }
+/* The pool is a drop target too: dragging an assigned value back here frees it. */
+.creator-pool.is-dragover { outline: 2px dashed var(--cc-select); outline-offset: 4px; border-radius: var(--cc-radius); }
+
+.creator-ability-list { list-style: none; margin: 0; padding: 0; max-width: 520px; }
+.creator-ability-row {
+  display: grid;
+  /* minmax(0, …) lets the name column shrink below its text's min-content width; without it a
+     long label (Constitution) pushes its row's stepper out of the shared vertical line the other
+     rows' steppers sit on. The name span ellipsizes instead of shoving the controls around. */
+  grid-template-columns: minmax(0, 1fr) auto 3rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.5rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  box-shadow: var(--cc-sheen);
+  transition: border-color 0.25s var(--cc-ease), background 0.25s var(--cc-ease);
+}
+.creator-ability-row.is-assigned { border-color: var(--cc-select); }
+/* Highlight an ability row while a pooled score is dragged over it. */
+.creator-ability-row.is-dragover { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-ability-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.creator-ability-mod { text-align: right; color: var(--cc-muted); font-variant-numeric: tabular-nums; }
+
+.creator-stepper { display: flex; align-items: center; gap: 0.75rem; }
+.creator-step-btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--cc-radius);
+  border: 1px solid var(--cc-line);
+  background: var(--cc-panel-2);
+  color: var(--cc-text);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.creator-step-btn:hover:not(:disabled) { border-color: var(--cc-accent); }
+.creator-step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+/* Fixed width + tabular digits so every row's score box is identical — the -/score/+ controls
+   line up in clean vertical columns instead of drifting with each number's natural width. */
+.creator-ability-score {
+  width: 2.4rem;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.creator-assign {
+  padding: 0.35rem 0.6rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-text);
+}
+
+/* Manual entry: a plain number box where the stepper or the pool select sits in the other
+   methods, sized to match the score box beside it so the three panels share one silhouette. */
+.creator-manual-note { margin: 0 0 0.9rem; color: var(--cc-muted); font-size: 0.9rem; }
+.creator-manual-score {
+  width: 4.5rem;
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-text);
+}
+.creator-manual-score:focus { border-color: var(--cc-accent); outline: none; }
+.creator-ability-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.25rem; }
+/* Suggest takes a row of its own above Roll and Reset. Its label carries the class name
+   ("Suggest for Artificer"), which cannot share the aside's width with two more buttons. */
+.creator-ability-actions .creator-ability-suggest { flex-basis: 100%; }
+/* Keep both buttons on one row inside the narrow aside: shrink padding and let them
+   share the width rather than wrapping Reset onto a second line. */
+.creator-ability-actions .creator-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: center;
+  padding: 0.55rem 0.7rem;
+  white-space: nowrap;
+}
+

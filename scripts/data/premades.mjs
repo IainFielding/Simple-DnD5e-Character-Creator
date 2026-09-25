@@ -1,6 +1,7 @@
 import { log, t } from "../config.mjs";
 import { slugify } from "./origin-art.mjs";
 import { isPlaceholderName } from "../state/creator-state.mjs";
+import { getEnabledPacks } from "./compendium-util.mjs";
 
 /**
  * Ready-made characters: the third way into the creator.
@@ -168,6 +169,10 @@ export async function foundryPregens() {
 async function readPregenPack({ pack: packId, idHint, describe = true }) {
   const pack = game.packs?.get(packId);
   if ( !pack ) return [];
+  // A pack the GM has switched off in dnd5e's source configuration is not offered, as it isn't on
+  // any other shelf — installed is not the same as wanted.
+  const enabled = getEnabledPacks();
+  if ( enabled && !enabled.has(packId) ) return [];
   try {
     const index = await pack.getIndex();
     const wanted = [...index].filter(e => {

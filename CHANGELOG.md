@@ -30,17 +30,17 @@ All notable changes to the Simple D&D Character Creator.
 - **Maximum only hit points.** A fourth choice for the level-up hit points setting: every level
   gained takes the full hit die, applied automatically, including the levels Quick Build climbs
   for you. The default is still Player's choice.
-- **The Wizard's spellbook.** A Wizard now gets a full spellbook in both editions: six spells at
-  1st level and two more at every level after, with only its prepared allowance of them prepared.
-  The rest go on the sheet unprepared, the way the D&D system's own premade wizards hold them, so
-  a 5th-level Wizard has 14 spells rather than 9. The Spells step has a **Spellbook** tab for
-  writing spells into the book and a **Prepare** tab for choosing which of them are prepared. New
-  spells are prepared first while there's room, so a player who never opens Prepare still ends up
-  with a full set. On a level-up the Prepare tab lists the whole book, old spells and new, and
-  nothing in the book is ever deleted. Quick Build and its level climb fill the book too. Spells you
-  copy into the book during play are extra and never reduce the two free spells a level. A Wizard
-  built before this version is offered the spells its book is missing on its next level-up, and one
-  with more prepared than its limit is told how many to unprepare.
+- **Support for the Wizard's spellbook,** A Wizard's spellbook is now built to make use of the
+  way the D&D system itself holds one: all of the Wizard's spells go on the sheet, and only
+  its prepared allowance of them is prepared, with the rest in the book unprepared. That is six
+  spells at 1st level and two more at every level after, so a 5th-level Wizard has 14 spells 
+  rather than 9. The creation and levelling screens now include pages for managing the
+  book: **Spellbook** for writing in new spells, and **Prepare** for choosing which of the Wizard's
+  spells are prepared. On a level-up, Prepare lists every spell in the book, old and new, and nothing
+  is ever removed. New spells fill the prepared slots first, so skipping Prepare still gives a legal
+  character, and Quick Build fills the book too. Spells copied into the book during play don't
+  reduce the two a level. A Wizard built before this version is offered the spells it's missing on
+  its next level-up, and one with more prepared than its limit is told how many to unprepare.
 
 ### Improved
 
@@ -72,6 +72,12 @@ All notable changes to the Simple D&D Character Creator.
 
 ### Fixed
 
+- **2014 Clerics, Druids and Wizards prepare the right number of spells at 1st level.** Under the
+  2014 rules these classes prepare their spellcasting ability modifier + 1 spells at 1st level
+  (minimum one), but the creator gave every one a fixed count: 3 for a Cleric or Druid, and all 6
+  of a Wizard's spells prepared. A Cleric with Wisdom 16 now prepares 4, and a Wizard with
+  Intelligence 16 prepares 4 of its 6. The count follows your final scores, origin increases
+  included, and changes if you go back and change them. Quick Build uses the same count.
 - **Players see the book artwork too.** The class, species and background art on the Quick screen
   and the entry chooser found its images by listing the art folders, which Foundry only allows for
   users with the "Use File Browser" permission. Most players don't have it, so they saw plain icons

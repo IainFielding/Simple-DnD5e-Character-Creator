@@ -1,0 +1,24 @@
+{{!--
+  The head of a spell's detail pane: its picture, name, one-line meta and sourcebook. Shared by the
+  creation, feat and level-up spell steps, which differ only in what sits *under* the head — add or
+  remove, prepare, swap, or a note saying why there is nothing to press.
+
+  Called with the focused spell as its context: `{{> …/spell-detail-head.hbs focused}}`.
+--}}
+<header class="creator-detail-head">
+  <img class="creator-detail-img" src="{{img}}" alt="">
+  <div>
+    <h2>{{name}}</h2>
+    <p class="creator-spell-meta">
+      {{#if levelLabel}}{{levelLabel}} · {{/if}}{{school}}{{#if components}} · {{components}}{{/if}}
+      {{#if isConcentration}} · {{localize "sogrom-dnd5e-character-creator.step.spells.concentration"}}{{/if}}
+      {{#if isRitual}} · {{localize "sogrom-dnd5e-character-creator.step.spells.ritual"}}{{/if}}
+    </p>
+  </div>
+  {{!-- Provenance badge, as on the class, species, background and subclass panels. --}}
+  {{#if source}}
+  <span class="creator-detail-source" title="{{source}}">
+    <i class="fa-solid fa-book" aria-hidden="true"></i>{{source}}
+  </span>
+  {{/if}}
+</header>
