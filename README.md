@@ -4,4 +4,4 @@ A complete character creation and level-up experience for the Dungeon and Dragon
 Instead of manually dragging compendium entries onto a sheet and navigating multiple advancement screens, Simple D&D Character Creator provides a guided, immersive workflow that takes players from concept to completed character within minutes.
 
 ## Character Creation Wizard
-![]
+![Welcome to the Character creation wizard](docs\screenshots\entry-chooser.png)

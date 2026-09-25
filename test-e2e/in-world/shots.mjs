@@ -612,7 +612,12 @@ export async function walkTo({ until, limit = 60 } = {}) {
     const next = document.querySelector('.creator-stage-foot [data-action="navNext"]');
     if ( next && !next.disabled ) {
       next.click();
+      // Wait for the next screen rather than a fixed beat. The Ember Store's first render loads the
+      // whole shop index and took over a minute cold, and clicking Next again meanwhile only moves
+      // the index on under a heading that has not changed yet.
+      const started = Date.now();
       await pause(900);
+      while ( (currentStep() === here) && ((Date.now() - started) < 180_000) ) await pause(500);
       continue;
     }
     const option = document.querySelector(`.creator-stage ${SELECTABLE}`);

@@ -499,6 +499,7 @@ HEADED=1 node screenshots.mjs --only=class-step --hold # watch it, then leave th
 | --- | --- |
 | `--world=<id>` | Which world's shot list to take: `playwright` (default), `playwright-ember` or `playwright-bare` |
 | `--only=a,b` | Capture only the named shots. Every earlier step still runs (see below), and nothing after the last named one does |
+| `--full-size` | Save the raw 2× capture instead of downscaling it to fit 800×460 |
 | `--hold` | Keep the browser and server up after the last shot, for an hour or until Ctrl+C |
 | `HEADED=1` | Show the browser instead of running it headless |
 
@@ -509,7 +510,9 @@ picture can be retaken without the others drifting out of step. `--only` filters
 step's setup still executes. Files land in `docs/screenshots/` (the bare world's in
 `docs/screenshots/no-content/`), overwriting in place — check `git diff` before keeping them.
 
-Every picture is taken at 1667×957 with a 2× pixel ratio (3334×1914 files). Just before each one,
+Every picture is taken at 1667×957 with a 2× pixel ratio, then downscaled in the browser to fit
+800×460 so it drops into the README at a sensible size: full-screen shots are 800×459, element
+crops keep their own shape inside that box. Just before each one,
 `depersonalise` clears Foundry's toasts and hides the version pill, which reads `#{VERSION}#` in a
 source checkout. A shot with a `selector` is cropped to that element, one with a `clip` to that rectangle
 (for a fixed-position menu, which no element crop can hold together with its row); the rest are the

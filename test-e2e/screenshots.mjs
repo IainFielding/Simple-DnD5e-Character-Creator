@@ -18,7 +18,7 @@
  * sets never overwrite one another.
  */
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { WORLDS } from "./config.mjs";
 import { startFoundry } from "./lib/server.mjs";
@@ -32,6 +32,15 @@ import { ensureWorld } from "./lib/worlds.mjs";
  */
 const VIEWPORT = { width: 1667, height: 957 };
 const SCALE = 2;
+
+/**
+ * The box every saved picture is shrunk to fit, so the files drop straight into the README at
+ * their natural size. Rendering stays at the viewport and pixel ratio above — laying the page out
+ * at 800 wide would squash the creator into its narrow layout — and the 2x capture is downscaled
+ * afterwards, which keeps text sharper than a 1x render would. Full-screen shots come out 800x459;
+ * element crops keep their own shape inside the box. `--full-size` keeps the raw 2x capture.
+ */
+const FIT = { width: 800, height: 460 };
 
 /**
  * Where each world's pictures land. The bare world writes to its own folder rather than over the
@@ -62,6 +71,7 @@ const CHARACTER = {
 const argv = process.argv.slice(2);
 const value = name => argv.find(a => a.startsWith(`--${name}=`))?.split("=")[1] ?? null;
 const hold = argv.includes("--hold");
+const fullSize = argv.includes("--full-size");
 const worldId = value("world") ?? "playwright";
 const only = value("only")?.split(",").map(s => s.trim()).filter(Boolean) ?? null;
 
@@ -529,15 +539,18 @@ try {
     // caught by that, rather than each helper having to remember.
     await call("depersonalise");
     const path = new URL(`./${shot.name}.png`, OUT_DIR).pathname.slice(1);
+    let png;
     if ( shot.clip ) {
-      await session.page.screenshot({ path, clip: shot.clip });
+      png = await session.page.screenshot({ clip: shot.clip });
     } else if ( shot.selector ) {
       const target = session.page.locator(shot.selector).last();
       await target.waitFor({ timeout: 15_000 });
-      await target.screenshot({ path });
+      png = await target.screenshot();
     } else {
-      await session.page.screenshot({ path });
+      png = await session.page.screenshot();
     }
+    const out = fullSize ? png : await fit(session, png);
+    writeFileSync(path, out);
     console.log("ok");
   }
 
@@ -549,7 +562,6 @@ try {
   exitCode = 1;
   console.error(`\n${err.message}`);
   if ( session ) {
-    const { writeFileSync } = await import("node:fs");
     writeFileSync(new URL("./console.log", import.meta.url), session.consoleLog.join("\n"), "utf8");
     await session.page.screenshot({ path: new URL("./failure.png", import.meta.url).pathname.slice(1) })
       .catch(() => {});
@@ -560,6 +572,38 @@ try {
   await server.stop();
 }
 process.exit(exitCode);
+
+/**
+ * Shrink a PNG to fit inside `FIT`, keeping its aspect ratio; one already inside is left alone.
+ * The resize runs in a scratch browser page rather than the Foundry one, so the world is never
+ * touched, and uses the browser's own high-quality scaler, so the harness needs no image library.
+ * @param {Session} session
+ * @param {Buffer} png
+ * @returns {Promise<Buffer>}
+ */
+async function fit(session, png) {
+  const page = await session.page.context().newPage();
+  try {
+    const b64 = await page.evaluate(async ({ src, box }) => {
+      const blob = await (await fetch(`data:image/png;base64,${src}`)).blob();
+      const full = await createImageBitmap(blob);
+      const ratio = Math.min(box.width / full.width, box.height / full.height, 1);
+      if ( ratio === 1 ) return src;
+      const width = Math.round(full.width * ratio);
+      const height = Math.round(full.height * ratio);
+      const scaled = await createImageBitmap(blob, { resizeWidth: width, resizeHeight: height, resizeQuality: "high" });
+      const canvas = new OffscreenCanvas(width, height);
+      canvas.getContext("2d").drawImage(scaled, 0, 0);
+      const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer());
+      let bin = "";
+      for ( let i = 0; i < bytes.length; i += 0x8000 ) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
+    }, { src: png.toString("base64"), box: FIT });
+    return Buffer.from(b64, "base64");
+  } finally {
+    await page.close();
+  }
+}
 
 /**
  * Import `in-world/shots.mjs` into the page and return a caller for its exports — the same

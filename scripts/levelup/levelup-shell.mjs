@@ -209,6 +209,8 @@ export class LevelUpShell extends CreatorShellBase {
     // The Ember hand-off renders the creator's top bar and dossier instead of the rail, so it needs
     // their two view-models; an ordinary level-up leaves both null and renders neither template.
     const ember = this.state.emberCreation;
+    // Per-level steps carry a resolved label ("Level 4"); the review step uses its labelKey.
+    const label = step.label ?? t(step.labelKey);
 
     return {
       loading: false,
@@ -224,10 +226,12 @@ export class LevelUpShell extends CreatorShellBase {
       step: {
         id: step.id,
         template: tpl(`${step.template}.hbs`),
-        // Per-level steps carry a resolved label ("Level 4"); the review step uses its labelKey.
-        label: step.label ?? t(step.labelKey),
+        label,
         ...stepContext
       },
+      // The stage band reads `heading`, not the step, since the creator's entry screens took it
+      // over; without this the level-up and Ember hand-off band rendered an empty title.
+      heading: { title: label, instruction: stepContext.instruction },
       // The finish button (Apply) replaces Next in the footer on the review step only.
       isReview: step.id === "review",
       nav: {
