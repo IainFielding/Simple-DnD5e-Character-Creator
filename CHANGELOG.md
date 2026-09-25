@@ -78,6 +78,21 @@ All notable changes to the Simple D&D Character Creator.
   of a Wizard's spells prepared. A Cleric with Wisdom 16 now prepares 4, and a Wizard with
   Intelligence 16 prepares 4 of its 6. The count follows your final scores, origin increases
   included, and changes if you go back and change them. Quick Build uses the same count.
+- **2014 Bards, Sorcerers, Warlocks and Rangers learn new spells when they level up.** These
+  classes know a set number of spells rather than preparing them, and the level-up read only the
+  prepared count, which is zero for them. So they gained no new spells on any level-up, including
+  the levels Quick Build climbs. The level-up now reads the class's Spells Known table.
+- **Arcane Tricksters choose their cantrips.** The Player's Handbook's Arcane Trickster has no
+  cantrip table of its own, so the creator offered none. It now offers two at Rogue 3 and a third at
+  Rogue 10, alongside the Mage Hand the subclass grants.
+- **A multiclass caster only learns spells of a level its own class could cast.** Spell slots are
+  shared across every class, but each class learns spells as if it were the only one. A Cleric 5
+  taking a first level of Wizard was offered 3rd-level Wizard spells; it's now offered 1st-level
+  ones, as the rules intend. The same applies to Warlock pact slots beside another caster.
+- **Ready-made characters follow your compendium sources.** The ready-made list ignored the
+  system's Compendium Browser source settings, so it could show characters from packs the GM had
+  turned off. It now uses the same sources as every other list in the creator.
+- **The Background step shows its Read the Rules link,** like the Class and Species steps.
 - **Players see the book artwork too.** The class, species and background art on the Quick screen
   and the entry chooser found its images by listing the art folders, which Foundry only allows for
   users with the "Use File Browser" permission. Most players don't have it, so they saw plain icons
