@@ -434,7 +434,10 @@ describe("applyQuickBuild (fighter + sage + human fixtures)", () => {
 
     // Spells step: fighter is no caster, so the gate closes with nothing picked.
     expect(state.spellInfo)
-      .toEqual({ isSpellcaster: false, maxCantrips: 0, maxSpells: 0, listMissing: false });
+      .toEqual({
+        isSpellcaster: false, maxCantrips: 0, maxSpells: 0, listMissing: false,
+        classId: "", preparedFormula: "", spellbook: false
+      });
     expect(state.selectedCantrips).toEqual([]);
 
     // Feat-spells step: Sage's Magic Initiate auto-filled (cleric list, 2 cantrips + 1 spell).

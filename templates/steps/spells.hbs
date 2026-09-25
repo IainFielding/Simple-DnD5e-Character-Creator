@@ -9,6 +9,7 @@
   <!-- Main column: intro, tabs, filters, and the spell list for the active tab -->
   <div class="creator-pick-side">
     <p class="levelup-spells-intro">{{intro}}</p>
+    {{#if prepareNote}}<p class="levelup-spells-intro">{{prepareNote}}</p>{{/if}}
     {{> "modules/sogrom-dnd5e-character-creator/templates/parts/spell-list-notice.hbs" this}}
 
     {{!-- With no list to draw from there is nothing behind any of these: the tabs would count

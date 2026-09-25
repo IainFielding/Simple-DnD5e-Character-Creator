@@ -393,6 +393,17 @@ export class CreatorState {
   }
 
   /**
+   * The ability scores the finished 1st-level character will have: the method's base scores with
+   * every origin increase added. What a 2014 prepared caster's spell count is worked out from.
+   * @returns {Record<string, number>}
+   */
+  finalScores() {
+    const scores = this.resolvedScores();
+    for ( const [key, { total }] of Object.entries(this.abilityDeltas()) ) scores[key] = (scores[key] ?? 8) + total;
+    return scores;
+  }
+
+  /**
    * Forget everything keyed to the class: its level-1 spell picks, its advancement
    * choices, and its equipment selection. Called when the class selection changes so
    * a spell list or skill pick never carries over to a different class.

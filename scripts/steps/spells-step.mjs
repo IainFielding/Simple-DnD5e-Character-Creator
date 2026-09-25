@@ -1,6 +1,6 @@
 import { t } from "../config.mjs";
 import { pinContext } from "../app/compare.mjs";
-import { spellFilterOptions, spellListNotice } from "../data/spell-source.mjs";
+import { levelOneSpellLimits, spellFilterOptions, spellListNotice } from "../data/spell-source.mjs";
 import { originGrantedSpellCards } from "./feat-spells-step.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
 
@@ -15,8 +15,9 @@ import { spellKey } from "../data/spell-identity.mjs";
  * counts come from {@link spellInfoFor}, cached on `state.spellInfo` so this stays sync.
  *
  * Domain terms for a junior: "cantrips" are level-0 spells; "level-1 spells" are the first real
- * spells. Each class knows a fixed number of each at level 1 (its maxCantrips / maxSpells). The
- * two are picked on separate tabs but tracked in two separate arrays on the state.
+ * spells. Each class knows a fixed number of each at level 1 (its maxCantrips / maxSpells), except
+ * a 2014 prepared caster, whose count follows its ability score ({@link spellLimits}). The two are
+ * picked on separate tabs but tracked in two separate arrays on the state.
  */
 export const spellsStep = {
   id: "spells",
@@ -32,16 +33,18 @@ export const spellsStep = {
     // over a quota that cannot be filled would trap the player on this screen with no way forward,
     // so the step steps aside and the panel explains what is missing instead.
     if ( info.listMissing ) return true;
-    return state.selectedCantrips.length >= info.maxCantrips
-        && state.selectedSpells.length >= info.maxSpells;
+    const { maxCantrips, maxSpells } = spellLimits(state);
+    return state.selectedCantrips.length >= maxCantrips
+        && state.selectedSpells.length >= maxSpells;
   },
 
   /** Why Next is blocked: how many spells are still to be chosen. */
   incompleteHint(state) {
     const info = state.spellInfo;
     if ( !info?.isSpellcaster || info.listMissing ) return null;
-    const remain = Math.max(0, info.maxCantrips - state.selectedCantrips.length)
-                 + Math.max(0, info.maxSpells - state.selectedSpells.length);
+    const { maxCantrips, maxSpells } = spellLimits(state);
+    const remain = Math.max(0, maxCantrips - state.selectedCantrips.length)
+                 + Math.max(0, maxSpells - state.selectedSpells.length);
     return remain ? t("step.spells.hint", { count: remain }) : null;
   },
 
@@ -55,7 +58,8 @@ export const spellsStep = {
   applicable(state) {
     if ( !state.spellInfo ) return true;
     if ( !state.spellInfo.isSpellcaster ) return false;
-    return ((state.spellInfo.maxCantrips ?? 0) + (state.spellInfo.maxSpells ?? 0)) > 0;
+    const { maxCantrips, maxSpells } = spellLimits(state);
+    return (maxCantrips + maxSpells) > 0;
   },
 
   /** Rail summary: how many spells are picked (cantrips + level-1). */
@@ -94,7 +98,8 @@ export const spellsStep = {
       const idx = bucket.findIndex(s => s.uuid === uuid);
       if ( idx >= 0 ) { bucket.splice(idx, 1); return; }
       // Selecting: ignore the click once the known-spell limit is reached.
-      const max = isCantrip ? data.maxCantrips : data.maxSpells;
+      const limits = levelOneSpellLimits(data, state.finalScores());
+      const max = isCantrip ? limits.maxCantrips : limits.maxSpells;
       if ( bucket.length >= max ) return;
       const spell = (isCantrip ? data.cantrips : data.level1).find(s => s.uuid === uuid);
       // `identifier` rides along so this pick keys the same way as the pool row it came from —
@@ -111,18 +116,14 @@ export const spellsStep = {
   async context({ state, spells, source, app }) {
     const data = await spells.forClass(state.classUuid, { listOverride: state.spellListOverride });
     // Keep the completion gate's view of the class in sync with what we render.
-    state.spellInfo = {
-      isSpellcaster: !!data.isSpellcaster,
-      maxCantrips: data.maxCantrips ?? 0,
-      maxSpells: data.maxSpells ?? 0,
-      listMissing: !!data.listMissing
-    };
+    state.spellInfo = slimInfo(data);
     // "Not a caster" and "a caster with nothing to learn yet" both mean there is nothing to show, so
     // both take the short message rather than an empty list. The second is the half-casters: a 2014
     // Ranger or Paladin declares spellcasting progression on the class item but learns its first
     // spell at 2nd level, and asking `isSpellcaster` alone dropped them into the normal list with no
     // rows in it and no explanation.
-    const nothingToLearn = ((data.maxCantrips ?? 0) + (data.maxSpells ?? 0)) === 0;
+    const { maxCantrips, maxSpells, maxPrepared } = levelOneSpellLimits(data, state.finalScores());
+    const nothingToLearn = (maxCantrips + maxSpells) === 0;
     if ( !data.isSpellcaster || nothingToLearn ) {
       return {
         isSpellcaster: false,
@@ -130,7 +131,7 @@ export const spellsStep = {
       };
     }
 
-    const { cantrips, level1, maxCantrips, maxSpells } = data;
+    const { cantrips, level1 } = data;
     const picked = new Set([...state.selectedCantrips, ...state.selectedSpells].map(s => s.uuid));
 
     // Spells the build is going to grant anyway — a 2014 Cleric's domain spells, a species cantrip.
@@ -203,6 +204,11 @@ export const spellsStep = {
       tab,
       ...listNotice,
       intro: t("step.spells.intro", { class: className }),
+      // A spellbook holds more than its owner can prepare. Said up front, because otherwise the
+      // sheet showing some of these unprepared reads as spells the build forgot.
+      prepareNote: (maxPrepared < maxSpells)
+        ? t("step.spells.spellbookNote", { book: maxSpells, prepared: maxPrepared })
+        : "",
       isCantripsTab: tab === "cantrips",
       isLevel1Tab: tab === "level1",
       hasCantrips: maxCantrips > 0,
@@ -241,12 +247,32 @@ export const spellsStep = {
  */
 export async function spellInfoFor(spells, classUuid, listOverride = "") {
   if ( !classUuid ) return null;
-  const info = await spells.forClass(classUuid, { listOverride });
+  return slimInfo(await spells.forClass(classUuid, { listOverride }));
+}
+
+/** The parts of a class's spell payload the synchronous gates need, without the spell lists. */
+function slimInfo(info) {
   return {
     isSpellcaster: !!info.isSpellcaster,
     maxCantrips: info.maxCantrips ?? 0,
     maxSpells: info.maxSpells ?? 0,
+    // The 2014 prepared caster's formula, evaluated against the scores whenever a count is asked for
+    // (see {@link spellLimits}), so changing an ability score moves the count with it.
+    classId: info.classId ?? "",
+    preparedFormula: info.preparedFormula ?? "",
+    spellbook: !!info.spellbook,
     // Whether the pool came back empty, so the gate knows not to demand picks that cannot be made.
     listMissing: !!info.listMissing
   };
+}
+
+/**
+ * The creation spell counts for the current build: cantrips and 1st-level spells to pick, and how
+ * many of those spells are prepared. Read against the build's final scores each time, since a
+ * 2014 Cleric's count moves with its Wisdom.
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ * @returns {{maxCantrips:number, maxSpells:number, maxPrepared:number}}
+ */
+export function spellLimits(state) {
+  return levelOneSpellLimits(state.spellInfo, state.finalScores?.() ?? null);
 }

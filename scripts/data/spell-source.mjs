@@ -1,4 +1,5 @@
-import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, log } from "../config.mjs";
+import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, FALLBACK_CANTRIP_SCALES, SPELLBOOK_CLASSES, log }
+  from "../config.mjs";
 import { advancementArray, advancementTitle} from "./advancement-util.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
@@ -189,7 +190,8 @@ export class SpellSource {
    * Spell options for a class, or a non-caster marker. Memoised per class UUID.
    * @param {string} classUuid
    * @returns {Promise<{isSpellcaster:boolean, cantrips?:object[], level1?:object[],
-   *   maxCantrips?:number, maxSpells?:number, classId?:string}>}
+   *   maxCantrips?:number, maxSpells?:number, classId?:string, preparedFormula?:string,
+   *   spellbook?:boolean}>}
    */
   async forClass(classUuid, { listOverride = "" } = {}) {
     if ( !classUuid ) return { isSpellcaster: false };
@@ -417,10 +419,18 @@ export class SpellSource {
     const cantrips = all.filter(s => s.level === 0).sort(byName);
     const level1 = all.filter(s => s.level === 1).sort(byName);
 
+    // A 2014 prepared caster (Cleric, Druid, Wizard) has no spells scale to read: its count is
+    // `ability modifier + level`, which depends on scores the player may still be choosing, so the
+    // formula travels with the payload and the Spells step evaluates it against the current build
+    // ({@link levelOneSpellLimits}). `maxSpells` stays the flat table's figure for anything that
+    // cannot evaluate it.
+    const preparedFormula = abilityPreparationFormula(doc);
+    const spellbook = !!preparedFormula && SPELLBOOK_CLASSES.has(classId);
+
     log(`spells for "${classId}"${listNote(list, classId)}: ${cantrips.length} cantrips, ` +
-      `${level1.length} lvl-1 (know ${maxCantrips}/${maxSpells})`);
+      `${level1.length} lvl-1 (know ${maxCantrips}/${preparedFormula || maxSpells})`);
     return {
-      isSpellcaster: true, cantrips, level1, maxCantrips, maxSpells, classId,
+      isSpellcaster: true, cantrips, level1, maxCantrips, maxSpells, classId, preparedFormula, spellbook,
       ...listProvenance(list, classId, all.length)
     };
   }
@@ -482,17 +492,26 @@ function scaleCount(doc, classId, kind, fallback, level = 1) {
     // "spells known" scale that is neither the cantrip scale nor a spell-*slot* scale.
     if ( kind === "cantrip" && !isCantrip ) continue;
     if ( kind === "spell" && (isCantrip || !title.includes("spell") || title.includes("slot")) ) continue;
-    // A ScaleValue table only carries entries at the levels it changes; take the highest entry
-    // at or below the requested level so a mid-tier level reads the last increase, not a gap.
-    const scale = adv.configuration?.scale ?? {};
-    let val;
-    for ( let l = level; l >= 1; l-- ) {
-      const entry = scale[l] ?? scale[String(l)];
-      if ( entry !== undefined ) { val = entry; break; }
-    }
+    const val = valueAtLevel(adv.configuration?.scale ?? {}, level);
     if ( val !== undefined ) return Number(val.value ?? val) || 0;
   }
   return fallback[classId] ?? 0;
+}
+
+/**
+ * The entry a sparse level table holds at `level`. A ScaleValue table only carries entries at the
+ * levels it changes, so this takes the highest entry at or below the requested level: a mid-tier
+ * level reads the last increase, not a gap.
+ * @param {Record<number|string, any>} table
+ * @param {number} level
+ * @returns {any}  The entry, or undefined when the table has nothing at or below `level`.
+ */
+function valueAtLevel(table, level) {
+  for ( let l = level; l >= 1; l-- ) {
+    const entry = table[l] ?? table[String(l)];
+    if ( entry !== undefined ) return entry;
+  }
+  return undefined;
 }
 
 /**
@@ -505,7 +524,91 @@ function scaleCount(doc, classId, kind, fallback, level = 1) {
  */
 export function cantripsKnownAtLevel(classDoc, level) {
   const classId = classDoc?.system?.identifier ?? classDoc?.name?.toLowerCase() ?? "";
-  return scaleCount(classDoc, classId, "cantrip", DEFAULT_CANTRIPS, level);
+  // A caster with no cantrip scale of its own reads the table kept for it (the PHB Arcane
+  // Trickster) before the flat level-1 defaults, which know nothing about later levels.
+  const table = FALLBACK_CANTRIP_SCALES[classId];
+  const fallback = table ? { [classId]: Number(valueAtLevel(table, level) ?? 0) } : DEFAULT_CANTRIPS;
+  return scaleCount(classDoc, classId, "cantrip", fallback, level);
+}
+
+/**
+ * The number of leveled spells a *known* caster knows at a given class `level`, read from its
+ * "Spells Known" ScaleValue. This is the count for the 2014 Bard, Sorcerer, Warlock and Ranger,
+ * which declare no preparation formula at all, so dnd5e derives their `preparation.max` as 0 and
+ * the level-up has to take the figure from the scale instead. 0 when the class carries no such
+ * scale.
+ * @param {Item5e|object} classDoc   The class item or document.
+ * @param {number} level             The class's current level.
+ * @returns {number}
+ */
+export function spellsKnownAtLevel(classDoc, level) {
+  const classId = classDoc?.system?.identifier ?? classDoc?.name?.toLowerCase() ?? "";
+  return scaleCount(classDoc, classId, "spell", {}, level);
+}
+
+/** Spellcasting progressions that cast from 1st level. The 2014 half-casters start at 2nd. */
+const LEVEL_ONE_PROGRESSIONS = new Set(["full", "artificer"]);
+
+/**
+ * The ability-based preparation formula of a 2014 prepared caster that casts from 1st level: the
+ * Cleric's `@abilities.wis.mod + @classes.cleric.levels`, say. Empty for everything else: a 2024
+ * class, whose formula only points at its own scale (`@scale.cleric.max-prepared`) and is read
+ * from there; a known caster, which declares none; and the 2014 Paladin, whose formula exists but
+ * who learns nothing until 2nd level.
+ * @param {Item5e|object} classDoc
+ * @returns {string}
+ */
+export function abilityPreparationFormula(classDoc) {
+  const sc = classDoc?.system?.spellcasting;
+  const formula = String(sc?.preparation?.formula ?? "").trim();
+  if ( !formula || formula.includes("@scale.") ) return "";
+  return LEVEL_ONE_PROGRESSIONS.has(sc?.progression) ? formula : "";
+}
+
+/**
+ * How many spells a 1st-level character picks on the creation Spells step, and how many of them
+ * go onto the sheet prepared.
+ *
+ * Most classes read both straight off `info` (their scale, or the flat table). A 2014 prepared
+ * caster evaluates its formula against the build's final scores instead, with the rules' floor of
+ * one: a Cleric with Wisdom 16 prepares four, not a flat three. A spellbook class (the Wizard)
+ * still picks its whole book, six spells, and only `maxPrepared` of them are prepared.
+ * @param {{maxCantrips?:number, maxSpells?:number, classId?:string, preparedFormula?:string,
+ *   spellbook?:boolean}|null} info   The class's spell payload, or the slim `state.spellInfo`.
+ * @param {Record<string, number>|null} scores  Final ability scores, origin increases included.
+ * @returns {{maxCantrips:number, maxSpells:number, maxPrepared:number}}
+ */
+export function levelOneSpellLimits(info, scores) {
+  const maxCantrips = info?.maxCantrips ?? 0;
+  const tableSpells = info?.maxSpells ?? 0;
+  const prepared = info?.preparedFormula
+    ? evaluateLevelOneFormula(info.preparedFormula, info.classId, scores)
+    : null;
+  if ( prepared === null ) return { maxCantrips, maxSpells: tableSpells, maxPrepared: tableSpells };
+  return { maxCantrips, maxSpells: info.spellbook ? tableSpells : prepared, maxPrepared: prepared };
+}
+
+/**
+ * Evaluate a preparation formula for a 1st-level member of the class, with the given scores.
+ * Null when there are no scores or the formula cannot be evaluated, so the caller keeps its table.
+ * @param {string} formula
+ * @param {string} classId
+ * @param {Record<string, number>|null} scores
+ * @returns {number|null}
+ */
+function evaluateLevelOneFormula(formula, classId, scores) {
+  if ( !scores ) return null;
+  const abilities = {};
+  for ( const [key, value] of Object.entries(scores) ) {
+    abilities[key] = { value, mod: Math.floor((Number(value) - 10) / 2) };
+  }
+  try {
+    const data = { abilities, classes: { [classId]: { levels: 1 } } };
+    const total = Number(Roll.safeEval(Roll.replaceFormulaData(formula, data, { missing: "0" })));
+    return Number.isFinite(total) ? Math.max(1, Math.floor(total)) : null;
+  } catch {
+    return null;
+  }
 }
 
 /* -------------------------------------------- */

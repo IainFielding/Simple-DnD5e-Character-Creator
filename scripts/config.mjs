@@ -537,6 +537,31 @@ export const DEFAULT_LEVEL1_SPELLS = {
 };
 
 /**
+ * Cantrips a caster *chooses*, by class level, for spellcasting items whose data carries no
+ * "Cantrips" ScaleValue at all. Keyed by the casting item's identifier; like a real scale, each
+ * entry holds from its level until the next one.
+ *
+ * The PHB Arcane Trickster (`trickster`) is why this exists: its Eldritch Knight sibling ships a
+ * cantrip scale and it does not, so its cantrip capacity read as zero and the level-up never
+ * offered any. By the rules it knows three at 3rd level and a fourth at 10th, but one of those is
+ * Mage Hand, which the subclass grants itself with no spell configuration, so dnd5e leaves it
+ * without a `subclass:trickster` tag and it never counts as one of this caster's cantrips. These
+ * are the ones the player picks beside it.
+ */
+export const FALLBACK_CANTRIP_SCALES = {
+  trickster: { 3: 2, 10: 3 },
+  "arcane-trickster": { 3: 2, 10: 3 }
+};
+
+/**
+ * Classes that learn their spells into a book and prepare only some of them. A 2014 Wizard writes
+ * six 1st-level spells into its spellbook but prepares Intelligence modifier + level of them, so
+ * the creation Spells step asks for the book and the assembler prepares only as many as the
+ * formula allows.
+ */
+export const SPELLBOOK_CLASSES = new Set(["wizard"]);
+
+/**
  * Turn a translation key into the text the player sees, in their configured language.
  * We prefix the key with the module id so it resolves against *our* entries in lang/en.json
  * (e.g. t("step.class.label") reads "sogrom-dnd5e-character-creator.step.class.label").

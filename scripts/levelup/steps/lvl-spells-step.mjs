@@ -1,6 +1,6 @@
 import { t } from "../../config.mjs";
 import { cantripsKnownAtLevel, buildSpellFromEntry, spellFilterOptions, spellListNotice, spellMethodFor,
-  spellAlternatives } from "../../data/spell-source.mjs";
+  spellAlternatives, spellsKnownAtLevel } from "../../data/spell-source.mjs";
 import { ownedSpellKeys, spellKey } from "../../data/spell-identity.mjs";
 import { planSpellReconciliation } from "../../build/spell-reconcile.mjs";
 import { swapAllowance } from "../../data/spell-swap.mjs";
@@ -25,9 +25,11 @@ import { advancementArray } from "../../data/advancement-util.mjs";
  * @property {number}  [classLevel]    The class's current level (subclass scales key off it too).
  * @property {number}  [cantripTarget] Total cantrips known at this level.
  * @property {number}  [cantripHave]   Cantrips already known for this caster.
- * @property {number}  [spellTarget]   Total prepared spells allowed (preparation.max).
+ * @property {number}  [spellTarget]   Total prepared spells allowed (preparation.max, or the
+ *                                     "Spells Known" scale for a caster with no formula).
  * @property {number}  [spellHave]     Prepared leveled spells already known (preparation.value).
- * @property {number}  [maxSpellLevel] Highest spell level the actor has slots for.
+ * @property {number}  [maxSpellLevel] Highest spell level this class can learn: the actor's slots,
+ *                                     capped at what the class alone would give.
  * @property {number}  [releasedSpells]   Prepared selections a pending granted-spell merge frees.
  * @property {number}  [releasedCantrips] Cantrip selections a pending granted-spell merge frees.
  * @property {number}  addCantrips     Cantrips the player may add this level-up (≥ 0).
@@ -87,7 +89,10 @@ export function computeSpellPlan(actorLike, classItem) {
 
   // Capacity targets from the caster's derived data.
   const cantripTarget = cantripsKnownAtLevel(castItem, classLevel);
-  const spellTarget = sc.preparation?.max ?? 0;
+  // A known caster (the 2014 Bard, Sorcerer, Warlock, Ranger) declares no preparation formula, so
+  // dnd5e derives its `preparation.max` as 0. Its count lives on its "Spells Known" scale instead,
+  // and reading only the derived field left these classes gaining no spells on any level-up.
+  const spellTarget = (sc.preparation?.max ?? 0) || spellsKnownAtLevel(castItem, classLevel);
 
   // What the actor already knows. `preparation.value` is the system's own count of prepared leveled
   // spells for this caster (cantrips and always-prepared spells excluded — see SpellData#countsPrepared),
@@ -104,6 +109,11 @@ export function computeSpellPlan(actorLike, classItem) {
   let maxSpellLevel = 0;
   for ( let l = 1; l <= 9; l++ ) if ( (spells[`spell${l}`]?.max ?? 0) > 0 ) maxSpellLevel = l;
   if ( (spells.pact?.max ?? 0) > 0 ) maxSpellLevel = Math.max(maxSpellLevel, spells.pact?.level ?? 0);
+  // The actor's slots are pooled across every class, but each class learns spells as if it were the
+  // only one: a Cleric 5 taking Wizard 1 has 3rd-level slots and may still only learn 1st-level
+  // wizard spells. Pact slots leak the same way into a Sorcerer levelled beside a Warlock.
+  const ownLevel = singleClassSpellLevel(classItem);
+  if ( ownLevel !== null ) maxSpellLevel = Math.min(maxSpellLevel, ownLevel);
 
   // Selections a pending merge will hand back. A spell chosen at an earlier level that a feature now
   // grants always-prepared is about to be collapsed into the granted copy ({@link module:build/spell-reconcile}),
@@ -129,6 +139,37 @@ export function computeSpellPlan(actorLike, classItem) {
     canSwapCantrip: swap.cantrip, canSwapSpell: swap.spell, swapLabelKey: swap.labelKey,
     addCantrips, addSpells, hasDelta: (addCantrips > 0) || (addSpells > 0)
   };
+}
+
+/**
+ * The highest spell level a class would have slots for if it were the character's only class, as
+ * dnd5e itself works it out: the class's progression run through `computeClassProgression` with a
+ * count of one (so a lone half-caster rounds the way it would single-classed), then that caster
+ * level through the method's slot table. The class item's `spellcasting` getter already prefers a
+ * casting subclass, so the Eldritch Knight measures as a third-caster.
+ *
+ * Null when the system pieces aren't there to ask (outside Foundry, or a progression the system
+ * doesn't know), leaving the caller with the actor's pooled slots.
+ * @param {Item5e} classItem
+ * @returns {number|null}
+ */
+function singleClassSpellLevel(classItem) {
+  const sc = classItem?.spellcasting;
+  const model = globalThis.CONFIG?.DND5E?.spellcasting?.[sc?.type];
+  const Actor = globalThis.CONFIG?.Actor?.documentClass;
+  if ( !model?.slots || (typeof model.calculateSlots !== "function")
+    || (typeof Actor?.computeClassProgression !== "function") ) return null;
+  try {
+    const progression = { [model.key]: 0 };
+    Actor.computeClassProgression(progression, classItem, { actor: classItem.actor, count: 1 });
+    let level = 0;
+    for ( const [l, n] of Object.entries(model.calculateSlots(progression[model.key] ?? 0)) ) {
+      if ( n > 0 ) level = Math.max(level, Number(l));
+    }
+    return level;
+  } catch {
+    return null;
+  }
 }
 
 /* -------------------------------------------- */

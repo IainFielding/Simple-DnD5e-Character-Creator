@@ -574,6 +574,7 @@
         "label": "Spells",
         "hint": "Choose {count} more spell(s) to continue.",
         "intro": "Choose the cantrips and 1st-level spells your {class} knows at level 1.",
+        "spellbookNote": "These {book} spells go into your spellbook, and you can prepare {prepared} of them. The first {prepared} you choose start prepared; change which ones on your character sheet after a long rest.",
         "cantrips": "Cantrips",
         "level1": "1st-Level Spells",
         "selected": "Your Spells",

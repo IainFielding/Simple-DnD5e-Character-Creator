@@ -4,7 +4,7 @@ import { QUICK_BUILD, MI_SPELL_SUGGESTIONS, FEATURE_PREFERENCES } from "./quick-
 import { resolveChoices } from "./choice-resolver.mjs";
 import { resolveFeatSpells, originGrantedSpellKeys } from "../steps/feat-spells-step.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
-import { spellInfoFor } from "../steps/spells-step.mjs";
+import { spellInfoFor, spellLimits } from "../steps/spells-step.mjs";
 import { generateName } from "./name-generator.mjs";
 
 /**
@@ -151,8 +151,11 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
       return !key || !granted.has(key);
     });
 
-    state.selectedCantrips = pickSpells(free(data.cantrips), profile.cantrips, data.maxCantrips ?? 0);
-    state.selectedSpells = pickSpells(free(data.level1), profile.spells, data.maxSpells ?? 0);
+    // Counted against the build's scores, which are already set: a 2014 Cleric picks as many as its
+    // Wisdom allows, the same number the Spells step would ask for.
+    const { maxCantrips, maxSpells } = spellLimits(state);
+    state.selectedCantrips = pickSpells(free(data.cantrips), profile.cantrips, maxCantrips);
+    state.selectedSpells = pickSpells(free(data.level1), profile.spells, maxSpells);
   });
 
   // Feat spells (Magic Initiate and friends) — after choices, since a picked feat can grant one.
