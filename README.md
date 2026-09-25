@@ -1,8 +1,7 @@
-<img src="https://github.com/IainFielding/Simple-DnD5e-Character-Creator/blob/main/docs/screenshots/entry-chooser.png" width="800" height="600" align="center" >
+![](docs\screenshots\entry-chooser.png)
 
-
+<br>
 ![GitHub release](https://img.shields.io/github/v/release/IainFielding/Simple-DnD5e-Character-Creator)
-![GitHub Downloads (specific asset, all releases)](<https://img.shields.io/github/downloads/IainFielding/Simple-DnD5e-Character-Creator/module.zip?&label=Downloads>)
 ![](https://img.shields.io/badge/Foundry-v14.368-informational) 
 ![](https://img.shields.io/badge/D&D-v6.0.5-informational)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-sogrom?logo=ko-fi&logoColor=white)](https://ko-fi.com/sogrom)<br>
