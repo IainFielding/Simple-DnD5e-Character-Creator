@@ -60,6 +60,7 @@ export class CreatorShell extends CreatorShellBase {
       entryReturn() { return this._returnToQuick(); },
       entryPremade(event, target) { this._premadeSelect(target.dataset.id); },
       entryPremadeConfirm(event, target) { return this._premadeConfirm(target); },
+      entryPremadeLevel(event, target) { this._premadeLevel(target.dataset.level); },
       thresholdEdition(event, target) { return this._thresholdEdition(target.dataset.rules); },
       thresholdLevel(event, target) { return this._thresholdLevel(target.dataset.level); },
       thresholdRoll(event, target) { return this._thresholdRoll(target.dataset.category); },
@@ -142,6 +143,12 @@ export class CreatorShell extends CreatorShellBase {
   #quickClimb = false;
   /** The ready-made character the player has selected but not yet confirmed. */
   #premadeChoice = null;
+
+  /**
+   * The ready-made list's level filter: a level, "all", or null for the default (level 1).
+   * @type {number|"all"|null}
+   */
+  #premadeLevel = null;
   /**
    * Whether this window's work belongs in a draft.
    *
@@ -283,7 +290,7 @@ export class CreatorShell extends CreatorShellBase {
     // render rather than the previous one.
     const entry = this.#entry === "chooser" ? await chooserContext(this._ctx())
       : this.#entry === "premade"
-        ? { premades: await premadeContext(this._ctx(), this.#premadeChoice) }
+        ? { premades: await premadeContext(this._ctx(), this.#premadeChoice, this.#premadeLevel) }
         : null;
     const threshold = this.#entry === "threshold"
     ? await thresholdContext(this._ctx(), this.#thresholdRules ?? systemRulesEdition())
@@ -1033,6 +1040,18 @@ export class CreatorShell extends CreatorShellBase {
    */
   _premadeSelect(id) {
     this.#premadeChoice = (this.#premadeChoice === id) ? null : id;
+    this.render();
+  }
+
+  /**
+   * Narrow the ready-made list to one level, or to all of them. The selection is dropped: a card
+   * the filter hides would otherwise stay chosen, and the footer would offer to create someone the
+   * player can no longer see.
+   * @param {string} value  A level, or "all".
+   */
+  _premadeLevel(value) {
+    this.#premadeLevel = (value === "all") ? "all" : (Number(value) || null);
+    this.#premadeChoice = null;
     this.render();
   }
 

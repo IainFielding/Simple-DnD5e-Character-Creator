@@ -96,12 +96,12 @@
     "quickBuild": {
       "button": "Quick Build",
       "confirmTitle": "Overwrite current choices?",
-      "confirmBody": "Quick Build replaces your background, species, name, ability scores, spells, and other choices with the recommended set. Continue?",
+      "confirmBody": "Quick Build replaces your current selections with automatically generated choices. Continue?",
       "partial": "Quick Build finished with some gaps — check the remaining steps.",
       "failed": "Quick Build failed; your choices were left as they were.",
       "threshold": {
         "title": "Quick Build",
-        "instruction": "Three choices. Everything else is filled in for you, and none of it is locked.",
+        "instruction": "Choose a class, species, and background. Remaining options are generated automatically.",
         "create": "Create Character",
         "browse": "Browse all {count}",
         "name": "Name",
@@ -263,7 +263,7 @@
         },
         "hp": {
           "label": "Hit Points",
-          "intro": "Increase your {class}'s hit points — take the reliable average, or roll the hit die and take your chances.",
+          "intro": "Increase your {class}'s hit points by taking the average value or rolling the hit die.",
           "summary": "+{hp} HP",
           "average": "Average HP",
           "max": "Max HP",
@@ -309,7 +309,7 @@
         },
         "subclass": {
           "label": "Subclass",
-          "intro": "Your class branches here — choose the subclass that shapes the rest of your journey."
+          "intro": "Choose the subclass gained at this level."
         },
         "grant": {
           "label": "Spell",
@@ -349,7 +349,7 @@
         },
         "spells": {
           "label": "Spells",
-          "intro": "Your {class} training opens new magic — choose the spells you learn at this level.",
+          "intro": "Choose the spells learned at this level.",
           "cantrips": "Cantrips",
           "spells": "Spells",
           "levelTag": "Lvl {level}",
@@ -532,7 +532,7 @@
       "details": {
         "label": "Details",
         "hint": "Enter a name for your character.",
-        "subtitle": "Give your character a name and, if you like, the finer points of who they are.",
+        "subtitle": "Set your character's name, appearance, and optional background details.",
         "portrait": "Portrait",
         "token": "Token",
         "ringSubject": "Ring Subject",
@@ -556,7 +556,7 @@
           "auto": "Chosen species ({species})",
           "autoNone": "Chosen species"
         },
-        "optional": "Optional — flesh out who they are.",
+        "optional": "Additional character details (optional).",
         "field": {
           "alignment": "Alignment",
           "faith": "Faith",
@@ -666,7 +666,7 @@
       },
       "store": {
         "label": "Store",
-        "intro": "Spend your starting gold on extra gear. Anything you don't spend stays in your coin pouch.",
+        "intro": "Spend any starting gold granted by your class & background choices.",
         "none": "Your current equipment choice yields no gold to spend.",
         "empty": "The store has nothing in stock — ask your GM to add items to its shelves.",
         "cart": "Your Cart",
@@ -693,7 +693,7 @@
       },
       "magicShop": {
         "label": "Magic Items",
-        "intro": "Your starting level begins with a few magic items. Choose them free of charge within the rarity slots on the right. A slot can also hold an item of a lower rarity.",
+        "intro": "Choose the magic items available for your starting level. A slot can be used for an item of its rarity or lower.",
         "loading": "Loading magic items… {percent}%",
         "loadFailed": "The magic items could not be loaded. Leave the step and come back to try again.",
         "tier": "Level {level}",
@@ -964,7 +964,7 @@
       },
       "recommendedPath": {
         "name": "Recommended way to build",
-        "hint": "Which of the three ways into the creator is marked as recommended for a player who has not built a character before. Everything stays available whichever you pick.",
+        "hint": "Chooses which character creation method is marked as recommended.",
         "none": "No recommendation"
       }
     },
@@ -1067,39 +1067,42 @@
       "save": "Save Changes"
     },
     "entry": {
-      "heading": "How do you want to build this character?",
-      "blurb": "All three end in the same place: a finished character on the Review page, with every choice still yours to change. They differ only in how much is decided for you.",
+      "heading": "Choose a Character Creation Method",
+      "blurb": "Select how you would like to build out your character",
       "recommended": "Recommended",
       "custom": {
         "title": "Custom build",
-        "tagline": "Every choice is yours, in order, with the rules explained as you go.",
+        "tagline": "Create a character by making each choice yourself.",
         "go": "Build step by step",
-        "point1": "Every step, nothing decided for you",
-        "point2": "Compare options side by side",
-        "point3": "The longest way round, and the most yours"
+        "point1": "All choices selected manually",
+        "point2": "Supports option comparison",
+        "point3": "Full character creation workflow"
       },
       "quick": {
         "title": "Quick build",
-        "tagline": "Three choices — class, species, background. Everything else is filled in.",
-        "go": "Pick three things",
-        "point1": "Ability scores, skills, spells and kit chosen for you",
-        "point2": "Lands on Review with a finished character",
-        "point3": "Every pick still editable afterwards"
+        "tagline": "Choose a class, species, and background. Remaining options are generated automatically.",
+        "go": "Start Quick Build",
+        "point1": "Ability scores, skills, spells, and equipment are selected automatically",
+        "point2": "Creates a complete character",
+        "point3": "All choices can be changed later"
       },
       "premade": {
         "title": "Premade",
-        "tagline": "A collection of ready-to-play premade characters",
-        "go": "Start browsing",
-        "point1": "Not sure how to create your first character?",
-        "point2": "Skip the complicated stuff and start playing in minutes.",
-        "point3": "Still yours to edit before it is created",
+        "tagline": "Create a character from an available premade template.",
+        "go": "Browse Characters",
+        "point1": "Choose from available premade characters",
+        "point2": "No character creation required",
+        "point3": "Character can be modified after creation",
         "none": "No premade characters are available in this world.",
         "heading": "Premade Characters",
-        "blurb": "Not sure how to create your first character? Our premade characters let you skip the complicated stuff and start playing in minutes.",
+        "blurb": "Select a premade character to use as the basis for a new character.",
         "fromFoundry": "Foundry Virtual Tabletop",
         "fromModule": "From this module",
         "importFailed": "That premade character could not be imported.",
-        "confirm": "Create {name}"
+        "confirm": "Create {name}",
+        "level": "Level {level}",
+        "allLevels": "All levels",
+        "levelAria": "Character level"
       },
       "returnToChooser": "Other ways to build"
     }

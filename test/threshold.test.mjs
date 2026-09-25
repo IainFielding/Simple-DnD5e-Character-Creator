@@ -413,16 +413,22 @@ describe("Foundry's pregenerated characters", () => {
 
   beforeEach(() => invalidatePregenCache());
 
-  it("offers only the level 1 pregens, not 5, 11 and 17", async () => {
+  it("offers the pregens at every level, each carrying its level", async () => {
     // Level is read off the class items, not guessed from the id — the id only narrows the load.
     game.packs = packs([
-      doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined, { levels: 1 }),
+      doc("AkraLv1700000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined, { levels: 17 }),
       doc("AkraLv0500000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined, { levels: 5 }),
-      doc("AkraLv1700000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined, { levels: 17 })
+      doc("AkraLv0100000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined, { levels: 1 })
     ]);
     const out = await entries();
-    expect(out).toHaveLength(1);
-    expect(out[0].id).toBe("AkraLv0100000000");
+    expect(out.map(e => e.level)).toEqual([1, 5, 17]);
+    expect(out[1].line).toBe("Dragonborn Cleric 5 · Acolyte");
+  });
+
+  it("skips a character with no class levels", async () => {
+    game.packs = packs([doc("AkraLv0000000000", "Akra", "Cleric", "Dragonborn", "Acolyte", undefined,
+      { levels: 0 })]);
+    expect(await entries()).toEqual([]);
   });
 
   it("describes each one by species, class and background", async () => {

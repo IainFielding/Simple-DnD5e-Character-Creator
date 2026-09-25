@@ -1,7 +1,9 @@
 import { t, log, recommendedPath, MODULE_ID } from "../config.mjs";
 import { resolveArtFor } from "../data/art-cache.mjs";
 import { postCreationSummary } from "../build/chat-summary.mjs";
-import { availablePremades, foundryPregens, importPregen, profileFor } from "../data/premades.mjs";
+import {
+  DEFAULT_PREGEN_LEVEL, availablePremades, foundryPregens, importPregen, profileFor
+} from "../data/premades.mjs";
 import { applyQuickBuild } from "../data/quick-build.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 
@@ -131,7 +133,13 @@ export async function chooserContext({ source }) {
 }
 
 /**
- * Build the ready-made list's render context: two groups, each omitted when empty.
+ * Build the ready-made list's render context: one group per source, each omitted when empty, and
+ * all of them narrowed to one level by the filter above the list.
+ *
+ * The filter is across every group rather than per book, because the question a player is asking
+ * is "what can I play at level 5", not "what does this book have at level 5". It offers only the
+ * levels something is actually at, plus "All levels", and opens on {@link DEFAULT_PREGEN_LEVEL} so
+ * the first view is the starting characters rather than four copies of each hero.
  *
  * Foundry's own pregenerated characters come first and are labelled as theirs. They are finished
  * Actors, so taking one is an import; our configured premades are built through the same engine a
@@ -139,9 +147,11 @@ export async function chooserContext({ source }) {
  * rather than blurring them — a player who picks "Akra" is getting the system's Akra, not our
  * approximation of her.
  * @param {object} ctx
+ * @param {string|null} [chosenId]
+ * @param {number|"all"|null} [level]  The level to show; null means the default.
  * @returns {Promise<object>}
  */
-export async function premadeContext({ source }, chosenId = null) {
+export async function premadeContext({ source }, chosenId = null, level = null) {
   const official = await foundryPregens();
   const configured = availablePremades(source);
 
@@ -158,6 +168,7 @@ export async function premadeContext({ source }, chosenId = null) {
     badge: group.badge,
     entries: group.entries.map(pc => ({
       id: pc.id,
+      level: pc.level,
       uuid: pc.uuid,
       name: pc.name,
       line: pc.line,
@@ -180,6 +191,8 @@ export async function premadeContext({ source }, chosenId = null) {
       badge: null,
       entries: configured.map(({ premade, ...cards }) => ({
         id: premade.id,
+        // Built through the level 1 creation flow, so level 1 is what they are.
+        level: 1,
         uuid: "",
         name: premade.name,
         tagline: premade.tagline ?? "",
@@ -193,16 +206,36 @@ export async function premadeContext({ source }, chosenId = null) {
     });
   }
 
+  // The levels on offer, from what is actually there. A world whose only pregens are level 1 gets
+  // no filter at all — a control with one useful position is not a control.
+  const present = [...new Set(groups.flatMap(g => g.entries.map(e => e.level)))].sort((a, b) => a - b);
+  // A requested level nothing is at (a pack switched off since) falls back rather than showing an
+  // empty list; so does the default, in a world with no level 1 characters at all.
+  let active = level ?? DEFAULT_PREGEN_LEVEL;
+  if ( (active !== "all") && !present.includes(active) ) {
+    active = present.includes(DEFAULT_PREGEN_LEVEL) ? DEFAULT_PREGEN_LEVEL : (present[0] ?? "all");
+  }
+  const levels = (present.length > 1) ? [
+    ...present.map(n => ({ value: String(n), label: t("entry.premade.level", { level: n }), active: active === n })),
+    { value: "all", label: t("entry.premade.allLevels"), active: active === "all" }
+  ] : null;
+
+  const shown = groups
+    .map(g => ({ ...g, entries: g.entries.filter(e => (active === "all") || (e.level === active)) }))
+    .filter(g => g.entries.length);
+
   // Picking a card selects it; a second, deliberate press creates the character. Creating an
   // actor on a single click of a browsing grid is too easy to do by accident, and unlike every
-  // other path here it cannot be undone from inside the window.
-  const chosen = groups.flatMap(g => g.entries).find(e => e.chosen) ?? null;
+  // other path here it cannot be undone from inside the window. Read from the shown cards only, so
+  // a choice the filter has hidden cannot be created from a footer naming someone off screen.
+  const chosen = shown.flatMap(g => g.entries).find(e => e.chosen) ?? null;
 
   return {
     heading: t("entry.premade.heading"),
     blurb: t("entry.premade.blurb"),
     none: groups.length ? null : t("entry.premade.none"),
-    groups,
+    levels,
+    groups: shown,
     chosen,
     confirm: chosen ? t("entry.premade.confirm", { name: chosen.name }) : null
   };

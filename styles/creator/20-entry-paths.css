@@ -487,6 +487,8 @@
 .creator-threshold-rollall:hover .creator-btn-icon { transform: rotate(360deg); }
 
 /* ---- Ready-made groups ---- */
+/* The level filter borrows the quick screen's level pills (`.creator-threshold-level`) outright. */
+.creator-premade-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0 0 1rem; }
 .creator-premade-group + .creator-premade-group { margin-top: 1.4rem; }
 .creator-premade-grouphead {
   display: flex;
