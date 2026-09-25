@@ -371,7 +371,7 @@ Hooks.on(api.HOOKS.characterCreated, ({ actor, targetLevel }) => {
 ## Requirements
 
 - **Foundry VTT** version 14.359 or later (verified against 14.368). Foundry v14 only — this release deliberately won't install on v15, which hasn't been tested against yet.
-- The **D&D Fifth Edition (dnd5e)** game system, version 5.3.3 or later (verified against 6.0.5)
+- The **D&D Fifth Edition (dnd5e)** game system, version 6.0.0 or later (verified against 6.0.5)
 - Your character content (classes, species, backgrounds, spells, and equipment) enabled in your compendiums
 
 ---

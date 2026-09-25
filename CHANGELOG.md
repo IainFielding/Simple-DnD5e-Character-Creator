@@ -92,6 +92,8 @@ All notable changes to the Simple D&D Character Creator.
 
 ### Compatibility
 
+- **Now requires the D&D 5e system 6.0.0 or later.** Earlier versions allowed 5.3.3, but it hasn't
+  been tested since the move to 6.0. Worlds still on 5.3.x should stay on 3.2.0 of this module.
 - Verified against **dnd5e 6.0.5** on Foundry **14.368**: 135 of 135 subclasses built identically to
   the system's own advancement, levels 1 to 20.
 

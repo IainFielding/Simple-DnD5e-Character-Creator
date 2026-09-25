@@ -305,7 +305,7 @@ export function cartTotalCp(purchases) {
  * finished.
  *
  * **This is dnd5e's own conversion**, the one behind the Convert Currency button on the sheet
- * (`CurrencyManager.convertCurrency`, present since 5.3.3, which is our floor). Calling it rather
+ * (`CurrencyManager.convertCurrency`, present since 5.3.3, before our 6.0.0 floor). Calling it rather
  * than doing the arithmetic here means a character built by this module ends up with exactly the
  * coin the system would have given them, including in a world that has edited
  * `CONFIG.DND5E.currencies` — a house rule about money is then honoured for free instead of being

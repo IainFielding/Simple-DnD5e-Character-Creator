@@ -98,7 +98,7 @@ describe("autoResolve: an ASI answered with a feat", () => {
 /**
  * dnd5e 6.0 renamed the feat prerequisite check to `assertPrerequisites` and kept
  * `validatePrerequisites` only as a deprecated forwarder (it logs a compatibility warning on every
- * feat pick). 5.3.3 — still the module's minimum — has only the old name. The driver must take the
+ * feat pick). 5.3.3 — the module's minimum until 3.3.0 — has only the old name. The driver must take the
  * new one when it exists and still work where it does not.
  */
 describe("applyAsiFeat: the prerequisite check across dnd5e versions", () => {

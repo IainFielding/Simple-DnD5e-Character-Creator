@@ -23,7 +23,7 @@
         "id": "dnd5e",
         "type": "system",
         "compatibility": {
-          "minimum": "5.3.3",
+          "minimum": "6.0.0",
           "maximum": "6.99.99",
           "verified": "6.0.5"
         }
