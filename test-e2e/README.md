@@ -478,6 +478,7 @@ wrong file is worth fixing together (open item 5).
 | `in-world/pregens.mjs` | `--pregens`: every ready-made character imported whole |
 | `in-world/blank-build.mjs` | `--blank-build`: Build Character on a GM-prepared blank sheet |
 | `in-world/features.mjs` | `--features`: the 3.3.0 features through real clicks and real chat cards |
+| `in-world/spellbook.mjs` | `--spellbook`: the Wizard's spellbook, Prepare tab, granted cards and Cleric swaps, through real clicks |
 | `in-world/ember.mjs` | Stages Ember's creation hand-off, for the Ember world |
 | `in-world/shots.mjs` | Opens and drives the real wizard, for `screenshots.mjs` |
 
@@ -810,9 +811,23 @@ node run.mjs --pregens                # every ready-made character imported whol
 node run.mjs --blank-build            # Build Character on a blank sheet: gate, real right-click, build, rollback, ready-made
 node run.mjs --features               # party switch + card, level-up-ready card + XP glow, Suggest, class guide,
                                       # typed quick name, art without file-browse, Maximum only HP
+node run.mjs --spellbook              # Wizard spellbook at creation and level-up (both editions), Prepare tab,
+                                      # granted spells as locked cards, legacy books, Cleric multi-swaps
 ```
 
 `--only <text>` and `--limit <n>` narrow `--quick-build` and `--pregens` to matching classes or pregens.
+`--only <text>` also narrows `--spellbook` to cases whose name contains it. Its Ember case needs the
+Ember world (`node run.mjs playwright-ember --spellbook --only ember`) and reports itself skipped
+anywhere else: it renders a staged Ember hand-off so the module's real takeover opens the real
+hand-off window, fills the book on its Spells step, applies through Ember's path, and checks the
+book, prepared count and the class's free-pick ledger.
+
+**`--spellbook` answers each level-up's decisions in passes.** Picking a subclass can reveal its
+feature's choices (a 2014 Wizard's Arcane Tradition brings a trait pick), so one pass of the answer
+book leaves the level screen open and Apply silently refuses. A subclass the book leaves open is
+set to the class's first. When Apply does fail, the case names the open decision
+(`level-2: traits`). The Quick Build `--quick-build` Wizard lines also print the book: `book 14/14,
+prepared 9/9, unprepared 5`.
 
 **The sweeps** (see "The subclass sweep" below):
 

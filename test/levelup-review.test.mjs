@@ -95,7 +95,7 @@ function makeState(actor, clone) {
     selectedCantrips: [],
     selectedSpells: [],
     swapCantrip: null,
-    swapSpell: null,
+    swapSpells: [],
     spellPlan: () => ({ isSpellcaster: false, addCantrips: 0, addSpells: 0 })
   };
 }

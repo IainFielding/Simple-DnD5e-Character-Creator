@@ -554,12 +554,19 @@ export const FALLBACK_CANTRIP_SCALES = {
 };
 
 /**
- * Classes that learn their spells into a book and prepare only some of them. A 2014 Wizard writes
- * six 1st-level spells into its spellbook but prepares Intelligence modifier + level of them, so
- * the creation Spells step asks for the book and the assembler prepares only as many as the
- * formula allows.
+ * Classes that learn their spells into a book and prepare only some of them, keyed by class
+ * identifier: how many spells the book starts with at 1st level, and how many it gains with each
+ * level after. The Wizard, in both editions, writes six 1st-level spells into its spellbook and two
+ * more at every level, but prepares only its allowance of them (Intelligence modifier + level in
+ * 2014, the "Max Prepared Spells" scale in 2024). The rest sit in the book unprepared, which is how
+ * dnd5e's own premade wizards hold them (`system.prepared: 0`).
+ *
+ * The Spells steps read this through {@link module:data/spellbook}. A third-party book caster is
+ * one line here.
  */
-export const SPELLBOOK_CLASSES = new Set(["wizard"]);
+export const SPELLBOOK_CLASSES = {
+  wizard: { start: 6, perLevel: 2 }
+};
 
 /**
  * Turn a translation key into the text the player sees, in their configured language.

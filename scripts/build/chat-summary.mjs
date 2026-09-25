@@ -3,6 +3,7 @@ import {
   creationSummaryMode, levelUpSummaryMode
 } from "../config.mjs";
 import { slotChanges } from "../levelup/steps/lvl-review-step.mjs";
+import { preparedChangeNames } from "../levelup/steps/lvl-spells-step.mjs";
 import { formatCp } from "../data/store-source.mjs";
 import { addToParty } from "./party.mjs";
 
@@ -359,6 +360,14 @@ export function captureLevelUpSummary(state) {
     const hpMax = clone.system?.attributes?.hp?.max ?? 0;
     const prevHpMax = actor.system?.attributes?.hp?.max ?? 0;
 
+    // A Wizard's Prepare tab changes, read off the state like the spell picks, by name.
+    let prepared = { nowPrepared: [], noLongerPrepared: [], bookOnly: [] };
+    try {
+      prepared = preparedChangeNames(state);
+    } catch ( err ) {
+      log("level-up chat summary: prepared changes unavailable", err);
+    }
+
     return {
       fromLevel: actor.system?.details?.level ?? 0,
       toLevel: clone.system?.details?.level ?? 0,
@@ -370,7 +379,8 @@ export function captureLevelUpSummary(state) {
       profNow: clone.system?.attributes?.prof ?? 0,
       slots: slotChanges(clone, actor),
       features: dedupe(features),
-      spells: dedupe(spells)
+      spells: dedupe(spells),
+      prepared
     };
   } catch ( err ) {
     log("level-up chat summary capture failed", err);
@@ -407,6 +417,13 @@ export async function postLevelUpSummary(actor, snapshot) {
     for ( const slot of snapshot.slots ) rows.push({
       label: t("chat.levelup.spellSlots"),
       value: `${slot.label} ${slot.change}`
+    });
+    // A Wizard's spellbook: new spells written in unprepared, and what its Prepare tab changed.
+    const prepared = snapshot.prepared ?? {};
+    if ( prepared.bookOnly?.length ) rows.push({ label: t("chat.levelup.bookOnly"), value: prepared.bookOnly.join(", ") });
+    if ( prepared.nowPrepared?.length ) rows.push({ label: t("chat.levelup.nowPrepared"), value: prepared.nowPrepared.join(", ") });
+    if ( prepared.noLongerPrepared?.length ) rows.push({
+      label: t("chat.levelup.noLongerPrepared"), value: prepared.noLongerPrepared.join(", ")
     });
 
     // A level-up that moved no class, granted nothing and changed no number has no story worth a

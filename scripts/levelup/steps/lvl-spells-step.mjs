@@ -6,6 +6,7 @@ import { planSpellReconciliation } from "../../build/spell-reconcile.mjs";
 import { swapAllowance } from "../../data/spell-swap.mjs";
 import { pinContext } from "../../app/compare.mjs";
 import { advancementArray } from "../../data/advancement-util.mjs";
+import { bookFreeUpdate, bookPicksOwed, bookSpells, spellbookRule } from "../../data/spellbook.mjs";
 
 /**
  * @typedef {object} SpellPlan
@@ -33,7 +34,16 @@ import { advancementArray } from "../../data/advancement-util.mjs";
  * @property {number}  [releasedSpells]   Prepared selections a pending granted-spell merge frees.
  * @property {number}  [releasedCantrips] Cantrip selections a pending granted-spell merge frees.
  * @property {number}  addCantrips     Cantrips the player may add this level-up (≥ 0).
- * @property {number}  addSpells       Leveled spells the player may add this level-up (≥ 0).
+ * @property {number}  addSpells       Leveled spells the player may add this level-up (≥ 0). For a
+ *                                     book caster, the *prepared* budget instead.
+ * @property {{start:number, perLevel:number}|null} [bookRule]  The class's spellbook, if it keeps
+ *                                     one ({@link module:data/spellbook}).
+ * @property {number}  [addBook]       Free spells a book caster writes into its book this level-up.
+ * @property {number}  [bookCatchUp]   Of those, how many are ones its book was missing from earlier
+ *                                     levels (a character built before the book was modelled).
+ * @property {number}  [overPrepared]  How far a book caster is over its prepared limit already.
+ * @property {"one"|"any"} [spellSwaps] How many leveled spells may be marked for replacement.
+ * @property {boolean} [preparedWording] Whether owned spells read "Prepared" rather than "Known".
  */
 
 /**
@@ -127,17 +137,32 @@ export function computeSpellPlan(actorLike, classItem) {
   const addCantrips = Math.max(0, cantripTarget - cantripHave) + releasedCantrips;
   const addSpells = maxSpellLevel > 0 ? Math.max(0, spellTarget - spellHave) + releasedSpells : 0;
 
+  // A book caster (the Wizard) writes spells into its book separately from how many it prepares:
+  // two free spells a level, however its prepared allowance moves. Counted as the book's target size
+  // less what it already holds, so a wizard built before the book was modelled catches up here.
+  // `addSpells` stays its prepared budget. See {@link module:data/spellbook}.
+  const bookRule = (listType === "class") ? spellbookRule(castItem) : null;
+  const addBook = (bookRule && (maxSpellLevel > 0)) ? bookPicksOwed(actorLike, castItem, classLevel) : 0;
+  const bookCatchUp = bookRule ? Math.max(0, addBook - bookRule.perLevel) : 0;
+  // Already over the limit: a 2014 Wizard built before its prepared count followed Intelligence
+  // could open its first level-up with more prepared than it may have. The Prepare tab says so.
+  const overPrepared = bookRule ? Math.max(0, (spellHave - releasedSpells) - spellTarget) : 0;
+
   // What the edition lets this caster replace. Read from the casting item rather than the actor
   // because a multiclassed character can hold a 2014 class beside a 2024 one, and only the class
-  // gaining the level has a say in what it may trade.
+  // gaining the level has a say in what it may trade. A book caster trades nothing: changing what
+  // it prepares is its Prepare tab, and nothing in its book is ever deleted.
   const swap = swapAllowance(castItem);
 
   return {
     isSpellcaster: true, listId, listType, sourceTag, castUuid, castItem, classLevel, method,
     cantripTarget, cantripHave, spellTarget, spellHave, maxSpellLevel,
     releasedSpells, releasedCantrips,
-    canSwapCantrip: swap.cantrip, canSwapSpell: swap.spell, swapLabelKey: swap.labelKey,
-    addCantrips, addSpells, hasDelta: (addCantrips > 0) || (addSpells > 0)
+    canSwapCantrip: swap.cantrip, canSwapSpell: swap.spell && !bookRule, swapLabelKey: swap.labelKey,
+    spellSwaps: swap.spells ?? "one", preparedWording: !!swap.prepared,
+    bookRule, addBook, bookCatchUp, overPrepared,
+    addCantrips, addSpells,
+    hasDelta: (addCantrips > 0) || (addSpells > 0) || (addBook > 0) || (overPrepared > 0)
   };
 }
 
@@ -174,14 +199,61 @@ function singleClassSpellLevel(classItem) {
 
 /* -------------------------------------------- */
 
-/** The bucket ("cantrips" | "spells") a pick belongs to, and its per-bucket cap. */
+/**
+ * The tabs this level-up shows, in order. An ordinary caster gets Cantrips and Spells where it has
+ * something to add; a book caster gets Cantrips, Spellbook (new spells for the book) and Prepare
+ * (its whole book, to choose what is prepared), which it always has. Cantrips lead whenever they
+ * are on offer, as on the creation step, and the step opens on the first tab.
+ * @param {SpellPlan} plan
+ * @returns {string[]}
+ */
+function spellTabs(plan) {
+  const tabs = [];
+  if ( plan.bookRule ) {
+    if ( plan.addCantrips > 0 ) tabs.push("cantrips");
+    if ( plan.addBook > 0 ) tabs.push("book");
+    tabs.push("prepare");
+    return tabs;
+  }
+  if ( plan.addCantrips > 0 ) tabs.push("cantrips");
+  if ( plan.addSpells > 0 ) tabs.push("spells");
+  return tabs.length ? tabs : ["spells"];
+}
+
+/** The active tab: the one the player chose where it still exists, else the first there is. */
 function bucketFor(state, plan) {
-  const wantCantrips = plan.addCantrips > 0;
-  let tab = state.spellTab;
-  if ( tab === "cantrips" && !wantCantrips ) tab = "spells";
-  if ( tab === "spells" && plan.addSpells <= 0 ) tab = wantCantrips ? "cantrips" : "spells";
-  if ( !tab ) tab = wantCantrips ? "cantrips" : "spells";
-  return tab;
+  const tabs = spellTabs(plan);
+  return tabs.includes(state.spellTab) ? state.spellTab : tabs[0];
+}
+
+/** Whether a staged leveled pick is prepared. Only a book caster's picks carry `prepared: false`. */
+const isPreparedPick = pick => !!pick && (pick.prepared !== false);
+
+/** The leveled spells marked for replacement this level-up (several, for a Cleric or Druid). */
+function spellMarks(state) {
+  return state.swapSpells ?? [];
+}
+
+/**
+ * A book caster's prepared count as it will stand after Apply, and its limit. Starts from dnd5e's
+ * own count (`preparation.value`, less any a pending merge will remove), then applies the Prepare
+ * tab's changes to owned spells and adds the new picks that are prepared.
+ * @param {object} state
+ * @param {SpellPlan} plan
+ * @returns {{count:number, cap:number, all:object[]}}  `all` is the book's owned spells.
+ */
+export function bookPrepared(state, plan) {
+  const { all } = bookSpells(state.spellSource, plan.castItem);
+  let count = Math.max(0, (plan.spellHave ?? 0) - (plan.releasedSpells ?? 0));
+  const changes = state.preparedChanges ?? {};
+  for ( const item of all ) {
+    const next = changes[item.id];
+    const was = Number(item.system?.prepared ?? 0);
+    if ( (next === undefined) || (was === 2) ) continue;
+    count += (next === 1 ? 1 : 0) - (was === 1 ? 1 : 0);
+  }
+  count += state.selectedSpells.filter(isPreparedPick).length;
+  return { count, cap: plan.spellTarget ?? 0, all };
 }
 
 /**
@@ -223,6 +295,7 @@ export const lvlSpellsStep = {
     }
     if ( action === "pick-spell" ) return pickSpell(el, ctx);
     if ( action === "swap-spell" ) return toggleSwap(el, ctx);
+    if ( action === "toggle-prepared" ) return togglePrepared(el, ctx);
     // Substituting a feat-granted spell the character already knows. The empty value is "keep the
     // spell the feat names", so clearing the control undoes the substitution rather than leaving
     // the grant with nothing.
@@ -241,7 +314,8 @@ export const lvlSpellsStep = {
       state.selectedCantrips = [];
       state.selectedSpells = [];
       state.swapCantrip = null;
-      state.swapSpell = null;
+      state.swapSpells = [];
+      state.preparedChanges = {};
     }
   },
 
@@ -263,13 +337,20 @@ export const lvlSpellsStep = {
       { doc: plan.castItem, listOverride: state.spellListOverride });
     const tab = bucketFor(state, plan);
     const isCantrips = tab === "cantrips";
+    const isBook = !!plan.bookRule;
+    const isBookTab = tab === "book";
+    const isPrepareTab = tab === "prepare";
 
-    // Effective add budgets: a marked swap frees one extra slot in its bucket (Phase 4b). The
+    // Effective add budgets: each marked swap frees one extra slot in its bucket (Phase 4b). The
     // allowance is re-checked here as well as at the rows, so a mark left behind by an earlier
     // render (the leveled class can change mid-session) can never widen a budget the edition
     // has since closed.
+    const marks = plan.canSwapSpell ? spellMarks(state) : [];
     const effCantrips = plan.addCantrips + ((plan.canSwapCantrip && state.swapCantrip) ? 1 : 0);
-    const effSpells = plan.addSpells + ((plan.canSwapSpell && state.swapSpell) ? 1 : 0);
+    const effSpells = plan.addSpells + marks.length;
+    // A book caster's prepared count against its limit, for the Prepare tab and the auto-fill.
+    const prep = isBook ? bookPrepared(state, plan) : null;
+    const prepFull = !!prep && (prep.count >= prep.cap);
 
     const picked = new Set([...state.selectedCantrips, ...state.selectedSpells].map(s => s.uuid));
     const ownedItems = ownedSpells(state.actor, plan.sourceTag, isCantrips);
@@ -288,11 +369,14 @@ export const lvlSpellsStep = {
       ? (pool.byLevel?.[0] ?? [])
       : Object.entries(pool.byLevel ?? {}).filter(([l]) => Number(l) > 0)
           .flatMap(([, arr]) => arr).sort(byLevelThenName);
-    const budget = isCantrips ? effCantrips : effSpells;
+    const budget = isCantrips ? effCantrips : (isBookTab ? plan.addBook : effSpells);
     const chosen = isCantrips ? state.selectedCantrips : state.selectedSpells;
-    const swapMark = isCantrips ? state.swapCantrip : state.swapSpell;
+    const swapMarkedIds = new Set(isCantrips
+      ? (state.swapCantrip ? [state.swapCantrip.id] : [])
+      : marks.map(m => m.id));
+    const swapNames = isCantrips ? (state.swapCantrip ? [state.swapCantrip.name] : []) : marks.map(m => m.name);
     const released = (isCantrips ? plan.releasedCantrips : plan.releasedSpells) ?? 0;
-    const atLimit = chosen.length >= budget;
+    const atLimit = isPrepareTab ? prepFull : (chosen.length >= budget);
     const decorate = s => ({ ...s, levelLabel: s.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: s.level }) });
 
     // Owned spells the player may swap out — offered only when this bucket has add capacity (you
@@ -304,28 +388,47 @@ export const lvlSpellsStep = {
     // note the detail pane opens with. All three fork on the same edition test that words the hint
     // above the list ({@link module:data/spell-swap}) — a 2014 Wizard changes what it has prepared,
     // it does not forget a spell it knows.
-    const prepared = plan.swapLabelKey === "levelup.step.spells.swapHintPrepared";
-    const wording = (known, prep) => `levelup.step.spells.${prepared ? prep : known}`;
+    const prepared = plan.preparedWording ?? (plan.swapLabelKey === "levelup.step.spells.swapHintPrepared");
+    const wording = (known, prepKey) => `levelup.step.spells.${prepared ? prepKey : known}`;
     const ownedLabels = {
       ownedTag: t(wording("ownedTag", "ownedTagPrepared")),
       ownedTip: t(wording("ownedTip", "ownedTipPrepared")),
       swapTag: t("levelup.step.spells.swapTag"),
       swapTip: t("levelup.step.spells.swapTip")
     };
-    const ownedRows = (canSwap && (plan[isCantrips ? "addCantrips" : "addSpells"] > 0))
+    const ownedRows = (canSwap && !isPrepareTab && (plan[isCantrips ? "addCantrips" : "addSpells"] > 0))
       ? ownedItems.map(o => ({
-          ...decorate(o), ...ownedLabels, owned: true, swapMarked: swapMark?.id === o.id,
+          ...decorate(o), ...ownedLabels, owned: true, swapMarked: swapMarkedIds.has(o.id),
           focused: state.focusedSpellUuid === o.uuid
         }))
       : [];
 
-    const poolRows = raw.filter(s => !ownedKeys.has(spellKey(s))).map(s => ({
+    // A new book pick wears the same flag as an owned spell: whether auto-fill prepared it.
+    const pickByUuid = new Map(state.selectedSpells.map(s => [s.uuid, s]));
+    const bookFlag = pick => {
+      if ( !isBook || !pick ) return {};
+      const on = isPreparedPick(pick);
+      return {
+        ownedTag: t(on ? "levelup.step.spells.flagPrepared" : "levelup.step.spells.flagBook"),
+        ownedTip: t(on ? "levelup.step.spells.flagPreparedTip" : "levelup.step.spells.flagBookTip")
+      };
+    };
+
+    const poolRows = isPrepareTab ? [] : raw.filter(s => !ownedKeys.has(spellKey(s))).map(s => ({
       ...decorate(s), owned: false,
       active: picked.has(s.uuid),
+      ...(isBookTab ? bookFlag(pickByUuid.get(s.uuid)) : {}),
       focused: state.focusedSpellUuid === s.uuid,
       disabled: atLimit && !picked.has(s.uuid)
     }));
-    const list = [...ownedRows, ...poolRows];
+    const prepareRows = isPrepareTab ? prepareTabRows(state, prep, raw, decorate) : [];
+    // Spells the character already has from a feature, a feat, another class: shown locked on the
+    // tab they belong to, so the player sees them while choosing. On the Prepare tab they sit among
+    // the book by level; on the others they lead the list, after any swap-out rows.
+    const grantedRows = grantedSpellRows(state, plan, prep, isCantrips, decorate);
+    const list = isPrepareTab
+      ? [...prepareRows, ...grantedRows].sort(byLevelThenName)
+      : [...ownedRows, ...grantedRows, ...poolRows];
 
     let focused = null;
     const focus = list.find(s => s.uuid === state.focusedSpellUuid);
@@ -337,7 +440,15 @@ export const lvlSpellsStep = {
         // purpose, or that trading one away buys a pick this level.
         note: focus.owned
           ? (focus.swapMarked ? t("levelup.step.spells.swapNote") : t(wording("ownedNote", "ownedNotePrepared")))
-          : "",
+          : focus.granted
+            ? (focus.grantedBy
+              ? t("levelup.step.spells.grantedNote", { source: focus.grantedBy })
+              : t("levelup.step.spells.grantedNoteNoSource"))
+            : (focus.locked ? t("levelup.step.spells.alwaysNote") : ""),
+        // On the Prepare tab the detail pane's button prepares and unprepares instead.
+        prepareMode: isPrepareTab && !focus.granted,
+        prepared: !!focus.active,
+        prepareDisabled: prepFull && !focus.active,
         description: await spells.description(focus.uuid),
         source: await spells.sourceBook(focus.uuid)
       };
@@ -365,21 +476,41 @@ export const lvlSpellsStep = {
       swapHint: ownedRows.length ? t(plan.swapLabelKey ?? "levelup.step.spells.swapHint") : "",
       // A marked swap raises this tab's budget by one, which is otherwise an unexplained extra pick:
       // name the spell being replaced so the count and the struck-through row are one story.
-      swapActiveHint: (canSwap && swapMark) ? t("levelup.step.spells.swapActive", { name: swapMark.name }) : "",
+      swapActiveHint: (canSwap && swapNames.length && !isPrepareTab)
+        ? t("levelup.step.spells.swapActive", { name: swapNames.join(", ") }) : "",
       // Why there is an extra pick this level: a spell chosen earlier is about to become always
       // prepared, so the selection it was occupying comes back.
       releasedHint: released > 0 ? t("levelup.step.spells.releasedHint", { count: released }) : "",
+      // A book caster's two extra lines: spells its book was missing, and being over its limit.
+      bookCatchUpHint: (isBookTab && plan.bookCatchUp > 0)
+        ? t("levelup.step.spells.bookCatchUp", { count: plan.bookCatchUp }) : "",
+      overPreparedHint: (isPrepareTab && prep && (prep.count > prep.cap))
+        ? t("levelup.step.spells.overPrepared", { count: prep.count - prep.cap }) : "",
+      prepareIntro: isPrepareTab ? t("levelup.step.spells.prepareIntro", { prepared: prep?.cap ?? 0 }) : "",
+      isBook,
+      hasBook: isBook && (plan.addBook > 0),
+      addBook: plan.addBook ?? 0,
+      bookFull: isBook && (state.selectedSpells.length >= (plan.addBook ?? 0)),
+      isBookTab,
+      isPrepareTab,
+      preparedCount: prep?.count ?? 0,
+      preparedCap: prep?.cap ?? 0,
+      preparedFull: prepFull,
       hasCantrips: plan.addCantrips > 0,
-      hasSpells: plan.addSpells > 0,
+      hasSpells: !isBook && (plan.addSpells > 0),
       isCantripsTab: isCantrips,
-      isSpellsTab: !isCantrips,
+      isSpellsTab: !isCantrips && !isBookTab && !isPrepareTab,
+      // The level filter makes sense on every tab that lists more than cantrips.
+      showLevelFilter: !isCantrips,
       addCantrips: effCantrips,
       addSpells: effSpells,
       cantripCount: state.selectedCantrips.length,
       spellCount: state.selectedSpells.length,
       cantripsFull: effCantrips > 0 && state.selectedCantrips.length >= effCantrips,
       spellsFull: effSpells > 0 && state.selectedSpells.length >= effSpells,
-      needLabel: t("levelup.step.spells.need", { count: Math.max(0, budget - chosen.length) }),
+      needLabel: isPrepareTab
+        ? t("levelup.step.spells.preparedOf", { count: prep?.count ?? 0, cap: prep?.cap ?? 0 })
+        : t("levelup.step.spells.need", { count: Math.max(0, budget - chosen.length) }),
       atLimit,
       list: pinned.cards,
       compareCategory: pinned.compareCategory,
@@ -418,14 +549,133 @@ function knownSpellGroups(source) {
     const level = Number(item.system?.level ?? 0);
     if ( !byLevel.has(level) ) byLevel.set(level, []);
     // The compendium source where there is one: a clone item's own uuid does not resolve for the
-    // chip's tooltip or click-to-open.
-    byLevel.get(level).push({ uuid: item._stats?.compendiumSource ?? item.uuid, name: item.name, img: item.img });
+    // chip's tooltip or click-to-open. A leveled spell that is not prepared (a wizard's book-only
+    // spell) is marked so the chip can show it faded; otherwise the whole book reads as prepared.
+    byLevel.get(level).push({
+      uuid: item._stats?.compendiumSource ?? item.uuid, name: item.name, img: item.img,
+      unprepared: (level > 0) && (Number(item.system?.prepared ?? 1) === 0)
+    });
   }
   const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
   return [...byLevel.keys()].sort((a, b) => a - b).map(level => ({
     label: level === 0 ? t("levelup.step.spells.cantrips") : t("levelup.step.spells.levelTag", { level }),
     spells: byLevel.get(level).sort(byName)
   }));
+}
+
+/**
+ * The Prepare tab's rows: a book caster's whole book, owned spells and this session's new picks,
+ * each flagged with its state (Prepared, In book, Always, New) the way the owned-spell badge is.
+ * @param {object} state
+ * @param {{count:number, cap:number, all:object[]}} prep  From {@link bookPrepared}.
+ * @param {object[]} pool       The leveled pool, for the new picks' full card data.
+ * @param {(s:object) => object} decorate
+ * @returns {object[]}
+ */
+function prepareTabRows(state, prep, pool, decorate) {
+  const full = prep.count >= prep.cap;
+  const changes = state.preparedChanges ?? {};
+  const flag = key => ({ ownedTag: t(`levelup.step.spells.${key}`), ownedTip: t(`levelup.step.spells.${key}Tip`) });
+  const rows = prep.all.map(item => {
+    const was = Number(item.system?.prepared ?? 0);
+    const now = (was === 2) ? 2 : (changes[item.id] ?? was);
+    const card = { ...buildSpellFromEntry(item), id: item.id, uuid: item._stats?.compendiumSource ?? item.uuid };
+    return {
+      ...decorate(card),
+      ...flag(now === 2 ? "flagAlways" : (now === 1 ? "flagPrepared" : "flagBook")),
+      active: now > 0,
+      locked: now === 2,
+      focused: state.focusedSpellUuid === card.uuid,
+      disabled: full && (now === 0)
+    };
+  });
+  for ( const pick of state.selectedSpells ) {
+    const card = pool.find(s => s.uuid === pick.uuid) ?? pick;
+    const on = isPreparedPick(pick);
+    rows.push({
+      ...decorate(card),
+      ...flag("flagNew"),
+      ownedFlagClass: "is-new",
+      isNewPick: true,
+      active: on,
+      focused: state.focusedSpellUuid === card.uuid,
+      disabled: full && !on
+    });
+  }
+  return rows.sort(byLevelThenName);
+}
+
+/**
+ * The spells the character already has that aren't this caster's own picks: always-prepared grants
+ * (a Cleric's domain spells, a Wizard's Spell Mastery), feat and species spells, another class's
+ * spells. Each is shown locked, flagged "Always" or "Granted", with a tooltip naming what gave it.
+ * A book caster's own book is left to the Prepare tab's rows, and this caster's ordinary picks to
+ * the swap rows. Cantrips on the Cantrips tab, leveled spells everywhere else; deduplicated by
+ * spell identity, since a feature can hand over two copies of one spell.
+ * @param {object} state
+ * @param {SpellPlan} plan
+ * @param {{all:object[]}|null} prep   A book caster's book, from {@link bookPrepared}.
+ * @param {boolean} cantrips           Whether the active tab is Cantrips.
+ * @param {(s:object) => object} decorate
+ * @returns {object[]}
+ */
+function grantedSpellRows(state, plan, prep, cantrips, decorate) {
+  const items = [...(state.spellSource?.items ?? [])];
+  const inBook = new Set((prep?.all ?? []).map(i => i.id));
+  const seen = new Set();
+  const rows = [];
+  for ( const item of items ) {
+    if ( item.type !== "spell" ) continue;
+    const level = Number(item.system?.level ?? 0);
+    if ( cantrips ? (level !== 0) : (level === 0) ) continue;
+    if ( inBook.has(item.id) ) continue;
+    const prepared = Number(item.system?.prepared ?? 0);
+    const ownPick = ((item.system?.sourceItem ?? "") === plan.sourceTag)
+      && (prepared !== 2) && !item.flags?.dnd5e?.advancementOrigin;
+    if ( ownPick ) continue;
+    const key = spellKey(item);
+    if ( key && seen.has(key) ) continue;
+    if ( key ) seen.add(key);
+
+    const source = grantSource(item, items);
+    const always = prepared === 2;
+    let tip;
+    if ( always ) tip = source ? t("levelup.step.spells.grantedTipAlways", { source }) : t("levelup.step.spells.flagAlwaysTip");
+    else tip = source ? t("levelup.step.spells.grantedTip", { source }) : t("levelup.step.spells.grantedTipNoSource");
+    const card = { ...buildSpellFromEntry(item), id: item.id, uuid: item._stats?.compendiumSource ?? item.uuid };
+    rows.push({
+      ...decorate(card),
+      granted: true,
+      locked: true,
+      active: always,
+      grantedBy: source,
+      ownedTag: t(always ? "levelup.step.spells.flagAlways" : "levelup.step.spells.flagGranted"),
+      ownedTip: tip,
+      focused: state.focusedSpellUuid === card.uuid
+    });
+  }
+  return rows.sort(byLevelThenName);
+}
+
+/**
+ * What gave a character a spell, by name: the item its advancement record points to, else the item
+ * its `sourceItem` tag names (`feat:fey-touched`, `class:cleric`). Empty when neither resolves.
+ * @param {object} item
+ * @param {object[]} items   The actor's items.
+ * @returns {string}
+ */
+function grantSource(item, items) {
+  const origin = String(item.flags?.dnd5e?.advancementOrigin ?? "");
+  if ( origin ) {
+    const granter = items.find(i => i.id === origin.split(".")[0]);
+    if ( granter?.name ) return granter.name;
+  }
+  const identifier = String(item.system?.sourceItem ?? "").split(":")[1];
+  if ( identifier ) {
+    const named = items.find(i => (i.type !== "spell") && (i.system?.identifier === identifier));
+    if ( named?.name ) return named.name;
+  }
+  return "";
 }
 
 /** Toggle a spell into/out of the staged selection, capped at the effective add budget (incl. swap). */
@@ -438,18 +688,61 @@ async function pickSpell(el, { state }) {
   const idx = bucket.findIndex(s => s.uuid === uuid);
   if ( idx >= 0 ) { bucket.splice(idx, 1); return; }
 
-  const allowed = isCantrip ? plan.canSwapCantrip : plan.canSwapSpell;
-  const swap = allowed && (isCantrip ? state.swapCantrip : state.swapSpell);
-  const max = (isCantrip ? plan.addCantrips : plan.addSpells) + (swap ? 1 : 0);
+  // A book caster's leveled pick goes into its book: capped by the free book picks, and prepared
+  // while its prepared limit has room (auto-fill), otherwise written in unprepared.
+  if ( !isCantrip && plan.bookRule ) {
+    if ( bucket.length >= (plan.addBook ?? 0) ) return;
+    const doc = await fromUuid(uuid).catch(() => null);
+    if ( !doc ) return;
+    const { count, cap } = bookPrepared(state, plan);
+    bucket.push({ uuid, id: doc.id, name: doc.name, img: doc.img, level: doc.system?.level ?? 0, prepared: count < cap });
+    return;
+  }
+
+  const extra = isCantrip
+    ? ((plan.canSwapCantrip && state.swapCantrip) ? 1 : 0)
+    : (plan.canSwapSpell ? spellMarks(state).length : 0);
+  const max = (isCantrip ? plan.addCantrips : plan.addSpells) + extra;
   if ( bucket.length >= max ) return;   // ignore the click once the budget is spent
   const doc = await fromUuid(uuid).catch(() => null);
   if ( doc ) bucket.push({ uuid, id: doc.id, name: doc.name, img: doc.img, level: doc.system?.level ?? 0 });
 }
 
 /**
+ * The Prepare tab: prepare or unprepare one book spell. An owned spell's change is staged in
+ * `state.preparedChanges` (item id → 0 or 1, and dropped again when it returns to what the sheet
+ * has); a new pick's is its own `prepared` flag. Refused past the limit, and never for an
+ * always-prepared spell.
+ */
+async function togglePrepared(el, { state }) {
+  const plan = state.spellPlan();
+  if ( !plan.bookRule ) return;
+  const { count, cap, all } = bookPrepared(state, plan);
+  const id = el.dataset.id;
+  if ( id ) {
+    const item = all.find(i => i.id === id);
+    if ( !item ) return;
+    const was = Number(item.system?.prepared ?? 0);
+    if ( was === 2 ) return;
+    state.preparedChanges ??= {};
+    const next = ((state.preparedChanges[id] ?? was) === 1) ? 0 : 1;
+    if ( (next === 1) && (count >= cap) ) return;
+    if ( next === was ) delete state.preparedChanges[id];
+    else state.preparedChanges[id] = next;
+    return;
+  }
+  const pick = state.selectedSpells.find(s => s.uuid === el.dataset.uuid);
+  if ( !pick ) return;
+  if ( isPreparedPick(pick) ) { pick.prepared = false; return; }
+  if ( count >= cap ) return;
+  pick.prepared = true;
+}
+
+/**
  * Mark (or unmark) an owned spell for replacement this level-up (Phase 4b). Marking frees one extra
  * slot in that bucket; unmarking drops the replacement pick that filled it so the budget stays
- * honest. Marking a different owned spell moves the mark without changing the freed count.
+ * honest. Where only one leveled spell may be replaced, marking a different one moves the mark
+ * without changing the freed count; a Cleric or Druid (`spellSwaps: "any"`) may mark several.
  */
 async function toggleSwap(el, { state }) {
   const plan = state.spellPlan();
@@ -457,17 +750,29 @@ async function toggleSwap(el, { state }) {
   // The rows this fires from are only rendered when the edition allows the replacement, so this is
   // belt-and-braces against a stale click landing after the leveled class changed.
   if ( !(isCantrip ? plan.canSwapCantrip : plan.canSwapSpell) ) return;
-  const key = isCantrip ? "swapCantrip" : "swapSpell";
   const bucket = isCantrip ? state.selectedCantrips : state.selectedSpells;
   const addBudget = isCantrip ? plan.addCantrips : plan.addSpells;
   const id = el.dataset.id;
+  const mark = { id, name: el.dataset.name ?? "" };
 
-  if ( state[key]?.id === id ) {
-    state[key] = null;
-    while ( bucket.length > addBudget ) bucket.pop();   // give back the freed slot's pick
-  } else {
-    state[key] = { id, name: el.dataset.name ?? "" };
+  if ( isCantrip ) {
+    if ( state.swapCantrip?.id === id ) {
+      state.swapCantrip = null;
+      while ( bucket.length > addBudget ) bucket.pop();   // give back the freed slot's pick
+    } else {
+      state.swapCantrip = mark;
+    }
+    return;
   }
+
+  const marks = (state.swapSpells ??= []);
+  const at = marks.findIndex(m => m.id === id);
+  if ( at >= 0 ) {
+    marks.splice(at, 1);
+    while ( bucket.length > (addBudget + marks.length) ) bucket.pop();
+  }
+  else if ( plan.spellSwaps === "any" ) marks.push(mark);
+  else marks.splice(0, marks.length, mark);
 }
 
 /**
@@ -604,20 +909,53 @@ export async function featSpellGrants(state) {
 }
 
 /**
- * Resolve the staged spell step into concrete actor changes: the spells to create and the ids of
- * swapped-out spells to delete. A swap only deletes when its freed slot was actually used (the
- * bucket holds more picks than the base add budget), so marking without picking a replacement is a
- * harmless no-op.
+ * Resolve the staged spell step into concrete actor changes: the spells to create, the ids of
+ * swapped-out spells to delete, and a book caster's prepared-state updates. A swap only deletes
+ * when its freed slot was actually used (the bucket holds more picks than the base add budget), so
+ * marking without picking a replacement is a harmless no-op; with several marks, as many are
+ * deleted as extra picks were made, in the order they were marked.
  * @param {import("../levelup-state.mjs").LevelUpState} state
- * @returns {{sourceTag:string, method:string, create:{uuid:string}[], deleteIds:string[]}}
+ * A book caster also gets `bookLedger`: the class-item update recording the free book picks made
+ * ({@link module:data/spellbook.bookFreeUpdate}). Call this *before* creating the spells, since a
+ * class with no ledger yet estimates from the book as it stands.
+ * @returns {{sourceTag:string, method:string, create:{uuid:string, prepared?:boolean}[],
+ *   deleteIds:string[], prepareUpdates:{_id:string, "system.prepared":number}[], bookLedger:object|null}}
  */
 export function spellChanges(state) {
   const plan = state.spellPlan();
   const create = [...state.selectedCantrips, ...state.selectedSpells];
   const deleteIds = [];
   if ( state.swapCantrip && state.selectedCantrips.length > plan.addCantrips ) deleteIds.push(state.swapCantrip.id);
-  if ( state.swapSpell && state.selectedSpells.length > plan.addSpells ) deleteIds.push(state.swapSpell.id);
-  return { sourceTag: plan.sourceTag, method: plan.method ?? "spell", create, deleteIds };
+  const used = Math.max(0, state.selectedSpells.length - (plan.addSpells ?? 0));
+  if ( plan.canSwapSpell && used ) deleteIds.push(...spellMarks(state).slice(0, used).map(m => m.id));
+  const prepareUpdates = plan.bookRule
+    ? Object.entries(state.preparedChanges ?? {}).map(([_id, value]) => ({ _id, "system.prepared": value }))
+    : [];
+  const bookLedger = plan.bookRule
+    ? bookFreeUpdate(state.spellSource, plan.castItem, state.selectedSpells.length)
+    : null;
+  return { sourceTag: plan.sourceTag, method: plan.method ?? "spell", create, deleteIds, prepareUpdates, bookLedger };
+}
+
+/**
+ * What the Prepare tab changed, by name, for the Review screen and the chat card: owned spells now
+ * prepared or no longer prepared, and the new picks going into the book unprepared.
+ * @param {import("../levelup-state.mjs").LevelUpState} state
+ * @returns {{nowPrepared:string[], noLongerPrepared:string[], bookOnly:string[]}}
+ */
+export function preparedChangeNames(state) {
+  const out = { nowPrepared: [], noLongerPrepared: [], bookOnly: [] };
+  const plan = state.spellPlan?.();
+  if ( !plan?.bookRule ) return out;
+  const items = state.spellSource?.items;
+  for ( const [id, value] of Object.entries(state.preparedChanges ?? {}) ) {
+    const item = items?.get?.(id) ?? [...(items ?? [])].find(i => i.id === id);
+    if ( item ) (value === 1 ? out.nowPrepared : out.noLongerPrepared).push(item.name);
+  }
+  out.bookOnly = state.selectedSpells.filter(s => !isPreparedPick(s)).map(s => s.name);
+  const byName = (a, b) => a.localeCompare(b, game.i18n.lang);
+  for ( const list of Object.values(out) ) list.sort(byName);
+  return out;
 }
 
 /**
@@ -702,7 +1040,9 @@ export async function buildSpellItemData(sourceTag, picks, method = "spell") {
     if ( !doc ) return;
     const obj = doc.toObject();
     if ( obj._stats ) obj._stats.compendiumSource = picks[i].uuid;
-    foundry.utils.setProperty(obj, "system.prepared", 1);
+    // A book caster's leveled pick can go into the book unprepared; everything else is prepared.
+    const unprepared = ((doc.system?.level ?? 0) > 0) && (picks[i].prepared === false);
+    foundry.utils.setProperty(obj, "system.prepared", unprepared ? 0 : 1);
     foundry.utils.setProperty(obj, "system.method", method);
     if ( sourceTag ) foundry.utils.setProperty(obj, "system.sourceItem", sourceTag);
     data.push(obj);

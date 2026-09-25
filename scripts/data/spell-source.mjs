@@ -1,5 +1,5 @@
-import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, FALLBACK_CANTRIP_SCALES, SPELLBOOK_CLASSES, log }
-  from "../config.mjs";
+import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, FALLBACK_CANTRIP_SCALES, log } from "../config.mjs";
+import { spellbookRule } from "./spellbook.mjs";
 import { advancementArray, advancementTitle} from "./advancement-util.mjs";
 import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
@@ -191,7 +191,7 @@ export class SpellSource {
    * @param {string} classUuid
    * @returns {Promise<{isSpellcaster:boolean, cantrips?:object[], level1?:object[],
    *   maxCantrips?:number, maxSpells?:number, classId?:string, preparedFormula?:string,
-   *   spellbook?:boolean}>}
+   *   spellbook?:boolean, bookSize?:number}>}
    */
   async forClass(classUuid, { listOverride = "" } = {}) {
     if ( !classUuid ) return { isSpellcaster: false };
@@ -425,12 +425,17 @@ export class SpellSource {
     // ({@link levelOneSpellLimits}). `maxSpells` stays the flat table's figure for anything that
     // cannot evaluate it.
     const preparedFormula = abilityPreparationFormula(doc);
-    const spellbook = !!preparedFormula && SPELLBOOK_CLASSES.has(classId);
+    // A book caster, in either edition, writes more spells than it prepares. `maxSpells` above is
+    // then its *prepared* figure (the 2024 "Max Prepared Spells" scale) or the flat table's book
+    // size (2014, which has no scale), and `bookSize` is what the book holds at 1st level.
+    const book = spellbookRule(doc);
+    const spellbook = !!book;
+    const bookSize = book?.start ?? 0;
 
     log(`spells for "${classId}"${listNote(list, classId)}: ${cantrips.length} cantrips, ` +
       `${level1.length} lvl-1 (know ${maxCantrips}/${preparedFormula || maxSpells})`);
     return {
-      isSpellcaster: true, cantrips, level1, maxCantrips, maxSpells, classId, preparedFormula, spellbook,
+      isSpellcaster: true, cantrips, level1, maxCantrips, maxSpells, classId, preparedFormula, spellbook, bookSize,
       ...listProvenance(list, classId, all.length)
     };
   }
@@ -571,10 +576,12 @@ export function abilityPreparationFormula(classDoc) {
  *
  * Most classes read both straight off `info` (their scale, or the flat table). A 2014 prepared
  * caster evaluates its formula against the build's final scores instead, with the rules' floor of
- * one: a Cleric with Wisdom 16 prepares four, not a flat three. A spellbook class (the Wizard)
- * still picks its whole book, six spells, and only `maxPrepared` of them are prepared.
+ * one: a Cleric with Wisdom 16 prepares four, not a flat three. A spellbook class (the Wizard,
+ * either edition) still picks its whole book, six spells, and only `maxPrepared` of them are
+ * prepared: its formula's figure in 2014, its "Max Prepared Spells" scale in 2024.
  * @param {{maxCantrips?:number, maxSpells?:number, classId?:string, preparedFormula?:string,
- *   spellbook?:boolean}|null} info   The class's spell payload, or the slim `state.spellInfo`.
+ *   spellbook?:boolean, bookSize?:number}|null} info   The class's spell payload, or the slim
+ *   `state.spellInfo`.
  * @param {Record<string, number>|null} scores  Final ability scores, origin increases included.
  * @returns {{maxCantrips:number, maxSpells:number, maxPrepared:number}}
  */
@@ -584,8 +591,12 @@ export function levelOneSpellLimits(info, scores) {
   const prepared = info?.preparedFormula
     ? evaluateLevelOneFormula(info.preparedFormula, info.classId, scores)
     : null;
-  if ( prepared === null ) return { maxCantrips, maxSpells: tableSpells, maxPrepared: tableSpells };
-  return { maxCantrips, maxSpells: info.spellbook ? tableSpells : prepared, maxPrepared: prepared };
+  // The book's size, for a book caster: its own 1st-level figure where the payload carries one,
+  // else the table's (the 2014 Wizard's six).
+  const book = info?.spellbook ? (Number(info.bookSize) || tableSpells) : null;
+  const preparedCount = prepared ?? tableSpells;
+  const maxSpells = book ?? preparedCount;
+  return { maxCantrips, maxSpells, maxPrepared: Math.min(preparedCount, maxSpells) };
 }
 
 /**

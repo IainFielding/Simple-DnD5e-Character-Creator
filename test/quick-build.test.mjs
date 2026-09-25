@@ -436,7 +436,7 @@ describe("applyQuickBuild (fighter + sage + human fixtures)", () => {
     expect(state.spellInfo)
       .toEqual({
         isSpellcaster: false, maxCantrips: 0, maxSpells: 0, listMissing: false,
-        classId: "", preparedFormula: "", spellbook: false
+        classId: "", preparedFormula: "", spellbook: false, bookSize: 0
       });
     expect(state.selectedCantrips).toEqual([]);
 

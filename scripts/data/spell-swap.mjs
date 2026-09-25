@@ -18,6 +18,13 @@
  * ordinary embedded Item, so trading one for another *is* how that list changes, and withdrawing
  * the control would remove a real capability to satisfy a label. So we fix the label.
  *
+ * **How many.** A class that prepares from its whole list may change *any number* of prepared
+ * spells after a long rest: the Cleric and Druid in both editions, and the 2014 Paladin and
+ * Artificer. Nothing in dnd5e helps a player do that, and a level-up is when players reshuffle, so
+ * those classes may mark as many spells for replacement as they like (`spells: "any"`). Everyone
+ * else keeps the one swap. The Wizard is the exception to both: it prepares from its *book*, so its
+ * level-up has a Prepare tab instead and no swap at all ({@link module:data/spellbook}).
+ *
  * @see module:levelup/steps/lvl-spells-step for the step that consumes this
  */
 
@@ -26,6 +33,12 @@
  * Keyed by `system.identifier`. Used only to choose the wording — never to withhold the control.
  */
 const PREPARED_CASTERS_2014 = new Set(["cleric", "druid", "paladin", "wizard", "artificer"]);
+
+/** Classes that may change any number of prepared spells, by edition. Keyed by `system.identifier`. */
+const CHANGE_ANY = {
+  2014: new Set(["cleric", "druid", "paladin", "artificer"]),
+  2024: new Set(["cleric", "druid"])
+};
 
 /**
  * What this caster may replace when it gains a level.
@@ -37,16 +50,26 @@ const PREPARED_CASTERS_2014 = new Set(["cleric", "druid", "paladin", "wizard", "
  *
  * @param {Item5e|{system?: object}|null} castItem  The class *or subclass* item that casts — whatever
  *   `spellcastingItem()` resolved for the level being gained.
- * @returns {{cantrip: boolean, spell: boolean, labelKey: string}}
- *   `labelKey` is relative to the module namespace, for {@link module:config.t}.
+ * @returns {{cantrip: boolean, spell: boolean, spells: "one"|"any", prepared: boolean, labelKey: string}}
+ *   `spells` is how many leveled spells may be marked at once; `prepared` whether the class
+ *   prepares its spells (so owned spells read "Prepared", not "Known"). `labelKey` is relative to
+ *   the module namespace, for {@link module:config.t}.
  */
 export function swapAllowance(castItem) {
   const is2014 = String(castItem?.system?.source?.rules ?? "") === "2014";
-  if ( !is2014 ) return { cantrip: true, spell: true, labelKey: "levelup.step.spells.swapHint" };
-  const prepared = PREPARED_CASTERS_2014.has(castItem?.system?.identifier ?? "");
+  const identifier = castItem?.system?.identifier ?? "";
+  const any = CHANGE_ANY[is2014 ? 2014 : 2024].has(identifier);
+  const spells = any ? "any" : "one";
+  if ( any ) {
+    return { cantrip: !is2014, spell: true, spells, prepared: true, labelKey: "levelup.step.spells.swapHintAny" };
+  }
+  if ( !is2014 ) return { cantrip: true, spell: true, spells, prepared: false, labelKey: "levelup.step.spells.swapHint" };
+  const prepared = PREPARED_CASTERS_2014.has(identifier);
   return {
     cantrip: false,
     spell: true,
+    spells,
+    prepared,
     labelKey: prepared ? "levelup.step.spells.swapHintPrepared" : "levelup.step.spells.swapHint"
   };
 }

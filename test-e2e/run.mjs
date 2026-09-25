@@ -18,6 +18,7 @@
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
  *   node run.mjs --blank-build            # Build Character on a GM-prepared blank sheet, end to end
  *   node run.mjs --features               # party switch + card button, Suggest, class guide, quick name
+ *   node run.mjs --spellbook              # Wizard spellbook, Prepare tab, granted cards, Cleric swaps
  *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
  *                                         # native only, per level, in a world without this module
  *   HEADED=1 node run.mjs                 # watch the native wizard being driven
@@ -203,7 +204,8 @@ try {
     });
     for ( const c of r.cases ) {
       console.log(`${c.ok ? "PASS  " : "FAIL  "} ${c.label}`
-        + (c.error ? "" : ` — ${c.items} item(s), ${c.spells} spell(s)`));
+        + (c.error ? "" : ` — ${c.items} item(s), ${c.spells} spell(s)`)
+        + (c.spellbook ? ` — ${c.spellbook}` : ""));
       if ( c.error ) console.log(`  error: ${c.error}`);
       for ( const f of c.failures ?? [] ) console.log(`  ! ${f}`);
     }
@@ -246,6 +248,24 @@ ${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);
     const passed = r.cases.filter(c => c.ok).length;
     if ( r.ok ) console.log(`
 PASS   ${passed}/${r.cases.length} feature cases`);
+    else {
+      console.log(`
+FAIL   ${r.failures.length} problem(s)`);
+      for ( const f of r.failures ) console.log(`  ${f}`);
+      exitCode = 1;
+    }
+  } else if ( flag("spellbook") ) {
+    // The Wizard's spellbook and the spell-step changes with it, through real windows and clicks.
+    // See in-world/spellbook.mjs.
+    const r = await harness("checkSpellbook", { only: value("only") ?? null });
+    for ( const c of r.cases ) {
+      console.log(`${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);
+      for ( const n of c.notes ?? [] ) console.log(`  ${n}`);
+      for ( const f of c.failures ) console.log(`  ! ${f}`);
+    }
+    const passed = r.cases.filter(c => c.ok).length;
+    if ( r.ok ) console.log(`
+PASS   ${passed}/${r.cases.length} spellbook cases`);
     else {
       console.log(`
 FAIL   ${r.failures.length} problem(s)`);

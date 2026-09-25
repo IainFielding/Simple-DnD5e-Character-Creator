@@ -77,14 +77,7 @@
           worked that out would be the wrong way round. Its label carries the count, and both label
           and tooltip are patched in place as pins change (see _togglePin) so pinning never costs a
           re-render of this grid or the search text in the field above. --}}
-    {{#if compare}}
-    <button type="button" class="creator-btn creator-btn-ghost creator-compare-btn"
-            data-action="openCompare" data-category="{{compare.category}}"
-            data-tooltip="{{compare.hint}}" {{#unless compare.canCompare}}disabled{{/unless}}>
-      <i class="fa-solid fa-scale-balanced"></i>
-      <span class="creator-compare-btn-label">{{compare.label}}</span>
-    </button>
-    {{/if}}
+    {{!-- Compare is in the stage footer (templates/stage.hbs), the same place on every step. --}}
 
     {{!-- Only offered once there is something to go back to. With nothing chosen the drawer is
           the step, and a close button would be a control that does nothing. --}}

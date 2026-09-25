@@ -1,7 +1,9 @@
 {{!-- Post-commit spell step (§3.4): add the cantrips and spells this level unlocked. The spell
       choices take the wide main column (room for long names, filtered by level/school); the focused
       spell's description sits in a narrower sidebar with the running tally pinned beneath it.
-      Add-only — the pool hides spells already known, and each tab is capped at the level-up's budget. --}}
+      Add-only — the pool hides spells already known, and each tab is capped at the level-up's budget.
+      A Wizard gets Spellbook (new spells for its book) and Prepare (its whole book, to choose what
+      is prepared) in place of the Spells tab. --}}
 <section class="creator-pick creator-spells levelup-spells">
   {{#if isSpellcaster}}
   <!-- Main column: intro, tabs, filters, and the spell list for the active tab -->
@@ -10,6 +12,9 @@
     <p class="levelup-spells-intro">{{intro}}</p>
     {{#if swapHint}}<p class="levelup-spells-swaphint"><i class="fa-solid fa-arrow-right-arrow-left"></i> {{swapHint}}</p>{{/if}}
     {{#if releasedHint}}<p class="levelup-spells-releasedhint"><i class="fa-solid fa-wand-sparkles"></i> {{releasedHint}}</p>{{/if}}
+    {{#if bookCatchUpHint}}<p class="levelup-spells-releasedhint"><i class="fa-solid fa-book"></i> {{bookCatchUpHint}}</p>{{/if}}
+    {{#if prepareIntro}}<p class="levelup-spells-intro">{{prepareIntro}}</p>{{/if}}
+    {{#if overPreparedHint}}<p class="levelup-spells-overprepared"><i class="fa-solid fa-triangle-exclamation"></i> {{overPreparedHint}}</p>{{/if}}
     {{!-- Once a swap is marked the tab's count goes up by one, which without this line is an extra
           pick out of nowhere. Naming the spell ties the raised budget to the struck-through row. --}}
     {{#if swapActiveHint}}<p class="levelup-spells-swapactive"><i class="fa-solid fa-arrow-right-arrow-left"></i> {{swapActiveHint}}</p>{{/if}}
@@ -28,6 +33,14 @@
         <span class="creator-spell-count">{{cantripCount}}/{{addCantrips}}</span>
       </button>
       {{/if}}
+      {{!-- A Wizard's book tab comes after Cantrips, in the order the step's own logic uses. --}}
+      {{#if hasBook}}
+      <button type="button" class="creator-spell-tab {{#if isBookTab}}is-active{{/if}} {{#if bookFull}}is-full{{/if}}"
+              data-action="stepAction" data-step-action="spell-tab" data-tab="book">
+        {{localize "sogrom-dnd5e-character-creator.levelup.step.spells.spellbookTab"}}
+        <span class="creator-spell-count">{{spellCount}}/{{addBook}}</span>
+      </button>
+      {{/if}}
       {{#if hasSpells}}
       <button type="button" class="creator-spell-tab {{#if isSpellsTab}}is-active{{/if}} {{#if spellsFull}}is-full{{/if}}"
               data-action="stepAction" data-step-action="spell-tab" data-tab="spells">
@@ -35,11 +48,18 @@
         <span class="creator-spell-count">{{spellCount}}/{{addSpells}}</span>
       </button>
       {{/if}}
+      {{#if isBook}}
+      <button type="button" class="creator-spell-tab {{#if isPrepareTab}}is-active{{/if}} {{#if preparedFull}}is-full{{/if}}"
+              data-action="stepAction" data-step-action="spell-tab" data-tab="prepare">
+        {{localize "sogrom-dnd5e-character-creator.levelup.step.spells.prepareTab"}}
+        <span class="creator-spell-count">{{preparedCount}}/{{preparedCap}}</span>
+      </button>
+      {{/if}}
     </div>
 
     <div class="creator-toolbar creator-toolbar--stacked">
-      {{> "modules/sogrom-dnd5e-character-creator/templates/parts/spell-filters.hbs" showLevel=isSpellsTab}}
-      <span class="creator-count">{{needLabel}}</span>
+      {{!-- No "Choose N more" here: the tab counts already say it. --}}
+      {{> "modules/sogrom-dnd5e-character-creator/templates/parts/spell-filters.hbs" showLevel=showLevelFilter}}
     </div>
 
     <ul class="creator-picklist">
@@ -76,7 +96,28 @@
         {{/if}}
       </header>
 
-      {{#if focused.owned}}
+      {{#if focused.granted}}
+      {{! A spell the character already has from a feature: say which, and offer nothing to press. }}
+      <p class="creator-swap-note"><i class="fa-solid fa-gift" aria-hidden="true"></i><span>{{focused.note}}</span></p>
+      {{else if focused.prepareMode}}
+      {{! The Prepare tab: prepare or unprepare a book spell. An always-prepared spell says why it
+          can't be changed instead. An owned spell is named by its item id, a new pick by its uuid. }}
+      {{#if focused.note}}
+      <p class="creator-swap-note"><i class="fa-solid fa-lock" aria-hidden="true"></i><span>{{focused.note}}</span></p>
+      {{/if}}
+      {{#unless focused.locked}}
+      <button type="button" class="creator-btn {{#if focused.prepared}}creator-btn-danger{{else}}creator-btn-primary{{/if}}"
+              data-action="stepAction" data-step-action="toggle-prepared"
+              {{#if focused.isNewPick}}data-uuid="{{focused.uuid}}"{{else}}data-id="{{focused.id}}"{{/if}}
+              {{#if focused.prepareDisabled}}disabled{{/if}}>
+        {{#if focused.prepared}}
+        <i class="fa-solid fa-book"></i> {{localize "sogrom-dnd5e-character-creator.levelup.step.spells.unprepare"}}
+        {{else}}
+        <i class="fa-solid fa-book-open"></i> {{localize "sogrom-dnd5e-character-creator.levelup.step.spells.prepare"}}
+        {{/if}}
+      </button>
+      {{/unless}}
+      {{else if focused.owned}}
       {{! An owned spell — say why it is in a list of spells to learn, then offer to swap it out
           (freeing a pick) or keep it. The note carries the explanation the one-word flag on the row
           can only gesture at, and changes once the swap is marked to say what happens next. }}
@@ -162,7 +203,7 @@
           <span class="creator-spell-group-label">{{label}}</span>
           <ul class="creator-spell-chips">
             {{#each spells}}
-            <li><a class="content-link creator-spell-chip" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
+            <li><a class="content-link creator-spell-chip {{#if unprepared}}is-unprepared{{/if}}" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}{{#if unprepared}}<i class="fa-solid fa-book creator-spell-chip-mark" data-tooltip="{{localize 'sogrom-dnd5e-character-creator.levelup.step.spells.flagBookTip'}}" aria-label="{{localize 'sogrom-dnd5e-character-creator.levelup.step.spells.flagBookTip'}}"></i>{{/if}}</a></li>
             {{/each}}
           </ul>
         </div>

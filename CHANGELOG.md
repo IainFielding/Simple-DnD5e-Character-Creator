@@ -30,6 +30,17 @@ All notable changes to the Simple D&D Character Creator.
 - **Maximum only hit points.** A fourth choice for the level-up hit points setting: every level
   gained takes the full hit die, applied automatically, including the levels Quick Build climbs
   for you. The default is still Player's choice.
+- **The Wizard's spellbook.** A Wizard now gets a full spellbook in both editions: six spells at
+  1st level and two more at every level after, with only its prepared allowance of them prepared.
+  The rest go on the sheet unprepared, the way the D&D system's own premade wizards hold them, so
+  a 5th-level Wizard has 14 spells rather than 9. The Spells step has a **Spellbook** tab for
+  writing spells into the book and a **Prepare** tab for choosing which of them are prepared. New
+  spells are prepared first while there's room, so a player who never opens Prepare still ends up
+  with a full set. On a level-up the Prepare tab lists the whole book, old spells and new, and
+  nothing in the book is ever deleted. Quick Build and its level climb fill the book too. Spells you
+  copy into the book during play are extra and never reduce the two free spells a level. A Wizard
+  built before this version is offered the spells its book is missing on its next level-up, and one
+  with more prepared than its limit is told how many to unprepare.
 
 ### Improved
 
@@ -38,6 +49,24 @@ All notable changes to the Simple D&D Character Creator.
   own `dnd5e.renderChatMessage` hook.
 - **Complexity dots sit under the class icon** in the class list, leaving the summary line the whole
   width of the row.
+- **Clerics and Druids can change any number of prepared spells when they level up.** The rules
+  let these classes change their prepared spells freely after a long rest, and the level-up now
+  allows it: mark as many prepared spells as you like and choose a replacement for each. The 2014
+  Paladin and Artificer work the same way. Every other class still replaces one spell.
+- **Already-known spells are marked in the level-up's spell list.** A Wizard's book-only spells
+  show faded, so the list doesn't read as if everything is prepared.
+- **Spells you already have show up where you choose spells.** Always-prepared spells, feat and
+  species spells, and spells from another class now appear on the Spells step's tabs as locked
+  cards, marked **Always** or **Granted**, with a tooltip naming what gave them. On the Prepare tab
+  they sit among the book, so you can see everything you'll have ready. They never count against
+  your picks or your prepared limit.
+- **Compare moved to the footer.** The Compare button now sits in the bottom bar beside Next, on
+  every step that has one (spells, class, species, background), so it can't be squeezed off the end
+  of the filter row on a smaller screen. The spell lists also lose their "Choose N more" label: the
+  tab counts and the footer's hint already say it. The spell tabs wrap onto a second line when the
+  window is narrow.
+- **Cantrips come first.** When a level-up offers new cantrips, the Cantrips tab is first and the
+  step opens on it, as it does at creation.
 - **Right-click entries use Foundry v14's menu format.** The Level Up, Repair and Build Character
   entries no longer trigger v14's deprecation warnings, and keep working when v16 drops the old format.
 

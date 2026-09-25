@@ -396,7 +396,11 @@ export async function grantedSpellCards(doc, sel = {}, seen = new Set(), depth =
           uuid, name: d.name, img: d.img || "icons/svg/daze.svg", level: d.system?.level ?? 0,
           // Carried so a card can be matched by {@link module:data/spell-identity.spellKey} rather
           // than by uuid — see {@link originGrantedSpellKeys} for why that distinction matters.
-          identifier: d.system?.identifier ?? ""
+          identifier: d.system?.identifier ?? "",
+          // What granted it, and whether it arrives always prepared: the Spells step names the
+          // feature on the card it shows for this spell, so the player knows where it comes from.
+          grantedBy: doc.name ?? "",
+          always: Number(adv.configuration?.spell?.prepared ?? 0) === 2
         });
       } else if ( advancementArray(d).length ) {
         out.push(...await grantedSpellCards(d, sel, seen, depth + 1));

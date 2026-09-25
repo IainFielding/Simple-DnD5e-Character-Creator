@@ -981,6 +981,10 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   background: var(--cc-panel);
 }
 
+/* The footer's right-hand group: Compare (where the step has one), the quick-screen return, and
+   the primary action, kept together so the hint stays centred between Back and them. */
+.creator-stage-foot-end { display: flex; align-items: center; gap: 0.75rem; flex: 0 0 auto; }
+
 /* Why a greyed Next/Create is greyed — sits centred between Back and the primary action. */
 .creator-nav-hint {
   display: inline-flex;
@@ -2728,7 +2732,9 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 /* Spell-level tabs are a view switch (cantrips vs 1st-level), so they share the
    method-tab recipe: muted pill at rest, gold when active — the one "currently
    here" colour used by every view-switch tab in the creator. */
-.creator-spell-tabs { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+/* The row wraps: a Wizard has three tabs (Cantrips, Spellbook, Prepare), each with a count, and on a
+   narrow window three won't fit on one line. */
+.creator-spell-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
 .creator-spell-tab {
   flex: 1;
   display: flex;
@@ -2808,6 +2814,9 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .levelup-spells-releasedhint i { color: var(--cc-accent); margin-right: 0.25rem; }
 .levelup-spells-swapactive { margin: -0.35rem 0 0.75rem; color: var(--cc-text); font-size: 0.82rem; line-height: 1.35; }
 .levelup-spells-swapactive i { color: var(--cc-danger, #c66); margin-right: 0.25rem; }
+/* A Wizard already over its prepared limit (built before the limit followed Intelligence). */
+.levelup-spells-overprepared { margin: -0.35rem 0 0.75rem; color: var(--cc-text); font-size: 0.82rem; line-height: 1.35; }
+.levelup-spells-overprepared i { color: var(--cc-danger, #c66); margin-right: 0.25rem; }
 
 /* A spell already on the sheet is marked two ways, and neither of them costs the name any width.
 
@@ -2880,6 +2889,11 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
   color: var(--cc-danger, #c66);
   border-color: color-mix(in srgb, var(--cc-danger, #c66) 55%, transparent);
   background: color-mix(in srgb, var(--cc-danger, #c66) 16%, var(--cc-panel));
+}
+/* A spell written into a Wizard's book this level-up, on the Prepare tab. */
+.creator-pickrow-flag.is-new {
+  color: var(--cc-gold);
+  border-color: color-mix(in srgb, var(--cc-gold) 55%, transparent);
 }
 
 /* Spell names wrap between words and never inside one. The shared pick-row name allows
@@ -3117,6 +3131,9 @@ body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
 .creator-spell-chip i { display: none; }
 .creator-spell-chip img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid var(--cc-line); }
 .creator-spell-chip:hover { border-color: var(--cc-gold); color: var(--cc-gold); }
+/* A spell in a Wizard's book that isn't prepared: faded, with a book mark whose tooltip says so. */
+.creator-spell-chip.is-unprepared { opacity: 0.6; border-style: dashed; }
+.creator-spell-chip i.creator-spell-chip-mark { display: inline; font-size: 0.7rem; color: var(--cc-muted); cursor: help; }
 
 /* ---- Spell browser: choices wide + description sidebar ----
    The spell choices take the main column; the focused spell's description sits in a sidebar.

@@ -70,16 +70,6 @@
     </label>
     {{/if}}
   </div>
-  {{!-- Compare: the way out of "pick one, read it, pick the other, read that, and hold the first in
-        your head" — the same control the class and origin pickers carry, and the same reason it is
-        disabled rather than hidden below two pins. Its label and tooltip are patched in place as
-        pins change, so pinning never re-renders the list or clears the search above. --}}
-  {{#if compare}}
-  <button type="button" class="creator-btn creator-btn-ghost creator-compare-btn"
-          data-action="openCompare" data-category="{{compare.category}}"
-          data-tooltip="{{compare.hint}}" {{#unless compare.canCompare}}disabled{{/unless}}>
-    <i class="fa-solid fa-scale-balanced"></i>
-    <span class="creator-compare-btn-label">{{compare.label}}</span>
-  </button>
-  {{/if}}
+  {{!-- Compare lives in the stage footer, not here: on a narrow window this row wraps, and the
+        button was squeezed off the end of it. See templates/stage.hbs. --}}
 </div>

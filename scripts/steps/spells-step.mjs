@@ -18,6 +18,12 @@ import { spellKey } from "../data/spell-identity.mjs";
  * spells. Each class knows a fixed number of each at level 1 (its maxCantrips / maxSpells), except
  * a 2014 prepared caster, whose count follows its ability score ({@link spellLimits}). The two are
  * picked on separate tabs but tracked in two separate arrays on the state.
+ *
+ * A **spellbook** class (the Wizard, either edition) picks its whole book — six spells — but prepares
+ * only its allowance of them, so it gets a third tab, *Prepare*. Each leveled pick carries a
+ * `prepared` flag: new picks fill the prepared allowance first and the rest go in unprepared, and the
+ * Prepare tab changes which. Every other class's picks are all prepared (a missing flag reads as
+ * prepared — see {@link isPreparedPick}).
  */
 export const spellsStep = {
   id: "spells",
@@ -33,19 +39,23 @@ export const spellsStep = {
     // over a quota that cannot be filled would trap the player on this screen with no way forward,
     // so the step steps aside and the panel explains what is missing instead.
     if ( info.listMissing ) return true;
-    const { maxCantrips, maxSpells } = spellLimits(state);
+    const { maxCantrips, maxSpells, maxPrepared } = spellLimits(state);
     return state.selectedCantrips.length >= maxCantrips
-        && state.selectedSpells.length >= maxSpells;
+        && state.selectedSpells.length >= maxSpells
+        && preparedCount(state) >= Math.min(maxPrepared, state.selectedSpells.length);
   },
 
   /** Why Next is blocked: how many spells are still to be chosen. */
   incompleteHint(state) {
     const info = state.spellInfo;
     if ( !info?.isSpellcaster || info.listMissing ) return null;
-    const { maxCantrips, maxSpells } = spellLimits(state);
+    const { maxCantrips, maxSpells, maxPrepared } = spellLimits(state);
     const remain = Math.max(0, maxCantrips - state.selectedCantrips.length)
                  + Math.max(0, maxSpells - state.selectedSpells.length);
-    return remain ? t("step.spells.hint", { count: remain }) : null;
+    if ( remain ) return t("step.spells.hint", { count: remain });
+    // Every pick made, but the Prepare tab left a prepared slot empty.
+    const unprepared = Math.min(maxPrepared, state.selectedSpells.length) - preparedCount(state);
+    return unprepared > 0 ? t("step.spells.prepareHint", { count: unprepared }) : null;
   },
 
   // The Spells step only applies to spellcasters with something to choose; the rail greys it out
@@ -78,6 +88,16 @@ export const spellsStep = {
       state.focusedSpellUuid = el.dataset.uuid;
       return;
     }
+    // The Prepare tab: move a book pick in or out of the prepared allowance. Refused past the cap;
+    // the player unprepares one spell to prepare another.
+    if ( action === "toggle-prepared" ) {
+      const pick = state.selectedSpells.find(s => s.uuid === el.dataset.uuid);
+      if ( !pick ) return;
+      if ( isPreparedPick(pick) ) { pick.prepared = false; return; }
+      if ( preparedCount(state) >= spellLimits(state).maxPrepared ) return;
+      pick.prepared = true;
+      return;
+    }
     // The player naming the list this caster draws from, when nothing could work it out for them,
     // and taking it back again — clearing it hands the question back to
     // {@link module:data/spell-source.spellListFor}. Either way the pool becomes a different set of
@@ -106,10 +126,15 @@ export const spellsStep = {
       // see {@link module:data/spell-identity.spellKey}. Without it every later comparison against
       // a chosen spell falls back to its uuid, which cannot match the same spell from another
       // installed package.
-      if ( spell ) bucket.push({
+      if ( !spell ) return;
+      const pick = {
         uuid: spell.uuid, id: spell.id, identifier: spell.identifier ?? "",
         name: spell.name, img: spell.img, level: spell.level
-      });
+      };
+      // A leveled pick fills the prepared allowance first; once it is full the spell goes into the
+      // book unprepared. Only a book caster's allowance is ever smaller than its picks.
+      if ( !isCantrip ) pick.prepared = bucket.filter(isPreparedPick).length < limits.maxPrepared;
+      bucket.push(pick);
     }
   },
 
@@ -117,6 +142,8 @@ export const spellsStep = {
     const data = await spells.forClass(state.classUuid, { listOverride: state.spellListOverride });
     // Keep the completion gate's view of the class in sync with what we render.
     state.spellInfo = slimInfo(data);
+    // A lowered ability score can shrink the prepared allowance under picks already prepared.
+    normalizePrepared(state);
     // "Not a caster" and "a caster with nothing to learn yet" both mean there is nothing to show, so
     // both take the short message rather than an empty list. The second is the half-casters: a 2014
     // Ranger or Paladin declares spellcasting progression on the class item but learns its first
@@ -155,36 +182,98 @@ export const spellsStep = {
     const selectedCantrips = [...state.selectedCantrips].sort(byName).map(toChip);
     const selectedSpells = [...state.selectedSpells].sort(byName).map(toChip);
 
+    // A book caster's picks, split by whether they are prepared, for the tally and the Prepare tab.
+    const isBook = !!data.spellbook;
+    const prepared = preparedCount(state);
+    const preparedFull = prepared >= maxPrepared;
+    const pickByUuid = new Map(state.selectedSpells.map(s => [s.uuid, s]));
+
     // Resolve the active tab, falling back when the class lacks that level of spell.
     let tab = state.spellTab;
+    if ( tab === "prepare" && !isBook ) tab = "level1";
     if ( tab === "cantrips" && maxCantrips === 0 ) tab = "level1";
     if ( tab === "level1" && maxSpells === 0 ) tab = "cantrips";
+    const isPrepareTab = tab === "prepare";
 
     const activeBucket = tab === "cantrips" ? state.selectedCantrips : state.selectedSpells;
     const activeMax = tab === "cantrips" ? maxCantrips : maxSpells;
-    const atLimit = activeBucket.length >= activeMax;
-    const pool = tab === "cantrips" ? cantrips : level1;
+    const atLimit = isPrepareTab ? preparedFull : activeBucket.length >= activeMax;
+    // The Prepare tab lists the book itself: every leveled pick, as its pool card where there is one.
+    const pool = isPrepareTab
+      ? state.selectedSpells.map(p => level1.find(s => s.uuid === p.uuid) ?? p)
+      : (tab === "cantrips" ? cantrips : level1);
 
-    const list = pool.filter(s => {
+    // The one-word flag under the compare pin, and the sentence behind it: whether a book pick is
+    // prepared or waiting in the book. The same badge the level-up step puts on owned spells.
+    const flagFor = pick => {
+      if ( !isBook || !pick || (pick.level === 0) ) return {};
+      const on = isPreparedPick(pick);
+      return {
+        ownedTag: t(on ? "step.spells.flagPrepared" : "step.spells.flagBook"),
+        ownedTip: t(on ? "step.spells.flagPreparedTip" : "step.spells.flagBookTip")
+      };
+    };
+
+    // Spells the origins grant, shown on the tab they belong to as locked cards: the player sees
+    // them where they are choosing, flagged with what granted them, instead of wondering why a spell
+    // is missing from the list. Cantrips on the Cantrips tab; leveled spells on the Spellbook and
+    // Prepare tabs. Never picked and never counted. A granted spell the player picked anyway keeps
+    // its ordinary row, so it can be un-picked.
+    const levelTab = isPrepareTab || (tab === "level1");
+    const grantedRows = grantedCards
+      .filter(c => (levelTab ? c.level > 0 : c.level === 0) && !picked.has(c.uuid))
+      .map(c => {
+        const card = (c.level === 0 ? cantrips : level1).find(s => spellKey(s) === spellKey(c)) ?? c;
+        const source = c.grantedBy || "";
+        return {
+          ...card,
+          levelLabel: card.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: card.level }),
+          granted: true,
+          grantedBy: source,
+          ownedTag: t((c.always || (c.level > 0)) ? "step.spells.flagAlways" : "step.spells.flagGranted"),
+          ownedTip: source ? t("step.spells.grantedTip", { source }) : t("step.spells.grantedTipNoSource"),
+          focused: state.focusedSpellUuid === card.uuid
+        };
+      });
+
+    const ownRows = pool.filter(s => {
+      if ( isPrepareTab ) return true;
       const key = spellKey(s);
       return !key || !granted.has(key) || picked.has(s.uuid);
-    }).map(s => ({
-      ...s,
-      // Blank for a cantrip: "Lvl 0" is not what a player calls one, and the tab already says so.
-      levelLabel: s.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: s.level }),
-      active: picked.has(s.uuid),
-      focused: state.focusedSpellUuid === s.uuid,
-      disabled: atLimit && !picked.has(s.uuid)
-    }));
+    }).map(s => {
+      const pick = pickByUuid.get(s.uuid);
+      const active = isPrepareTab ? isPreparedPick(pick) : picked.has(s.uuid);
+      return {
+        ...s,
+        // Blank for a cantrip: "Lvl 0" is not what a player calls one, and the tab already says so.
+        levelLabel: s.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: s.level }),
+        active,
+        ...flagFor(pick),
+        focused: state.focusedSpellUuid === s.uuid,
+        disabled: atLimit && !active
+      };
+    });
+    // On the Prepare tab the granted spells sit among the book by name; elsewhere they lead the list.
+    const byNameRow = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
+    const list = isPrepareTab ? [...ownRows, ...grantedRows].sort(byNameRow) : [...grantedRows, ...ownRows];
 
     // Focused spell detail (with its lazily-enriched description).
     let focused = null;
     const focus = list.find(s => s.uuid === state.focusedSpellUuid)
       ?? cantrips.concat(level1).find(s => s.uuid === state.focusedSpellUuid);
     if ( focus ) {
+      const pick = pickByUuid.get(focus.uuid);
       focused = {
         ...focus,
         active: picked.has(focus.uuid),
+        // A granted spell's detail says where it comes from, and offers no button.
+        grantedNote: focus.granted
+          ? (focus.grantedBy ? t("step.spells.grantedNote", { source: focus.grantedBy }) : t("step.spells.grantedNoteNoSource"))
+          : "",
+        // On the Prepare tab the detail pane's button prepares and unprepares instead.
+        prepareMode: isPrepareTab && !!pick,
+        prepared: isPreparedPick(pick),
+        prepareDisabled: preparedFull && !isPreparedPick(pick),
         description: await spells.description(focus.uuid),
         source: await spells.sourceBook(focus.uuid)
       };
@@ -206,21 +295,30 @@ export const spellsStep = {
       intro: t("step.spells.intro", { class: className }),
       // A spellbook holds more than its owner can prepare. Said up front, because otherwise the
       // sheet showing some of these unprepared reads as spells the build forgot.
-      prepareNote: (maxPrepared < maxSpells)
+      prepareNote: (isBook && (maxPrepared < maxSpells))
         ? t("step.spells.spellbookNote", { book: maxSpells, prepared: maxPrepared })
         : "",
       isCantripsTab: tab === "cantrips",
       isLevel1Tab: tab === "level1",
+      isPrepareTab,
+      isBook,
       hasCantrips: maxCantrips > 0,
       hasLevel1: maxSpells > 0,
       maxCantrips,
       maxSpells,
+      maxPrepared,
       cantripCount: state.selectedCantrips.length,
       spellCount: state.selectedSpells.length,
+      preparedCount: prepared,
       cantripsFull: maxCantrips > 0 && state.selectedCantrips.length >= maxCantrips,
       spellsFull: maxSpells > 0 && state.selectedSpells.length >= maxSpells,
+      preparedTabFull: prepared >= Math.min(maxPrepared, maxSpells),
       atLimit,
-      needLabel: t("levelup.step.spells.need", { count: Math.max(0, activeMax - activeBucket.length) }),
+      needLabel: isPrepareTab
+        ? t("step.spells.needPrepare", {
+          count: Math.max(0, Math.min(maxPrepared, state.selectedSpells.length) - prepared)
+        })
+        : t("levelup.step.spells.need", { count: Math.max(0, activeMax - activeBucket.length) }),
       list: pinned.cards,
       compareCategory: pinned.compareCategory,
       compare: pinned.compare,
@@ -228,6 +326,9 @@ export const spellsStep = {
       ...filters,
       selectedCantrips,
       selectedSpells,
+      // A book caster's leveled picks are shown in two groups instead: prepared, and book-only.
+      preparedChips: [...state.selectedSpells].filter(isPreparedPick).sort(byName).map(toChip),
+      bookOnlyChips: [...state.selectedSpells].filter(p => !isPreparedPick(p)).sort(byName).map(toChip),
       hasSelected: selectedCantrips.length + selectedSpells.length > 0,
       // Shown alongside the picks, not among them: these arrive automatically (a Cleric's domain
       // spells, a species cantrip) and are kept out of the pool so they can't be picked twice.
@@ -261,6 +362,7 @@ function slimInfo(info) {
     classId: info.classId ?? "",
     preparedFormula: info.preparedFormula ?? "",
     spellbook: !!info.spellbook,
+    bookSize: info.bookSize ?? 0,
     // Whether the pool came back empty, so the gate knows not to demand picks that cannot be made.
     listMissing: !!info.listMissing
   };
@@ -275,4 +377,41 @@ function slimInfo(info) {
  */
 export function spellLimits(state) {
   return levelOneSpellLimits(state.spellInfo, state.finalScores?.() ?? null);
+}
+
+/**
+ * Whether a leveled creation pick goes onto the sheet prepared. Only a book caster's picks ever
+ * carry `prepared: false`; a pick with no flag at all (every other class, and picks made before the
+ * flag existed) is prepared.
+ * @param {{prepared?:boolean}|null|undefined} pick
+ * @returns {boolean}
+ */
+export function isPreparedPick(pick) {
+  return !!pick && (pick.prepared !== false);
+}
+
+/** How many of the build's leveled picks are prepared. */
+function preparedCount(state) {
+  return state.selectedSpells.filter(isPreparedPick).length;
+}
+
+/**
+ * Settle every leveled pick's `prepared` flag against the current allowance: a pick with no flag
+ * takes a prepared slot while one is free, and a prepared pick past the allowance (the player
+ * lowered the score it is worked out from) goes back into the book. Never promotes a pick the
+ * player unprepared, which would undo the Prepare tab behind their back.
+ *
+ * Idempotent. Run by the step's context, by Quick Build, and by the assembler before it writes,
+ * so the sheet can never open over its prepared limit.
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ */
+export function normalizePrepared(state) {
+  const maxPrepared = state.spellInfo ? spellLimits(state).maxPrepared : Infinity;
+  let used = 0;
+  for ( const pick of state.selectedSpells ) {
+    if ( pick.prepared === undefined ) pick.prepared = used < maxPrepared;
+    if ( !pick.prepared ) continue;
+    if ( used >= maxPrepared ) pick.prepared = false;
+    else used++;
+  }
 }

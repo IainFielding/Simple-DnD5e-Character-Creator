@@ -5,7 +5,8 @@ import { applyCartToCurrency, consolidateCurrency, purchasedItems } from "../dat
 import { grantMagicItems } from "../data/magic-shop-source.mjs";
 import { spellMethodFor } from "../data/spell-source.mjs";
 import { resolveFeatSpells } from "../steps/feat-spells-step.mjs";
-import { spellLimits } from "../steps/spells-step.mjs";
+import { isPreparedPick, normalizePrepared } from "../steps/spells-step.mjs";
+import { bookFreeUpdate } from "../data/spellbook.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { buildCreationManager, CreationChoiceProvider } from "./creation-advancement.mjs";
 import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
@@ -321,11 +322,12 @@ async function addSpells(actor, state) {
     method = spellMethodFor(classDoc);
   }
 
-  // A spellbook holds more than its owner prepares: a 2014 Wizard writes six spells into it but
-  // prepares Intelligence modifier + 1. The first picks fill the prepared allowance and the rest go
-  // in unprepared, so the sheet doesn't open over its limit. Cantrips are always prepared. A build
-  // that never resolved its class's spell info has no allowance to hold it to, so nothing is capped.
-  let preparedLeft = state.spellInfo ? spellLimits(state).maxPrepared : Infinity;
+  // A spellbook holds more than its owner prepares: a Wizard writes six spells into it but prepares
+  // only its allowance. Each leveled pick says which it is (the Spells step's Prepare tab), and
+  // settling the flags first means the sheet can never open over its limit, whatever path built the
+  // picks. Cantrips are always prepared. A build that never resolved its class's spell info has no
+  // allowance to hold it to, so nothing is capped.
+  normalizePrepared(state);
 
   const data = [];
   for ( const pick of picks ) {
@@ -334,12 +336,19 @@ async function addSpells(actor, state) {
     const obj = doc.toObject();
     if ( obj._stats ) obj._stats.compendiumSource = pick.uuid;
     const leveled = (doc.system?.level ?? 0) > 0;
-    foundry.utils.setProperty(obj, "system.prepared", (!leveled || (preparedLeft-- > 0)) ? 1 : 0);
+    foundry.utils.setProperty(obj, "system.prepared", (!leveled || isPreparedPick(pick)) ? 1 : 0);
     foundry.utils.setProperty(obj, "system.method", method);
     if ( classId ) foundry.utils.setProperty(obj, "system.sourceItem", `class:${classId}`);
     data.push(obj);
   }
+  // A Wizard's free book picks, recorded on its class so a level-up can tell them from spells it
+  // copies into the book later. Read before the spells exist, so it starts from nothing.
+  const classItem = actor.items.find(i => (i.type === "class") && (i.system?.identifier === classId));
+  const ledger = classItem
+    ? bookFreeUpdate(actor, classItem, data.filter(d => (d.system?.level ?? 0) > 0).length)
+    : null;
   if ( data.length ) await actor.createEmbeddedDocuments("Item", data, { render: false });
+  if ( ledger ) await actor.updateEmbeddedDocuments("Item", [ledger], { render: false });
 }
 
 /**
