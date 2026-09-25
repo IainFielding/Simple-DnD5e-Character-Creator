@@ -199,6 +199,17 @@ export function defaultWealthTable() {
 }
 
 /**
+ * A table where no level grants anything — no gold, no items. This is the shop switched off: with
+ * every row empty, {@link tierGrantsAnything} is false at every level and no Magic Items step appears.
+ * @returns {Record<string, {baseGp: number, perD10Gp: number, allowance: Record<string, number>}>}
+ */
+export function emptyWealthTable() {
+  return Object.fromEntries(WEALTH_LEVELS.map(level => [`l${level}`, {
+    baseGp: 0, perD10Gp: 0, allowance: emptyAllowance()
+  }]));
+}
+
+/**
  * The band a starting level falls in, with its row from the table.
  * @param {number} level
  * @param {object} [table]  A sanitised table; the DMG table when omitted.

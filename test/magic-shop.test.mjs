@@ -5,10 +5,11 @@ import { INDEX_FIELDS } from "../scripts/data/magic-shop-source.mjs";
 import {
   BANDS, DEFAULT_WEALTH_TABLE, assignSlots, bonusGoldCp, canPick, countByRarity, countPicks,
   descendantFolderIds, filterMagicIndex, goldRange, highestSlotRank, mergeEntries, normalizeRarity,
-  sanitizeMagicEntry, sanitizeWealthTable, slotsSummary, tierFor, tierGrantsAnything, withinAllowance
+  emptyWealthTable, sanitizeMagicEntry, sanitizeWealthTable, slotsSummary, tierFor, tierGrantsAnything,
+  withinAllowance
 } from "../scripts/data/magic-shop.mjs";
 import {
-  MagicShopSource, ensureMagicShopRoll, grantMagicItems, locateUuid, magicShopConfig, magicShopGrant, magicShopTier
+  MagicShopSource, ensureMagicShopRoll, grantMagicItems, locateUuid, magicShopGrant, magicShopTier
 } from "../scripts/data/magic-shop-source.mjs";
 import { MODULE_ID, SETTINGS } from "../scripts/config.mjs";
 
@@ -274,8 +275,7 @@ describe("the stock loader", () => {
 describe("the step's gate and grant", () => {
   beforeEach(() => installFoundryShims());
 
-  function enable(config = {}) {
-    game.settings.set(MODULE_ID, SETTINGS.magicShopEnabled, true);
+  function configure(config = {}) {
     game.settings.set(MODULE_ID, SETTINGS.magicShopConfig, { inventory: [], wealthTable: null, ...config });
   }
 
@@ -293,7 +293,7 @@ describe("the step's gate and grant", () => {
     // creation one or the GM's 1st-level row is silently ignored. A character starting higher gets
     // theirs from the climb instead, against the row for the level they start at — offering both
     // would ask twice and grant twice.
-    enable({ wealthTable: { l1: { allowance: { legendary: 1 } } } });
+    configure({ wealthTable: { l1: { allowance: { legendary: 1 } } } });
     expect(creationMagicShopStep.applicable({ targetLevel: 1 })).toBe(true);
     expect(creationMagicShopStep.applicable({ targetLevel: 5 })).toBe(false);
   });
@@ -303,7 +303,7 @@ describe("the step's gate and grant", () => {
     // level saw the climb's tier and an unrolled d10 and answered "not finished". A hidden step
     // that is permanently incomplete stops Next with nothing on screen to fix — a high-level custom
     // build got stuck on the Store step and could go no further.
-    enable({ wealthTable: { l1: { allowance: { legendary: 1 } } } });
+    configure({ wealthTable: { l1: { allowance: { legendary: 1 } } } });
     const climbing = { targetLevel: 5, magicShop: { d10: null, picks: {} } };
     expect(creationMagicShopStep.applicable(climbing)).toBe(false);
     expect(creationMagicShopStep.isComplete(climbing)).toBe(true);
@@ -313,27 +313,34 @@ describe("the step's gate and grant", () => {
 
   it("still gates properly on the rail it IS on", () => {
     // The inverse: at 1st level with something to grant, an unrolled tier is genuinely unfinished.
-    enable({ wealthTable: { l1: { baseGp: 100, perD10Gp: 10, allowance: { common: 1 } } } });
+    configure({ wealthTable: { l1: { baseGp: 100, perD10Gp: 10, allowance: { common: 1 } } } });
     const here = { targetLevel: 1, magicShop: { d10: null, picks: {} }, magicShopVisited: true };
     expect(creationMagicShopStep.applicable(here)).toBe(true);
     expect(creationMagicShopStep.isComplete(here)).toBe(false);
   });
 
   it("stays off the creation rail when the 1st-level row grants nothing", () => {
-    enable();
+    configure();
     expect(creationMagicShopStep.applicable({ targetLevel: 1 })).toBe(false);
   });
 
-  it("is off by default and needs a level above 1", () => {
-    expect(magicShopConfig().enabled).toBe(false);
-    expect(magicShopTier({ targetLevel: 12 })).toBeNull();
-    enable();
+  it("is on by default with the DMG table, which grants nothing at level 1", () => {
+    // No setting stored at all: the DMG table is the default, and there is no on/off switch.
     expect(magicShopTier({ targetLevel: 1 })).toBeNull();
     expect(magicShopTier({ targetLevel: 12 })?.key).toBe("l12");
   });
 
+  it("is off at every level once the table is set to 0", () => {
+    // "Set all to 0" is the shop's off switch: no gold and no items leaves no step to show.
+    configure({ wealthTable: emptyWealthTable() });
+    for ( const targetLevel of [1, 2, 5, 12, 20] ) expect(magicShopTier({ targetLevel })).toBeNull();
+    // And it survives the round trip through the setting's sanitiser, rather than reading as "missing,
+    // so use the DMG value".
+    expect(sanitizeWealthTable(emptyWealthTable())).toEqual(emptyWealthTable());
+  });
+
   it("grants the picks and the gold, but no items once they no longer fit", () => {
-    enable();
+    configure();
     const state = {
       targetLevel: 5,
       magicShop: { d10: 4, picks: { "u1": { qty: 1, name: "Wand", rarity: "uncommon" }, "c1": { qty: 1, name: "Cloak", rarity: "common" } } }
@@ -371,7 +378,7 @@ describe("the step's gate and grant", () => {
   });
 
   it("reports what it granted, so the chat card can show the roll behind the gold", async () => {
-    enable();
+    configure();
     let update = null;
     const actor = { system: { currency: { gp: 15 } }, update: async data => { update = data; } };
     const state = { targetLevel: 5, magicShop: { d10: 7, picks: {} } };
@@ -384,7 +391,7 @@ describe("the step's gate and grant", () => {
   });
 
   it("charges the cart against the bonus gold and the purse together", async () => {
-    enable();
+    configure();
     let update = null;
     const actor = { system: { currency: { gp: 15 } }, update: async data => { update = data; } };
     const state = {
@@ -404,7 +411,7 @@ describe("the step's gate and grant", () => {
   it("never leaves a character owing money, however stale the cart", async () => {
     // The step gates the cart against the budget, so a shortfall here means state from an earlier
     // render. A discount is a better outcome than a negative purse.
-    enable();
+    configure();
     let update = null;
     const actor = { system: { currency: {} }, update: async data => { update = data; } };
     const state = {

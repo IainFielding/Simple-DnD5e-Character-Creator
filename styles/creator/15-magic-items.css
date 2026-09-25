@@ -136,7 +136,7 @@
 .sogrom-magic-table input[type="number"] { width: 4.2em; text-align: right; }
 .sogrom-magic-table tbody tr { border-top: 1px solid var(--color-border-light-2, rgba(120, 120, 120, 0.3)); }
 .sogrom-magic-range { font-size: 0.8rem; white-space: nowrap; opacity: 0.8; }
-.sogrom-magic-table-actions { display: flex; justify-content: flex-end; }
+.sogrom-magic-table-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .sogrom-magic-table-actions button { width: auto; }
 
 .sogrom-magic-inventory .sogrom-store-inv-toolbar select { flex: 0 0 auto; width: auto; }

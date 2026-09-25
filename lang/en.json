@@ -931,14 +931,10 @@
         "label": "Configure Store",
         "hint": "Curate the store's shelves: drag items in from any compendium, set per-item prices, and hide or remove stock."
       },
-      "magicShopEnabled": {
-        "name": "Enable the magic item shop",
-        "hint": "Adds a Magic Items step for any starting level whose wealth-table row grants something. It rolls their bonus gold and lets them pick free magic items by rarity, and buy more with what they can afford."
-      },
       "magicShopConfigMenu": {
         "name": "Magic Item Shop",
         "label": "Configure Magic Items",
-        "hint": "Set the starting wealth table (defaults to the DMG) and stock magic items by dragging in items, compendium folders or whole compendiums."
+        "hint": "Bonus gold and free magic items for characters who start above 1st level, per level. On by default with the Dungeon Master’s Guide table; set every level to 0 to turn it off."
       },
       "debugLogging": {
         "name": "Debug logging",
@@ -1004,7 +1000,7 @@
       "title": "Magic Item Shop",
       "tabTable": "Wealth Table",
       "tabInventory": "Inventory",
-      "tableHint": "What a character starting above 1st level arrives with, per level: bonus gold on top of their normal starting equipment, and how many magic items of each rarity they may pick. Every level has its own row, so you can give 7th level something 5th level does not. Reset puts the Dungeon Master's Guide's own numbers back.",
+      "tableHint": "What a character starting above 1st level arrives with, per level: bonus gold on top of their normal starting equipment, and how many magic items of each rarity they may pick. Every level has its own row, so you can give 7th level something 5th level does not. A level whose row is all zeros gets no Magic Items step, so Set all to 0 turns the shop off. Reset puts the Dungeon Master’s Guide’s own numbers back.",
       "colLevels": "Level",
       "colBaseGp": "Base gp",
       "colPerD10": "gp per d10",
@@ -1016,6 +1012,11 @@
         "label": "Reset to DMG",
         "title": "Reset the wealth table?",
         "body": "This puts the Dungeon Master's Guide values back in every band. Nothing is saved until you press Save Changes."
+      },
+      "zero": {
+        "label": "Set all to 0",
+        "title": "Set every level to 0?",
+        "body": "This clears the gold and item counts for every level, so no character gets a Magic Items step. Nothing is saved until you press Save Changes."
       },
       "countLabel": "{count} item(s)",
       "removeEntry": "Remove from the shop",

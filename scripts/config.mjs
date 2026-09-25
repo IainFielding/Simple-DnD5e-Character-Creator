@@ -190,7 +190,6 @@ export const SETTINGS = {
   bannedAlignments: "bannedAlignments",
   storeEnabled: "storeEnabled",
   storeConfig: "storeConfig",
-  magicShopEnabled: "magicShopEnabled",
   recommendedPath: "recommendedPath",
   magicShopConfig: "magicShopConfig",
   debug: "debugLogging"
@@ -224,8 +223,6 @@ export const DEFAULTS = {
     priceMultiplier: 1.0,
     inventory: null            // null = the factory default list; [] = deliberately emptied
   },
-  // Off by default: it changes a higher-level character's starting wealth, which a table opts into.
-  magicShopEnabled: false,
   // Which way in the entry chooser marks as recommended. Quick build, because the player this
   // badge is for is the one who does not yet know which they want — and that is the path that
   // asks least of them. A table that would rather everyone built by hand says so here.

@@ -1193,7 +1193,6 @@ export async function probeMagicShopStep({ level = 5 } = {}) {
   const config = magicShopConfig();
   const creationState = { targetLevel: level, magicShop: { d10: null, picks: {} } };
   const out = {
-    enabled: config.enabled,
     inventory: config.inventory.length,
     tier: !!magicShopTier(creationState, config),
     applicable: null, railIds: null, context: null, error: null

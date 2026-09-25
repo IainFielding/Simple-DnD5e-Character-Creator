@@ -284,6 +284,13 @@ const SHOTS = {
       async setup(call) { await call("xpReadySheet"); }
     },
     {
+      // The same header crop, on a copy of the character with one choice left unanswered.
+      name: "repair-button",
+      note: "The repair wrench in the sheet header, shown only while a level has a skipped choice.",
+      selector: ".application.sheet .sheet-header",
+      async setup(call) { await call("repairSheet"); }
+    },
+    {
       name: "chat-card",
       note: "The creation chat card, with the GM's Add to party button.",
       selector: ".sogrom-shot-target",

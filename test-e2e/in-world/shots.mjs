@@ -354,6 +354,41 @@ export async function xpReadySheet() {
 }
 
 /**
+ * The sheet's repair wrench, which dnd5e's own header never shows: it appears only while a level has
+ * a choice that was never made.
+ *
+ * The picture needs such a character, and the built one is whole — so this copies it and blanks one
+ * answered decision on the copy, the class's skill picks, which is exactly the shape a skipped choice
+ * leaves (`value.chosen` short of the count). The copy keeps the character's name, so the cleanup
+ * step removes it with everything else, and the built character stays whole for the shots after
+ * this one. XP is zeroed so the Level Up button beside the wrench is its ordinary self rather than
+ * the glowing ready state the previous shot shows.
+ */
+export async function repairSheet() {
+  await closeAll();
+  if ( !built ) throw new Error("no built character: run buildActor first");
+  const [copy] = await Actor.implementation.createDocuments([built.toObject()]);
+  const cls = copy.items.find(i => i.type === "class");
+  // Read from the source: on a live item `system.advancement` may hold prepared objects.
+  // One that was actually answered: a class also carries its multiclass Trait (restricted to a
+  // secondary class), which the original class never answers — blanking that one changes nothing.
+  const advancement = cls?.toObject().system?.advancement ?? {};
+  const trait = Object.values(advancement)
+    .find(a => (a.type === "Trait") && (a.configuration?.choices ?? []).some(c => c?.count > 0)
+      && (a.value?.chosen?.length > 0));
+  if ( !trait ) throw new Error(`${cls?.name ?? "the class"} has no answered Trait choice to blank`);
+  trait.value.chosen = [];
+  // Written back whole, so it lands whether the source keeps advancements as an array or keyed by id.
+  await cls.update({ "system.advancement": advancement });
+  await copy.update({ "system.details.xp.value": 0 });
+  const { canRepair } = await import("/modules/sogrom-dnd5e-character-creator/scripts/levelup/repair.mjs");
+  if ( !canRepair(copy) ) throw new Error("the copy has nothing to repair; the wrench would not show");
+  await copy.sheet.render(true);
+  await pause(2000);
+  return copy.uuid;
+}
+
+/**
  * The creation chat card for the built character, with its "Add to {party}" button.
  *
  * Rendered on its own rather than photographed in the chat log: `closeAll` closes the sidebar with
@@ -772,12 +807,11 @@ export async function compare({ category = "class", count = 3 } = {}) {
  * own `magicEntryFromItem`, so the rows are shaped exactly as a drag-and-drop would leave them
  * rather than by a second, divergent implementation of that mapping.
  *
- * The wealth table is left at its DMG default; only `targetLevel` decides whether the step appears.
+ * The wealth table is left at its DMG default (there is no on/off switch; a level whose row grants
+ * nothing has no step), so only `targetLevel` decides whether the step appears.
  * @param {{packs?: string[], limit?: number}} options
  */
 export async function stockMagicShop({ packs = null, limit = 60 } = {}) {
-  await game.settings.set(MODULE_ID, SETTINGS.magicShopEnabled, true);
-
   const wanted = packs ?? ["dnd-dungeon-masters-guide.items", "dnd5e.items24", "dnd5e.items"];
   const inventory = [];
   for ( const packId of wanted ) {

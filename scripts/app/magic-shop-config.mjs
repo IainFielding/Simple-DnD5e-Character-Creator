@@ -3,6 +3,7 @@ import { PHYSICAL_TYPES } from "../data/store-source.mjs";
 import { sectionKey, groupCards, itemTypeLabel } from "../data/shelf-sections.mjs";
 import {
   RARITIES, BANDS, MAX_INVENTORY, rarityLabel, sanitizeMagicEntry, sanitizeWealthTable, defaultWealthTable,
+  emptyWealthTable,
   magicEntryFromItem, stockability, mergeEntries, countByRarity, goldRange
 } from "../data/magic-shop.mjs";
 import { magicShopConfig, droppedMagicItems, droppedMagicItem } from "../data/magic-shop-source.mjs";
@@ -10,9 +11,10 @@ import { isTemplate, isShell, linkUuid } from "../data/magic-templates.mjs";
 import { InventoryConfigApp } from "./inventory-config-base.mjs";
 
 /**
- * The GM's Magic Item Shop window, opened from the module settings: the master toggle, the wealth
- * table (the DMG's gold and item counts per level band, overridable), and the inventory players
- * pick their free magic items from.
+ * The GM's Magic Item Shop window, opened from the module settings: the wealth table (the DMG's gold
+ * and item counts per level, overridable), and the inventory players pick their free magic items
+ * from. There is no on/off switch: a level whose row grants nothing has no Magic Items step, so
+ * "Set all to 0" is how a table turns the shop off.
  *
  * Stocking is by drag and drop, three ways: a single item from a compendium or the Items sidebar;
  * a folder from a compendium (or the sidebar), which brings every magic item in that folder and
@@ -41,6 +43,7 @@ export class MagicShopConfigApp extends InventoryConfigApp {
     actions: {
       switchTab: MagicShopConfigApp.#onSwitchTab,
       resetTable: MagicShopConfigApp.#onResetTable,
+      zeroTable: MagicShopConfigApp.#onZeroTable,
       removeEntry: MagicShopConfigApp.#onRemoveEntry,
       clearInventory: MagicShopConfigApp.#onClearInventory
     },
@@ -61,7 +64,6 @@ export class MagicShopConfigApp extends InventoryConfigApp {
   /** @type {object|null} Working copy of the wealth table. */
   #table = null;
 
-  #enabled = false;
   #tab = "table";
   #search = "";
   #rarity = "";
@@ -70,7 +72,6 @@ export class MagicShopConfigApp extends InventoryConfigApp {
   async _prepareContext() {
     if ( this.#inventory === null ) {
       const config = magicShopConfig();
-      this.#enabled = config.enabled;
       this.#inventory = config.inventory;
       this.#table = config.wealthTable;
     }
@@ -79,7 +80,6 @@ export class MagicShopConfigApp extends InventoryConfigApp {
       .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
     const counts = countByRarity(this.#inventory);
     return {
-      enabled: this.#enabled,
       tab: this.#tab,
       isTable: this.#tab === "table",
       isInventory: this.#tab === "inventory",
@@ -193,8 +193,6 @@ export class MagicShopConfigApp extends InventoryConfigApp {
   /** Pull the live inputs back into the working copies before any re-render or save. */
   #syncFormToWorkingCopy() {
     const form = this.element;
-    const enabled = form.elements?.enabled;
-    if ( enabled ) this.#enabled = !!enabled.checked;
     const table = structuredClone(this.#table);
     for ( const input of form.querySelectorAll("[data-band][data-field]") ) {
       const band = table[input.dataset.band];
@@ -315,6 +313,18 @@ export class MagicShopConfigApp extends InventoryConfigApp {
     this.render();
   }
 
+  /** Zero every level's gold and item counts — the shop's "off" (working copy only). */
+  static async #onZeroTable() {
+    const proceed = await this._confirm({
+      title: t("magicShopConfig.zero.title"), icon: "fa-solid fa-ban",
+      content: `<p>${t("magicShopConfig.zero.body")}</p>`
+    });
+    if ( !proceed ) return;
+    this.#syncFormToWorkingCopy();
+    this.#table = emptyWealthTable();
+    this.render();
+  }
+
   /** Remove one row in place — no re-render, which on a long list would cost a noticeable pause. */
   static #onRemoveEntry(_event, target) {
     const row = target.closest("[data-uuid]");
@@ -349,7 +359,6 @@ export class MagicShopConfigApp extends InventoryConfigApp {
 
   static async #onSubmit() {
     this.#syncFormToWorkingCopy();
-    await game.settings.set(MODULE_ID, SETTINGS.magicShopEnabled, this.#enabled);
     await game.settings.set(MODULE_ID, SETTINGS.magicShopConfig, {
       inventory: this.#inventory.map(sanitizeMagicEntry).filter(e => e.uuid && e.rarity && PHYSICAL_TYPES.includes(e.type)),
       wealthTable: sanitizeWealthTable(this.#table)

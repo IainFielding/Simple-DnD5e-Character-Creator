@@ -537,6 +537,7 @@ whole screen.
 | `actor` | The finished sheet (built outside the party, for the card below) | sheet |
 | `levelup` | The level-up wizard on that character | screen |
 | `levelup-ready` | The sheet's Level Up button with its golden outline, XP at the threshold (the world is switched to XP levelling for it, and put back by `cleanup`) | sheet header |
+| `repair-button` | The sheet's repair wrench beside Level Up, on a copy of the character with its class skill picks blanked so a level has a skipped choice (the copy is removed by `cleanup`) | sheet header |
 | `chat-card` | The creation chat card with its Add to party button, in the real chat log | the message |
 | `blank-sheet` | A blank character with the gold Build Character hammer | sheet |
 | `blank-menu` | Build Character in the Actors sidebar's right-click menu (game unpaused) | sidebar strip (`clip`) |

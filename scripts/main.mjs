@@ -260,11 +260,10 @@ function registerSettings() {
     restricted: true
   });
   // The Magic Item Shop: free magic items and bonus gold for a character starting above level 1.
-  // Same shape as the store — a hidden toggle and a hidden object, edited through one menu. Saving
-  // the object drops the players' cached shelf, so the next visit to the step reads the new stock.
-  game.settings.register(MODULE_ID, SETTINGS.magicShopEnabled, {
-    scope: "world", config: false, type: Boolean, default: DEFAULTS.magicShopEnabled
-  });
+  // One hidden object, edited through one menu. There is no on/off switch: a level whose row grants
+  // nothing (no gold, no items) has no Magic Items step, so a table that wants none zeroes the table.
+  // Saving the object drops the players' cached shelf, so the next visit to the step reads the new
+  // stock. (Worlds from 3.2 and earlier may still hold a `magicShopEnabled` value; nothing reads it.)
   game.settings.register(MODULE_ID, SETTINGS.magicShopConfig, {
     scope: "world", config: false, type: Object, default: DEFAULTS.magicShopConfig,
     onChange: () => magicShopSource.clear()

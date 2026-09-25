@@ -1,19 +1,13 @@
 {{!--
-  The GM's Magic Item Shop window: the master toggle, then two tabs — the wealth table (gold and item
-  counts per level band, defaulting to the DMG) and the inventory (magic items dropped in from
-  compendiums, grouped by item type in collapsible sections, names in their rarity colour). Data,
-  drops and saving live in scripts/app/magic-shop-config.mjs; the Save button is Foundry's generic
-  form footer. Inputs other than `enabled` carry no `name` — they are read back by data attribute.
+  The GM's Magic Item Shop window: two tabs — the wealth table (gold and item counts per level,
+  defaulting to the DMG) and the inventory (magic items dropped in from compendiums, grouped by item
+  type in collapsible sections, names in their rarity colour). There is no on/off switch: a level
+  whose row is all zeros has no Magic Items step, and "Set all to 0" zeroes every level. Data, drops
+  and saving live in scripts/app/magic-shop-config.mjs; the Save button is Foundry's generic form
+  footer. The inputs carry no `name` — they are read back by data attribute.
   Everything sits inside ONE root element, as an ApplicationV2 part requires.
 --}}
 <div class="sogrom-magic-config-fields">
-<div class="form-group">
-  <label>{{localize "sogrom-dnd5e-character-creator.settings.magicShopEnabled.name"}}</label>
-  <div class="form-fields">
-    <input type="checkbox" name="enabled" {{#if enabled}}checked{{/if}}>
-  </div>
-  <p class="hint">{{localize "sogrom-dnd5e-character-creator.settings.magicShopEnabled.hint"}}</p>
-</div>
 
 <nav class="sheet-tabs tabs sogrom-magic-tabs" role="tablist">
   <a class="item {{#if isTable}}active{{/if}}" data-action="switchTab" data-tab="table" role="tab"
@@ -62,6 +56,9 @@
   <div class="sogrom-magic-table-actions">
     <button type="button" data-action="resetTable">
       <i class="fa-solid fa-rotate-left"></i> {{localize "sogrom-dnd5e-character-creator.magicShopConfig.reset.label"}}
+    </button>
+    <button type="button" data-action="zeroTable">
+      <i class="fa-solid fa-ban"></i> {{localize "sogrom-dnd5e-character-creator.magicShopConfig.zero.label"}}
     </button>
   </div>
 </section>
