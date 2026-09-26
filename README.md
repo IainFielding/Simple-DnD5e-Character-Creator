@@ -7,7 +7,7 @@ Create characters through a step-by-step wizard, generate characters in seconds 
 > This module works best with the [Official FoundryVTT game expansion modules from Wizards of the Coast](https://www.foundryvtt.store/creators/wizards-of-the-coast) 
 
 ## Character Creation Wizard
-![Welcome to the Character creation wizard](docs\screenshots\entry-chooser.png)
+![Welcome to the Character creation wizard](https://github.com/IainFielding/Simple-DnD5e-Character-Creator/blob/main/docs/screenshots/entry-chooser.png)
 
 ### Custom Build
 Build a character from start to finish with the guided workflow:
