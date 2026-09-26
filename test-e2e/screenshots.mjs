@@ -6,6 +6,8 @@
  *   node screenshots.mjs --world=playwright-ember
  *   node screenshots.mjs --world=playwright-bare    # no content modules; writes to no-content/
  *   HEADED=1 node screenshots.mjs --only=class --hold   # watch it, then poke at the result
+ *   node screenshots.mjs --profile           # also writes shots-profile.log: a timed browser console
+ *   node screenshots.mjs --canvas            # draw the game board too (much slower; see Session.open below)
  *
  * Why this exists: the README's pictures are the module's shop window, and they go stale the
  * moment the UI is restyled. Taking fourteen of them by hand means fourteen chances to catch a
@@ -73,6 +75,7 @@ const value = name => argv.find(a => a.startsWith(`--${name}=`))?.split("=")[1] 
 const hold = argv.includes("--hold");
 const fullSize = argv.includes("--full-size");
 const profile = argv.includes("--profile");
+const withCanvas = argv.includes("--canvas");
 const profileLog = [];
 const worldId = value("world") ?? "playwright";
 const only = value("only")?.split(",").map(s => s.trim()).filter(Boolean) ?? null;
@@ -513,7 +516,10 @@ console.log(`Foundry up with world "${worldId}"`);
 let session;
 let exitCode = 0;
 try {
-  session = await Session.open({ viewport: VIEWPORT, deviceScaleFactor: SCALE, canvas: true });
+  // Canvas off unless `--canvas`. Every full-screen shot is a window that covers the board, and
+  // headless Chromium draws the board in software (SwiftShader) every frame, which starved the
+  // page: a full run took 764s with it on and 176s with it off, for the same pictures.
+  session = await Session.open({ viewport: VIEWPORT, deviceScaleFactor: SCALE, canvas: withCanvas });
   if ( profile ) {
     // The module's debug log names each warm phase and times each render; stamping every console
     // line with the run's clock shows where a slow shot's seconds actually went.

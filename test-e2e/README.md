@@ -501,6 +501,8 @@ HEADED=1 node screenshots.mjs --only=class-step --hold # watch it, then leave th
 | `--only=a,b` | Capture only the named shots. Every earlier step still runs (see below), and nothing after the last named one does |
 | `--full-size` | Save the raw 2× capture instead of downscaling it to fit 800×460 |
 | `--hold` | Keep the browser and server up after the last shot, for an hour or until Ctrl+C |
+| `--profile` | Turn on the module's debug log and write `shots-profile.log`: the browser console, every line stamped with the run's clock, with a marker at each shot. Shows which warm phase or render a slow shot is waiting on |
+| `--canvas` | Draw the game board. Off by default: every full-screen shot is a window that covers it, and headless Chromium draws it in software every frame, which slowed the whole page. A full run took 764s with it on and 176s with it off, for the same pictures |
 | `HEADED=1` | Show the browser instead of running it headless |
 
 The character is a Bard, "Aria Nightbreeze", filled by Quick Build with a fixed seed and given the
