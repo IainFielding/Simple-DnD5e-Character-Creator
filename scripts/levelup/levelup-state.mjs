@@ -204,6 +204,8 @@ export class LevelUpState {
   spellPropFilter = "";
   spellCastingFilter = "";
   spellRangeFilter = "";
+  /** The spell-level chip filtering the list to its level and below ("" for none). */
+  spellCapFilter = "";
 
   /**
    * Phase 4b spell swaps: an owned cantrip / leveled spells the player has marked to replace this
@@ -364,6 +366,7 @@ export class LevelUpState {
     this.spellPropFilter = "";
     this.spellCastingFilter = "";
     this.spellRangeFilter = "";
+    this.spellCapFilter = "";
     // The override answered "which list does *this* caster use", so it dies with the caster.
     this.spellListOverride = "";
     this.collapsedBlocks.clear();

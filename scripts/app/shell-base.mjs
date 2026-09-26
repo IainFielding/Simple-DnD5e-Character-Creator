@@ -392,15 +392,28 @@ export class CreatorShellBase extends HandlebarsApplicationMixin(ApplicationV2) 
         this._applySpellFilters();
       });
     }
+    // The level-up's spell-level chips: clicking one shows every spell that pick could take — its
+    // level and all below — and clicking it again shows the whole list. A filter of its own, not the
+    // level dropdown, which matches one level exactly; the two combine like any other pair. Kept on
+    // the state for the same reason as the controls above: a pick re-renders the stage.
+    for ( const chip of root.querySelectorAll("[data-spell-cap-level]") ) {
+      chip.addEventListener("click", () => {
+        if ( !this.state ) return;
+        const want = chip.dataset.spellCapLevel;
+        this.state.spellCapFilter = (this.state.spellCapFilter === want) ? "" : want;
+        this._applySpellFilters();
+      });
+    }
     this._applySpellFilters();
     return true;
   }
 
   /**
    * Hide pick-rows that don't match the active spell filters — name search, spell level, school,
-   * property, casting time and range — combined: a row must satisfy every active one to show. Each
-   * control reads its value straight from the DOM so any of them can drive the same pass, and
-   * nothing re-renders, so the search field keeps focus while typing.
+   * property, casting time, range, and a level-up spell-level chip (that level and below) —
+   * combined: a row must satisfy every active one to show. Each control reads its value straight
+   * from the DOM so any of them can drive the same pass, and nothing re-renders, so the search
+   * field keeps focus while typing.
    *
    * The property filter is the only one that isn't a plain equality test. Its value is
    * `"<propertyKey>:yes"` or `"<propertyKey>:no"` — "Ritual only", "Without Concentration" — which
@@ -417,6 +430,10 @@ export class CreatorShellBase extends HandlebarsApplicationMixin(ApplicationV2) 
     const prop = valueOf("data-spell-filter-prop");
     const casting = valueOf("data-spell-filter-casting");
     const range = valueOf("data-spell-filter-range");
+    // A chip filter only counts while its chip is on screen: the chips live on the Spells and
+    // Spellbook tabs, and a cap left set must not empty the Cantrips tab of its level-0 rows.
+    const capWant = this.state?.spellCapFilter ?? "";
+    const cap = (capWant && root.querySelector(`[data-spell-cap-level="${capWant}"]`)) ? Number(capWant) : 0;
 
     const [propKey, propWant] = prop ? prop.split(":") : [];
     for ( const row of root.querySelectorAll(".creator-pickrow") ) {
@@ -426,10 +443,16 @@ export class CreatorShellBase extends HandlebarsApplicationMixin(ApplicationV2) 
         && (!school || (row.dataset.school ?? "") === school)
         && (!propKey || (has === (propWant === "yes")))
         && (!casting || (row.dataset.casting ?? "") === casting)
-        && (!range || (row.dataset.range ?? "") === range);
+        && (!range || (row.dataset.range ?? "") === range)
+        && (!cap || (Number(row.dataset.level) <= cap));
       (row.closest("li") ?? row).classList.toggle("is-hidden", !matches);
     }
-    this._afterFilter(needle, !!(level || school || prop || casting || range));
+    for ( const chip of root.querySelectorAll("[data-spell-cap-level]") ) {
+      const on = !!cap && (Number(chip.dataset.spellCapLevel) === cap);
+      chip.classList.toggle("is-active", on);
+      chip.setAttribute("aria-pressed", String(on));
+    }
+    this._afterFilter(needle, !!(level || school || prop || casting || range || cap));
   }
 
   /**

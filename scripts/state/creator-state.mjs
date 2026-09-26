@@ -216,6 +216,8 @@ export class CreatorState {
   magicShopCategory = "";
   magicShopSubtype = "";
   magicShopRarity = "";
+  /** A slot chip's rarity: the shelf shows what that slot can take, its rarity and lower. */
+  magicShopSlotFilter = "";
 
   /** Transient Magic Items UI: the shelf sections the player has expanded. Collapsed by default. Not persisted. */
   magicShopOpenGroups = [];

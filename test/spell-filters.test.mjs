@@ -23,19 +23,31 @@ function row(dataset) {
   return el;
 }
 
+/** A stub spell-level chip from the level-up's caps panel, recording whether it is lit. */
+function chip(level) {
+  const el = { dataset: { spellCapLevel: String(level) }, active: false, pressed: null };
+  el.classList = { toggle: (_cls, on) => { el.active = on; } };
+  el.setAttribute = (_name, value) => { el.pressed = value; };
+  return el;
+}
+
 /**
  * A stand-in shell. `controls` maps a filter's `data-` attribute to its current value; anything
- * absent is a control the step did not render, which must read as "not filtering".
+ * absent is a control the step did not render, which must read as "not filtering". `chips` are the
+ * spell-level chips on screen, and `state` carries the chip filter (`spellCapFilter`).
  */
-function shellLike(rows, controls = {}) {
+function shellLike(rows, controls = {}, { chips = [], state = null } = {}) {
   const shell = {
     afterFilter: null,
+    state,
     element: {
       querySelector(selector) {
+        const capped = selector.match(/^\[data-spell-cap-level="(\d+)"\]$/);
+        if ( capped ) return chips.find(c => c.dataset.spellCapLevel === capped[1]) ?? null;
         const attr = selector.replace(/[[\]]/g, "");
         return attr in controls ? { value: controls[attr] } : null;
       },
-      querySelectorAll: () => rows
+      querySelectorAll: selector => (selector === "[data-spell-cap-level]" ? chips : rows)
     },
     _afterFilter(needle, filtered) { shell.afterFilter = { needle, filtered }; }
   };
@@ -150,5 +162,47 @@ describe("SPELL_FILTER_CONTROLS", () => {
     expect(searches).toEqual([
       { selector: "[data-creator-search]", stateKey: "spellSearch", event: "input" }
     ]);
+  });
+});
+
+/**
+ * The level-up's spell-level chips: clicking "Lvl 3" shows every spell that pick could take, 3rd
+ * level and below, rather than 3rd level alone the way the level dropdown matches.
+ */
+describe("the spell-level chip filter", () => {
+  it("shows the chip's level and everything below it", () => {
+    const rows = sampleRows();
+    const chips = [chip(3), chip(1)];
+    apply(shellLike(rows, {}, { chips, state: { spellCapFilter: "1" } }));
+    expect(visible(rows)).toEqual(["Detect Magic", "Alarm"]);
+    expect(chips.map(c => c.active)).toEqual([false, true]);
+    expect(chips[1].pressed).toBe("true");
+  });
+
+  it("keeps a higher chip's lower spells in view", () => {
+    const rows = sampleRows();
+    apply(shellLike(rows, {}, { chips: [chip(3), chip(1)], state: { spellCapFilter: "3" } }));
+    expect(visible(rows)).toEqual(["Fireball", "Detect Magic", "Alarm"]);
+  });
+
+  it("combines with the other filters", () => {
+    const rows = sampleRows();
+    apply(shellLike(rows, { "data-spell-filter-school": "Abjuration" },
+      { chips: [chip(1)], state: { spellCapFilter: "1" } }));
+    expect(visible(rows)).toEqual(["Alarm"]);
+  });
+
+  it("does nothing while its chip is off screen, so it can't empty the Cantrips tab", () => {
+    const rows = [row({ name: "Fire Bolt", level: "0" }), row({ name: "Light", level: "0" })];
+    const shell = shellLike(rows, {}, { chips: [], state: { spellCapFilter: "3" } });
+    apply(shell);
+    expect(visible(rows)).toEqual(["Fire Bolt", "Light"]);
+    expect(shell.afterFilter.filtered).toBe(false);
+  });
+
+  it("tells _afterFilter it is narrowing", () => {
+    const shell = shellLike(sampleRows(), {}, { chips: [chip(1)], state: { spellCapFilter: "1" } });
+    apply(shell);
+    expect(shell.afterFilter.filtered).toBe(true);
   });
 });

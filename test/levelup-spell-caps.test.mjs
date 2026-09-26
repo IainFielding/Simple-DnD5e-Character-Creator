@@ -57,13 +57,14 @@ describe("spell-level caps", () => {
 
   it("seats picks in the lowest cap that holds them for the chips", () => {
     // A 1st-level pick fills the 1st-level cap, leaving the 5th free for something that needs it.
+    // Lowest first, as the magic shop lists its rarities.
     expect(capSummary([1], [5, 1])).toEqual([
-      { level: 5, used: 0, allowed: 1, full: false },
-      { level: 1, used: 1, allowed: 1, full: true }
+      { level: 1, used: 1, allowed: 1, full: true },
+      { level: 5, used: 0, allowed: 1, full: false }
     ]);
     expect(capSummary([3, 3], [4, 4, 2])).toEqual([
-      { level: 4, used: 2, allowed: 2, full: true },
-      { level: 2, used: 0, allowed: 1, full: false }
+      { level: 2, used: 0, allowed: 1, full: false },
+      { level: 4, used: 2, allowed: 2, full: true }
     ]);
   });
 });
@@ -497,6 +498,6 @@ describe("the spell page under caps", () => {
     expect(byName.blur.capped).toBe(true);
     expect(byName.shield.disabled).toBe(false);
     expect(ctx.focused.note).toContain("levelup.step.spells.capNote");
-    expect(ctx.levelCaps.map(c => [c.level, c.used, c.allowed])).toEqual([[2, 1, 1], [1, 0, 1]]);
+    expect(ctx.levelCaps.map(c => [c.level, c.used, c.allowed])).toEqual([[1, 0, 1], [2, 1, 1]]);
   });
 });

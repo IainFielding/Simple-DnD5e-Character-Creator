@@ -348,7 +348,8 @@
   color: var(--cc-accent);
 }
 .creator-spell-selected-empty { color: var(--cc-muted); font-size: 0.85rem; }
-/* The spell-level caps of a multi-level jump, above the tally: the magic shop's slot chips. */
+/* The spell-level caps of a multi-level jump, above the tally. The chips themselves are the magic
+   shop's slot chips (15-magic-items.css), filtering to that level and below. */
 .creator-spell-caps {
   flex: 0 0 auto;
   margin-top: 0.85rem;
