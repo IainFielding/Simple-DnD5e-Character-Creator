@@ -144,6 +144,24 @@
     {{/if}}
     </div>
 
+    {{!-- Several levels gained at once: each pick belongs to the level it comes from, so it can only
+          reach the spell level that level could cast. One chip per cap, the magic shop's rarity
+          slots with spell levels for rarities. --}}
+    {{#if levelCaps.length}}
+    <div class="creator-spell-caps">
+      <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.spells.capsLabel"}}</span>
+      <ul class="creator-magic-slots" aria-label="{{localize 'sogrom-dnd5e-character-creator.levelup.step.spells.capsLabel'}}">
+        {{#each levelCaps}}
+        <li class="creator-magic-slot {{#if full}}is-full{{/if}}">
+          <span>{{label}}</span>
+          <span class="creator-magic-slot-count">{{used}}/{{allowed}}</span>
+        </li>
+        {{/each}}
+      </ul>
+      <p class="creator-magic-slots-hint">{{localize "sogrom-dnd5e-character-creator.levelup.step.spells.capsHint"}}</p>
+    </div>
+    {{/if}}
+
     <!-- Running tally of everything the player is learning this level, grouped cantrips vs leveled. -->
     <div class="creator-spell-selected">
       <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.spells.selected"}}</span>

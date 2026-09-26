@@ -6,7 +6,8 @@ import { planSpellReconciliation } from "../../build/spell-reconcile.mjs";
 import { swapAllowance } from "../../data/spell-swap.mjs";
 import { pinContext } from "../../app/compare.mjs";
 import { advancementArray } from "../../data/advancement-util.mjs";
-import { bookFreeUpdate, bookPicksOwed, bookSpells, spellbookRule } from "../../data/spellbook.mjs";
+import { bookFreeUpdate, bookPicksOwed, bookSpells, bookTarget, spellbookRule } from "../../data/spellbook.mjs";
+import { canAddLevel, capSummary, ladderCaps, trimToCaps } from "../../data/spell-level-caps.mjs";
 
 /**
  * @typedef {object} SpellPlan
@@ -43,6 +44,14 @@ import { bookFreeUpdate, bookPicksOwed, bookSpells, spellbookRule } from "../../
  *                                     levels (a character built before the book was modelled).
  * @property {number}  [overPrepared]  How far a book caster is over its prepared limit already.
  * @property {"one"|"any"} [spellSwaps] How many leveled spells may be marked for replacement.
+ * @property {number}  [swapLimit]     For "one": how many marks, one per class level gained.
+ * @property {number}  [gainedLevels]  Class levels this level-up gains (0 when unknown, or a repair).
+ * @property {number[]|null} [spellCaps] Per-pick spell-level caps for `addSpells`, highest first, for
+ *                                     a class whose list changes only on gaining a level; null when
+ *                                     the final level's `maxSpellLevel` is the only bound
+ *                                     ({@link module:data/spell-level-caps}).
+ * @property {number[]|null} [bookCaps] The same for a book caster's `addBook`.
+ * @property {number[]}  [swapCaps]    The cap a replacement takes for each mark, highest first.
  * @property {boolean} [preparedWording] Whether owned spells read "Prepared" rather than "Known".
  */
 
@@ -79,9 +88,13 @@ function spellcastingItem(actorLike, classItem) {
  * way the class level drives the scales and `actor.system.spells` bounds the spell level.
  * @param {Actor5e} actorLike     Clone or real actor whose derived data reflects the new level.
  * @param {Item5e|null} classItem The leveled class item on that actor-like.
+ * @param {object} [options]
+ * @param {number} [options.fromClassLevel]  The class's level before this level-up (0 for a class
+ *   being taken). With it, a jump of several levels caps each pick at the spell level of the level
+ *   it belongs to; without it (the one-level Quick Build climb), only the final level bounds them.
  * @returns {SpellPlan}
  */
-export function computeSpellPlan(actorLike, classItem) {
+export function computeSpellPlan(actorLike, classItem, { fromClassLevel } = {}) {
   const casting = spellcastingItem(actorLike, classItem);
   if ( !casting ) return { isSpellcaster: false, hasDelta: false, addCantrips: 0, addSpells: 0 };
 
@@ -154,12 +167,36 @@ export function computeSpellPlan(actorLike, classItem) {
   // it prepares is its Prepare tab, and nothing in its book is ever deleted.
   const swap = swapAllowance(castItem);
 
+  // A jump of several levels asks for every level's spells on one screen, but they are learned one
+  // level at a time: each pick is capped at what the class could cast at the level it comes from.
+  // Only for a list that changes on gaining a level, and a book's free spells; a class that
+  // re-prepares on a long rest could have reshaped its list between those levels anyway.
+  const from = Number.isFinite(fromClassLevel) ? Math.max(0, fromClassLevel) : classLevel;
+  const gainedLevels = Math.max(0, classLevel - from);
+  const capAt = level => (level < 1) ? 0 : Math.min(maxSpellLevel, singleClassSpellLevel(classItem, level) ?? maxSpellLevel);
+  const laddered = gainedLevels > 0 && (maxSpellLevel > 0) && (singleClassSpellLevel(classItem, classLevel) !== null);
+  // The ladder counts off the class's own scale, so it is only trusted where that scale *is* the
+  // target: a bonus to preparation.max from elsewhere would leave picks the scale cannot place.
+  const scaleIsTarget = spellsKnownAtLevel(castItem, classLevel) === spellTarget;
+  const spellCaps = (laddered && swap.levelGated && !bookRule && scaleIsTarget)
+    ? ladderCaps({ from, to: classLevel, total: addSpells, countAt: l => spellsKnownAtLevel(castItem, l), capAt })
+    : null;
+  const bookCaps = (laddered && bookRule)
+    ? ladderCaps({ from, to: classLevel, total: addBook, countAt: l => ((l < 1) ? 0 : bookTarget(bookRule, l)), capAt })
+    : null;
+  // One replacement per level gained, but only from a level the class could cast at: a Fighter
+  // taking Eldritch Knight in a 1 → 7 jump has nothing to replace at 1st or 2nd level.
+  const swapCaps = spellCaps
+    ? Array.from({ length: gainedLevels }, (_, i) => capAt(from + 1 + i)).filter(c => c > 0).sort((a, b) => b - a)
+    : [];
+
   return {
     isSpellcaster: true, listId, listType, sourceTag, castUuid, castItem, classLevel, method,
     cantripTarget, cantripHave, spellTarget, spellHave, maxSpellLevel,
     releasedSpells, releasedCantrips,
     canSwapCantrip: swap.cantrip, canSwapSpell: swap.spell && !bookRule, swapLabelKey: swap.labelKey,
     spellSwaps: swap.spells ?? "one", preparedWording: !!swap.prepared,
+    swapLimit: Math.max(1, spellCaps ? swapCaps.length : gainedLevels), gainedLevels, spellCaps, bookCaps, swapCaps,
     bookRule, addBook, bookCatchUp, overPrepared,
     addCantrips, addSpells,
     hasDelta: (addCantrips > 0) || (addSpells > 0) || (addBook > 0) || (overPrepared > 0)
@@ -175,10 +212,15 @@ export function computeSpellPlan(actorLike, classItem) {
  *
  * Null when the system pieces aren't there to ask (outside Foundry, or a progression the system
  * doesn't know), leaving the caller with the actor's pooled slots.
+ *
+ * With `level`, the answer for the class at that level instead of its current one: dnd5e reads the
+ * class level off the spellcasting description (`spellcasting.levels`), so a copy with a different
+ * figure asks the same question of an earlier level.
  * @param {Item5e} classItem
+ * @param {number} [level]
  * @returns {number|null}
  */
-function singleClassSpellLevel(classItem) {
+function singleClassSpellLevel(classItem, level) {
   const sc = classItem?.spellcasting;
   const model = globalThis.CONFIG?.DND5E?.spellcasting?.[sc?.type];
   const Actor = globalThis.CONFIG?.Actor?.documentClass;
@@ -186,12 +228,13 @@ function singleClassSpellLevel(classItem) {
     || (typeof Actor?.computeClassProgression !== "function") ) return null;
   try {
     const progression = { [model.key]: 0 };
-    Actor.computeClassProgression(progression, classItem, { actor: classItem.actor, count: 1 });
-    let level = 0;
+    const spellcasting = Number.isFinite(level) ? { ...sc, levels: level } : undefined;
+    Actor.computeClassProgression(progression, classItem, { actor: classItem.actor, count: 1, spellcasting });
+    let highest = 0;
     for ( const [l, n] of Object.entries(model.calculateSlots(progression[model.key] ?? 0)) ) {
-      if ( n > 0 ) level = Math.max(level, Number(l));
+      if ( n > 0 ) highest = Math.max(highest, Number(l));
     }
-    return level;
+    return highest;
   } catch {
     return null;
   }
@@ -233,6 +276,23 @@ const isPreparedPick = pick => !!pick && (pick.prepared !== false);
 function spellMarks(state) {
   return state.swapSpells ?? [];
 }
+
+/**
+ * The spell-level caps a leveled pick must fit this level-up, or null when only `maxSpellLevel`
+ * bounds it. A book caster's are its book picks'; anyone else's are its new spells' plus one per
+ * marked swap, since a replacement is learned at a level too.
+ * @param {SpellPlan} plan
+ * @param {number} marks  Swaps marked.
+ * @returns {number[]|null}
+ */
+function levelCapsFor(plan, marks) {
+  if ( plan.bookRule ) return plan.bookCaps ?? null;
+  if ( !plan.spellCaps ) return null;
+  return [...plan.spellCaps, ...(plan.swapCaps ?? []).slice(0, marks)].sort((a, b) => b - a);
+}
+
+/** The spell levels of the leveled picks staged so far. */
+const pickedLevels = state => state.selectedSpells.map(s => Number(s.level) || 0);
 
 /**
  * A book caster's prepared count as it will stand after Apply, and its limit. Starts from dnd5e's
@@ -377,6 +437,10 @@ export const lvlSpellsStep = {
     const swapNames = isCantrips ? (state.swapCantrip ? [state.swapCantrip.name] : []) : marks.map(m => m.name);
     const released = (isCantrips ? plan.releasedCantrips : plan.releasedSpells) ?? 0;
     const atLimit = isPrepareTab ? prepFull : (chosen.length >= budget);
+    // Several levels gained at once: each leveled pick is capped at the level it comes from.
+    const caps = (isCantrips || isPrepareTab) ? null : levelCapsFor(plan, marks.length);
+    const levels = pickedLevels(state);
+    const capped = s => !!caps && !canAddLevel(levels, s.level, caps);
     const decorate = s => ({ ...s, levelLabel: s.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: s.level }) });
 
     // Owned spells the player may swap out — offered only when this bucket has add capacity (you
@@ -419,7 +483,8 @@ export const lvlSpellsStep = {
       active: picked.has(s.uuid),
       ...(isBookTab ? bookFlag(pickByUuid.get(s.uuid)) : {}),
       focused: state.focusedSpellUuid === s.uuid,
-      disabled: atLimit && !picked.has(s.uuid)
+      capped: !atLimit && !picked.has(s.uuid) && capped(s),
+      disabled: !picked.has(s.uuid) && (atLimit || capped(s))
     }));
     const prepareRows = isPrepareTab ? prepareTabRows(state, prep, raw, decorate) : [];
     // Spells the character already has from a feature, a feat, another class: shown locked on the
@@ -444,7 +509,8 @@ export const lvlSpellsStep = {
             ? (focus.grantedBy
               ? t("levelup.step.spells.grantedNote", { source: focus.grantedBy })
               : t("levelup.step.spells.grantedNoteNoSource"))
-            : (focus.locked ? t("levelup.step.spells.alwaysNote") : ""),
+            : focus.locked ? t("levelup.step.spells.alwaysNote")
+              : (focus.capped ? t("levelup.step.spells.capNote", { level: focus.level }) : ""),
         // On the Prepare tab the detail pane's button prepares and unprepares instead.
         prepareMode: isPrepareTab && !focus.granted,
         prepared: !!focus.active,
@@ -473,7 +539,10 @@ export const lvlSpellsStep = {
       intro: t("levelup.step.spells.intro", { class: className }),
       // The wording follows the class: a 2014 prepared caster is changing what it has prepared,
       // not trading a spell it knows forever.
-      swapHint: ownedRows.length ? t(plan.swapLabelKey ?? "levelup.step.spells.swapHint") : "",
+      swapHint: !ownedRows.length ? ""
+        : (!isCantrips && (plan.spellSwaps === "one") && (plan.swapLimit > 1))
+          ? t("levelup.step.spells.swapHintLevels", { count: plan.swapLimit })
+          : t(plan.swapLabelKey ?? "levelup.step.spells.swapHint"),
       // A marked swap raises this tab's budget by one, which is otherwise an unexplained extra pick:
       // name the spell being replaced so the count and the struck-through row are one story.
       swapActiveHint: (canSwap && swapNames.length && !isPrepareTab)
@@ -512,6 +581,10 @@ export const lvlSpellsStep = {
         ? t("levelup.step.spells.preparedOf", { count: prep?.count ?? 0, cap: prep?.cap ?? 0 })
         : t("levelup.step.spells.need", { count: Math.max(0, budget - chosen.length) }),
       atLimit,
+      // One chip per cap: how many picks may reach each spell level, and how many do.
+      levelCaps: caps ? capSummary(levels, caps).map(c => ({
+        ...c, label: t("levelup.step.spells.levelTag", { level: c.level })
+      })) : [],
       list: pinned.cards,
       compareCategory: pinned.compareCategory,
       compare: pinned.compare,
@@ -690,6 +763,8 @@ async function pickSpell(el, { state }) {
 
   // A book caster's leveled pick goes into its book: capped by the free book picks, and prepared
   // while its prepared limit has room (auto-fill), otherwise written in unprepared.
+  const caps = isCantrip ? null : levelCapsFor(plan, plan.canSwapSpell ? spellMarks(state).length : 0);
+  if ( caps && !canAddLevel(pickedLevels(state), Number(el.dataset.level) || 0, caps) ) return;
   if ( !isCantrip && plan.bookRule ) {
     if ( bucket.length >= (plan.addBook ?? 0) ) return;
     const doc = await fromUuid(uuid).catch(() => null);
@@ -741,8 +816,9 @@ async function togglePrepared(el, { state }) {
 /**
  * Mark (or unmark) an owned spell for replacement this level-up (Phase 4b). Marking frees one extra
  * slot in that bucket; unmarking drops the replacement pick that filled it so the budget stays
- * honest. Where only one leveled spell may be replaced, marking a different one moves the mark
- * without changing the freed count; a Cleric or Druid (`spellSwaps: "any"`) may mark several.
+ * honest. A class that replaces one spell per level may mark one per level gained, and marking
+ * past that moves the oldest mark without changing the freed count; a Cleric or Druid
+ * (`spellSwaps: "any"`) may mark as many as it likes.
  */
 async function toggleSwap(el, { state }) {
   const plan = state.spellPlan();
@@ -770,9 +846,13 @@ async function toggleSwap(el, { state }) {
   if ( at >= 0 ) {
     marks.splice(at, 1);
     while ( bucket.length > (addBudget + marks.length) ) bucket.pop();
+    // The mark took its cap with it: a replacement that needed it goes too.
+    const caps = levelCapsFor(plan, marks.length);
+    if ( caps ) trimToCaps(bucket, caps);
   }
-  else if ( plan.spellSwaps === "any" ) marks.push(mark);
-  else marks.splice(0, marks.length, mark);
+  // One mark per level gained for a class that replaces one; at the limit, the oldest mark moves.
+  else if ( (plan.spellSwaps === "any") || (marks.length < (plan.swapLimit ?? 1)) ) marks.push(mark);
+  else marks.splice(0, marks.length, ...marks.slice(1), mark);
 }
 
 /**

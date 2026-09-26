@@ -348,6 +348,18 @@
   color: var(--cc-accent);
 }
 .creator-spell-selected-empty { color: var(--cc-muted); font-size: 0.85rem; }
+/* The spell-level caps of a multi-level jump, above the tally: the magic shop's slot chips. */
+.creator-spell-caps {
+  flex: 0 0 auto;
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.65rem 0.85rem 0.3rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+}
 /* Spells the build grants outright, listed under the picks for reference. On its own row across the
    full width, and visibly separated, so it reads as "you also get these" rather than as more of the
    player's own choices. */

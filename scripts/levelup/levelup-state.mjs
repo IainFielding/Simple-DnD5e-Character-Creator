@@ -122,6 +122,14 @@ export class LevelUpState {
   classBrowse = false;
   /** Character level before this level-up. */
   fromLevel;
+
+  /**
+   * The leveled class's level before this session (0 for a class being taken), or null before a
+   * class is decided. Bounds the spell levels of picks in a jump of several levels.
+   * @type {number|null}
+   */
+  fromClassLevel = null;
+
   /** Character level after this level-up. */
   toLevel;
   /**
@@ -324,6 +332,8 @@ export class LevelUpState {
   adoptDriver(driver) {
     this.driver = driver;
     this.classItem = driver.steps.find(s => s.class)?.class?.item ?? null;
+    // Read off the real actor before anything is committed: a class being taken has none.
+    this.fromClassLevel = this.actor.items?.get?.(this.classItem?.id)?.system?.levels ?? 0;
     // The trailing marker step carries the final character level the manager is targeting.
     this.toLevel = driver.steps.reduce((max, s) => Math.max(max, s.level ?? 0), this.fromLevel);
   }
@@ -337,6 +347,7 @@ export class LevelUpState {
   clearDriver() {
     this.driver = null;
     this.classItem = null;
+    this.fromClassLevel = null;
     this.toLevel = this.fromLevel + 1;
     this.selectedCantrips = [];
     this.selectedSpells = [];
@@ -388,7 +399,9 @@ export class LevelUpState {
     if ( !this.driver && !this.committed ) return computeSpellPlan(this.actor, null);
     const source = this.spellSource;
     const classItem = this.classItem ? source.items.get(this.classItem.id) : null;
-    return computeSpellPlan(source, classItem);
+    // The class level this session started from, so a jump of several levels caps each spell pick
+    // at the level it comes from. Held from adoption, since after the commit the actor has moved on.
+    return computeSpellPlan(source, classItem, { fromClassLevel: this.fromClassLevel ?? undefined });
   }
 
   /**

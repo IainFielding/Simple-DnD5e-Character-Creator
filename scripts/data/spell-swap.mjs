@@ -25,6 +25,14 @@
  * else keeps the one swap. The Wizard is the exception to both: it prepares from its *book*, so its
  * level-up has a Prepare tab instead and no swap at all ({@link module:data/spellbook}).
  *
+ * **Level-gated lists.** Some classes change their spells *only* when they gain a level: every 2014
+ * spells-known class, and in 2024 the Bard, Sorcerer, Warlock and the third-caster subclasses. For
+ * those, a spell learned on the way through a multi-level jump is bound by the slots of the level it
+ * was learned at ({@link module:data/spell-level-caps}). A class that re-prepares on a long rest —
+ * the any-number classes above, and the 2024 Paladin, Ranger and Artificer, which trade one spell
+ * per long rest — could have reshaped its list on every rest between those levels, so only the
+ * final level's slots bound it (`levelGated: false`).
+ *
  * @see module:levelup/steps/lvl-spells-step for the step that consumes this
  */
 
@@ -40,6 +48,9 @@ const CHANGE_ANY = {
   2024: new Set(["cleric", "druid"])
 };
 
+/** 2024 classes that change a prepared spell on a long rest rather than on gaining a level. */
+const LONG_REST_2024 = new Set(["paladin", "ranger", "artificer"]);
+
 /**
  * What this caster may replace when it gains a level.
  *
@@ -50,10 +61,12 @@ const CHANGE_ANY = {
  *
  * @param {Item5e|{system?: object}|null} castItem  The class *or subclass* item that casts — whatever
  *   `spellcastingItem()` resolved for the level being gained.
- * @returns {{cantrip: boolean, spell: boolean, spells: "one"|"any", prepared: boolean, labelKey: string}}
- *   `spells` is how many leveled spells may be marked at once; `prepared` whether the class
- *   prepares its spells (so owned spells read "Prepared", not "Known"). `labelKey` is relative to
- *   the module namespace, for {@link module:config.t}.
+ * @returns {{cantrip: boolean, spell: boolean, spells: "one"|"any", prepared: boolean, levelGated: boolean,
+ *   labelKey: string}}
+ *   `spells` is how many leveled spells may be marked at once (per level gained, for "one");
+ *   `prepared` whether the class prepares its spells (so owned spells read "Prepared", not "Known");
+ *   `levelGated` whether its list changes only on gaining a level. `labelKey` is relative to the
+ *   module namespace, for {@link module:config.t}.
  */
 export function swapAllowance(castItem) {
   const is2014 = String(castItem?.system?.source?.rules ?? "") === "2014";
@@ -61,15 +74,24 @@ export function swapAllowance(castItem) {
   const any = CHANGE_ANY[is2014 ? 2014 : 2024].has(identifier);
   const spells = any ? "any" : "one";
   if ( any ) {
-    return { cantrip: !is2014, spell: true, spells, prepared: true, labelKey: "levelup.step.spells.swapHintAny" };
+    return {
+      cantrip: !is2014, spell: true, spells, prepared: true, levelGated: false,
+      labelKey: "levelup.step.spells.swapHintAny"
+    };
   }
-  if ( !is2014 ) return { cantrip: true, spell: true, spells, prepared: false, labelKey: "levelup.step.spells.swapHint" };
+  if ( !is2014 ) {
+    return {
+      cantrip: true, spell: true, spells, prepared: false, levelGated: !LONG_REST_2024.has(identifier),
+      labelKey: "levelup.step.spells.swapHint"
+    };
+  }
   const prepared = PREPARED_CASTERS_2014.has(identifier);
   return {
     cantrip: false,
     spell: true,
     spells,
     prepared,
+    levelGated: !prepared,
     labelKey: prepared ? "levelup.step.spells.swapHintPrepared" : "levelup.step.spells.swapHint"
   };
 }
