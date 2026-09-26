@@ -72,6 +72,8 @@ const argv = process.argv.slice(2);
 const value = name => argv.find(a => a.startsWith(`--${name}=`))?.split("=")[1] ?? null;
 const hold = argv.includes("--hold");
 const fullSize = argv.includes("--full-size");
+const profile = argv.includes("--profile");
+const profileLog = [];
 const worldId = value("world") ?? "playwright";
 const only = value("only")?.split(",").map(s => s.trim()).filter(Boolean) ?? null;
 
@@ -501,6 +503,10 @@ const OUT_DIR = OUT_DIRS[worldId] ?? OUT_DIRS.playwright;
 mkdirSync(OUT_DIR, { recursive: true });
 ensureWorld(worldId);
 
+const runStarted = Date.now();
+const secs = since => `${Math.round((Date.now() - since) / 1000)}s`;
+let taken = 0;
+
 const server = await startFoundry(worldId);
 console.log(`Foundry up with world "${worldId}"`);
 
@@ -508,6 +514,12 @@ let session;
 let exitCode = 0;
 try {
   session = await Session.open({ viewport: VIEWPORT, deviceScaleFactor: SCALE, canvas: true });
+  if ( profile ) {
+    // The module's debug log names each warm phase and times each render; stamping every console
+    // line with the run's clock shows where a slow shot's seconds actually went.
+    session.page.on("console", msg => profileLog.push(`+${((Date.now() - runStarted) / 1000).toFixed(1)}s ${msg.text()}`));
+    await session.eval(() => game.settings.set("sogrom-dnd5e-character-creator", "debugLogging", true));
+  }
   const call = await load(session);
 
   const shots = SHOTS[worldId];
@@ -527,9 +539,11 @@ try {
     // `capture: false` marks a step that only changes the world (the cleanup at the end of a list).
     const capture = (shot.capture !== false) && (!only || only.includes(shot.name));
     process.stdout.write(`  ${shot.name} … `);
+    if ( profile ) profileLog.push(`+${((Date.now() - runStarted) / 1000).toFixed(1)}s ===== ${shot.name}`);
+    const shotStarted = Date.now();
     await shot.setup(call);
     if ( !capture ) {
-      console.log("(setup only)");
+      console.log(`(setup only, ${secs(shotStarted)})`);
       continue;
     }
     await sleep(600);
@@ -551,7 +565,8 @@ try {
     }
     const out = fullSize ? png : await fit(session, png);
     writeFileSync(path, out);
-    console.log("ok");
+    taken++;
+    console.log(`ok (${secs(shotStarted)})`);
   }
 
   if ( hold ) {
@@ -568,9 +583,12 @@ try {
     console.error("wrote console.log and failure.png");
   }
 } finally {
+  if ( profile ) writeFileSync(new URL("./shots-profile.log", import.meta.url), profileLog.join("\n"), "utf8");
   if ( session ) await session.close();
   await server.stop();
 }
+// A closing line of its own, so a finished run can be told apart from one still loading.
+console.log(`${exitCode ? "FAILED" : "Done"}: ${taken} shot(s) written to ${OUT_DIR.pathname.slice(1)} in ${secs(runStarted)}`);
 process.exit(exitCode);
 
 /**
