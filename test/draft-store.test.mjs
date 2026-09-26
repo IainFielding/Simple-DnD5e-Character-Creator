@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import {
-  applyDraft, cancelDraftSave, clearDraft, draftSnapshot, hasDraft, pruneMissingOrigins, readDraft,
+  applyDraft, cancelDraftSave, clearDraft, draftSnapshot, pruneMissingOrigins, readDraft,
   saveDraft
 } from "../scripts/state/draft-store.mjs";
 import { CreatorState } from "../scripts/state/creator-state.mjs";
@@ -137,7 +137,6 @@ describe("what a draft carries", () => {
 describe("a stored draft that can't be trusted", () => {
   it("offers nothing when the player has never saved one", () => {
     expect(readDraft()).toBeNull();
-    expect(hasDraft()).toBe(false);
   });
 
   it("forgets a draft written to a different shape rather than half-applying it", async () => {
@@ -179,9 +178,9 @@ describe("a stored draft that can't be trusted", () => {
 
   it("clears on request", async () => {
     await saveDraft(filledState());
-    expect(hasDraft()).toBe(true);
+    expect(readDraft()).not.toBeNull();
     await clearDraft();
-    expect(hasDraft()).toBe(false);
+    expect(readDraft()).toBeNull();
   });
 });
 

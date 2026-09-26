@@ -3,7 +3,7 @@ import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import {
   toCopper, totalCp, multiplyCp, priceCp, formatCp, fromCopper,
   sanitizeEntry, entryFromItem, effectiveCp, parsePriceInput, cpToPriceParts,
-  hydrateEntries, buildStock, cartTotalCp, remainingCurrency, applyCartToCurrency,
+  hydrateEntries, buildStock, cartTotalCp, applyCartToCurrency,
   consolidateCurrency, equipmentBudgetCp, purchasedItems
 } from "../scripts/data/store-source.mjs";
 
@@ -199,24 +199,6 @@ describe("cart totals & deduction", () => {
     const { cartCp, currency } = applyCartToCurrency({}, { gp: 1500 });
     expect(cartCp).toBe(0);
     expect(currency).toEqual({ pp: 150, gp: 0, sp: 0, cp: 0 });
-  });
-
-  it("deducts a fitting cart and re-expresses the remainder as change", () => {
-    const { spendable, remainder } = remainingCurrency({ gp: 125 }, 4550);
-    expect(spendable).toBe(true);
-    expect(remainder).toEqual({ pp: 7, gp: 9, sp: 5, cp: 0 });
-  });
-
-  it("declines a cart that exceeds the currency, leaving it untouched", () => {
-    const { spendable, remainder } = remainingCurrency({ gp: 10 }, 1001);
-    expect(spendable).toBe(false);
-    expect(remainder).toEqual({ gp: 10 });
-  });
-
-  it("passes an empty cart through without collapsing denominations", () => {
-    const { spendable, remainder } = remainingCurrency({ gp: 10, sp: 5 }, 0);
-    expect(spendable).toBe(true);
-    expect(remainder).toEqual({ gp: 10, sp: 5 });
   });
 });
 

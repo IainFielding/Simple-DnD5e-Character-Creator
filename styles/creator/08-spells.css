@@ -1,0 +1,592 @@
+/* ---------------------------------------------- Spells step
+
+   The spell-selection step (only shown for casters). It reuses the pick-step layout
+   but adds tabs to switch between spell levels, a running tally of chosen spells
+   across the top, and selected/disabled/at-limit states on the spell rows. */
+
+/* Spell-level tabs are a view switch (cantrips vs 1st-level), so they share the
+   method-tab recipe: muted pill at rest, gold when active — the one "currently
+   here" colour used by every view-switch tab in the creator. */
+/* The row wraps: a Wizard has three tabs (Cantrips, Spellbook, Prepare), each with a count, and on a
+   narrow window three won't fit on one line. */
+.creator-spell-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+.creator-spell-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  color: var(--cc-muted);
+  cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
+}
+.creator-spell-tab:hover:not(.is-active) { border-color: var(--cc-select); color: var(--cc-text); }
+.creator-spell-tab:active { transform: scale(0.97); }
+.creator-spell-tab.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
+.creator-spell-count { font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+.creator-spell-tab.is-full .creator-spell-count { color: var(--cc-good); }
+/* On the active (gold) tab the green "full" count would muddy against gold, so the
+   count follows the tab's own dark active text instead. */
+.creator-spell-tab.is-active .creator-spell-count { color: inherit; }
+.creator-pickrow.is-focused { border-color: var(--cc-accent); }
+.creator-pickrow.is-disabled { opacity: 0.4; cursor: not-allowed; }
+.creator-spell-meta { color: var(--cc-muted); font-size: 0.85rem; margin: 0.2rem 0 0; }
+/* No top strip now — the two columns fill the whole stage height. */
+.creator-spells { grid-template-rows: minmax(0, 1fr); }
+.creator-spells-none { grid-column: 1 / -1; grid-row: 1 / -1; }
+
+/* Spells a feat handed out, above the caster's own picks (and the whole page for a non-caster).
+   Reuses the pick-row shape so a granted spell reads as the same kind of thing as a chosen one —
+   it differs only in being fixed, which the tick and the absence of a button already say. */
+.creator-feat-grants { margin-bottom: 1rem; }
+.creator-feat-grant-list { overflow: visible; flex: 0 0 auto; }
+/* Not a button: there is nothing to click. Kill the affordances the row shape brings with it. */
+.creator-feat-grant { cursor: default; }
+.creator-feat-grant:hover { border-color: var(--cc-select); }
+.creator-feat-grant-from { color: var(--cc-muted); font-style: italic; }
+.creator-feat-grant-swapped { color: var(--cc-accent); }
+/* The substitution control, indented under the row it belongs to so the pair reads as one item. */
+.creator-feat-grant-swap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0.75rem 3.4rem;
+  font-size: 0.85rem;
+  color: var(--cc-muted);
+}
+.creator-feat-grant-swap select { flex: 1 1 12rem; min-width: 0; }
+
+/* Level-up spell step: a one-line intro above the tabs, and a small spell-level badge on each
+   pick-row (the leveled tab mixes spell levels, so each row states its own). */
+.levelup-spells-intro { margin: 0 0 0.75rem; color: var(--cc-muted); font-size: 0.9rem; line-height: 1.4; }
+.creator-pickrow-tag {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  color: var(--cc-accent);
+  background: var(--cc-panel-2, var(--cc-panel));
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+}
+/* When a row carries both a level badge and a selected tick, keep them side by side at the right. */
+.creator-pickrow-tag + .creator-pickrow-tick { margin-left: 0.4rem; }
+
+
+/* Level-up spell swaps (Phase 4b): a known spell offered as a swap-out candidate reads muted with a
+   bookmark; once marked for replacement it strikes through and the arrows glow. */
+.levelup-spells-swaphint,
+.levelup-spells-releasedhint { margin: -0.35rem 0 0.75rem; color: var(--cc-muted); font-size: 0.82rem; line-height: 1.35; }
+.levelup-spells-swaphint i,
+.levelup-spells-releasedhint i { color: var(--cc-accent); margin-right: 0.25rem; }
+.levelup-spells-swapactive { margin: -0.35rem 0 0.75rem; color: var(--cc-text); font-size: 0.82rem; line-height: 1.35; }
+.levelup-spells-swapactive i { color: var(--cc-danger, #c66); margin-right: 0.25rem; }
+/* A Wizard already over its prepared limit (built before the limit followed Intelligence). */
+.levelup-spells-overprepared { margin: -0.35rem 0 0.75rem; color: var(--cc-text); font-size: 0.82rem; line-height: 1.35; }
+.levelup-spells-overprepared i { color: var(--cc-danger, #c66); margin-right: 0.25rem; }
+
+/* A spell already on the sheet is marked two ways, and neither of them costs the name any width.
+
+   The card is *shaded* — a tinted ground, a dashed edge, and the accent picking out the leading
+   border the base row already reserves. The tint is painted on the `<li>`, not on the row inside
+   it, so it runs the full width of the card and under the pin column too; on the row alone it
+   stopped short and left the corner holding the compare pin sitting on bare panel, which read as
+   two cards rather than one.
+
+   And it is *labelled*, in the column the pin already occupies (see `.creator-rowside`). On the
+   row's own line that label took about a quarter of a 224px card — most of the name's share, enough
+   that "Chromatic Orb" wrapped as "Chroma / tic Orb". Stacked under the pin it costs only the few
+   pixels by which the word is wider than the pin. */
+.creator-spells .creator-picklist > li:has(.creator-pickrow.is-owned) {
+  background: color-mix(in srgb, var(--cc-accent) 9%, var(--cc-panel));
+}
+.creator-spells .creator-picklist > li:has(.creator-pickrow.is-swapping) {
+  background: color-mix(in srgb, var(--cc-danger, #c66) 12%, var(--cc-panel));
+}
+.creator-pickrow.is-owned {
+  border-style: dashed;
+  border-left-color: color-mix(in srgb, var(--cc-accent) 60%, transparent);
+}
+.creator-pickrow.is-owned .creator-pickrow-name { color: var(--cc-muted); }
+.creator-pickrow.is-swapping { border-color: var(--cc-danger, #c66); }
+.creator-pickrow.is-swapping .creator-pickrow-name { color: var(--cc-text); text-decoration: line-through; opacity: 0.75; }
+
+/* The card's right-hand column: compare pin on top, state flag beneath it. Centred as a group, so
+   a card with no flag puts the pin exactly where it has always been. */
+.creator-picklist li:has(> .creator-rowside):not(.is-hidden) { display: flex; align-items: stretch; }
+.creator-picklist li:has(> .creator-rowside) > .creator-pickrow { flex: 1 1 auto; min-width: 0; }
+.creator-rowside {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.2rem;
+}
+/* Nothing to show — no pin on this list and no flag on this row. `:not(:has(*))` rather than
+   `:empty`, which the template's own indentation would defeat. */
+.creator-rowside:not(:has(*)) { display: none; }
+/* Alone in the column the pin keeps the full-height hit area it had as a direct child of the row;
+   sharing with a flag it becomes a square above it. */
+.creator-rowside .creator-pin { height: 2.25rem; border-bottom: 0; }
+.creator-rowside .creator-pin:only-child { height: auto; align-self: stretch; margin: -0.35rem -0.2rem; }
+/* The pin's "quiet until the row is hovered" rule keys off a direct child; nested in the column it
+   needs saying again. */
+.creator-picklist li:hover .creator-rowside .creator-pin { color: var(--cc-muted); }
+
+/* The flag itself: a word, sized to sit under a 2.25rem pin without widening the column more than
+   the word demands. `cursor: help` is what advertises the tooltip — it is the only thing here that
+   answers a hover rather than a click. */
+.creator-pickrow-flag {
+  display: block;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  background: var(--cc-panel-2, var(--cc-panel));
+  color: var(--cc-muted);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  cursor: help;
+}
+.creator-pickrow-flag.is-swapping {
+  color: var(--cc-danger, #c66);
+  border-color: color-mix(in srgb, var(--cc-danger, #c66) 55%, transparent);
+  background: color-mix(in srgb, var(--cc-danger, #c66) 16%, var(--cc-panel));
+}
+/* A spell written into a Wizard's book this level-up, on the Prepare tab. */
+.creator-pickrow-flag.is-new {
+  color: var(--cc-gold);
+  border-color: color-mix(in srgb, var(--cc-gold) 55%, transparent);
+}
+
+/* Spell names wrap between words and never inside one. The shared pick-row name allows
+   `overflow-wrap: anywhere`, which is right for a single narrow column and wrong for a grid cell:
+   it spends the shortage on hyphen-less mid-word breaks rather than on a second line. Two lines,
+   clamped, of whole words — the bargain the class browse rows already struck. Scoped to the spell
+   grids, which is every list that shares this cell size: the level-up step, the creation step and
+   the feat-spell browser. */
+.creator-spells .creator-picklist .creator-pickrow-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: normal;
+}
+
+/* The detail pane's version of the same explanation, with room for the whole sentence. Same dashed
+   idiom as the feat-spells "already known" note, so the two screens read as one module. */
+.creator-swap-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0 0 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--cc-panel);
+  border: 1px dashed var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.creator-swap-note i { margin-top: 0.15rem; color: var(--cc-accent); }
+.creator-swap-note.is-swapping {
+  border-color: color-mix(in srgb, var(--cc-danger, #c66) 55%, transparent);
+  background: color-mix(in srgb, var(--cc-danger, #c66) 10%, transparent);
+  color: var(--cc-text);
+}
+.creator-swap-note.is-swapping i { color: var(--cc-danger, #c66); }
+
+/* Where this caster's spells come from. The borrowed note is a quiet aside — it answers a question
+   the player may not have asked yet ("why is my Fighter seeing wizard spells"), so it must not
+   compete with the list. The missing panel is the opposite: nothing can be chosen until it is
+   answered, so it takes the accent border a blocking message earns. */
+.creator-spell-listnote {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: -0.35rem 0 0.75rem;
+  color: var(--cc-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.creator-spell-listnote i { color: var(--cc-accent); }
+.creator-spell-listmissing {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-left: 3px solid var(--cc-accent);
+  border-radius: var(--cc-radius);
+}
+.creator-spell-listmissing-lead {
+  margin: 0;
+  color: var(--cc-text);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.creator-spell-listmissing-lead i { color: var(--cc-accent); margin-right: 0.35rem; }
+.creator-spell-listmissing-none { margin: 0.5rem 0 0; color: var(--cc-muted); font-size: 0.8rem; }
+.creator-spell-listpick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  color: var(--cc-muted);
+  font-size: 0.82rem;
+}
+.creator-spell-listpick select {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  background: var(--cc-panel-2, var(--cc-panel));
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.creator-spell-listpick select option { background: var(--cc-panel); color: var(--cc-text); }
+/* An inline "Change" beside the note: a link in behaviour, so it must not look like a button
+   competing with the pick controls below it. */
+.creator-linkbtn {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--cc-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.creator-linkbtn:hover { color: var(--cc-text); }
+
+/* A spell row's second line: everything a player would otherwise have to click each spell to read.
+   The name and the meta share a column so the row stays one flex line with the image and the tick,
+   and the meta truncates rather than wrapping — a list is scanned, and a row that grows to two lines
+   on some spells and not others is harder to scan than one that ends in an ellipsis. */
+.creator-spellrow-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  text-align: left;
+}
+.creator-spellrow-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--cc-muted);
+}
+/* Separators between the plain facts, drawn rather than typed so no cell has to know whether it is
+   the last one present. The tags opt out: they carry their own outline. */
+.creator-spellrow-meta > span + span:not(.creator-spellrow-tag)::before {
+  content: "·";
+  margin-right: 0.4rem;
+}
+.creator-spellrow-level { color: var(--cc-accent); font-weight: 600; }
+.creator-spellrow-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+}
+.creator-spellrow-tag i { font-size: 0.62rem; }
+/* The swap states dim or strike the whole label block, not just the name, so a marked row reads as
+   one struck-through thing rather than a struck name over live metadata. */
+.creator-pickrow.is-owned .creator-spellrow-meta { opacity: 0.75; }
+.creator-pickrow.is-swapping .creator-spellrow-meta { text-decoration: line-through; opacity: 0.7; }
+
+/* The description column scrolls its detail, with the picked-spell tally pinned beneath it. */
+.creator-spells .creator-pick-desc { display: flex; flex-direction: column; overflow: hidden; }
+/* Flat fill on the focused-spell detail card — no panel gradient on the spell pages. */
+.creator-spells .creator-detail { background: var(--cc-panel); }
+/* `0 1 auto`, not `1 1 auto`: the description takes the height it needs and no more.
+   Growing it was what pinned the tally to the bottom of the column and opened several
+   hundred pixels of nothing between the two on a tall window. It can still shrink and
+   scroll when a long spell description would otherwise push the tally off. */
+.creator-pick-desc-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Running tally of picked spells. It follows the description immediately rather than
+   being pinned to the foot of the column — it is a readout of what you have chosen,
+   which belongs beside the thing you are choosing, not at the far end of the window. */
+.creator-spell-selected {
+  flex: 0 0 auto;
+  margin-top: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+}
+.creator-spell-selected-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-accent);
+}
+.creator-spell-selected-empty { color: var(--cc-muted); font-size: 0.85rem; }
+/* Spells the build grants outright, listed under the picks for reference. On its own row across the
+   full width, and visibly separated, so it reads as "you also get these" rather than as more of the
+   player's own choices. */
+.creator-spell-granted {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--cc-line);
+}
+.creator-spell-granted .creator-spell-group-label { color: var(--cc-muted); }
+.creator-spell-granted .creator-spell-group-label i { margin-right: 0.3rem; }
+/* Level-up: the spells the character already has, under the tally. A high-level caster can
+   know thirty-odd spells, so the panel shrinks and scrolls rather than pushing the tally and
+   the focused spell out of the column. */
+.creator-spell-known {
+  flex: 0 1 auto;
+  min-height: 4rem;
+  overflow-y: auto;
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px dashed var(--cc-line);
+  border-radius: var(--cc-radius);
+}
+.creator-spell-known .creator-spell-selected-label { color: var(--cc-muted); }
+/* Picked spells, grouped by level so cantrips and 1st-level spells read apart. */
+.creator-spell-groups { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.5rem; }
+.creator-spell-group { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.6rem; }
+.creator-spell-group-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-muted);
+  flex: 0 0 5.5rem;
+}
+.creator-spell-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.creator-spell-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem 0.15rem 0.2rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  color: var(--cc-text);
+  text-decoration: none;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.creator-spell-chip i { display: none; }
+.creator-spell-chip img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid var(--cc-line); }
+.creator-spell-chip:hover { border-color: var(--cc-gold); color: var(--cc-gold); }
+/* A spell in a Wizard's book that isn't prepared: faded, with a book mark whose tooltip says so. */
+.creator-spell-chip.is-unprepared { opacity: 0.6; border-style: dashed; }
+.creator-spell-chip i.creator-spell-chip-mark { display: inline; font-size: 0.7rem; color: var(--cc-muted); cursor: help; }
+
+/* ---- Spell browser: choices wide + description sidebar ----
+   The spell choices take the main column; the focused spell's description sits in a sidebar.
+   Shared by the level-up spell step, the creation Spells step, and the feat-spells step
+   (`.creator-spells-browser`). Guarded to wide stages so the <1100px rule can stack the columns.
+
+   The sidebar is capped rather than being a `1fr` share. It used to be `minmax(280px, 1fr)` of a
+   2fr/1fr split, which on a wide monitor made it ~740px — three times the measure a spell
+   description needs, and the extra width bought nothing but a taller void underneath it. Capped,
+   the space goes to the list, which is where more room actually shows more spells. */
+@media (min-width: 1101px) {
+  .levelup-spells,
+  .creator-spells-browser { grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); }
+}
+
+/* The spell list is a grid, not a stack.
+
+   One spell per row is right in a 340px column and absurd in a 1400px one: fifteen cantrips
+   became fifteen full-width rows and a scrollbar, each using a quarter of its own width and
+   leaving the rest blank. The same `auto-fill` track the picker drawer uses puts them in as
+   many columns as fit, so a level-1 caster's whole list is usually on screen at once —
+   which is the point of a chooser. */
+.creator-spells .creator-picklist {
+  grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+  /* Gaps over the column's own dark ground — see the drawer grid above for why neither a
+     coloured container background nor per-cell borders survives a short last row. */
+  gap: 2px;
+  align-content: start;
+  border-top: 1px solid var(--cc-line);
+}
+.creator-spells .creator-picklist > li {
+  background: var(--cc-panel);
+  min-width: 0;
+}
+/* The 1px grid gaps are the rules now; a per-row border would double them. */
+.creator-spells .creator-picklist .creator-pickrow { border-bottom: 0; }
+.creator-spells .creator-picklist .creator-no-results { grid-column: 1 / -1; }
+
+/* Search box + level/school filter dropdowns share the top toolbar row, wrapping when tight.
+   The "choose N more" count joins them on that row rather than taking a line of its own —
+   the stacked toolbar puts each child on its own row, which for three short controls meant
+   three rows of chrome above the list. */
+.creator-spells > .creator-pick-side > .creator-toolbar--stacked {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+}
+.creator-spells > .creator-pick-side > .creator-toolbar--stacked .creator-spell-search-row { flex: 1 1 420px; }
+.creator-spell-search-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.creator-spell-search-row .creator-search { flex: 1 1 220px; width: auto; }
+
+/* Two tabs do not need the whole width of a wide stage. */
+.creator-spells .creator-spell-tabs .creator-spell-tab { flex: 0 1 18rem; }
+/* Five dropdowns will not sit on one line on a narrow stage, so the group wraps and each control
+   takes a share of whatever row it lands on. A zero flex-basis made five equal slivers on a wide
+   stage; the basis below is what keeps each one wide enough to read its own longest option. */
+.creator-spell-filters { display: flex; flex: 1 1 260px; flex-wrap: wrap; gap: 0.5rem; }
+.creator-spell-filter {
+  flex: 1 1 9rem;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-muted);
+}
+.creator-spell-filter i { flex: 0 0 auto; font-size: 0.8rem; }
+.creator-spell-filter select {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--cc-text);
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+}
+.creator-spell-filter select option { background: var(--cc-panel); color: var(--cc-text); }
+
+/* ---- Feat-spells step (Magic Initiate): a spell-list picker and a casting-ability picker sit
+   above the spell browser; when a feat grants more than one such choice, a switcher tops the column. */
+.feat-spells-switch { flex-wrap: wrap; }
+.feat-spells-switch-img,
+.feat-spells-segment-img {
+  width: 20px; height: 20px; border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--cc-line); margin-right: 0.4rem;
+}
+
+/* Setup panel: groups the list + ability decisions into one framed block so they read as required
+   set-up before the spell browser, rather than blending into it. */
+.feat-spells-setup {
+  margin: 0 0 1rem;
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+}
+.feat-spells-choice { margin: 0; }
+/* An unmade decision is flagged: an amber rail and a soft glow draw the eye to it. */
+.feat-spells-choice.is-needed {
+  margin: -0.35rem -0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-left: 3px solid var(--cc-accent);
+  border-radius: var(--cc-radius);
+  background: color-mix(in srgb, var(--cc-accent) 8%, transparent);
+}
+.feat-spells-choice-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-text);
+}
+.feat-spells-choice-label > i:first-child { color: var(--cc-accent); }
+.feat-spells-choice-tick { color: var(--cc-good); font-size: 0.8rem; }
+/* "Choose one" badge, pulsing gently until the decision is made. */
+.feat-spells-req {
+  margin-left: auto;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #1a1206;
+  background: var(--cc-accent);
+  border-radius: var(--cc-radius-pill);
+  animation: feat-spells-pulse 1.8s var(--cc-ease) infinite;
+}
+@keyframes feat-spells-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.feat-spells-choice-hint { margin: -0.15rem 0 0.5rem; color: var(--cc-muted); font-size: 0.8rem; line-height: 1.35; }
+.feat-spells-rec-tag {
+  margin-left: 0.45rem;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--cc-accent);
+  white-space: nowrap;
+}
+.feat-spells-segment.is-active .feat-spells-rec-tag { color: inherit; }
+.feat-spells-segments { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.feat-spells-segment {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  color: var(--cc-muted);
+  cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease), color 0.25s var(--cc-ease);
+}
+.feat-spells-segment:hover:not(.is-active) { border-color: var(--cc-select); color: var(--cc-text); }
+.feat-spells-segment.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
+.feat-spells-segment.is-recommended:not(.is-active) { border-color: var(--cc-accent); color: var(--cc-text); }
+.feat-spells-segment .fa-star { margin-left: 0.35rem; font-size: 0.7rem; color: var(--cc-accent); }
+.feat-spells-segment.is-active .fa-star { color: inherit; }
+/* Note shown in place of the Add button when the focused spell is already known elsewhere. */
+.feat-spells-known-note {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;
+  font-size: 0.85rem; color: var(--cc-muted);
+  background: var(--cc-panel); border: 1px dashed var(--cc-line); border-radius: var(--cc-radius);
+}
+.feat-spells-known-note i { color: var(--cc-good); }
+/* Prompt shown in the list column until a spell list is chosen. */
+.feat-spells-await {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.6rem; padding: 2rem 1rem; text-align: center; color: var(--cc-muted);
+}
+.feat-spells-await i { font-size: 1.4rem; color: var(--cc-accent); }
+

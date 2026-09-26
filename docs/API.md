@@ -121,9 +121,20 @@ itself. The API object itself exists earlier, from `init`.
   across renders.
 - **`preLevelUpApply`** — **the veto point.** Fires after the summary has been captured but before
   anything is written. Return `false` and the actor is untouched and the window stays open.
-- **`levelUpApplied`** — everything has been written: advancements, spells and any swap.
-  `summary` is the same snapshot the chat card renders from. Like `characterCreated`, this fires
-  regardless of the chat-summary setting.
+- **`levelUpApplied`** — everything has been written: advancements, spells, any swaps, and a
+  Wizard's Prepare tab changes. `summary` is the same snapshot the chat card renders from. Like
+  `characterCreated`, this fires regardless of the chat-summary setting.
+
+> **Spell picks on `state`.** On both wizards, `state.selectedSpells` holds the leveled spells
+> being added. For a Wizard, each carries `prepared: false` when it goes into the spellbook
+> unprepared; a pick without the flag is prepared. On a level-up, `state.swapSpells` lists the
+> spells marked for replacement (several for a Cleric or Druid), and `state.preparedChanges` maps an
+> owned spell's item id to the prepared state (`0` or `1`) a Wizard's Prepare tab gave it.
+> `summary.prepared` names the changes: `{nowPrepared, noLongerPrepared, bookOnly}`. A Wizard's
+> class item carries `flags["sogrom-dnd5e-character-creator"].spellbookFree`: how many free
+> spellbook picks it has had, so spells copied into the book in play never count against them. All of these
+> are additions; nothing that was there before has changed shape except `state.swapSpell`, which
+> is now the `state.swapSpells` list.
 - **`levelUpCancelled`** — the player discarded the level-up. The actor was never touched. Useful
   if you opened something on `levelUpStarted` and need to close it again.
 - **`emberHandoff`** — fires when the module claims [Ember](https://foundryvtt.com/packages/ember)'s

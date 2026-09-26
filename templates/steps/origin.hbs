@@ -1,12 +1,18 @@
 {{!--
-  Shared template for the origin picks that aren't the class — currently Species. One work surface
-  carrying the chosen origin's page, its ability increase (where its edition grants one), and the
-  option list as a drawer over the top. See parts/work-picker.hbs for why the picker is a drawer
+  Shared template for the origin picks that aren't the class — Species and Background. One work
+  surface carrying the chosen origin's page, its ability increase (where its edition grants one), and
+  the option list as a drawer over the top. See parts/work-picker.hbs for why the picker is a drawer
   and not a column.
 
-  Data from origin-step.mjs context(): `cards`/`count`/`pickAction`/`drawerOpen` for the drawer,
-  `detail`/`groups` for the page, and `abilities` — the shared ability-increase panel, present only
-  when the chosen origin actually grants an increase (a 2014 species does; a 2024 one does not).
+  Data from origin-step.mjs context() (Species) or background-step.mjs context(): `cards`/`count`/
+  `pickAction`/`drawerOpen` for the drawer, `detail`/`groups` for the page, `rulesTopic` for the
+  "Read the Rules" control, and `abilities` — the shared ability-increase panel, present only when
+  the chosen origin actually grants an increase (a 2014 species does, as does a 2024 background;
+  a 2024 species and a 2014 background do not).
+
+  Background's drawer carries one extra control: `abilityOptions` drives a filter for "show me
+  backgrounds that raise this ability", which work-picker.hbs renders only when the context
+  supplies it.
 --}}
 <section class="creator-work">
 

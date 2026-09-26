@@ -1,6 +1,6 @@
 import { t } from "../config.mjs";
 import { advancementArray, advancementTitle} from "../data/advancement-util.mjs";
-import { MAGIC_INITIATE_LISTS } from "../data/spell-source.mjs";
+import { MAGIC_INITIATE_LISTS, spellFilterOptions } from "../data/spell-source.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
 
 /**
@@ -396,7 +396,11 @@ export async function grantedSpellCards(doc, sel = {}, seen = new Set(), depth =
           uuid, name: d.name, img: d.img || "icons/svg/daze.svg", level: d.system?.level ?? 0,
           // Carried so a card can be matched by {@link module:data/spell-identity.spellKey} rather
           // than by uuid — see {@link originGrantedSpellKeys} for why that distinction matters.
-          identifier: d.system?.identifier ?? ""
+          identifier: d.system?.identifier ?? "",
+          // What granted it, and whether it arrives always prepared: the Spells step names the
+          // feature on the card it shows for this spell, so the player knows where it comes from.
+          grantedBy: doc.name ?? "",
+          always: Number(adv.configuration?.spell?.prepared ?? 0) === 2
         });
       } else if ( advancementArray(d).length ) {
         out.push(...await grantedSpellCards(d, sel, seen, depth + 1));
@@ -585,8 +589,11 @@ async function spellBrowser(state, grant, listId, spells, owned = new Set()) {
     const isOwned = owned.has(s.uuid) && !chosenSet.has(s.uuid);
     return {
       ...s,
+      levelLabel: s.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: s.level }),
       active: chosenSet.has(s.uuid),
       owned: isOwned,
+      // The row's state flag, as the class spell list shows it: one word, and the sentence behind it.
+      ...(isOwned ? { ownedTag: t("step.featSpells.knownTag"), ownedTip: t("step.featSpells.alreadyKnown") } : {}),
       focused: state.focusedFeatSpellUuid === s.uuid,
       disabled: isOwned || (atLimit && !chosenSet.has(s.uuid))
     };
@@ -601,13 +608,6 @@ async function spellBrowser(state, grant, listId, spells, owned = new Set()) {
       source: await spells.sourceBook(focus.uuid)
     };
   }
-
-  const levelOptions = [...new Set(list.filter(s => s.level > 0).map(s => s.level))]
-    .sort((a, b) => a - b)
-    .map(level => ({ value: level, label: t("levelup.step.spells.levelTag", { level }) }));
-  const schoolOptions = [...new Set(list.map(s => s.school).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, game.i18n.lang))
-    .map(school => ({ value: school, label: school }));
 
   const toChip = async uuids => Promise.all(uuids.map(async uuid => {
     const doc = await fromUuid(uuid).catch(() => null);
@@ -632,8 +632,8 @@ async function spellBrowser(state, grant, listId, spells, owned = new Set()) {
     atLimit,
     list,
     count: list.length,
-    levelOptions,
-    schoolOptions,
+    // The same toolbar as the class spell list: level, school, casting time, range and properties.
+    ...spellFilterOptions(list, t),
     focused,
     selectedCantrips,
     selectedSpells,

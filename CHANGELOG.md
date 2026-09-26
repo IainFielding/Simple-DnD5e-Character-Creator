@@ -2,6 +2,116 @@
 
 All notable changes to the Simple D&D Character Creator.
 
+## 3.3.0 — Wizard Spellbook Support & Spell Swapping
+
+### New
+
+- **Build into a blank character.** Tables that don't let players create actors can still use the
+  creator. The GM makes an empty character and gives the player ownership of it, and the sheet
+  gets a **Build Character** button (the gold hammer, also in the sheet's ⋯ menu and the Actors
+  sidebar's right-click menu). The creator builds straight into that sheet, so the character keeps its
+  folder and permissions. Anything else the GM left on the sheet, such as starting gold, stays. A
+  ready-made character fills the sheet the same way. The button only appears on a character with no
+  class, species or background.
+- **Add to the party.** If your world has a primary party and you own it, the review screen has an
+  **Add to [party]** tick box beside the PDF export, and the character joins as soon as it's created.
+  The creation chat card also has an **Add to [party]** button for anyone who owns the party, so a
+  GM can add a character a player built. Both are hidden from anyone who can't change the party.
+- **Suggest for [class].** Once you've picked a class, one click arranges your ability scores in the
+  order that class relies on, the same order Quick Build uses. It works with point buy, the standard
+  array and a set you've already rolled.
+- **Class guide.** Every class in the list shows a one-line summary of what it does and a rating of
+  how much there is to keep track of, from one dot to three. The ratings are the 2024 Player's
+  Handbook's own. The Artificer, which the book doesn't rate, is rated high.
+- **The Level Up button lights up when it's time.** Once a character has the XP for their next
+  level, the Level Up button on their sheet gets a glowing golden outline. The button still shows
+  whenever the character can level. In a milestone world it never lights, because there's no XP
+  to reach.
+- **Maximum only hit points.** A fourth choice for the level-up hit points setting: every level
+  gained takes the full hit die, applied automatically, including the levels Quick Build climbs
+  for you. The default is still Player's choice.
+- **Support for the Wizard's spellbook,** A Wizard's spellbook is now built to make use of the
+  way the D&D system itself holds one: all of the Wizard's spells go on the sheet, and only
+  its prepared allowance of them is prepared, with the rest in the book unprepared. That is six
+  spells at 1st level and two more at every level after, so a 5th-level Wizard has 14 spells 
+  rather than 9. The creation and levelling screens now include pages for managing the
+  book: **Spellbook** for writing in new spells, and **Prepare** for choosing which of the Wizard's
+  spells are prepared. On a level-up, Prepare lists every spell in the book, old and new, and nothing
+  is ever removed. New spells fill the prepared slots first, so skipping Prepare still gives a legal
+  character, and Quick Build fills the book too. Spells copied into the book during play don't
+  reduce the two a level. A Wizard built before this version is offered the spells it's missing on
+  its next level-up, and one with more prepared than its limit is told how many to unprepare.
+
+### Improved
+
+- **Chat card buttons wait for dnd5e.** The Add to party and Level Up buttons on this module's chat
+  cards are now attached after the D&D system has finished preparing each card, using the system's
+  own `dnd5e.renderChatMessage` hook.
+- **Complexity dots sit under the class icon** in the class list, leaving the summary line the whole
+  width of the row.
+- **Clerics and Druids can change any number of prepared spells when they level up.** The rules
+  let these classes change their prepared spells freely after a long rest, and the level-up now
+  allows it: mark as many prepared spells as you like and choose a replacement for each. The 2014
+  Paladin and Artificer work the same way. Every other class still replaces one spell.
+- **Already-known spells are marked in the level-up's spell list.** A Wizard's book-only spells
+  show faded, so the list doesn't read as if everything is prepared.
+- **Spells you already have show up where you choose spells.** Always-prepared spells, feat and
+  species spells, and spells from another class now appear on the Spells step's tabs as locked
+  cards, marked **Always** or **Granted**, with a tooltip naming what gave them. On the Prepare tab
+  they sit among the book, so you can see everything you'll have ready. They never count against
+  your picks or your prepared limit.
+- **Compare moved to the footer.** The Compare button now sits in the bottom bar beside Next, on
+  every step that has one (spells, class, species, background), so it can't be squeezed off the end
+  of the filter row on a smaller screen. The spell lists also lose their "Choose N more" label: the
+  tab counts and the footer's hint already say it. The spell tabs wrap onto a second line when the
+  window is narrow.
+- **Cantrips come first.** When a level-up offers new cantrips, the Cantrips tab is first and the
+  step opens on it, as it does at creation.
+- **Right-click entries use Foundry v14's menu format.** The Level Up, Repair and Build Character
+  entries no longer trigger v14's deprecation warnings, and keep working when v16 drops the old format.
+
+### Fixed
+
+- **2014 Clerics, Druids and Wizards prepare the right number of spells at 1st level.** Under the
+  2014 rules these classes prepare their spellcasting ability modifier + 1 spells at 1st level
+  (minimum one), but the creator gave every one a fixed count: 3 for a Cleric or Druid, and all 6
+  of a Wizard's spells prepared. A Cleric with Wisdom 16 now prepares 4, and a Wizard with
+  Intelligence 16 prepares 4 of its 6. The count follows your final scores, origin increases
+  included, and changes if you go back and change them. Quick Build uses the same count.
+- **2014 Bards, Sorcerers, Warlocks and Rangers learn new spells when they level up.** These
+  classes know a set number of spells rather than preparing them, and the level-up read only the
+  prepared count, which is zero for them. So they gained no new spells on any level-up, including
+  the levels Quick Build climbs. The level-up now reads the class's Spells Known table.
+- **Arcane Tricksters choose their cantrips.** The Player's Handbook's Arcane Trickster has no
+  cantrip table of its own, so the creator offered none. It now offers two at Rogue 3 and a third at
+  Rogue 10, alongside the Mage Hand the subclass grants.
+- **A multiclass caster only learns spells of a level its own class could cast.** Spell slots are
+  shared across every class, but each class learns spells as if it were the only one. A Cleric 5
+  taking a first level of Wizard was offered 3rd-level Wizard spells; it's now offered 1st-level
+  ones, as the rules intend. The same applies to Warlock pact slots beside another caster.
+- **Ready-made characters follow your compendium sources.** The ready-made list ignored the
+  system's Compendium Browser source settings, so it could show characters from packs the GM had
+  turned off. It now uses the same sources as every other list in the creator.
+- **The Background step shows its Read the Rules link,** like the Class and Species steps.
+- **Players see the book artwork too.** The class, species and background art on the Quick screen
+  and the entry chooser found its images by listing the art folders, which Foundry only allows for
+  users with the "Use File Browser" permission. Most players don't have it, so they saw plain icons
+  where the GM saw the Player's Handbook's paintings. Players now get the same artwork. The same
+  change covers hosts such as The Forge, where the folder listing can come back empty for a GM too
+  and module files may be served from another domain: the art is now found either way.
+- **The Quick screen keeps the name you type.** A name typed into the Quick screen's name box never
+  reached the character. The box only noticed its contents when clicked, and Create then rolled a
+  new name anyway. The character is now created with the name in the box.
+- **A failed build into an existing character is undone.** If a build stopped part-way, anything it
+  had added to the sheet is removed, so trying again doesn't give the character two classes.
+
+### Compatibility
+
+- **Now requires the D&D 5e system 6.0.0 or later.** Earlier versions allowed 5.3.3, but it hasn't
+  been tested since the move to 6.0. Worlds still on 5.3.x should stay on 3.2.0 of this module.
+- Verified against **dnd5e 6.0.5** on Foundry **14.368**: 135 of 135 subclasses built identically to
+  the system's own advancement, levels 1 to 20.
+
 ## 3.2.0 — Quick Build & Ready-Made Characters
 
 ### New

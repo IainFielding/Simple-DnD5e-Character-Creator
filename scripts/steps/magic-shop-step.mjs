@@ -35,7 +35,7 @@ export const magicShopStep = {
   labelKey: "step.magicShop.label",
   template: "steps/magic-shop",
 
-  // Only a build climbing past level 1 with the GM's shop switched on sees this step at all.
+  // Only a build climbing past level 1, to a level whose wealth-table row grants something, sees this step.
   hideWhenInapplicable: true,
 
   applicable(state) {

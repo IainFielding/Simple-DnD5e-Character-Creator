@@ -190,7 +190,6 @@ export const SETTINGS = {
   bannedAlignments: "bannedAlignments",
   storeEnabled: "storeEnabled",
   storeConfig: "storeConfig",
-  magicShopEnabled: "magicShopEnabled",
   recommendedPath: "recommendedPath",
   magicShopConfig: "magicShopConfig",
   debug: "debugLogging"
@@ -224,8 +223,6 @@ export const DEFAULTS = {
     priceMultiplier: 1.0,
     inventory: null            // null = the factory default list; [] = deliberately emptied
   },
-  // Off by default: it changes a higher-level character's starting wealth, which a table opts into.
-  magicShopEnabled: false,
   // Which way in the entry chooser marks as recommended. Quick build, because the player this
   // badge is for is the one who does not yet know which they want — and that is the path that
   // asks least of them. A table that would rather everyone built by hand says so here.
@@ -251,8 +248,9 @@ export const MODES = ["creation", "creation-levelup", "levelup"];
  *  - `"choice"`       — average, roll, max, or a manually-typed value (the module's original behaviour).
  *  - `"average-roll"` — average or roll only (the 2024 rules as written); no max, no manual entry.
  *  - `"average"`      — average only; the buttons collapse to a single pre-made decision.
+ *  - `"max"`          — maximum only; every gained level takes the full hit die, as a done deal.
  */
-export const HP_MODES = ["choice", "average-roll", "average"];
+export const HP_MODES = ["choice", "average-roll", "average", "max"];
 
 /**
  * How much freedom players get on the level-up hit-point decision, per the world setting.
@@ -262,6 +260,16 @@ export const HP_MODES = ["choice", "average-roll", "average"];
 export function levelUpHpMode() {
   const raw = game.settings.get(MODULE_ID, SETTINGS.levelUpHpMode);
   return HP_MODES.includes(raw) ? raw : DEFAULTS.levelUpHpMode;
+}
+
+/**
+ * The hit-point decision a gained level starts on: the maximum in a "Maximum only" world, the
+ * average everywhere else (dnd5e's own default). Also what a headless climb takes, so a Quick Build
+ * to level 5 follows the table's rule rather than always taking the average.
+ * @returns {"avg"|"max"}
+ */
+export function levelUpHpDefault() {
+  return levelUpHpMode() === "max" ? "max" : "avg";
 }
 
 /**
@@ -523,6 +531,38 @@ export const DEFAULT_CANTRIPS = {
 export const DEFAULT_LEVEL1_SPELLS = {
   artificer: 2, bard: 2, cleric: 3, druid: 3,
   ranger: 0, sorcerer: 2, warlock: 2, wizard: 6
+};
+
+/**
+ * Cantrips a caster *chooses*, by class level, for spellcasting items whose data carries no
+ * "Cantrips" ScaleValue at all. Keyed by the casting item's identifier; like a real scale, each
+ * entry holds from its level until the next one.
+ *
+ * The PHB Arcane Trickster (`trickster`) is why this exists: its Eldritch Knight sibling ships a
+ * cantrip scale and it does not, so its cantrip capacity read as zero and the level-up never
+ * offered any. By the rules it knows three at 3rd level and a fourth at 10th, but one of those is
+ * Mage Hand, which the subclass grants itself with no spell configuration, so dnd5e leaves it
+ * without a `subclass:trickster` tag and it never counts as one of this caster's cantrips. These
+ * are the ones the player picks beside it.
+ */
+export const FALLBACK_CANTRIP_SCALES = {
+  trickster: { 3: 2, 10: 3 },
+  "arcane-trickster": { 3: 2, 10: 3 }
+};
+
+/**
+ * Classes that learn their spells into a book and prepare only some of them, keyed by class
+ * identifier: how many spells the book starts with at 1st level, and how many it gains with each
+ * level after. The Wizard, in both editions, writes six 1st-level spells into its spellbook and two
+ * more at every level, but prepares only its allowance of them (Intelligence modifier + level in
+ * 2014, the "Max Prepared Spells" scale in 2024). The rest sit in the book unprepared, which is how
+ * dnd5e's own premade wizards hold them (`system.prepared: 0`).
+ *
+ * The Spells steps read this through {@link module:data/spellbook}. A third-party book caster is
+ * one line here.
+ */
+export const SPELLBOOK_CLASSES = {
+  wizard: { start: 6, perLevel: 2 }
 };
 
 /**

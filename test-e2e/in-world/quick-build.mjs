@@ -35,6 +35,7 @@ const { CreatorState } = await import(`${MODULE}/state/creator-state.mjs`);
 const { assembleActor } = await import(`${MODULE}/build/actor-assembler.mjs`);
 const { REQUIRED_STEPS } = await import(`${MODULE}/steps/registry.mjs`);
 const { spellKey } = await import(`${MODULE}/data/spell-identity.mjs`);
+const { BOOK_FREE_FLAG, bookSpells, bookTarget, spellbookRule } = await import(`${MODULE}/data/spellbook.mjs`);
 const { quickClimb, QUICK_LEVELS } = await import(`${MODULE}/data/quick-climb.mjs`);
 
 const PREFIX = "[e2e] ";
@@ -279,7 +280,29 @@ function assertQuickBuild(actor, state, spec, result) {
     }
   }
 
-  return { ok: !failures.length, failures, spells: spellItems.length, items: actor.items.size };
+  // 8. A Wizard's spellbook: six spells plus two a level, and exactly its prepared limit of them
+  //    prepared. The book spells left unprepared are what make both numbers come out, so a build
+  //    that prepares everything, or writes only its prepared spells, fails one or the other.
+  //    The numbers are reported on every Wizard's line, pass or fail, so a run can be read at a glance.
+  let spellbook = "";
+  for ( const cls of actor.items.filter(i => i.type === "class") ) {
+    const rule = spellbookRule(cls);
+    if ( !rule ) continue;
+    const level = Number(cls.system?.levels ?? 1);
+    const { all, counted } = bookSpells(actor, cls);
+    const held = counted.length;
+    const target = bookTarget(rule, level);
+    const { value, max } = cls.system?.spellcasting?.preparation ?? {};
+    const unprepared = all.filter(s => Number(s.system?.prepared ?? 0) === 0).length;
+    spellbook = `book ${held}/${target}, prepared ${value}/${max}, unprepared ${unprepared}`
+      + (all.length > held ? `, +${all.length - held} granted into the book` : "");
+    if ( held !== target ) failures.push(`${cls.name} ${level}: spellbook holds ${held} spells, expected ${target}`);
+    const ledger = cls.flags?.["sogrom-dnd5e-character-creator"]?.[BOOK_FREE_FLAG];
+    if ( ledger !== target ) failures.push(`${cls.name} ${level}: the class records ${ledger} free picks, expected ${target}`);
+    if ( Number(value) !== Number(max) ) failures.push(`${cls.name} ${level}: ${value} spells prepared, limit ${max}`);
+  }
+
+  return { ok: !failures.length, failures, spells: spellItems.length, items: actor.items.size, spellbook };
 }
 
 /* -------------------------------------------- */

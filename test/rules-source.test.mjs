@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { rulesPageFor, hasRulesPage, invalidateRulesPages, RULE_TOPICS } from "../scripts/data/rules-source.mjs";
+import { resetPackIndexes } from "../scripts/data/compendium-util.mjs";
 
 /**
  * Resolving a wizard step's topic to the rulebook's own page.
@@ -210,7 +211,9 @@ describe("rulesPageFor resolves a topic to a rulebook page", () => {
     await rulesPageFor("class", "2024");
     await rulesPageFor("class", "2024");
     expect(reads).toBe(1);
+    // Both, as `invalidateSources` does: the index memo would otherwise answer the re-read itself.
     invalidateRulesPages();
+    resetPackIndexes();
     await rulesPageFor("class", "2024");
     expect(reads).toBe(2);
   });

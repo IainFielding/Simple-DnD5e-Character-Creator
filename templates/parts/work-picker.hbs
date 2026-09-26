@@ -77,14 +77,7 @@
           worked that out would be the wrong way round. Its label carries the count, and both label
           and tooltip are patched in place as pins change (see _togglePin) so pinning never costs a
           re-render of this grid or the search text in the field above. --}}
-    {{#if compare}}
-    <button type="button" class="creator-btn creator-btn-ghost creator-compare-btn"
-            data-action="openCompare" data-category="{{compare.category}}"
-            data-tooltip="{{compare.hint}}" {{#unless compare.canCompare}}disabled{{/unless}}>
-      <i class="fa-solid fa-scale-balanced"></i>
-      <span class="creator-compare-btn-label">{{compare.label}}</span>
-    </button>
-    {{/if}}
+    {{!-- Compare is in the stage footer (templates/stage.hbs), the same place on every step. --}}
 
     {{!-- Only offered once there is something to go back to. With nothing chosen the drawer is
           the step, and a close button would be a control that does nothing. --}}
@@ -112,6 +105,18 @@
               enabled lists thirteen apparently-duplicate pairs. The edition is the only thing
               telling them apart, and it is already on the card. --}}
         {{#if rules}}<span class="creator-pickrow-rules">{{rules}}</span>{{/if}}
+        {{!-- The class step's guide: the PHB's complexity rating as pips under the icon, and what the
+              class does in one line beside them, with the text column to itself. Only classes carry
+              it, and only ones data/class-guide.mjs knows. --}}
+        {{#if guide}}
+        {{#if guide.pips.length}}
+        <span class="creator-complexity creator-pickrow-complexity" role="img"
+              aria-label="{{guide.label}}" data-tooltip="{{guide.label}}">
+          {{#each guide.pips}}<i class="{{#if on}}is-on{{/if}}"></i>{{/each}}
+        </span>
+        {{/if}}
+        <span class="creator-pickrow-guide"><span class="creator-pickrow-role">{{guide.role}}</span></span>
+        {{/if}}
         {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}
       </button>
       {{!-- The pin, as a *sibling* of the row rather than inside it: the row is itself a button, and

@@ -1,4 +1,4 @@
-import { log, levelUpHpRollToChat, t } from "../config.mjs";
+import { log, levelUpHpRollToChat, levelUpHpDefault, t } from "../config.mjs";
 import {
   withItemSegment, addedEntries, applyDependents, grantItems, replacementGroups
 } from "../data/advancement-util.mjs";
@@ -728,9 +728,13 @@ export class LevelUpDriver {
     return flow.advancement.apply(flow.level, {}, { initial: true });
   }
 
-  /** Seed a hit-point decision with its average and apply it so the clone stays valid. */
+  /**
+   * Seed a hit-point decision and apply it so the clone stays valid: the average, or the maximum in
+   * a world set to "Maximum only" (see {@link levelUpHpDefault}).
+   */
   #recordHitPoints(flow) {
     const adv = flow.advancement;
+    const seed = levelUpHpDefault();
     const record = {
       level: flow.level,
       screenLevel: flow.level,
@@ -738,13 +742,15 @@ export class LevelUpDriver {
       item: adv.item,
       average: adv.average,
       hitDie: adv.hitDie,
-      value: "avg",
-      // Which control the value came from: "avg" | "roll" | "manual". Drives the UI highlight.
-      mode: "avg"
+      value: seed,
+      // Which control the value came from: "avg" | "max" | "roll" | "manual". Drives the UI highlight.
+      mode: seed,
+      // What it started as, so "has the player changed anything?" compares against this, not "avg".
+      seedMode: seed
     };
     this.hpSteps.push(record);
     // apply() reverses any prior value first, so re-applying on every change is safe.
-    return adv.apply(flow.level, { [flow.level]: "avg" });
+    return adv.apply(flow.level, { [flow.level]: seed });
   }
 
   /**
@@ -1358,8 +1364,8 @@ export class LevelUpDriver {
     const item = await fromUuid(uuid).catch(() => null);
     if ( !item ) { log("ASI feat not found", uuid); return false; }
     // dnd5e 6.0 renamed this check `assertPrerequisites` (same arguments) and gave the old name to a
-    // results-map validator, which still forwards an Actor with a deprecation warning. 5.3.3 has
-    // only the old name, so take the new one when it exists.
+    // results-map validator, which still forwards an Actor with a deprecation warning. 5.3.x had
+    // only the old name, so take the new one when it exists (the fallback predates the 6.0.0 floor).
     const system = item.system;
     const assert = system.assertPrerequisites ?? system.validatePrerequisites;
     if ( assert?.call(system, this.clone, { showMessage }) !== true ) {
@@ -1713,9 +1719,9 @@ export class LevelUpDriver {
    *
    * ── This is a copy. Here is the original ──
    * `AdvancementManager##complete` — `dnd5e/module/applications/advancement/advancement-manager.mjs`,
-   * around line 880 in **5.3.3**, the version this was ported from. `module.json` declares that
-   * as its floor (`minimum: 5.3.3`), so this has to hold for the oldest system it claims as well
-   * as the newest it is verified on.
+   * around line 880 in **5.3.3**, the version this was ported from. `module.json` now declares
+   * 6.0.0 as its floor (`minimum: 6.0.0`), so this has to hold for the oldest system it claims as
+   * well as the newest it is verified on.
    *
    * Everywhere else the driver merely *drives* the system: if dnd5e changes an advancement's
    * `apply`, we call the changed one. This method is the exception — it reimplements system

@@ -4,7 +4,7 @@ import { QUICK_BUILD, MI_SPELL_SUGGESTIONS, FEATURE_PREFERENCES } from "./quick-
 import { resolveChoices } from "./choice-resolver.mjs";
 import { resolveFeatSpells, originGrantedSpellKeys } from "../steps/feat-spells-step.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
-import { spellInfoFor } from "../steps/spells-step.mjs";
+import { normalizePrepared, spellInfoFor, spellLimits } from "../steps/spells-step.mjs";
 import { generateName } from "./name-generator.mjs";
 
 /**
@@ -151,8 +151,14 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
       return !key || !granted.has(key);
     });
 
-    state.selectedCantrips = pickSpells(free(data.cantrips), profile.cantrips, data.maxCantrips ?? 0);
-    state.selectedSpells = pickSpells(free(data.level1), profile.spells, data.maxSpells ?? 0);
+    // Counted against the build's scores, which are already set: a 2014 Cleric picks as many as its
+    // Wisdom allows, the same number the Spells step would ask for.
+    // A Wizard fills its whole six-spell book here; `normalizePrepared` then prepares the first of
+    // them up to its allowance, exactly as picking them one by one on the Spells step would.
+    const { maxCantrips, maxSpells } = spellLimits(state);
+    state.selectedCantrips = pickSpells(free(data.cantrips), profile.cantrips, maxCantrips);
+    state.selectedSpells = pickSpells(free(data.level1), profile.spells, maxSpells);
+    normalizePrepared(state);
   });
 
   // Feat spells (Magic Initiate and friends) — after choices, since a picked feat can grant one.
@@ -470,6 +476,19 @@ async function fillFeatSpells(state, source, spells, profile, classDoc) {
 /* -------------------------------------------- */
 /*  Generic profile                             */
 /* -------------------------------------------- */
+
+/**
+ * The class's ability priorities, highest first: the Quick Build profile's order when the table
+ * knows the class, else the generic order built from its own `primaryAbility`. Shared with the
+ * ability panel's "Suggest" button, so a suggested spread and a Quick Build always agree.
+ * @param {string} classUuid
+ * @param {import("./source-index.mjs").SourceIndex} source
+ * @returns {Promise<string[]>}  All six ability keys.
+ */
+export async function abilityPriorities(classUuid, source) {
+  const identifier = source.card(classUuid)?.identifier ?? "";
+  return QUICK_BUILD[identifier]?.abilities ?? (await genericProfile(classUuid)).abilities;
+}
 
 /**
  * A minimal profile for a class the table doesn't know (homebrew, 2014 content): its own

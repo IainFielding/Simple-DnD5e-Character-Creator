@@ -9,7 +9,8 @@ import { atLevel } from "../levelup-state.mjs";
  *
  * Which controls appear is the GM's call, per the `levelUpHpMode` world setting: `"choice"`
  * offers average / max / roll / manual entry, `"average-roll"` matches the written rules
- * (average or roll only), and `"average"` presents the average as a done deal. The handler
+ * (average or roll only), `"average"` presents the average as a done deal, and `"max"` does the same
+ * with the maximum. The handler
  * re-checks the setting, so a stale or hand-crafted click can't apply a disallowed value.
  */
 
@@ -52,8 +53,9 @@ export const hpStep = {
       density: "form",
       blockStatus: t("levelup.step.hp.summary", { hp: total }),
       intro: t("levelup.step.hp.intro", { class: className }),
-      allowMax: mode === "choice",
-      allowRoll: mode !== "average",
+      allowAverage: mode !== "max",
+      allowMax: (mode === "choice") || (mode === "max"),
+      allowRoll: (mode !== "average") && (mode !== "max"),
       allowManual: mode === "choice",
       // One screen per level, so a level's hit-point row never needs its own level label.
       rows: records.map(record => ({
@@ -81,12 +83,14 @@ export const hpStep = {
     const record = state.hpSteps[Number(el.dataset.index)];
     if ( !record ) return;
     const mode = levelUpHpMode();
-    if ( action === "hpAverage" ) await driver.applyHitPoints(record, "avg");
-    else if ( action === "hpMax" ) {
-      if ( mode !== "choice" ) return false;
+    if ( action === "hpAverage" ) {
+      if ( mode === "max" ) return false;
+      await driver.applyHitPoints(record, "avg");
+    } else if ( action === "hpMax" ) {
+      if ( (mode !== "choice") && (mode !== "max") ) return false;
       await driver.applyHitPoints(record, "max", "max");
     } else if ( action === "hpRoll" ) {
-      if ( mode === "average" ) return false;
+      if ( (mode === "average") || (mode === "max") ) return false;
       await driver.rollHitPoints(record);
     } else if ( action === "hpManual" ) {
       if ( mode !== "choice" ) return false;

@@ -1,5 +1,7 @@
 import { log, t } from "../config.mjs";
 import { slugify } from "./origin-art.mjs";
+import { isPlaceholderName } from "../state/creator-state.mjs";
+import { getEnabledPacks, packIndex } from "./compendium-util.mjs";
 
 /**
  * Ready-made characters: the third way into the creator.
@@ -15,22 +17,27 @@ import { slugify } from "./origin-art.mjs";
  *    identifier plus optional picks, replayed through the same `applyQuickBuild` a hand-built
  *    character uses. Nothing is redistributed — just identifiers naming content the world owns.
  *
- * The pack also holds the same twelve at levels 5, 11 and 17. Only level 1 is offered here: this is
- * a character *creator*, and a table starting above first level has decisions about equipment and
- * magic items that a pregen cannot make for them.
+ * The pack also holds the same twelve at levels 5, 11 and 17, and all four are offered: a table
+ * starting above first level wants a finished character at its level as much as one starting at
+ * first. Each entry carries its level, and the list filters on it — opening on level 1, so the
+ * default is the same twelve a new player would expect ({@link DEFAULT_PREGEN_LEVEL}).
  */
+
+/** The level the ready-made list opens on. The others are one press of the level filter away. */
+export const DEFAULT_PREGEN_LEVEL = 1;
 
 /**
  * Packs that hold ready-made player characters, in the order they are offered.
  *
- * `idHint` is an optimisation, not the rule. The rule is "a character document whose class levels
- * total one", which is the only test that stays right when a pack changes shape — but applying it
- * means loading documents, and `dnd5e.actors24` holds 471 of them across four levels. Matching the
- * id first cuts that to twelve. A pack with no hint is filtered on `type` from the index instead,
- * which is cheap, and only the characters are loaded.
+ * `idHint` is an optimisation, not the rule. The rule is "a character document with at least one
+ * class level", and the level itself is read off its class items — the only test that stays right
+ * when a pack changes shape. But applying it means loading documents, and `dnd5e.actors24` holds
+ * 471 of them; matching the `<Name>Lv05…` id shape first cuts that to the forty-eight heroes. A pack
+ * with no hint is filtered on `type` from the index instead, which is cheap, and only the
+ * characters are loaded.
  */
 export const PREGEN_SOURCES = [
-  { pack: "dnd5e.actors24", idHint: "Lv01" },
+  { pack: "dnd5e.actors24", idHint: /Lv\d\d/ },
   // `describe: false` because these characters' biographies are not biographies. Every one of the
   // twelve carries the same ~1,900 characters of the book's own character-creation walkthrough —
   // "Step 1: Choose a Class", then a table of classes and their primary abilities — which is
@@ -71,11 +78,11 @@ export function portraitFor(doc, cls) {
   return cls?.img || "icons/svg/mystery-man.svg";
 }
 
-/** Resolved pregens, memoised — these Actor documents are not a load to repeat on every render. */
+/** The pregen load, memoised as its promise — these Actor documents are not a load to repeat on every render. */
 let pregenCache = null;
 
 /** A character's level: the sum of its class items, which is the only place the truth lives. */
-function levelOf(doc) {
+export function levelOf(doc) {
   return doc.items.reduce((sum, i) => sum + (i.type === "class" ? (i.system?.levels ?? 0) : 0), 0);
 }
 
@@ -141,7 +148,7 @@ function groupFor(pack) {
 }
 
 /**
- * Every level 1 ready-made character this world has, grouped by the book that ships it.
+ * Every ready-made character this world has, at every level, grouped by the book that ships it.
  *
  * Each entry carries what the card needs and the uuid to import from, including the character's
  * own portrait ({@link portraitFor}) and a sentence of their biography ({@link describePregen}).
@@ -149,28 +156,33 @@ function groupFor(pack) {
  *
  * @returns {Promise<Array<{label: string, badge: string|null, pack: string, entries: object[]}>>}
  */
-export async function foundryPregens() {
-  if ( pregenCache ) return pregenCache;
-  const groups = [];
-  for ( const source of PREGEN_SOURCES ) {
+export function foundryPregens() {
+  // The promise is what is cached, not the result: the warm and the chooser's first render both ask,
+  // and reading every pregen in full is seconds of work that must not run twice side by side. The
+  // packs are read together, since none depends on another.
+  pregenCache ??= Promise.all(PREGEN_SOURCES.map(async source => {
     const entries = await readPregenPack(source);
-    if ( entries.length ) groups.push({ ...groupFor(source.pack), pack: source.pack, entries });
-  }
-  return (pregenCache = groups);
+    return entries.length ? { ...groupFor(source.pack), pack: source.pack, entries } : null;
+  })).then(groups => groups.filter(Boolean));
+  return pregenCache;
 }
 
 /**
- * The level 1 characters in one pack, or an empty list if it is absent or unreadable.
- * @param {{pack: string, idHint?: string, describe?: boolean}} source
+ * The characters in one pack, or an empty list if it is absent or unreadable.
+ * @param {{pack: string, idHint?: RegExp, describe?: boolean}} source
  * @returns {Promise<object[]>}
  */
 async function readPregenPack({ pack: packId, idHint, describe = true }) {
   const pack = game.packs?.get(packId);
   if ( !pack ) return [];
+  // A pack the GM has switched off in dnd5e's source configuration is not offered, as it isn't on
+  // any other shelf — installed is not the same as wanted.
+  const enabled = getEnabledPacks();
+  if ( enabled && !enabled.has(packId) ) return [];
   try {
-    const index = await pack.getIndex();
+    const index = await packIndex(pack);
     const wanted = [...index].filter(e => {
-      if ( idHint && !String(e._id).includes(idHint) ) return false;
+      if ( idHint && !idHint.test(String(e._id)) ) return false;
       // `type` is in every index; filtering on it here is what keeps a 166-actor pack of monsters
       // from being loaded in full to find twelve characters.
       return !e.type || e.type === "character";
@@ -178,7 +190,9 @@ async function readPregenPack({ pack: packId, idHint, describe = true }) {
     const docs = await Promise.all(wanted.map(e => pack.getDocument(e._id).catch(() => null)));
 
     return docs
-      .filter(doc => doc && doc.type === "character" && levelOf(doc) === 1)
+      // A character with no class levels is not a finished hero — it is a blank sheet someone left
+      // in the pack — so it is not offered at any level.
+      .filter(doc => doc && doc.type === "character" && levelOf(doc) >= 1)
       // Described inside the map, which is inside the try below — but note what the try is for:
       // a pack that cannot be read at all. A single malformed document must not empty the list,
       // which is why `describePregen` swallows its own failures rather than throwing here.
@@ -187,21 +201,25 @@ async function readPregenPack({ pack: packId, idHint, describe = true }) {
         const cls = of("class");
         const race = of("race");
         const background = of("background");
+        const level = levelOf(doc);
         const parts = [race?.name, cls?.name].filter(Boolean).join(" ");
         return {
           id: doc.id,
+          level,
           uuid: doc.uuid,
           name: doc.name,
           className: cls?.name ?? "",
           speciesName: race?.name ?? "",
           backgroundName: background?.name ?? "",
-          line: parts ? (background?.name ? `${parts} 1 · ${background.name}` : `${parts} 1`) : "",
+          line: parts ? (background?.name ? `${parts} ${level} · ${background.name}` : `${parts} ${level}`) : "",
           tagline: describe ? describePregen(doc) : "",
           img: portraitFor(doc, cls),
           official: true
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name, game.i18n?.lang ?? "en"));
+      // Level first, so "All levels" reads as four rosters in order rather than each hero's four
+      // copies side by side.
+      .sort((a, b) => (a.level - b.level) || a.name.localeCompare(b.name, game.i18n?.lang ?? "en"));
   } catch ( err ) {
     log(`could not read ready-made characters from ${packId}`, err);
     return [];
@@ -214,25 +232,59 @@ export function invalidatePregenCache() {
 }
 
 /**
- * Import one of Foundry's pregenerated characters into the world as a new actor.
+ * Import one of Foundry's pregenerated characters into the world as a new actor — or, given `into`,
+ * onto a blank character the GM prepared (see {@link module:app/blank-build}).
  *
  * A straight import, on purpose. The document is already a finished, correct character; running it
  * back through our own build engine could only introduce differences, and there is nothing for that
  * engine to decide that the pregen has not already decided.
  *
  * @param {string} uuid  The compendium actor's uuid.
+ * @param {object} [options]
+ * @param {Actor|null} [options.into]  A blank character to fill instead of creating a new one. The
+ *   player building into a GM's sheet may lack permission to create actors at all.
  * @returns {Promise<Actor|null>}
  */
-export async function importPregen(uuid) {
+export async function importPregen(uuid, { into = null } = {}) {
   const doc = await fromUuid(uuid).catch(() => null);
   if ( !doc ) return null;
   const data = doc.toObject();
+  if ( into ) return importPregenInto(into, data);
   delete data._id;
   // The player who built it should be able to play it. A GM doing this for someone else can
   // reassign ownership afterwards; leaving it GM-only would mean the character they just made is
   // one they cannot open.
   data.ownership = { ...(data.ownership ?? {}), [game.user.id]: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER };
   return Actor.implementation.create(data, { renderSheet: false });
+}
+
+/**
+ * Fill a blank character with a pregen's contents: its system data, portrait, token art, items and
+ * effects. The sheet itself — its id, its ownership, the folder the GM filed it in — stays the GM's.
+ *
+ * Items and effects keep their ids. A pregen's advancements record the ids of the items they
+ * granted, so fresh ids would leave every class feature orphaned from the advancement that gave it;
+ * a blank sheet has nothing those ids could collide with. The name is taken only when the sheet
+ * still has a placeholder one — a GM who named it after the player meant that name.
+ * @param {Actor} actor
+ * @param {object} data   The pregen's `toObject()`.
+ * @returns {Promise<Actor>}
+ */
+async function importPregenInto(actor, data) {
+  const update = {
+    system: data.system,
+    img: data.img,
+    "prototypeToken.texture": data.prototypeToken?.texture ?? {},
+    "prototypeToken.ring": data.prototypeToken?.ring ?? {}
+  };
+  if ( isPlaceholderName(actor.name) ) {
+    update.name = data.name;
+    update["prototypeToken.name"] = data.name;
+  }
+  await actor.update(update);
+  if ( data.items?.length ) await actor.createEmbeddedDocuments("Item", data.items, { keepId: true });
+  if ( data.effects?.length ) await actor.createEmbeddedDocuments("ActiveEffect", data.effects, { keepId: true });
+  return actor;
 }
 
 /**

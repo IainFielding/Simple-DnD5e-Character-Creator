@@ -1,0 +1,1013 @@
+/* ---------------------------------------------- Origin grids
+
+   The card-grid picker layout: a toolbar (search box + result count) above a
+   responsive grid of selectable cards, with a detail panel shown below once a card
+   is chosen. "Origin" refers to the character's class/background/species choices. */
+
+.creator-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+.creator-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  width: min(360px, 60%);
+}
+.creator-search i { color: var(--cc-muted); }
+.creator-search input {
+  border: none;
+  background: transparent;
+  color: var(--cc-text);
+  width: 100%;
+  outline: none;
+}
+.creator-count { color: var(--cc-muted); font-size: 0.85rem; }
+
+/* The detail panel for a chosen option. Outside the pick layouts it is still a
+   panel; inside them (:is(.creator-pick-desc, .creator-work-page) .creator-detail, above) it becomes the
+   page itself and this framing is stripped off. */
+.creator-detail {
+  margin-top: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--cc-panel-grad);
+  border: 1px solid color-mix(in srgb, var(--cc-accent) 38%, var(--cc-line));
+  border-radius: var(--cc-radius);
+  box-shadow: var(--cc-sheen);
+}
+
+/* --- The page head -------------------------------------------------------
+   Where a leaf opens: the option's name set large in Cinzel, its source as a
+   gold rubric above, and a hairline rule closing the head off from the prose.
+   The head is clipped at its own bottom edge so the artwork behind it (added
+   by the backdrop module) can bleed sideways and upward but never reaches the
+   text below. Only that one edge is cut — clipping all four, as overflow
+   would, kills the sideways bleed that makes art read as bled rather than
+   pasted on. */
+/* Compact throughout, creator and level-up alike: the title sits on a single
+   baseline row beside its rubric rather than stacked above it under a big
+   display line. This is what gets the actual content of a leaf — the traits
+   table, the subclass row — above the fold instead of below it. */
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-head {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.1rem;
+  margin-bottom: 0;
+  padding-top: 1.35rem;
+  padding-bottom: 0.8rem;
+}
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-head > * { position: relative; z-index: 1; }
+
+/* Provenance as a gold rubric rather than a bordered pill, trailing the title
+   on the same line. */
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-source {
+  order: 2;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  font-family: var(--cc-font-heading);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--cc-gold);
+}
+
+/* --- The illumination ----------------------------------------------------
+   Compendium art behind the page head was built and removed: the item images
+   are emblems and cutouts rather than scenes, and nothing about them survived
+   being bled, cropped and scrimmed. The generated sigil kept its place, but
+   moved to the Review frontispiece (below), which is the one leaf with room
+   for a figure behind its content. Injected by page-illumination.mjs. */
+/* Square, and comfortably wider than the 260px portrait it sits behind.
+
+   It used to be 560×300. The figure is a circle sized from the *shorter* side, so that box
+   drew a 276px disc — sixteen pixels wider than the portrait covering it, of which the mask
+   then faded away the outer half. The sigil was rendering correctly every time and had
+   nowhere to be seen. Square keeps the disc from being sized by a short axis, and 520px
+   leaves a good ring of it clear of the portrait on every side. */
+.creator-page-sigil {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: min(520px, 88vw);
+  height: min(520px, 88vw);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  user-select: none;
+  /* Fades only at the outermost edge, so the ring that clears the portrait stays at full
+     strength instead of being the part that gets erased. */
+  -webkit-mask-image: radial-gradient(closest-side, #000 60%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 60%, transparent 100%);
+}
+
+/* The frontispiece: portrait centred on its sigil, both above the leaf. */
+.creator-review-portrait { position: relative; }
+.creator-review-portrait > .creator-portrait-frame { position: relative; z-index: 1; }
+
+/* Gold hairline closing the head. It carries the full weight at the spine and
+   fades out across the measure, so it reads as a ruled page edge rather than a
+   drawn box. This is also the line the head's clip-path cuts on, so no artwork
+   ever crosses it into the prose. */
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    var(--cc-gold),
+    color-mix(in srgb, var(--cc-gold) 28%, transparent) 42%,
+    transparent 80%);
+}
+
+.creator-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.75rem; }
+.creator-detail-head h2 { margin: 0; border: none; font-size: 1.35rem; letter-spacing: 0.04em; }
+
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-head h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  text-wrap: balance;
+  text-shadow: none;
+}
+/* The option's own plate is already on screen — in the switcher bar directly above
+   on the work surface, in the list entry beside it in the spell browser — so a
+   second copy at the head of the page is the same icon twice. */
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-img { display: none; }
+
+.creator-detail-img { width: 56px; height: 56px; border-radius: var(--cc-radius); object-fit: cover; border: 1px solid var(--cc-line-2); }
+/* Sourcebook badge beside the detail title, naming where the selected item originates — the same
+   recipe as .levelup-block-source, so the creator and the level-up wizard read as one family.
+   Quiet by design (it's provenance, not state) and truncates rather than wrapping a long title. */
+.creator-detail-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.creator-detail-source i { flex: 0 0 auto; font-size: 0.7rem; opacity: 0.8; }
+.creator-detail-body { line-height: 1.65; color: var(--cc-text); }
+.creator-detail-body :is(h1, h2, h3, h4, h5, h6) { color: var(--cc-gold); }
+/* Enriched prose can also carry figures and table footers, which Foundry colours directly. */
+.creator-detail-body :is(figcaption, tfoot) { color: var(--cc-muted); }
+
+/* Prose on a page: held to a readable measure, and set in columns once there is room
+   for a second one.
+
+   A measure has to be about 65 characters whatever the window is doing, so on a large
+   monitor a single column left a 480px ribbon of text with well over a thousand pixels
+   of nothing beside it — the trait table filled the width, the paragraphs under it did
+   not. Widening the paragraphs is not the fix; a 150-character line is worse to read
+   than a narrow one, not better.
+
+   `columns: 3 32rem` is the whole mechanism, and it needs no breakpoint: the shorthand
+   caps the count at three and sets 32rem as each column's ideal width, so the browser
+   uses only as many columns as genuinely fit and silently falls back to one everywhere
+   else — including the spell browser's 400px sidebar, which shares these rules and must
+   never be columned. Three rather than two because two columns of a 1700px surface are
+   850px each, which is the same over-long line the cap was there to prevent.
+
+   The obvious objection to multi-column prose is that it lives inside a vertically
+   scrolling pane: read to the foot of column one, scroll back up for column two. That
+   only bites when a balanced column is taller than the pane, and it cannot be here,
+   because this element holds the item's description *only* — the trait table and the
+   granted features are `.creator-adv-block` sections after it (work-detail.hbs), outside
+   the columned flow. A few paragraphs balanced three ways is a fraction of a screen. If
+   anything long is ever moved inside this element, that stops being true. */
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-body {
+  padding-top: 1.5rem;
+  line-height: 1.72;
+  columns: 3 32rem;
+  column-gap: clamp(2rem, 3vw, 3.5rem);
+}
+/* Inside a column the column *is* the measure, so the paragraph cap would only make
+   each one narrower again. */
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-body > p { max-width: none; }
+/* Headings, tables and rules run the full width and restart the columns beneath them,
+   so the flow reads as sections rather than as one stream sliced in half. Tables and
+   lists are also kept whole — a trait table split across a column break is unreadable. */
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-body :is(h1, h2, h3, h4, h5, h6, table, hr) {
+  column-span: all;
+}
+:is(.creator-pick-desc, .creator-work-page) .creator-detail-body :is(table, ul, ol, figure) {
+  break-inside: avoid;
+}
+
+/* Categorized advancement blocks (Traits / Features / Spells) below the description. */
+.creator-adv-block { margin-top: 1.5rem; }
+.creator-adv-heading {
+  margin: 0 0 0.6rem;
+  border: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cc-gold);
+}
+
+/* Core traits as an aligned label/value grid so rows stay a uniform size. */
+.creator-trait-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  overflow: hidden;
+  font-size: 0.82rem;
+}
+.creator-trait { display: contents; }
+.creator-trait-label,
+.creator-trait-value {
+  padding: 0.4rem 0.7rem;
+  border-top: 1px solid var(--cc-line);
+}
+.creator-trait:first-child .creator-trait-label,
+.creator-trait:first-child .creator-trait-value { border-top: none; }
+.creator-trait-label {
+  background: var(--cc-panel-2);
+  color: var(--cc-muted);
+  white-space: nowrap;
+}
+.creator-trait-value { color: var(--cc-text); }
+
+/* Granted features and spells: round icon + clickable content link + level tag.
+   `columns: 22rem` sets the ideal column width and lets the browser pick the count, so a
+   short list of feature names makes as many columns as the space allows instead of two
+   very wide ones with the level tags flung to the far right. */
+.creator-grant-list {
+  columns: 22rem;
+  /* Wide enough that the gap between columns clearly beats the gap between an entry and
+     its own level tag — the columns have no rule between them, so spacing is the only
+     thing saying where one column ends. */
+  column-gap: 3rem;
+  column-rule: 1px solid var(--cc-line);
+}
+.creator-grant {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.6rem;
+  break-inside: avoid;
+}
+.creator-grant-icon {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border: 1px solid var(--cc-line);
+  border-radius: 50%;
+  background: var(--cc-panel-2);
+}
+/* `0 1 auto`, not `1`: the link sizes to the name rather than stretching to fill the row.
+   Stretching it pushed the level tag to the far right of the column, which in a multi-column
+   list put "Lvl 3" a couple of hundred pixels from the spell it belongs to and a few dozen
+   from the *next* column's spell. Read across, "Ray of Sickness … Lvl 3 | Hold Person … Lvl 5"
+   pairs each tag with the wrong spell. Proximity is doing the labelling here, so the tag has
+   to sit against its own name. */
+.creator-grant .content-link {
+  flex: 0 1 auto;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--cc-text);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.creator-grant .content-link i { display: none; }
+.creator-grant .content-link:hover { color: var(--cc-gold); }
+.creator-grant-tag {
+  flex: 0 0 auto;
+  /* Trailing space is pushed after the pair, so the leftover width in a wide column falls
+     between one entry and the next rather than between an entry and its own tag. */
+  margin-right: auto;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.68rem;
+  color: var(--cc-muted);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+}
+
+.creator-empty { color: var(--cc-muted); font-style: italic; padding: 1rem 0; }
+/* "No matches" line appended into a pick-list whose rows are all filtered out. */
+.creator-no-results { color: var(--cc-muted); font-style: italic; padding: 1rem 0.25rem; list-style: none; }
+
+/* ---------------------------------------------- Work surface
+
+   The layout the three origin picks (class / species / background) use: one column,
+   with the option list as a drawer that opens over it.
+
+   It replaced a three-column grid — `340px minmax(0,1fr) 348px`. Two of those three
+   were chrome that never changed, so 688px of every window was permanently spent on
+   a list and an aside, and the description in the middle was the only column that
+   could give ground: on a 1400px window it got about 400px. The column that should
+   flex last was flexing first.
+
+   The picker is only wanted while you are picking, so it is a drawer; the aside's
+   contents (ability scores, target level) are blocks in the flow. What is left is a
+   single surface that keeps a readable measure at every width, which is also why
+   there is no breakpoint below: there are no columns left to collapse. */
+.creator-work {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* Row 1 is the switcher bar (auto, and zero-height when absent); row 2 is the work. */
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+/* Two columns wherever the step has things to set: the option list and its page on the
+   left, the setters on the right.
+
+   The right column is a sibling of the body, not part of the page, and that is the whole
+   point of it. The picker drawer covers the body alone, so opening the class list never
+   takes the ability scores off screen and choosing a class never replaces them. Every
+   other arrangement tried put them somewhere they could be lost: inside the page they sat
+   below the class description and its full feature table, and while the drawer was open
+   they sat below the class list as well. */
+.creator-work:has(.creator-work-side) {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 460px);
+}
+.creator-work-side {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1.25rem 2rem;
+  background: var(--cc-panel);
+  border-left: 1px solid var(--cc-line-2);
+}
+/* First block in the column heads it, so it needs no separating rule above it. */
+.creator-work-side > .creator-work-block:first-child {
+  margin-top: 1.25rem;
+  padding-top: 0;
+  border-top: 0;
+}
+.creator-work-side .creator-work-block { max-width: none; }
+
+/* Narrow: the setters drop below the work rather than squeezing it, and keep their own
+   scroll so they can't push the list off the screen. */
+@media (max-width: 1199px) {
+  .creator-work:has(.creator-work-side) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .creator-work-side {
+    grid-column: 1;
+    grid-row: 3;
+    max-height: 45vh;
+    border-left: 0;
+    border-top: 1px solid var(--cc-line-2);
+  }
+}
+
+/* The surface reaches the edges of the stage, so the stage body must not pad it
+   inwards. Scoped with :has() so the steps that are a single centred form (details,
+   store config) keep their padding. */
+.creator-stage-body:has(> .creator-work) { padding: 0; overflow: hidden; }
+
+/* --- The switcher bar ---
+   What you chose, and the way back to the list: a control the width of its own
+   label, in place of a column the width of the longest name in the compendium. */
+.creator-work-bar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.6rem;
+  background: var(--cc-panel);
+  border-bottom: 1px solid var(--cc-line);
+}
+.creator-work-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Override Foundry's fixed button height and centring. */
+  height: auto;
+  min-height: auto;
+  width: auto;
+  justify-content: flex-start;
+  padding: 0.28rem 0.6rem;
+  background: var(--cc-panel-2);
+  /* Brass edge: this names something settled. */
+  border: 1px solid var(--cc-settled);
+  border-radius: var(--cc-radius);
+  color: var(--cc-bright);
+  font-size: 0.88rem;
+  cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.18s var(--cc-ease), filter 0.18s var(--cc-ease);
+}
+.creator-work-switch:hover { filter: brightness(1.15); }
+.creator-work-switch i { font-size: 0.6rem; color: var(--cc-muted); }
+.creator-work-switch-placeholder { color: var(--cc-muted); font-style: italic; }
+.creator-work-switch-img {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border: 1px solid var(--cc-line-2);
+  background: linear-gradient(160deg, #2a2d34, #191b20);
+}
+.creator-work-bar-note { font-size: 0.76rem; color: var(--cc-muted); }
+
+/* --- The body: page underneath, drawer over the top --- */
+.creator-work-body {
+  grid-column: 1;
+  grid-row: 2;
+  position: relative;
+  min-height: 0;
+}
+.creator-work-page {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--cc-page-pad) 3rem;
+  background: var(--cc-bg);
+}
+
+/* Blocks the player sets values in — the ability allocator, the target level, an
+   origin's increase — as opposed to the page above or beside them, which is read. */
+.creator-work-block {
+  max-width: 62ch;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cc-line);
+}
+
+/* A step with nothing to set beside it — a 2024 species, which grants no ability increase —
+   has the whole surface to itself. Capped only so the columns below stay a sane width on a
+   very large monitor; the prose fills it in columns rather than as one long line. */
+.creator-work-page .creator-detail { max-width: 112rem; }
+.creator-work-block-title {
+  margin: 0 0 0.85rem;
+  border: none;
+  font-family: var(--cc-font-heading);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cc-bright);
+}
+
+/* --- The picker drawer ---
+   One state, not two: absolute and opaque over `.creator-work-body`, in every case.
+   Opaque rather than scrimmed — the point is to give the list the whole width, and a
+   translucent panel leaves the page competing with it for the same pixels.
+
+   (This comment used to describe a second, flowing variant for when nothing is chosen.
+   No such rule exists, and none is needed: the drawer's containing block is the body,
+   which is one track of the work grid, so `inset: 0` fills the body and nothing else.
+   The switcher bar above it and the setters column beside it are siblings in that grid
+   and stay on screen either way — which is the property the two-variant version was
+   reaching for. It is written down here because a comment describing behaviour the
+   stylesheet does not have is worse than no comment.) */
+.creator-drawer {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  flex-direction: column;
+  background: var(--cc-sunk);
+}
+.creator-drawer.is-open { display: flex; }
+.creator-drawer-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.75rem 1.6rem;
+  border-bottom: 1px solid var(--cc-line);
+}
+.creator-drawer-head .creator-search { width: min(320px, 100%); }
+/* The class drawer's edition filter reuses the spell-filter chip, but sized to its own content:
+   the chip's default `flex: 1 1 9rem` would stretch it across whatever the search box left,
+   which is most of the head. */
+.creator-drawer-head .creator-rules-filter { flex: 0 0 auto; width: min(11rem, 100%); }
+.creator-drawer-close { margin-left: auto; padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+
+/* The grid gets the full width now, so options can sit several to a row instead of
+   stacking one-per-row down a 340px column. */
+/* Descendant-scoped, not `.creator-drawer-grid` alone: this block sits above the spell
+   browser's `.creator-picklist` rules, which the drawer grid shares a class with, and at
+   equal specificity those would win on source order and force a single column. */
+.creator-drawer .creator-drawer-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  /* The separation is gaps showing the drawer's own dark ground — no container background
+     behind them, and no borders on the cells.
+
+     Both of the other ways of doing this break on the last row, which is nearly always
+     short. Gaps over a *lighter* container background painted that colour across the
+     unfilled tracks, leaving a pale band beside the final card. Borders on the cells gave
+     the final card a right-hand rule with nothing after it, so it alone read as a closed
+     box while every other card is separated by what looks like a shared line.
+
+     With the gaps and the unfilled remainder both showing `--cc-sunk`, a short row simply
+     ends. There is nothing whose appearance depends on how many cards happen to be in it. */
+  gap: 2px;
+  align-content: start;
+  border-top: 1px solid var(--cc-line);
+  padding: 0;
+}
+/* The raised fill, not the base one, so the 2px seam of --cc-sunk between cards has
+   something to be a seam *against*. On --cc-panel a card cleared its own gutter by
+   1.24:1 and the grid read as one field with faint scratches in it; on --cc-panel-2
+   that is 1.42:1, which is what makes a 2px line resolve as an edge. */
+.creator-drawer .creator-drawer-grid > li {
+  background: var(--cc-panel-2);
+  min-width: 0;
+}
+.creator-drawer .creator-drawer-grid .creator-pickrow { border-bottom: 0; }
+/* A no-matches message spans the grid rather than sitting in one cell. */
+.creator-drawer .creator-drawer-grid .creator-no-results { grid-column: 1 / -1; }
+
+/* Which edition an option comes from, under its name.
+
+   The 2014 and 2024 books ship the same thirteen class names, so a world with both
+   enabled lists "Artificer, Artificer, Barbarian, Barbarian…" — twenty-six rows, half
+   of them apparently identical, with nothing on screen to tell a player which is
+   which until after they have clicked one. The rules edition is already on every card;
+   it just was not being shown. */
+.creator-pickrow-rules {
+  grid-area: rules;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--cc-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* Two-line rows only where the tag exists, so a list without editions is unchanged. */
+.creator-drawer .creator-pickrow:has(.creator-pickrow-rules) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "img name tick" "img rules tick";
+  align-items: center;
+  column-gap: 0.75rem;
+  row-gap: 0.1rem;
+}
+.creator-drawer .creator-pickrow:has(.creator-pickrow-rules) .creator-pickrow-img { grid-area: img; }
+.creator-drawer .creator-pickrow:has(.creator-pickrow-rules) .creator-pickrow-name { grid-area: name; }
+.creator-drawer .creator-pickrow:has(.creator-pickrow-rules) .creator-pickrow-tick { grid-area: tick; }
+
+/* A class's guide: complexity pips under the icon, and a one-line role as a third line
+   beside them, so the role has the whole text column. Declared after the two-line rule so
+   that, at equal specificity, it wins where both apply. */
+.creator-drawer .creator-pickrow:has(.creator-pickrow-guide) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "img name tick" "img rules tick" "pips guide tick";
+  align-items: center;
+  column-gap: 0.75rem;
+  row-gap: 0.1rem;
+}
+.creator-drawer .creator-pickrow-complexity {
+  grid-area: pips;
+  justify-self: center;
+  align-self: start;
+  margin-top: 0.3rem;
+}
+.creator-drawer .creator-pickrow:has(.creator-pickrow-guide) .creator-pickrow-img { grid-area: img; }
+.creator-drawer .creator-pickrow:has(.creator-pickrow-guide) .creator-pickrow-name { grid-area: name; }
+.creator-drawer .creator-pickrow:has(.creator-pickrow-guide) .creator-pickrow-tick { grid-area: tick; }
+.creator-pickrow-guide {
+  grid-area: guide;
+  min-width: 0;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--cc-muted);
+}
+.creator-pickrow-role { min-width: 0; }
+
+/* Complexity as three pips, filled up to the rating. The words are the tooltip and the
+   accessible name; the pips are for scanning a grid of twenty-six classes at a glance. */
+.creator-complexity { display: inline-flex; gap: 3px; flex: 0 0 auto; }
+.creator-complexity i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--cc-muted);
+  display: inline-block;
+}
+.creator-complexity i.is-on { background: var(--cc-select); border-color: var(--cc-select); }
+
+/* ---------------------------------------------- List + description layout
+
+   The two-column layout: a list you scan beside a description you read. Still used by
+   the spell steps (creation and level-up) and by the level-up's class and subclass
+   picks.
+
+   The three creation origin picks moved off it to the work surface above, because
+   there the list was one of *three* columns and the description was losing to both.
+   The screens left here are genuinely two-column — neither side is chrome, and the
+   level-up ones pick from a handful of options rather than a whole compendium, so a
+   drawer would be covering a page to show six rows. */
+.creator-pick {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) 348px;
+  /* No gap: the leaves are bound, not floating. What separates them is the
+     hairline on each leaf plus the binding shadow cast across the gutter. */
+  gap: 0;
+  align-items: stretch;
+  /* Fill the stage so the columns can each own their scroll region. */
+  height: 100%;
+  min-height: 0;
+}
+/* An origin that grants no ability increase has no aside — drop the column. Which origin that is
+   depends on the edition: 2024 backgrounds and 2014 species carry one, their opposites don't. */
+.creator-pick--solo { grid-template-columns: 340px minmax(0, 1fr); }
+
+/* The leaves reach the edges of the stage, so the stage body must not pad
+   them inwards. Scoped with :has() to the pick layouts only — the steps that
+   are a single centred form (details, store config) keep their padding. */
+.creator-stage-body:has(> .creator-pick) { padding: 0; }
+
+/* Left column — the index leaf: search/count on top, scrolling pick-list
+   below, bound at the spine. */
+.creator-pick-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  background: var(--cc-leaf-index);
+  border-right: 1px solid var(--cc-line-2);
+}
+/* The gutter — a real binding shadow falling from the index leaf onto the
+   recto. Drawn from this side so it sits *over* the page's own surface. */
+.creator-pick-side::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 16px;
+  background: var(--cc-gutter);
+  pointer-events: none;
+  z-index: 2;
+}
+/* The index leaf's head. It owns the padding now that the leaf itself is
+   flush to the stage edge. */
+.creator-pick-side > .creator-toolbar--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  padding: 0.9rem 1rem 0.8rem;
+  border-bottom: 1px solid var(--cc-line);
+}
+.creator-toolbar--stacked { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+.creator-toolbar--stacked .creator-search { width: 100%; }
+/* Reuse the spell-filter chip for the background step's increased-ability dropdown, full-width in the stacked rail. */
+.creator-toolbar--stacked .creator-bg-filter { flex: 0 0 auto; width: 100%; }
+
+/* Two-column option grid; collapses to one column on a narrow window (see media query).
+   align-content:start keeps rows packed to the top when the list is short. */
+/* One entry per row, flush and ruled — a manuscript index, not a card grid.
+   The single column is what lets each entry carry its own meta line (hit die,
+   primary ability, size/speed) instead of being a bare name in a tile. */
+.creator-picklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  align-content: start;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+/* `margin: 0` is load-bearing, not tidying.
+   Foundry's core styling gives list items a bottom margin and removes it on `:last-child`.
+   Grid tracks size to an item's *margin* box while the item itself stretches to the track
+   minus its own margins — so every card sat 4px short of its row and the last one, having
+   no margin to subtract, stretched the full height and rendered visibly taller than the
+   other twenty-three. Resetting the `<ul>` alone (which `.creator-picklist` already did)
+   does not reach it. */
+.creator-picklist li { min-width: 0; margin: 0; }
+.creator-picklist li.is-hidden { display: none; }
+
+/* A single index entry: square icon plate + name, ruled off from the next.
+   Selection is a gold tab bled off the leading edge plus a tinted ground —
+   no ring, no glow, nothing that reads as a floating card. */
+.creator-pickrow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0.55rem 1rem 0.55rem 0.85rem;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(42, 40, 54, 0.55);
+  border-left: 3px solid transparent;
+  border-radius: var(--cc-radius);
+  color: var(--cc-text);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: none;
+  transition: background 0.18s var(--cc-ease), border-color 0.18s var(--cc-ease);
+}
+.creator-pickrow:hover { background: rgba(255, 255, 255, 0.026); }
+.creator-pickrow.is-selected {
+  background: var(--cc-select-soft);
+  border-left-color: var(--cc-select);
+  box-shadow: none;
+}
+.creator-pickrow-img {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--cc-radius);
+  object-fit: cover;
+  background: linear-gradient(160deg, #2a2d34, #191b20);
+  border: 1px solid var(--cc-line-2);
+  padding: 0;
+  /* Compendium icons are saturated; settle them back until the row is live,
+     so the leaf reads as one surface rather than a row of stickers. */
+  filter: saturate(0.86) brightness(0.94);
+  transition: filter 0.18s var(--cc-ease), border-color 0.18s var(--cc-ease);
+}
+.creator-pickrow:hover .creator-pickrow-img { filter: none; }
+.creator-pickrow.is-selected .creator-pickrow-img { filter: none; }
+.creator-pickrow.is-selected .creator-pickrow-img { border-color: var(--cc-select); }
+.creator-pickrow-name {
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.creator-pickrow-tick { margin-left: auto; color: var(--cc-select); font-size: 0.8rem; }
+
+/* Centre column — the illuminated page. It is the lit surface of the spread,
+   scrolling on its own, and it owns the page padding that the head backdrop
+   later bleeds back past. */
+.creator-pick-desc {
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--cc-leaf);
+}
+/* The detail is now the page itself, not a card sitting on it: no bezel, no
+   inset margin, no second background. The leaf is the container. */
+:is(.creator-pick-desc, .creator-work-page) .creator-detail {
+  margin: 0;
+  padding: 0 var(--cc-page-pad) 3rem;
+  background: none;
+  border: 0;
+  border-radius: var(--cc-radius);
+  box-shadow: none;
+}
+
+/* Placeholder shown before anything is picked. */
+.creator-pick-empty {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  color: var(--cc-muted);
+}
+.creator-pick-empty i { font-size: 2.5rem; opacity: 0.4; }
+.creator-pick-empty h2 { margin: 0; border: none; color: var(--cc-text); }
+.creator-pick-empty p { margin: 0; max-width: 28ch; }
+/* Keep the prompt text above the sketch backdrop below. */
+.creator-pick-empty > * { position: relative; z-index: 1; }
+
+/* When the PHB module is present its journal sketch sits behind the prompt as a
+   faint greyed backdrop (the JS sets --cc-pick-sketch; unset, this stays blank). */
+.creator-pick-empty::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--cc-pick-sketch, none);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  filter: grayscale(1) brightness(0.65);
+  opacity: 0.08;
+  pointer-events: none;
+}
+/* The spells step uses its own sketch (the abjurer) for its backdrop. */
+.creator-spells .creator-pick-empty::before {
+  background-image: var(--cc-spells-sketch, none);
+}
+
+/* The margin gloss — the third leaf. Ruled off from the page like a scribe's
+   commentary in the outer margin, not floated as a card on top of it. */
+.creator-class-aside {
+  position: sticky;
+  top: 0;
+  padding: 1.25rem 1.15rem;
+  background: var(--cc-leaf-gloss);
+  border: 0;
+  border-left: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius);
+}
+.creator-aside-title {
+  margin: 0 0 1rem;
+  border: none;
+  font-family: var(--cc-font-heading);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cc-bright);
+}
+/* Quick Build: one-click recommended fill, sitting in the class detail header beside the source
+   badge. Sized to its label (not the full column) since it shares a row with the class name. */
+.creator-quick-build-btn {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+.creator-quick-build-btn.is-busy { opacity: 0.6; pointer-events: none; }
+/* Target-level picker — sits above the ability panel in the class aside.
+   The chips reuse the .creator-tab pill look so the two pickers in this column read as one family;
+   the custom field is a chip-shaped number input that lights up when the level isn't a preset. */
+.creator-target-level {
+  margin: 0 0 1.1rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--cc-line);
+}
+.creator-level-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.creator-level-chip {
+  min-width: 2.8rem;
+  padding: 0.45rem 0.7rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  color: var(--cc-muted);
+  cursor: pointer;
+  box-shadow: var(--cc-sheen);
+  transition: background 0.25s var(--cc-ease), border-color 0.25s var(--cc-ease),
+    color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
+}
+.creator-level-chip:hover:not(.is-active) { border-color: var(--cc-select); color: var(--cc-text); }
+.creator-level-chip:active { transform: scale(0.97); }
+.creator-level-chip.is-active { background: var(--cc-select); border-color: var(--cc-select); color: #1a1206; }
+/* "Other" carries no pill of its own — the chips are the pills, and wrapping the label + field in a
+   second ring made it read as a fourth (permanently-active) chip. It's a plain label beside an
+   empty field; the field alone highlights when the level isn't one of the presets. */
+.creator-level-custom {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--cc-muted);
+  font-size: 0.82rem;
+}
+.creator-level-custom.is-active { color: var(--cc-text); }
+.creator-level-custom input {
+  width: 3.2rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  color: var(--cc-text);
+  text-align: center;
+  transition: border-color 0.25s var(--cc-ease);
+}
+.creator-level-custom.is-active input { border-color: var(--cc-select); }
+.creator-level-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  opacity: 0.75;
+}
+
+/* The eight rules that used to live here — tightened row gaps, a 2rem score box,
+   `flex-wrap: nowrap` and shrunken padding on the method tabs — existed only to fit
+   the ability panel into a 348px aside. The panel is on the work surface now, at the
+   width the base rules were written for, so they are gone rather than retuned.
+   `.creator-class-aside` itself survives for the level-up ASI screen, which still
+   renders one. */
+
+/* On narrow stages, stack the columns and let the stage scroll as one. */
+@media (max-width: 1100px) {
+  .creator-pick,
+  .creator-pick--solo {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .creator-pick-side,
+  .creator-pick-desc { height: auto; }
+  .creator-picklist { overflow-y: visible; }
+  .creator-pick .creator-class-aside { max-height: none; }
+  /* Stacked, there is no spine — so no binding shadow, and the leaves are
+     divided top-to-bottom instead of side-to-side. */
+  .creator-pick-side::after { display: none; }
+  .creator-pick-side {
+    border-right: 0;
+    border-bottom: 1px solid var(--cc-line-2);
+  }
+  .creator-pick .creator-class-aside {
+    border-left: 0;
+    border-top: 1px solid var(--cc-line-2);
+  }
+  /* Stacked: let every row size to its content rather than splitting the height. */
+  .creator-spells { grid-template-rows: none; }
+  /* Stacked: the description column flows with the page rather than owning a scroll. */
+  .creator-spells .creator-pick-desc { overflow: visible; }
+  .creator-pick-desc-scroll { overflow-y: visible; }
+
+  /* The step labels are *not* dropped here any more. They used to be, to keep the
+     level-up bar on one row of bare numerals — which is number-only navigation, and
+     costs a player the ability to tell which step is which at exactly the width where
+     the window is hardest to read. The row scrolls instead: the labels stay, and the
+     active step is scrolled into view by the browser when it takes focus. */
+  .creator-topbar { gap: 1rem; }
+  .creator-topbar-steps { justify-content: flex-start; }
+}
+
+/* Narrow window: the dossier stops being a column and becomes a band above the work
+   surface. It keeps its identity block and its roll — the character-so-far is the
+   thing worth keeping at every width — but caps its height so the surface below it
+   still has room to work in. */
+@media (max-width: 900px) {
+  .sogrom-creator-fullscreen:has(.creator-dossier),
+  .sogrom-creator-windowed .window-content:has(.creator-dossier) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .creator-dossier {
+    grid-row: 2;
+    grid-column: 1;
+    max-height: 40vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--cc-line-2);
+  }
+  .creator-stage { grid-row: 3; grid-column: 1; }
+  /* Two lines side by side rather than one per row, so the roll stays short. */
+  .creator-dossier-roll {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+}
+
+/* Narrow window: the spell browser's option list collapses to a single column. The
+   drawer grid is excluded — it already sizes its own columns from a minmax track, so it
+   collapses to one when, and only when, one is all that fits. */
+@media (max-width: 768px) {
+  .creator-picklist:not(.creator-drawer-grid) { grid-template-columns: 1fr; }
+}
+
+/* Origin increase: terse helper line under the block title. */
+.creator-asi-hint { margin: -0.4rem 0 1rem; color: var(--cc-muted); font-size: 0.85rem; }
+
+/* A fixed ability can't be hand-allocated: dim the whole row and stamp a padlock
+   over its score so the lock reads as "this number is set" rather than a side note. */
+.creator-ability-row.is-locked { opacity: 0.4; }
+.creator-ability-row.is-locked .creator-ability-score { position: relative; }
+.creator-ability-lock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  color: var(--cc-gold);
+  background: color-mix(in srgb, var(--cc-panel) 70%, transparent);
+  border-radius: var(--cc-radius);
+}
+

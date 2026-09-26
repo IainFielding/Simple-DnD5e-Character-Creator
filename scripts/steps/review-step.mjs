@@ -5,8 +5,10 @@ import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
 import { advancementArray, advancementTitle} from "../data/advancement-util.mjs";
 import { resolveChoices, traitChoiceTitle, traitKeyLabel } from "../data/choice-resolver.mjs";
 import { resolveFeatSpells, grantedSpellCards } from "./feat-spells-step.mjs";
+import { isPreparedPick } from "./spells-step.mjs";
 import { summarizeEquipment } from "../data/equipment-source.mjs";
 import { pdfExportContext } from "../build/pdf-export.mjs";
+import { partyJoinContext } from "../build/party.mjs";
 
 /*
  * The Review step (the step module itself is at the bottom of the file). It's read-only: it gathers
@@ -56,13 +58,18 @@ function reviewDetails(state) {
   return { tags, texts, hasAny: tags.length > 0 || texts.length > 0 };
 }
 
-/** The chosen spells for the summary, split into cantrips and level-1. */
+/**
+ * The chosen spells for the summary, split into cantrips and level-1 — and, for a spellbook class,
+ * the level-1 picks that go into the book unprepared, listed apart so the player isn't surprised to
+ * find them unprepared on the sheet.
+ */
 function reviewSpells(state) {
   const byName = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
   const map = s => ({ name: s.name, img: s.img, uuid: s.uuid });
   const cantrips = [...state.selectedCantrips].sort(byName).map(map);
-  const level1 = [...state.selectedSpells].sort(byName).map(map);
-  return { cantrips, level1, hasAny: cantrips.length > 0 || level1.length > 0 };
+  const level1 = state.selectedSpells.filter(isPreparedPick).sort(byName).map(map);
+  const bookOnly = state.selectedSpells.filter(s => !isPreparedPick(s)).sort(byName).map(map);
+  return { cantrips, level1, bookOnly, hasAny: cantrips.length + level1.length + bookOnly.length > 0 };
 }
 
 /**
@@ -277,8 +284,9 @@ export const reviewStep = {
    * character to print.
    */
   handle(action, _el, { state }) {
-    if ( action !== "toggle-pdf" ) return;
-    state.exportPdf = !state.exportPdf;
+    if ( action === "toggle-pdf" ) state.exportPdf = !state.exportPdf;
+    // Same shape as the PDF switch: an answer recorded now, acted on at Create.
+    else if ( action === "toggle-party" ) state.joinParty = !state.joinParty;
   },
 
   async context({ state, source, equipment }) {
@@ -318,6 +326,8 @@ export const reviewStep = {
       }),
       details: reviewDetails(state),
       pdf: pdfExportContext(state.exportPdf, "pdfExport.noteCreation"),
+      // Null unless this user owns dnd5e's primary party, which hides the switch.
+      party: partyJoinContext(state.joinParty),
       purchases: reviewPurchases(state),
       // Magic items, for a 1st-level character whose GM filled in that row of the wealth table.
       // One starting higher sees the same block on the climb's review instead — same view-model,

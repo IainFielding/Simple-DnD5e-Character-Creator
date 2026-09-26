@@ -176,8 +176,13 @@ export async function stageEmberGear(state, { equipment, source }) {
 
   // Spell picks staged on the spell step. A swap-out can't arise at creation (there is nothing
   // owned to swap), so only the additions matter here.
-  const { sourceTag, method, create } = spellChanges(state);
+  const { sourceTag, method, create, bookLedger } = spellChanges(state);
   if ( sourceTag && create.length ) items.push(...await buildSpellItemData(sourceTag, create, method));
+  // A Wizard's free book picks, recorded on its class on the clone, so Ember's write carries it.
+  if ( bookLedger ) {
+    const { _id, ...change } = bookLedger;
+    clone.items.get(_id)?.updateSource(change);
+  }
 
   if ( items.length ) clone.updateSource({ items });
 

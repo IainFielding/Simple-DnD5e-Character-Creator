@@ -3,7 +3,9 @@ import {
   creationSummaryMode, levelUpSummaryMode
 } from "../config.mjs";
 import { slotChanges } from "../levelup/steps/lvl-review-step.mjs";
+import { preparedChangeNames } from "../levelup/steps/lvl-spells-step.mjs";
 import { formatCp } from "../data/store-source.mjs";
+import { addToParty } from "./party.mjs";
 
 /**
  * The chat cards this module posts when a character is finished and when a level-up is applied.
@@ -160,6 +162,7 @@ export async function postCreationSummary(actor, { magicShop = null, readyMade =
 
     await postCard(actor, "creation", mode, {
       heading: t("chat.creation.heading"),
+      actorId: actor.id,
       name: actor.name,
       img: actor.img || "icons/svg/mystery-man.svg",
       // The level and the classes are two pieces rather than one sentence, because each class is
@@ -173,6 +176,90 @@ export async function postCreationSummary(actor, { magicShop = null, readyMade =
     // A card is never worth losing a built character over.
     log("creation chat summary failed", err);
   }
+}
+
+/* -------------------------------------------- */
+/*  Primary party                               */
+/* -------------------------------------------- */
+
+/**
+ * What the creation card's party button should be for one viewer, right now.
+ *
+ * Decided at render time, not at post time: the GM may appoint a primary party after the card was
+ * posted, or add the character by hand, and a reloaded chat log should tell the truth about both.
+ * Kept pure so the rules are testable without a world.
+ *
+ * Offered to whoever can update the party actor — its owners, which always includes a GM — because
+ * adding a member is exactly that update. Anyone else would get a button that fails on click, which
+ * is worse than no button.
+ * @param {object} opts
+ * @param {boolean} opts.canEdit    Whether the viewer owns the party actor (`party.isOwner`).
+ * @param {Actor5e|null} opts.party dnd5e's primary party (`game.actors.party`), if one is set.
+ * @param {Actor5e|null} opts.actor The character the card is about, if it still exists.
+ * @returns {{state: "add"|"member", partyName: string}|null}  Null to show nothing.
+ */
+export function partyButtonState({ canEdit, party, actor }) {
+  if ( !canEdit || !party || !actor ) return null;
+  const isMember = party.system?.members?.ids?.has?.(actor.id) ?? false;
+  return { state: isMember ? "member" : "add", partyName: party.name };
+}
+
+/**
+ * Put a button in its resolved state: a live "Add to …" button, or a spent "In …" label.
+ * @param {HTMLButtonElement} button
+ * @param {{state: "add"|"member", partyName: string}} resolved
+ */
+function paintPartyButton(button, { state, partyName }) {
+  const member = state === "member";
+  button.disabled = member;
+  button.classList.toggle("is-member", member);
+  const icon = member ? "fa-solid fa-check" : "fa-solid fa-users";
+  const label = t(member ? "party.member" : "party.add", { party: partyName });
+  button.replaceChildren(Object.assign(document.createElement("i"), { className: icon }), ` ${label}`);
+  button.hidden = false;
+}
+
+/**
+ * Wire the creation card's "Add to party" button.
+ *
+ * The template ships the button hidden and empty; this fills it in for anyone who owns the primary
+ * party, and removes it for everyone else. Scoped to our own creation cards by the message flag, so no other module's chat
+ * markup is touched.
+ */
+export function registerPartyButton() {
+  // dnd5e's hook rather than core's `renderChatMessageHTML`: core's fires inside
+  // `ChatMessage5e#renderHTML` *before* the system reworks the card (header, trays, summary
+  // hiding); this one fires after, on the finished HTML.
+  Hooks.on("dnd5e.renderChatMessage", (message, html) => {
+    try {
+      if ( message.getFlag?.(MODULE_ID, "summary") !== "creation" ) return;
+      const root = html instanceof HTMLElement ? html : html?.[0];
+      const button = root?.querySelector("[data-sogrom-party-actor]");
+      if ( !button ) return;
+
+      const actorId = button.dataset.sogromPartyActor;
+      const party = game.actors?.party ?? null;
+      const resolved = partyButtonState({
+        canEdit: !!party?.isOwner,
+        party,
+        actor: game.actors?.get(actorId) ?? null
+      });
+      if ( !resolved ) return button.remove();
+      paintPartyButton(button, resolved);
+
+      button.addEventListener("click", async () => {
+        // Re-read both at click time: the party or the character may have changed since render.
+        const party = game.actors?.party;
+        const actor = game.actors?.get(actorId);
+        if ( !party || !actor ) return ui.notifications.warn(t("party.missing"));
+        button.disabled = true;
+        if ( await addToParty(actor) ) paintPartyButton(button, { state: "member", partyName: party.name });
+        else button.disabled = false;
+      });
+    } catch ( err ) {
+      log("party button failed to render", err);
+    }
+  });
 }
 
 /**
@@ -273,6 +360,14 @@ export function captureLevelUpSummary(state) {
     const hpMax = clone.system?.attributes?.hp?.max ?? 0;
     const prevHpMax = actor.system?.attributes?.hp?.max ?? 0;
 
+    // A Wizard's Prepare tab changes, read off the state like the spell picks, by name.
+    let prepared = { nowPrepared: [], noLongerPrepared: [], bookOnly: [] };
+    try {
+      prepared = preparedChangeNames(state);
+    } catch ( err ) {
+      log("level-up chat summary: prepared changes unavailable", err);
+    }
+
     return {
       fromLevel: actor.system?.details?.level ?? 0,
       toLevel: clone.system?.details?.level ?? 0,
@@ -284,7 +379,8 @@ export function captureLevelUpSummary(state) {
       profNow: clone.system?.attributes?.prof ?? 0,
       slots: slotChanges(clone, actor),
       features: dedupe(features),
-      spells: dedupe(spells)
+      spells: dedupe(spells),
+      prepared
     };
   } catch ( err ) {
     log("level-up chat summary capture failed", err);
@@ -321,6 +417,13 @@ export async function postLevelUpSummary(actor, snapshot) {
     for ( const slot of snapshot.slots ) rows.push({
       label: t("chat.levelup.spellSlots"),
       value: `${slot.label} ${slot.change}`
+    });
+    // A Wizard's spellbook: new spells written in unprepared, and what its Prepare tab changed.
+    const prepared = snapshot.prepared ?? {};
+    if ( prepared.bookOnly?.length ) rows.push({ label: t("chat.levelup.bookOnly"), value: prepared.bookOnly.join(", ") });
+    if ( prepared.nowPrepared?.length ) rows.push({ label: t("chat.levelup.nowPrepared"), value: prepared.nowPrepared.join(", ") });
+    if ( prepared.noLongerPrepared?.length ) rows.push({
+      label: t("chat.levelup.noLongerPrepared"), value: prepared.noLongerPrepared.join(", ")
     });
 
     // A level-up that moved no class, granted nothing and changed no number has no story worth a

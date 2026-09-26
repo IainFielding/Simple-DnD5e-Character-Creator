@@ -63,7 +63,7 @@ export class LevelUpOptionsApp extends HandlebarsApplicationMixin(ApplicationV2)
   async _prepareContext() {
     const get = key => game.settings.get(MODULE_ID, key);
     // dnd5e's HP mode values are hyphenated but their i18n keys are camelCase.
-    const hpLabel = { "choice": "choice", "average-roll": "averageRoll", "average": "average" };
+    const hpLabel = { "choice": "choice", "average-roll": "averageRoll", "average": "average", "max": "max" };
     return {
       // Everything here is inert when the module is not doing level-ups at all; say so rather than
       // letting a GM tune a flow that will never run.

@@ -22,7 +22,7 @@ export const backgroundStep = {
   icon: "fa-solid fa-feather",
   labelKey: "step.background.label",
   instructionKey: "step.background.instruction",
-  template: "steps/background",
+  template: "steps/origin",
 
   isComplete(state) {
     if ( !state.backgroundUuid ) return false;

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import { SETTINGS } from "../scripts/config.mjs";
 import { lvlMagicShopStep } from "../scripts/levelup/steps/lvl-magic-shop-step.mjs";
+import { emptyWealthTable } from "../scripts/data/magic-shop.mjs";
 
 /**
  * The Magic Items step on the level-up rail.
@@ -20,10 +21,7 @@ const climbing = ({ targetLevel = 5, picks = {}, d10 = 4 } = {}) => ({
 });
 
 describe("the Magic Items step on the level-up rail", () => {
-  beforeEach(() => {
-    installFoundryShims();
-    game.settings.set("", SETTINGS.magicShopEnabled, true);
-  });
+  beforeEach(() => installFoundryShims());
 
   it("applies to a creation climb whose target level earns a wealth band", () => {
     expect(lvlMagicShopStep.applicable(climbing({ targetLevel: 5 }))).toBe(true);
@@ -37,8 +35,8 @@ describe("the Magic Items step on the level-up rail", () => {
     expect(lvlMagicShopStep.applicable(climbing({ targetLevel: 1 }))).toBe(false);
   });
 
-  it("does not apply while the GM has the shop switched off", () => {
-    game.settings.set("", SETTINGS.magicShopEnabled, false);
+  it("does not apply once the GM has set every level to 0, which is how the shop is switched off", () => {
+    game.settings.set("", SETTINGS.magicShopConfig, { inventory: [], wealthTable: emptyWealthTable() });
     expect(lvlMagicShopStep.applicable(climbing())).toBe(false);
   });
 

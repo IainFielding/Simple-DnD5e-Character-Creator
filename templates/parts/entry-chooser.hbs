@@ -21,6 +21,18 @@
   {{#if premades.none}}
   <p class="creator-entry-empty">{{premades.none}}</p>
   {{else}}
+  {{!-- The level filter, across every group. Offered only where the pregens span more than one
+        level; built as the quick screen's level rungs are, so the two read as one control. --}}
+  {{#if premades.levels}}
+  <div class="creator-premade-levels" role="group"
+       aria-label="{{localize "sogrom-dnd5e-character-creator.entry.premade.levelAria"}}">
+    {{#each premades.levels}}
+    <button type="button" class="creator-threshold-level{{#if this.active}} is-active{{/if}}"
+            data-action="entryPremadeLevel" data-level="{{this.value}}"
+            aria-pressed="{{this.active}}">{{this.label}}</button>
+    {{/each}}
+  </div>
+  {{/if}}
   {{!-- Two groups, each labelled with where it came from. A player picking "Akra" is getting the
         system's own Akra, not our approximation of her, and the heading says so. --}}
   {{#each premades.groups}}

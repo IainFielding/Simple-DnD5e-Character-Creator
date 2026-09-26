@@ -57,16 +57,6 @@ export function multiclassBlockers(actor, newClass) {
 }
 
 /**
- * Whether the actor meets the multiclass prerequisites for taking `newClass`.
- * @param {Actor5e} actor
- * @param {object} newClass   An Item5e or plain item data.
- * @returns {boolean}
- */
-export function meetsMulticlassPrereqs(actor, newClass) {
-  return multiclassBlockers(actor, newClass).length === 0;
-}
-
-/**
  * One human-readable sentence for a set of blockers — "Barbarian requires Strength 13;
  * Fighter requires Strength 13 or Dexterity 13" — for the picker's tooltip and the
  * drag-drop fallback toast.

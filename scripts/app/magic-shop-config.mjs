@@ -3,17 +3,18 @@ import { PHYSICAL_TYPES } from "../data/store-source.mjs";
 import { sectionKey, groupCards, itemTypeLabel } from "../data/shelf-sections.mjs";
 import {
   RARITIES, BANDS, MAX_INVENTORY, rarityLabel, sanitizeMagicEntry, sanitizeWealthTable, defaultWealthTable,
+  emptyWealthTable,
   magicEntryFromItem, stockability, mergeEntries, countByRarity, goldRange
 } from "../data/magic-shop.mjs";
 import { magicShopConfig, droppedMagicItems, droppedMagicItem } from "../data/magic-shop-source.mjs";
 import { isTemplate, isShell, linkUuid } from "../data/magic-templates.mjs";
-
-const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
+import { InventoryConfigApp } from "./inventory-config-base.mjs";
 
 /**
- * The GM's Magic Item Shop window, opened from the module settings: the master toggle, the wealth
- * table (the DMG's gold and item counts per level band, overridable), and the inventory players
- * pick their free magic items from.
+ * The GM's Magic Item Shop window, opened from the module settings: the wealth table (the DMG's gold
+ * and item counts per level, overridable), and the inventory players pick their free magic items
+ * from. There is no on/off switch: a level whose row grants nothing has no Magic Items step, so
+ * "Set all to 0" is how a table turns the shop off.
  *
  * Stocking is by drag and drop, three ways: a single item from a compendium or the Items sidebar;
  * a folder from a compendium (or the sidebar), which brings every magic item in that folder and
@@ -26,7 +27,7 @@ const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applicat
  * re-renders. Inputs carry no `name`, for the same reason as the Store's — uuids contain dots, which
  * form serialisation would explode — and are read back by data attribute.
  */
-export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2) {
+export class MagicShopConfigApp extends InventoryConfigApp {
 
   static DEFAULT_OPTIONS = {
     id: "sogrom-magic-shop-config",
@@ -42,6 +43,7 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
     actions: {
       switchTab: MagicShopConfigApp.#onSwitchTab,
       resetTable: MagicShopConfigApp.#onResetTable,
+      zeroTable: MagicShopConfigApp.#onZeroTable,
       removeEntry: MagicShopConfigApp.#onRemoveEntry,
       clearInventory: MagicShopConfigApp.#onClearInventory
     },
@@ -62,17 +64,14 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
   /** @type {object|null} Working copy of the wealth table. */
   #table = null;
 
-  #enabled = false;
   #tab = "table";
   #search = "";
   #rarity = "";
-  #dndWired = false;
 
   /** @override */
   async _prepareContext() {
     if ( this.#inventory === null ) {
       const config = magicShopConfig();
-      this.#enabled = config.enabled;
       this.#inventory = config.inventory;
       this.#table = config.wealthTable;
     }
@@ -81,7 +80,6 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
       .sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
     const counts = countByRarity(this.#inventory);
     return {
-      enabled: this.#enabled,
       tab: this.#tab,
       isTable: this.#tab === "table",
       isInventory: this.#tab === "inventory",
@@ -127,17 +125,8 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
       section: sectionKey(entry),
       broken: !resolved,
       hidden: entry.hidden,
-      sourceLabel: this.#sourceLabel(entry.uuid)
+      sourceLabel: this._sourceLabel(linkUuid(entry.uuid))
     };
-  }
-
-  #sourceLabel(id) {
-    const uuid = linkUuid(id);
-    if ( uuid.startsWith("Compendium.") ) {
-      const [, pkg, packName] = uuid.split(".");
-      return game.packs.get(`${pkg}.${packName}`)?.title ?? `${pkg}.${packName}`;
-    }
-    return t("storeConfig.worldSource");
   }
 
   #rangeLabel(row) {
@@ -154,15 +143,6 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
   _onRender(context, options) {
     super._onRender(context, options);
     const root = this.element;
-    if ( !this.#dndWired ) {
-      this.#dndWired = true;
-      root.addEventListener("dragover", ev => { ev.preventDefault(); root.classList.add("is-dragover"); });
-      root.addEventListener("dragleave", ev => {
-        if ( ev.relatedTarget && root.contains(ev.relatedTarget) ) return;
-        root.classList.remove("is-dragover");
-      });
-      root.addEventListener("drop", ev => this.#onDrop(ev));
-    }
     const search = root.querySelector("[data-inv-search]");
     if ( search ) {
       search.value = this.#search;
@@ -213,8 +193,6 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
   /** Pull the live inputs back into the working copies before any re-render or save. */
   #syncFormToWorkingCopy() {
     const form = this.element;
-    const enabled = form.elements?.enabled;
-    if ( enabled ) this.#enabled = !!enabled.checked;
     const table = structuredClone(this.#table);
     for ( const input of form.querySelectorAll("[data-band][data-field]") ) {
       const band = table[input.dataset.band];
@@ -249,13 +227,9 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
 
   /**
    * Stock whatever was dropped: an item, a folder (with all its subfolders) or a whole compendium.
+   * @override
    */
-  async #onDrop(event) {
-    event.preventDefault();
-    this.element.classList.remove("is-dragover");
-    let data = null;
-    try { data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event); } catch { data = null; }
-    if ( !data?.type ) return;
+  async _onDropData(data) {
     this.#syncFormToWorkingCopy();
     this.#showTab("inventory");
     if ( data.type === "Item" ) return this.#dropItem(data);
@@ -312,15 +286,14 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
       preview.overflow && t("magicShopConfig.skippedFull", { count: preview.overflow, max: MAX_INVENTORY })
     ].filter(Boolean);
     const esc = foundry.utils.escapeHTML ?? (s => s);
-    const proceed = await DialogV2.confirm({
-      window: { title: t("magicShopConfig.dropFolderTitle"), icon: "fa-solid fa-folder-open" },
+    const proceed = await this._confirm({
+      title: t("magicShopConfig.dropFolderTitle"), icon: "fa-solid fa-folder-open",
       classes: ["sogrom-magic-shop-drop"],
       content: `<p>${t("magicShopConfig.dropFolderBody", { count: preview.added.length, name: esc(dropped.name) })}</p>
         ${dropped.templates ? `<p class="hint">${t("magicShopConfig.templatesExpanded", { count: dropped.templates })}</p>` : ""}
         ${dropped.shells ? `<p class="hint">${t("magicShopConfig.shellsExpanded", { count: dropped.shells })}</p>` : ""}
         <ul class="sogrom-magic-drop-breakdown">${breakdown}</ul>
-        ${skipped.length ? `<p class="hint">${skipped.join(" · ")}</p>` : ""}`,
-      rejectClose: false
+        ${skipped.length ? `<p class="hint">${skipped.join(" · ")}</p>` : ""}`
     });
     if ( !proceed ) return;
     this.#syncFormToWorkingCopy();
@@ -330,14 +303,25 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
 
   /** Put the DMG's numbers back into the table (working copy only). */
   static async #onResetTable() {
-    const proceed = await DialogV2.confirm({
-      window: { title: t("magicShopConfig.reset.title"), icon: "fa-solid fa-rotate-left" },
-      content: `<p>${t("magicShopConfig.reset.body")}</p>`,
-      rejectClose: false
+    const proceed = await this._confirm({
+      title: t("magicShopConfig.reset.title"), icon: "fa-solid fa-rotate-left",
+      content: `<p>${t("magicShopConfig.reset.body")}</p>`
     });
     if ( !proceed ) return;
     this.#syncFormToWorkingCopy();
     this.#table = defaultWealthTable();
+    this.render();
+  }
+
+  /** Zero every level's gold and item counts — the shop's "off" (working copy only). */
+  static async #onZeroTable() {
+    const proceed = await this._confirm({
+      title: t("magicShopConfig.zero.title"), icon: "fa-solid fa-ban",
+      content: `<p>${t("magicShopConfig.zero.body")}</p>`
+    });
+    if ( !proceed ) return;
+    this.#syncFormToWorkingCopy();
+    this.#table = emptyWealthTable();
     this.render();
   }
 
@@ -363,10 +347,9 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   static async #onClearInventory() {
-    const proceed = await DialogV2.confirm({
-      window: { title: t("magicShopConfig.clear.title"), icon: "fa-solid fa-trash-can" },
-      content: `<p>${t("magicShopConfig.clear.body", { count: this.#inventory.length })}</p>`,
-      rejectClose: false
+    const proceed = await this._confirm({
+      title: t("magicShopConfig.clear.title"), icon: "fa-solid fa-trash-can",
+      content: `<p>${t("magicShopConfig.clear.body", { count: this.#inventory.length })}</p>`
     });
     if ( !proceed ) return;
     this.#syncFormToWorkingCopy();
@@ -376,7 +359,6 @@ export class MagicShopConfigApp extends HandlebarsApplicationMixin(ApplicationV2
 
   static async #onSubmit() {
     this.#syncFormToWorkingCopy();
-    await game.settings.set(MODULE_ID, SETTINGS.magicShopEnabled, this.#enabled);
     await game.settings.set(MODULE_ID, SETTINGS.magicShopConfig, {
       inventory: this.#inventory.map(sanitizeMagicEntry).filter(e => e.uuid && e.rarity && PHYSICAL_TYPES.includes(e.type)),
       wealthTable: sanitizeWealthTable(this.#table)

@@ -95,7 +95,8 @@ describe("class-choice phase (chooseClass session, no driver yet)", () => {
     const state = new LevelUpState(makeActor(3), null, { chooseClass: true });
     state.adoptDriver(makeDriver());
     state.selectedCantrips.push({ name: "Light" });
-    state.swapSpell = { id: "oldSpell00000000", name: "Jump" };
+    state.swapSpells = [{ id: "oldSpell00000000", name: "Jump" }];
+    state.preparedChanges = { own1: 0 };
     state.collapsedBlocks.add("4:hp");
 
     state.clearDriver();
@@ -103,7 +104,8 @@ describe("class-choice phase (chooseClass session, no driver yet)", () => {
     expect(state.classItem).toBe(null);
     expect(state.toLevel).toBe(4);                 // back to fromLevel + 1
     expect(state.selectedCantrips).toEqual([]);
-    expect(state.swapSpell).toBe(null);
+    expect(state.swapSpells).toEqual([]);
+    expect(state.preparedChanges).toEqual({});
     expect(state.collapsedBlocks.size).toBe(0);
     expect(state.hasPlayerInput()).toBe(false);
   });
@@ -199,8 +201,13 @@ describe("hasStagedSpells", () => {
     expect(withPick.hasStagedSpells()).toBe(true);
 
     const withSwap = makeState();
-    withSwap.swapSpell = { id: "oldSpell00000000", name: "Jump" };
+    withSwap.swapSpells = [{ id: "oldSpell00000000", name: "Jump" }];
     expect(withSwap.hasStagedSpells()).toBe(true);
+
+    // A Wizard's Prepare tab change is staged work too.
+    const withPrepare = makeState();
+    withPrepare.preparedChanges = { own1: 1 };
+    expect(withPrepare.hasStagedSpells()).toBe(true);
   });
 });
 

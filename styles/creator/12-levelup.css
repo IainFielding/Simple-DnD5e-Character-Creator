@@ -1,0 +1,652 @@
+/* ---------------------------------------------- Level-up
+
+   The level-up shell reuses the creator's rail/stage chrome and review styles; only the
+   hit-points step introduces its own controls. The sheet-header fallback button (shown only
+   when the world disables native advancements) lives outside the window, like the launch one. */
+
+/* ------------------------------ Level-up review
+
+   Reuses the creation review's portrait / score-strip / origin-column layout. The column count
+   flexes with however many origins have something to show (each class, plus species/background
+   when they gained something); the levelled class is framed and glowing so a multiclass
+   character reads at a glance which part of the sheet moved. */
+
+/* Column tracks size to their content count rather than stretching: a lone class block stays a
+   readable card width, two or three sit side by side, and the set is centered in the stage. */
+.creator-levelup-columns {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 420px));
+  justify-content: center;
+}
+
+/* The levelled class keeps the creation columns' quiet look; its gold top rule doubles up
+   (like an inscription's rule) instead of shouting with a filled, glowing frame. */
+.creator-levelup-columns .creator-review-block.is-leveled {
+  border-top: 6px double var(--cc-gold);
+}
+
+/* The level tag under an origin's name: quiet for an unchanged class, gold for the level jump. */
+.creator-levelup-lvlbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.65rem;
+  border: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius-pill);
+  background: var(--cc-panel-2);
+  font-size: 0.78rem;
+  color: var(--cc-muted);
+}
+.creator-levelup-lvlbadge.is-hot {
+  border-color: var(--cc-gold);
+  background: var(--cc-gold);
+  color: #1a1206;
+  font-weight: 700;
+}
+
+/* "New" pill marking what this level-up granted. */
+.creator-new-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.45rem;
+  border-radius: var(--cc-radius-pill);
+  background: var(--cc-gold);
+  color: #1a1206;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Feature/spell chips: a gained entry gets a soft gold frame so it stands out from the known set. */
+.creator-levelup-featlist li.is-new {
+  padding: 0.2rem 0.55rem 0.2rem 0.35rem;
+  border: 1px solid var(--cc-gold);
+  border-radius: var(--cc-radius-pill);
+  background: var(--cc-select-soft);
+}
+
+.creator-step-intro {
+  margin: 0 0 1.25rem;
+  color: var(--cc-text);
+  max-width: 52ch;
+}
+
+.creator-levelup-hp .creator-hp-row {
+  margin-bottom: 1.5rem;
+}
+
+.creator-hp-head {
+  margin-bottom: 0.6rem;
+}
+
+.creator-hp-level {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-gold);
+}
+
+/* The three source buttons sit in a row; the result box sits beside them (wrapping below on
+   narrow screens) and shows the hit points the player will actually gain this level. */
+.creator-hp-controls {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.creator-hp-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  flex: 1 1 340px;
+}
+
+.creator-hp-btn {
+  flex: 1 1 140px;
+  box-sizing: border-box;
+  height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.creator-hp-btn:hover { border-color: var(--cc-line-2); }
+.creator-hp-btn.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+
+.creator-hp-btn-label {
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.creator-hp-btn-value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--cc-gold-bright);
+  line-height: 1;
+}
+
+/* The value box: the number the level-up will commit. Editable, so typing a figure here is the
+   manual override; it highlights (like the buttons) when the current value came from manual entry. */
+.creator-hp-result {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius);
+}
+.creator-hp-result.is-manual { border-color: var(--cc-select); background: var(--cc-select-soft); }
+
+.creator-hp-result-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-muted);
+  text-align: center;
+}
+
+.creator-hp-input {
+  width: 5rem;
+  height: 2.3rem;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 2.1rem;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--cc-gold-bright);
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius);
+  padding: 0 0.4rem;
+}
+.creator-hp-input:focus { border-color: var(--cc-select); outline: none; }
+/* Drop the number spinner so it can't nudge the centred value sideways. */
+.creator-hp-input { appearance: textfield; -moz-appearance: textfield; }
+.creator-hp-input::-webkit-outer-spin-button,
+.creator-hp-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+/* The GM's HP mode can make the box display-only; keep it legible, just not interactive. */
+.creator-hp-input[readonly] { pointer-events: none; border-color: var(--cc-line-2); }
+
+/* The "+2 Con = 9 HP" line under the die value, tying the row's numbers to the review's total. */
+.creator-hp-con {
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* "Level Up" in the dnd5e sheet header: a .gold-button icon sitting with the short/long rest
+   pair, so it needs no styling of its own — but the character sheet's button row is absolutely
+   positioned with no spare room, so shift it left one icon-width to fit. The Action Tracker
+   module shifts the same row by two icons (-76px, .sogrom-has-tracker); when both are present
+   the combined rule wins on specificity and adds the widths together. */
+.dnd5e2.character .sheet-header-buttons.sogrom-has-levelup { transform: translateX(-38px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-levelup { transform: translateX(-114px); }
+/* The repair wrench (shown only while a level has an unanswered choice) takes one more icon-width. */
+.dnd5e2.character .sheet-header-buttons.sogrom-has-repair { transform: translateX(-38px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-levelup.sogrom-has-repair { transform: translateX(-76px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-repair { transform: translateX(-114px); }
+.dnd5e2.character .sheet-header-buttons.sogrom-has-tracker.sogrom-has-levelup.sogrom-has-repair {
+  transform: translateX(-152px);
+}
+
+/* The Level Up button once the character has the XP for their next level (hasLevelUpXp in
+   levelup/intercept.mjs): a gold ring that turns and a glow that breathes. The ring is a masked
+   conic gradient on ::before, so it follows the button's own rounding whatever shape the sheet
+   gives it. (There were twinkling sparkles on ::after too; they were too much, and went.) */
+@property --sogrom-spark-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.sogrom-levelup-btn.is-xp-ready {
+  position: relative;
+  overflow: visible;
+  animation: sogrom-xp-glow 1.8s ease-in-out infinite;
+}
+.sogrom-levelup-btn.is-xp-ready::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from var(--sogrom-spark-angle),
+    #fff4c2, #f5c542 20%, #a8741a 40%, #f5c542 60%, #fff4c2 80%, #f5c542);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: sogrom-xp-spin 2.4s linear infinite;
+}
+@keyframes sogrom-xp-spin { to { --sogrom-spark-angle: 360deg; } }
+@keyframes sogrom-xp-glow {
+  0%, 100% { box-shadow: 0 0 4px 1px rgba(245, 197, 66, 0.55); }
+  50% { box-shadow: 0 0 12px 4px rgba(255, 214, 92, 0.95); }
+}
+/* No motion: a steady gold ring and glow, still unmistakable. */
+@media (prefers-reduced-motion: reduce) {
+  .sogrom-levelup-btn.is-xp-ready,
+  .sogrom-levelup-btn.is-xp-ready::before { animation: none; }
+  .sogrom-levelup-btn.is-xp-ready { box-shadow: 0 0 8px 2px rgba(245, 197, 66, 0.8); }
+}
+
+/* Fallback placement for sheets without the v2 header row: a labelled title-bar button. */
+.sogrom-levelup-btn--window {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 0.4rem;
+}
+
+/* Level-up: each of a level's decisions sits in its own panel with an icon header + status pill. */
+.levelup-level { display: flex; flex-direction: column; gap: 1.5rem; max-width: 1100px; margin-inline: auto; }
+.levelup-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  overflow: hidden;
+}
+.levelup-block.is-complete { border-color: var(--cc-line-2); }
+
+/* The header doubles as a collapse toggle (like the creation choice checklist): the whole row is a
+   button that shows/hides the body, with a chevron that flips when open. */
+.levelup-block-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.8rem 1.1rem;
+  background: var(--cc-panel);
+  border: none;
+  border-bottom: 1px solid var(--cc-line);
+  color: var(--cc-text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.levelup-block-head:hover { background: var(--cc-panel-2); }
+/* Collapsed: no body below, so drop the divider the header would otherwise draw under itself. */
+.levelup-block:not(.is-open) .levelup-block-head { border-bottom-color: transparent; }
+.levelup-block-chevron {
+  flex: 0 0 auto;
+  color: var(--cc-muted);
+  font-size: 0.8rem;
+  transition: transform 0.2s ease;
+}
+.levelup-block.is-open .levelup-block-chevron { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .levelup-block-chevron { transition: none; }
+}
+.levelup-block-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--cc-radius);
+  background: var(--cc-select-soft);
+  color: var(--cc-gold-bright);
+  font-size: 0.95rem;
+}
+.levelup-block-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  border: none;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.levelup-block-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  white-space: nowrap;
+}
+.levelup-block-status.is-done {
+  color: var(--cc-gold-bright);
+  border-color: var(--cc-select);
+  background: var(--cc-select-soft);
+}
+/* The sourcebook badge sits just before the status pill in the block header, naming where the
+   chosen option (e.g. a subclass) originates. Quieter than the status pill — it's provenance,
+   not state — and truncates rather than wrapping the header on a long book title. */
+.levelup-block-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  font-size: 0.8rem;
+  color: var(--cc-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.levelup-block-source i { flex: 0 0 auto; font-size: 0.7rem; opacity: 0.8; }
+
+.levelup-block-body { padding: 1.1rem; }
+/* The panel owns the heading and spacing now, so reset the partials' own outer margins. */
+.levelup-block-body > .creator-levelup,
+.levelup-block-body > .creator-pick,
+.levelup-block-body > .creator-review { margin: 0; }
+.levelup-block-body .creator-choice-section:last-child { margin-bottom: 0; }
+/* The subclass picker fills its parent's height for its two scrolling columns; inside a panel
+   there is no stage to fill, so give it a definite, self-contained height. */
+.levelup-block--subclass .creator-pick { height: clamp(360px, 50vh, 600px); }
+
+/* The ASI screen reuses the pick layout with two columns — description on the left (a chosen feat,
+   or the ability-improvement placeholder), the stacked ability scores in the aside on the right. One
+   layout for both cases keeps the ability boxes pinned in place when switching between feat and
+   points. As with the subclass pick, a panel has no stage to fill, so give it a definite height. */
+.creator-pick--asi { grid-template-columns: minmax(0, 1fr) 340px; }
+/* Size to content rather than filling a stage; only the description column caps its height and
+   scrolls (for a long feat). The ability aside sizes to its rows, so it never grows a scrollbar. */
+.levelup-block--asi .creator-pick--asi { height: auto; align-items: start; }
+.levelup-block--asi .creator-pick--asi .creator-pick-desc {
+  height: auto;
+  max-height: clamp(320px, 45vh, 560px);
+}
+.creator-pick--asi .creator-class-aside { max-height: none; overflow: visible; }
+
+/* The feat picker's toolbar: name search plus the "increases <ability>" dropdown. Borrows the spell
+   toolbar's row so the two chooser screens read alike, but at the picker's own width — it sits in
+   the ASI screen's left column beside the ability aside, not across a full stage. */
+.creator-feat-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+.creator-feat-search-row .creator-search { flex: 1 1 200px; width: auto; }
+.creator-feat-search-row .creator-spell-filter { flex: 0 1 auto; }
+
+/* Hidden by the filter pass, which hides a card's `li`, and a group's grid together with the
+   heading that introduces it — a heading left standing over an emptied grid reads as a fault.
+   `!important` is not needed: the grids are `display: grid` from a single-class rule, and these
+   selectors carry a class more. */
+.creator-asi-feat-picker li.is-hidden,
+.creator-asi-feat-picker .creator-choice-grid.is-hidden,
+.creator-asi-feat-picker .creator-choice-group-head.is-hidden,
+.creator-asi-feat-picker .creator-choice-empty.is-hidden { display: none; }
+
+/* Icon badge standing in for the item art in the ASI placeholder's detail header (56px = img size). */
+.creator-detail-icon {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--cc-radius);
+  border: 1px solid var(--cc-line-2);
+  background: var(--cc-panel-2);
+  color: var(--cc-gold-bright);
+  font-size: 1.6rem;
+}
+
+/* Density tiers — vary card + icon size by how many options a pick offers.
+   Declared with `data-density` on whichever element owns the grids. Usually that is a level-up
+   block (see level.hbs), but not always: the ASI screen's block is a `form` — right for the
+   ability-score steppers — while the feat picker *inside* it is a 50+ option chooser that needs
+   its own tier. So these are keyed off the attribute alone rather than off `.levelup-block`,
+   and the nearest declaring ancestor wins. */
+/* Large option lists (a long feature / spell / weapon-mastery pool, 9+ options): a fixed five-wide
+   grid of small horizontal chips — icon then name — so a 10-40 option pick stays scannable in a few
+   tidy rows instead of sprawling into tall cards. Columns step down as the window narrows. */
+[data-density="compact"] .creator-choice-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+[data-density="compact"] .creator-choice-card {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: 0;
+  padding: 0.5rem 0.65rem;
+  gap: 0.5rem;
+}
+[data-density="compact"] .creator-choice-card-img { width: 34px; height: 34px; flex: 0 0 auto; }
+[data-density="compact"] .creator-choice-card-name {
+  font-size: 0.82rem;
+  text-align: left;
+  line-height: 1.2;
+  min-width: 0;
+}
+/* The tick overlay is tuned for tall cards; pull it into the shorter chip's corner. */
+[data-density="compact"] .creator-choice-card-check { top: 0.3rem; right: 0.35rem; }
+
+@media (max-width: 1000px) {
+  [data-density="compact"] .creator-choice-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  [data-density="compact"] .creator-choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+[data-density="chip"] .creator-choice-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+[data-density="chip"] .creator-choice-card {
+  flex-direction: row;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0.55rem 0.8rem;
+  gap: 0.55rem;
+}
+[data-density="chip"] .creator-choice-card-name { font-size: 0.9rem; text-align: left; }
+
+/* The "Current"/"Known" badge is a corner overlay tuned for the tall card's empty top padding.
+   In the short horizontal chip layouts there is no free corner, so it lands on top of the icon
+   and name. Float it inline at the end of the row instead, so it sits beside the text, not over it. */
+[data-density="compact"] .creator-choice-card-badge,
+[data-density="chip"] .creator-choice-card-badge {
+  position: static;
+  order: 3;
+  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: center;
+}
+[data-density="compact"] .creator-choice-card-name,
+[data-density="chip"] .creator-choice-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* With the badge sharing the row, a long name (e.g. "Two-Weapon Fighting") would wrap to three
+     lines. Cap it at two — the full name is still available via the card's item tooltip. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Trim the inline badge so the name keeps as much of the narrow chip's width as possible. */
+[data-density="compact"] .creator-choice-card-badge { font-size: 0.55rem; padding: 0.06rem 0.32rem; }
+/* When such a card is also ticked, keep the inline badge clear of the corner check overlay. */
+[data-density="compact"] .creator-choice-card.is-selected .creator-choice-card-badge,
+[data-density="chip"] .creator-choice-card.is-selected .creator-choice-card-badge { margin-right: 1rem; }
+
+/* Guided flow: when the player finishes a decision, the next incomplete block (or, if the level is
+   done, the enabled Next button) gets a brief ring pulse to draw the eye onward — nothing collapses
+   or jumps, so it guides without the jar of a layout shift. Applied/removed by levelup-shell.mjs. */
+@keyframes cc-guide-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--cc-select-soft); }
+  25%  { box-shadow: 0 0 0 4px var(--cc-select); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
+.cc-guide-pulse { animation: cc-guide-pulse 1.1s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .cc-guide-pulse { animation: none; }
+}
+
+.creator-levelup-choices .creator-choice-section {
+  margin-bottom: 1.75rem;
+}
+
+.creator-choice-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.creator-choice-head h2 { border: none; margin: 0; font-size: 1.15rem; }
+.creator-choice-count { color: var(--cc-muted); font-size: 0.85rem; white-space: nowrap; }
+
+.creator-choice-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+/* Category header within a choice section (e.g. Simple vs Martial Weapons). */
+.creator-choice-group-head {
+  border: none;
+  margin: 1.5rem 0 0.85rem;
+  font-size: 0.95rem;
+  color: var(--cc-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.creator-choice-group-head:first-child { margin-top: 0; }
+
+.creator-choice-card {
+  position: relative;
+  width: 100%;
+  min-height: 170px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 1.5rem 1rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.creator-choice-card:hover:not(:disabled) { border-color: var(--cc-line-2); }
+.creator-choice-card.is-selected { border-color: var(--cc-select); background: var(--cc-select-soft); }
+.creator-choice-card:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.creator-choice-card-img {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--cc-radius);
+  object-fit: cover;
+  border: 1px solid var(--cc-line);
+}
+.creator-choice-card-name { font-size: 1.05rem; text-align: center; line-height: 1.25; }
+
+.creator-choice-card-check {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.45rem;
+  color: var(--cc-gold-bright);
+  font-size: 0.85rem;
+}
+
+/* Replacement: the owned pick sits in the same grid, badged "Current", and dims when unticked. */
+.creator-choice-hint { margin: 0 0 1rem; color: var(--cc-muted); font-size: 0.85rem; }
+
+.creator-choice-card-badge {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.45rem;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--cc-radius-pill);
+  background: var(--cc-select-soft);
+  color: var(--cc-gold-bright);
+  border: 1px solid var(--cc-select);
+}
+
+/* An owned pick that's been unticked (marked for replacement) reads as struck-out and faded. */
+.creator-choice-card--owned:not(.is-selected) {
+  opacity: 0.5;
+  border-style: dashed;
+}
+.creator-choice-card--owned:not(.is-selected) .creator-choice-card-name { text-decoration: line-through; }
+
+/* A pool option the character already holds from another source (e.g. the base Fighting Style when
+   a Champion picks its extra one): enumerated with a "Known" badge but disabled — it can't be taken
+   twice. A dashed border sets it apart from options merely greyed out because the limit is reached. */
+.creator-choice-card--taken { opacity: 0.6; border-style: dashed; }
+
+/* ---- Spell grant with a choosable casting ability (species lineage spells) ---- */
+/* The granted spell(s), shown as small read-only chips above the ability picker. */
+.creator-grant-spells {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.creator-grant-spell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem 0.35rem 0.4rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+}
+.creator-grant-spell-img {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--cc-radius);
+  object-fit: cover;
+  border: 1px solid var(--cc-line);
+}
+.creator-grant-spell-name { font-size: 0.9rem; }
+
+/* The ability picker is a short, label-only row — keep the cards compact, not the tall image tier. */
+.creator-grant-abilities { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.creator-grant-abilities .creator-choice-card {
+  min-height: 0;
+  padding: 0.85rem 1rem;
+}
+
+/* ---- Ability Score Improvement ----
+   The level-up ASI reuses the creation panels wholesale: the Background increase aside for the
+   plain "spend your points" case, and the pick layout (description + ability aside) for a chosen
+   feat. Only the multi-record separator is bespoke here. */
+.creator-asi-section + .creator-asi-section { margin-top: 1.5rem; }
+

@@ -1,5 +1,5 @@
 import { log } from "../config.mjs";
-import { artDirectoriesFor, resolveOriginArt } from "./origin-art.mjs";
+import { artDirectoriesFor, artPathsFor, resolveOriginArt } from "./origin-art.mjs";
 
 /**
  * The Foundry half of the art lookup: browse each art directory once, remember what was in it, and
@@ -17,6 +17,31 @@ import { artDirectoriesFor, resolveOriginArt } from "./origin-art.mjs";
  * there is a broken image on the first screen a new player sees, and a browse costs one request per
  * directory per session — three, in a typical Player's Handbook world.
  *
+ * ## Players who may not browse
+ *
+ * `FilePicker.browse` needs the "Use File Browser" permission, which Foundry withholds from players
+ * by default — so for most players every browse failed, read as "no art here", and every card fell
+ * back to its icon. For a user without that permission each candidate file is checked on its own
+ * instead: module assets are served to anyone, so no permission is involved. It costs a handful of
+ * requests per card rather than one per directory, which is fine for the few cards that carry art
+ * (the entry chooser's paths, the quick screen's three), and each answer is cached for the session
+ * just as a listing is.
+ *
+ * ## Hosts that serve module files from somewhere else (The Forge)
+ *
+ * Two things differ on a host like The Forge, and neither can be seen from a local install:
+ *
+ *   - **A listing can come back empty for files that exist.** Premium content installed from the
+ *     Bazaar is not in the plain `data` source a browse asks, so even a GM can get nothing back.
+ *     When every directory a card's art could be in lists empty, that card is checked file by file
+ *     rather than given up on. A real local install never lists a directory it has as empty, so there
+ *     this costs nothing.
+ *   - **The file may be redirected to a CDN on another domain.** A `fetch` that follows that redirect
+ *     is subject to CORS and fails if the CDN doesn't allow it, which would read as "no file". So a
+ *     candidate is checked by loading it as an image instead, which CORS does not govern and which
+ *     follows redirects the way the page's own `<img>` will. The one that exists is then already in
+ *     the browser's cache for the card that shows it.
+ *
  * ## Lifetime
  *
  * Module-level, and deliberately not per-window: a player who opens the creator, closes it and
@@ -27,6 +52,50 @@ import { artDirectoriesFor, resolveOriginArt } from "./origin-art.mjs";
 
 /** directory path -> Promise<Set<string>> of the filenames in it. */
 const listings = new Map();
+
+/** file path -> Promise<boolean>: whether it exists, for users who can't browse. */
+const probes = new Map();
+
+/** Whether this user may list directories (the "Use File Browser" permission). */
+function canBrowse() {
+  return game.user?.isGM || !!game.user?.can?.("FILES_BROWSE");
+}
+
+/** How long an image probe may take before it counts as "not there". */
+const PROBE_TIMEOUT_MS = 10_000;
+
+/**
+ * Whether one image exists, by loading it the way the card's `<img>` would. Routed through
+ * `getRoute` so a world served under a route prefix is asked at the right address. See the note on
+ * other hosts above for why this is an image load rather than a `HEAD` request.
+ * @param {string} path  A Data-relative path, e.g. `modules/x/assets/art/wizard.webp`.
+ * @returns {Promise<boolean>}
+ */
+function exists(path) {
+  if ( probes.has(path) ) return probes.get(path);
+  const url = foundry.utils.getRoute?.(path) ?? `/${path}`;
+  const promise = new Promise(resolve => {
+    const img = new Image();
+    const done = ok => { clearTimeout(timer); img.onload = img.onerror = null; resolve(ok); };
+    const timer = setTimeout(() => done(false), PROBE_TIMEOUT_MS);
+    img.onload = () => done(true);
+    img.onerror = () => done(false);
+    img.src = url;
+  });
+  probes.set(path, promise);
+  return promise;
+}
+
+/**
+ * One card's art without a directory listing: every candidate checked at once, and the first in
+ * the plan's preference order that exists is the answer — the same answer a listing gives.
+ * @returns {Promise<object|null>}
+ */
+async function probeArt(card, category) {
+  const candidates = artPathsFor(card, category);
+  const found = await Promise.all(candidates.map(c => exists(c.path)));
+  return candidates[found.indexOf(true)] ?? null;
+}
 
 /**
  * Browse one directory and remember its contents. A directory that does not exist — a class module
@@ -72,14 +141,31 @@ export async function resolveArtFor(requests) {
   const wanted = (requests ?? []).filter(r => r?.card?.uuid);
   if ( !wanted.length ) return out;
 
+  if ( !canBrowse() ) {
+    await Promise.all(wanted.map(async ({ card, category }) => {
+      const art = await probeArt(card, category);
+      if ( art ) out.set(card.uuid, art);
+    }));
+    return out;
+  }
+
   const dirs = artDirectoriesFor(wanted);
   const sets = new Map();
   await Promise.all(dirs.map(async dir => sets.set(dir, await browse(dir))));
 
+  const unlisted = [];
   for ( const { card, category } of wanted ) {
     const art = resolveOriginArt(card, category, dir => sets.get(dir) ?? null);
-    if ( art ) out.set(card.uuid, art);
+    if ( art ) { out.set(card.uuid, art); continue; }
+    // Every directory this card could draw on listed empty: on a host that serves packages from
+    // elsewhere that says nothing about whether the files exist, so ask about each one directly.
+    const cardDirs = [...new Set(artPathsFor(card, category).map(c => c.dir))];
+    if ( cardDirs.length && cardDirs.every(dir => !sets.get(dir)?.size) ) unlisted.push({ card, category });
   }
+  await Promise.all(unlisted.map(async ({ card, category }) => {
+    const art = await probeArt(card, category);
+    if ( art ) out.set(card.uuid, art);
+  }));
   return out;
 }
 
@@ -104,4 +190,5 @@ export function creditFor(art) {
 /** Drop everything, so the next lookup re-browses. Called when the installed content may have changed. */
 export function invalidateArtCache() {
   listings.clear();
+  probes.clear();
 }

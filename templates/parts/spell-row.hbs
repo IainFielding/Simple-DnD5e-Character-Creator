@@ -13,10 +13,15 @@
   Level-up rows carry two extra states the creation step has no equivalent of: `owned` (a spell the
   character already has, offered as a swap-out candidate) and `swapMarked` (one picked for
   replacement). Both come through untouched when absent.
+
+  Any row may also carry a state flag (`ownedTag` + `ownedTip`) without being owned: the spellbook's
+  "Prepared" / "In book" / "Always" / "New", on both steps' Spellbook and Prepare tabs. A `granted`
+  row is a spell a feature already gives the character, shown locked (with the owned tint) so the
+  player can see it where they are choosing.
 --}}
 <li>
   <button type="button"
-          class="creator-pickrow creator-spellrow {{#if active}}is-selected{{/if}} {{#if owned}}is-owned{{/if}} {{#if swapMarked}}is-swapping{{/if}} {{#if focused}}is-focused{{/if}} {{#if disabled}}is-disabled{{/if}}"
+          class="creator-pickrow creator-spellrow {{#if active}}is-selected{{/if}} {{#if owned}}is-owned{{/if}} {{#if granted}}is-owned is-granted{{/if}} {{#if swapMarked}}is-swapping{{/if}} {{#if focused}}is-focused{{/if}} {{#if disabled}}is-disabled{{/if}}"
           data-action="stepAction" data-step-action="focus-spell"
           data-uuid="{{uuid}}" data-name="{{name}}" data-level="{{level}}" data-school="{{school}}"
           data-props="{{propertyKeys}}" data-casting="{{castingTimeKey}}" data-range="{{rangeKey}}"
@@ -70,12 +75,10 @@
       <i class="fa-solid fa-scale-balanced" aria-hidden="true"></i>
     </button>
     {{/if}}
-    {{#if owned}}
-      {{#if swapMarked}}
-      <span class="creator-pickrow-flag is-swapping" data-tooltip="{{swapTip}}">{{swapTag}}</span>
-      {{else}}
-      <span class="creator-pickrow-flag" data-tooltip="{{ownedTip}}">{{ownedTag}}</span>
-      {{/if}}
+    {{#if swapMarked}}
+    <span class="creator-pickrow-flag is-swapping" data-tooltip="{{swapTip}}">{{swapTag}}</span>
+    {{else if ownedTag}}
+    <span class="creator-pickrow-flag {{ownedFlagClass}}" data-tooltip="{{ownedTip}}">{{ownedTag}}</span>
     {{/if}}
   </div>
 </li>

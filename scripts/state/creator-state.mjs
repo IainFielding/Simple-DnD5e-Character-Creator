@@ -62,6 +62,14 @@ export class CreatorState {
   exportPdf = false;
 
   /**
+   * Whether to add the character to dnd5e's primary party once it is created. Only offered, on the
+   * Review step, to someone who owns that party — see {@link module:build/party}. On by default:
+   * a party owner building a character in a world that has a party usually means it for that party,
+   * and the switch sits in plain sight on the page they press Create from.
+   */
+  joinParty = true;
+
+  /**
    * Identity & biography fields. `name` mirrors the actor name (the only mandatory
    * field); the rest are optional and written to `actor.system.details` on build.
    */
@@ -385,6 +393,17 @@ export class CreatorState {
   }
 
   /**
+   * The ability scores the finished 1st-level character will have: the method's base scores with
+   * every origin increase added. What a 2014 prepared caster's spell count is worked out from.
+   * @returns {Record<string, number>}
+   */
+  finalScores() {
+    const scores = this.resolvedScores();
+    for ( const [key, { total }] of Object.entries(this.abilityDeltas()) ) scores[key] = (scores[key] ?? 8) + total;
+    return scores;
+  }
+
+  /**
    * Forget everything keyed to the class: its level-1 spell picks, its advancement
    * choices, and its equipment selection. Called when the class selection changes so
    * a spell list or skill pick never carries over to a different class.
@@ -467,11 +486,11 @@ export class CreatorState {
     // Identity & biography — round-trip whatever the actor already carries. `ideals`,
     // `bonds`, `flaws` map to the singular dnd5e keys; biography is a rich-text object.
     const d = actor.system?.details ?? {};
-    // The draft is created with a placeholder name; don't treat that as a real entry,
-    // so the Details step stays incomplete until the player actually names the character.
-    const placeholder = t("common.newCharacter");
+    // The draft is created with a placeholder name, and a blank sheet the GM made carries Foundry's
+    // own ("Player Character (2)"); don't treat either as a real entry, so the Details step stays
+    // incomplete until the player actually names the character.
     this.details = {
-      name: (actor.name && actor.name !== placeholder) ? actor.name : "",
+      name: isPlaceholderName(actor.name) ? "" : actor.name,
       alignment: d.alignment ?? "", faith: d.faith ?? "", gender: d.gender ?? "",
       eyes: d.eyes ?? "", hair: d.hair ?? "", skin: d.skin ?? "",
       height: d.height ?? "", weight: d.weight ?? "", age: d.age ?? "",
@@ -490,4 +509,21 @@ export class CreatorState {
     this.tokenRingEnabled = !!read(() => token.ring?.enabled);
     this.tokenLockRotation = !!read(() => token.lockRotation);
   }
+}
+
+/**
+ * Whether an actor's name is a placeholder rather than a name somebody chose: empty, the creator's
+ * own "New Character", or the name Foundry gives a new character sheet — its type label, with
+ * " (2)", " (3)"… when that is taken (see `ClientDocumentMixin.defaultName`).
+ * @param {string|null|undefined} name
+ * @returns {boolean}
+ */
+export function isPlaceholderName(name) {
+  const text = String(name ?? "").trim();
+  if ( !text || (text === t("common.newCharacter")) ) return true;
+  const typeKey = CONFIG.Actor?.typeLabels?.character;
+  const base = typeKey ? game.i18n.localize(typeKey) : null;
+  if ( !base ) return false;
+  const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped}( \\(\\d+\\))?$`).test(text);
 }

@@ -249,7 +249,7 @@ describe("the inline ASI feat picker", () => {
  * steppers it usually holds — but while the feat grid is open that block is a chooser of every
  * feat in the world, which as full 72px hero cards is several screens of scrolling in a column
  * capped at 45vh. So the picker declares a density of its own, from its own option count, exactly
- * as the choices and trait steps do; `creator.css` keys its density tiers off the attribute rather
+ * as the choices and trait steps do; `styles/creator/09-choices-equipment.css` keys its density tiers off the attribute rather
  * than off `.levelup-block` so the inner declaration wins.
  */
 describe("the feat picker's card density", () => {

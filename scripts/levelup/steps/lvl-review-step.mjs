@@ -4,6 +4,7 @@ import { summarizeEquipment } from "../../data/equipment-source.mjs";
 import { cartSummary } from "../../data/store-source.mjs";
 import { magicShopReview } from "../../data/magic-shop-source.mjs";
 import { pdfExportContext } from "../../build/pdf-export.mjs";
+import { preparedChangeNames } from "./lvl-spells-step.mjs";
 
 /**
  * Final review for a level-up, laid out like the creation review: the character portrait and
@@ -273,12 +274,17 @@ export const lvlReviewStep = {
       ? [...state.selectedCantrips, ...state.selectedSpells]
         .map(s => ({ name: s.name, img: s.img, uuid: s.uuid, isNew: true }))
       : [];
-    // A marked swap only takes effect when its freed slot was actually used (see spellChanges).
+    // A marked swap only takes effect when its freed slot was actually used (see spellChanges);
+    // with several marks (a Cleric or Druid), as many as extra picks were made.
     const swappedOut = [];
     if ( plan.isSpellcaster ) {
       if ( state.swapCantrip && (state.selectedCantrips.length > plan.addCantrips) ) swappedOut.push(state.swapCantrip.name);
-      if ( state.swapSpell && (state.selectedSpells.length > plan.addSpells) ) swappedOut.push(state.swapSpell.name);
+      const used = Math.max(0, state.selectedSpells.length - plan.addSpells);
+      if ( plan.canSwapSpell && used ) swappedOut.push(...(state.swapSpells ?? []).slice(0, used).map(m => m.name));
     }
+    // A Wizard's Prepare tab: what it changed, and which new book spells go in unprepared.
+    const prepChanges = plan.isSpellcaster ? preparedChangeNames(state)
+      : { nowPrepared: [], noLongerPrepared: [], bookOnly: [] };
 
     /* ---- origin columns ---- */
 
@@ -333,6 +339,18 @@ export const lvlReviewStep = {
         if ( swappedOut.length ) rows.push({
           title: t("levelup.step.review.swappedOut"),
           values: swappedOut.map(name => ({ name }))
+        });
+        if ( prepChanges.bookOnly.length ) rows.push({
+          title: t("levelup.step.review.bookOnly"),
+          values: prepChanges.bookOnly.map(name => ({ name }))
+        });
+        if ( prepChanges.nowPrepared.length ) rows.push({
+          title: t("levelup.step.review.nowPrepared"),
+          values: prepChanges.nowPrepared.map(name => ({ name }))
+        });
+        if ( prepChanges.noLongerPrepared.length ) rows.push({
+          title: t("levelup.step.review.noLongerPrepared"),
+          values: prepChanges.noLongerPrepared.map(name => ({ name }))
         });
       }
 

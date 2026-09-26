@@ -1,0 +1,120 @@
+/* ---------------------------------------------- Review additions
+
+   The detailed breakdown blocks at the bottom of the Review step (extending the
+   "Review" section above). The three origin choices are shown side by side as
+   columns — Class | Background | Species — each listing that origin's traits,
+   granted features, spells, and starting equipment. */
+
+/* The three origin summaries sit side by side: Class | Background | Species. */
+.creator-review-columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin-top: 2rem;
+  align-items: start;
+}
+.creator-review-columns .creator-review-block {
+  margin-top: 0;
+  padding: 1.25rem 0 0;
+  border: none;
+  border-top: 2px solid var(--cc-gold);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+@media (max-width: 900px) {
+  .creator-review-columns { grid-template-columns: 1fr; }
+}
+
+.creator-review-block {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cc-line);
+}
+.creator-review-block > h2 { font-size: 1.2rem; border: none; display: flex; align-items: center; gap: 0.5rem; }
+.creator-review-block h3 { font-size: 0.9rem; color: var(--cc-gold); margin: 0.75rem 0 0.4rem; }
+.creator-review-gold { color: var(--cc-gold); font-weight: 600; }
+.creator-review-origin-img {
+  width: 100%;
+  max-width: 160px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  background: var(--cc-panel-2);
+}
+
+/* Origin section header: small "kind" eyebrow, a large portrait, then the option name. */
+.creator-review-origin-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.creator-review-origin-head h2 { margin: 0; font-size: 1.15rem; text-align: center; }
+/* Keep every heading inside a column centered with its centered title/portrait. */
+.creator-review-columns .creator-review-block :is(h3, h4) { text-align: center; }
+.creator-review-columns .creator-review-spells { justify-content: center; }
+.creator-review-kind {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cc-gold);
+}
+/* Empty origin column: the gold line goes dashed to read as an unfilled slot. */
+.creator-review-columns .creator-review-block.is-empty {
+  border-top-style: dashed;
+}
+.creator-review-origin-head h2.is-muted { color: var(--cc-muted); font-style: italic; font-weight: 400; }
+.creator-review-text p { color: var(--cc-text); line-height: 1.5; margin: 0 0 0.5rem; }
+.creator-review-spells { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+.creator-review-spells li { display: flex; align-items: center; gap: 0.4rem; }
+.creator-review-spells img { width: 20px; height: 20px; border-radius: var(--cc-radius); object-fit: cover; }
+.creator-trait.is-empty .creator-trait-value { color: var(--cc-muted); font-style: italic; }
+
+/* Review trait values hold a mix of plain-text proficiencies and clickable item links. */
+.creator-review .creator-trait-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+.creator-review-val {
+  padding: 0.05rem 0.45rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-pill);
+  font-size: 0.78rem;
+}
+.creator-review .content-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--cc-text);
+  text-decoration: none;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.creator-review .content-link i { display: none; }
+.creator-review .content-link img {
+  width: 20px; height: 20px; border-radius: var(--cc-radius); object-fit: cover;
+  border: 1px solid var(--cc-line);
+}
+.creator-review .content-link:hover { color: var(--cc-gold); }
+
+/* A grouped sub-section (spells / starting equipment) tucked under an origin heading. */
+.creator-review-sub { margin-top: 0.85rem; }
+.creator-review-sub h4 {
+  margin: 0.5rem 0 0.3rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--cc-muted);
+}
+

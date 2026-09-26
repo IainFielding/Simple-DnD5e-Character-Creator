@@ -24,6 +24,9 @@ const deleteErrors = await import(`./delete-errors.mjs${BUST}`);
 const { checkRepair } = await import(`./repair.mjs${BUST}`);
 const { checkQuickBuild } = await import(`./quick-build.mjs${BUST}`);
 const { checkPregens } = await import(`./pregens.mjs${BUST}`);
+const { checkBlankBuild } = await import(`./blank-build.mjs${BUST}`);
+const { checkFeatures } = await import(`./features.mjs${BUST}`);
+const { checkSpellbook } = await import(`./spellbook.mjs${BUST}`);
 
 // The module under test, imported *without* a buster — the same instance the world already loaded.
 const { SourceIndex } = await import("/modules/sogrom-dnd5e-character-creator/scripts/data/source-index.mjs");
@@ -199,6 +202,15 @@ export { checkQuickBuild };
 
 /** The Ready-made path: pregens are imported whole — see `in-world/pregens.mjs`. */
 export { checkPregens };
+
+/** Building into a blank character the GM prepared — see `in-world/blank-build.mjs`. */
+export { checkBlankBuild };
+
+/** The 3.3.0 creation features: party, Suggest, class guide, typed quick name — see `in-world/features.mjs`. */
+export { checkFeatures };
+
+/** The Wizard's spellbook, granted cards and Cleric swaps, through the real windows — see `in-world/spellbook.mjs`. */
+export { checkSpellbook };
 
 /* -------------------------------------------- */
 
@@ -1181,7 +1193,6 @@ export async function probeMagicShopStep({ level = 5 } = {}) {
   const config = magicShopConfig();
   const creationState = { targetLevel: level, magicShop: { d10: null, picks: {} } };
   const out = {
-    enabled: config.enabled,
     inventory: config.inventory.length,
     tier: !!magicShopTier(creationState, config),
     applicable: null, railIds: null, context: null, error: null

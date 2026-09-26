@@ -1,0 +1,43 @@
+/* ---------------------------------------------- Sheet PDF export
+
+   The switch on both review screens (creation and level-up). It sits in the same block frame the
+   review's other panels use, so it reads as one more section of the summary rather than a stray
+   control — but its note line is muted, because it describes something that happens later rather
+   than part of the character.
+
+   There is no disabled state to style: with no module able to print a sheet the block is not
+   rendered at all. */
+.creator-pdf-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+.creator-pdf-toggle { gap: 0.55rem; }
+/* The creation review's finishing options (Add to party, Export PDF) share one row and one rule,
+   so the blocks inside drop their own. Each keeps its note beneath its own button; they wrap onto
+   separate lines only when the window is too narrow for both. An empty row (neither offered)
+   collapses to nothing. */
+.creator-review-finish {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 2rem;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cc-line);
+}
+.creator-review-finish:empty,
+.creator-review-finish:not(:has(.creator-review-block)) { display: none; }
+.creator-review-finish > .creator-review-block {
+  flex: 1 1 18rem;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  flex-direction: column;
+  align-items: flex-start;
+}
+/* The tick box leads the label; the accent marks it as chosen the same way a picked card is. */
+.creator-pdf-toggle.is-active { border-color: var(--cc-select); color: var(--cc-text); }
+.creator-pdf-note { margin: 0; color: var(--cc-muted); font-size: 0.9rem; }
+

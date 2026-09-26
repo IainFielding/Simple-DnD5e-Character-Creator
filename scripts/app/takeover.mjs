@@ -26,7 +26,7 @@ import { log } from "../config.mjs";
  * And we do not have to name anyone else's class names. The render hook hands us the application,
  * so we can put *our own* class on its element, and `!important` beats the inline z-index Foundry
  * rewrites on render and on focus. That is not a new trick here: the same one already lifts the
- * dnd5e Compendium Browser over the takeover from creator.css, for exactly this reason.
+ * dnd5e Compendium Browser over the takeover from styles/creator/02-window.css, for exactly this reason.
  *
  * Raising rather than lowering also deletes the bookkeeping the old shape needed. There is no
  * reference count, because each window carries its own class; nothing has to be restored when a
@@ -48,7 +48,7 @@ import { log } from "../config.mjs";
  * already the rare case, and it is a far smaller cost than burying either of them.
  */
 
-/** The class that lifts someone else's window above the takeover. Styled in creator.css. */
+/** The class that lifts someone else's window above the takeover. Styled in styles/creator/02-window.css. */
 const ABOVE_TAKEOVER = "sogrom-above-takeover";
 
 /**

@@ -124,7 +124,9 @@ export function registerXpNotice() {
   });
 
   // The card's own button. Scoped to our selector so no other module's chat cards are touched.
-  Hooks.on("renderChatMessageHTML", (_message, html) => {
+  // dnd5e's hook, which fires once the system has finished its own changes to the card — core's
+  // `renderChatMessageHTML` fires before them.
+  Hooks.on("dnd5e.renderChatMessage", (_message, html) => {
     const root = html instanceof HTMLElement ? html : html?.[0];
     const button = root?.querySelector("[data-sogrom-levelup-actor]");
     if ( !button ) return;

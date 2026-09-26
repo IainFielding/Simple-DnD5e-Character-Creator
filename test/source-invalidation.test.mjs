@@ -4,15 +4,17 @@ import { invalidateSources } from "../scripts/data/source-cache.mjs";
 import { findRestrictedItems } from "../scripts/data/choice-resolver.mjs";
 import { toolChoices } from "../scripts/data/tool-source.mjs";
 import { phbWeaponIcon } from "../scripts/data/weapon-source.mjs";
+import { foundryPregens } from "../scripts/data/premades.mjs";
 
 /**
  * Cache invalidation when the world's enabled compendium sources change.
  *
- * `SourceIndex`, `SpellSource` and friends hang off the shared cache and go with it. Three memos do
- * not — they live at module scope in their own files — and all three are built by scanning the
- * *enabled* packs: the `allowDrops` restriction scan, the tool-category expansion, and the PHB
- * weapon-icon map. Each test below primes one against a pack set, changes which packs are enabled,
- * and checks that the memo is still there (proving it is a memo at all) and that
+ * `SourceIndex`, `SpellSource` and friends hang off the shared cache and go with it. Four memos do
+ * not — they live at module scope in their own files — and all four are built by scanning the
+ * *enabled* packs: the `allowDrops` restriction scan, the tool-category expansion, the PHB
+ * weapon-icon map and the Ready-made pregen shelf. Each test below primes one against a pack set,
+ * changes which packs are enabled, and checks that the memo is still there (proving it is a memo
+ * at all) and that
  * `invalidateSources()` clears it — otherwise a GM switching a pack off keeps being offered its
  * content for the rest of the session.
  */
@@ -104,5 +106,30 @@ describe("enabled-source invalidation", () => {
 
     invalidateSources();
     expect(await phbWeaponIcon("weapon:mar:longsword")).toBeNull();
+  });
+
+  it("drops a switched-off pregen pack from the Ready-made shelf once invalidated", async () => {
+    const hero = {
+      id: "hero", uuid: "Compendium.dnd-heroes-borderlands.actors.Actor.hero", name: "Hero",
+      type: "character", img: "hero.webp", system: {},
+      items: [{ type: "class", name: "Fighter", img: "", system: { levels: 1 } }]
+    };
+    const actors = {
+      collection: "dnd-heroes-borderlands.actors", documentName: "Actor", metadata: { type: "Actor" },
+      getIndex: async () => [{ _id: "hero", type: "character" }],
+      getDocument: async () => hero
+    };
+    // The reader looks packs up by id and the enabled-set helper iterates them: an array with a
+    // `get` serves both, as Foundry's own collection does.
+    game.packs = Object.assign([actors], { get: id => (id === actors.collection ? actors : undefined) });
+    const names = async () => (await foundryPregens()).flatMap(g => g.entries.map(e => e.name));
+
+    expect(await names()).toEqual(["Hero"]);
+
+    disable("dnd-heroes-borderlands.actors");
+    expect(await names()).toEqual(["Hero"]);
+
+    invalidateSources();
+    expect(await names()).toEqual([]);
   });
 });

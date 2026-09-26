@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import { SETTINGS } from "../scripts/config.mjs";
 import {
-  postCreationSummary, captureLevelUpSummary, postLevelUpSummary
+  postCreationSummary, captureLevelUpSummary, postLevelUpSummary, partyButtonState
 } from "../scripts/build/chat-summary.mjs";
 
 /**
@@ -96,6 +96,8 @@ describe("creation summary", () => {
 
     const ctx = postedContext();
     expect(ctx.name).toBe("Vex");
+    // The party button finds its character by this id at render time.
+    expect(ctx.actorId).toBe("actor0000000000");
     // The level and the classes are separate pieces, so each class can be its own link.
     expect(ctx.levelLabel).toContain("\"level\":3");
     expect(ctx.classes).toEqual([
@@ -371,5 +373,42 @@ describe("level-up summary posting", () => {
   it("swallows a posting failure rather than losing the applied level", async () => {
     ChatMessage.create = async () => { throw new Error("no chat log"); };
     await expect(postLevelUpSummary(makeActor([]), snapshot)).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * The creation card's "Add to party" button. Its state is decided per viewer at render time, so the
+ * rules live in a pure function: only an owner of the party sees it, only while dnd5e has a primary party and the
+ * character still exists, and it reads as spent once the character is already a member.
+ */
+describe("partyButtonState", () => {
+  const party = { name: "The Company", system: { members: { ids: new Set(["member000000001"]) } } };
+  const actor = { id: "actor0000000000" };
+
+  it("offers the add button to the party's owner when the character is not yet a member", () => {
+    expect(partyButtonState({ canEdit: true, party, actor })).toEqual({ state: "add", partyName: "The Company" });
+  });
+
+  it("reads as a member once the character is in the party", () => {
+    expect(partyButtonState({ canEdit: true, party, actor: { id: "member000000001" } }))
+      .toEqual({ state: "member", partyName: "The Company" });
+  });
+
+  // Adding a member is an update to the party actor; without ownership it would fail on click.
+  it("shows nothing to someone who doesn't own the party", () => {
+    expect(partyButtonState({ canEdit: false, party, actor })).toBeNull();
+  });
+
+  it("shows nothing when the world has no primary party", () => {
+    expect(partyButtonState({ canEdit: true, party: null, actor })).toBeNull();
+  });
+
+  it("shows nothing when the character has since been deleted", () => {
+    expect(partyButtonState({ canEdit: true, party, actor: null })).toBeNull();
+  });
+
+  it("treats a party without a readable member list as not containing the character", () => {
+    expect(partyButtonState({ canEdit: true, party: { name: "P", system: {} }, actor }))
+      .toEqual({ state: "add", partyName: "P" });
   });
 });

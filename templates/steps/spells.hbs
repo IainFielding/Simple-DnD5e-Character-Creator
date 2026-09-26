@@ -1,6 +1,8 @@
 {{!--
   The Spells step (creation): pick the cantrips and level-1 spells a spellcasting class knows. Two
   tabs (cantrips / level-1), a filterable list of the class's spells, and a running "picked" tally.
+  A spellbook class (the Wizard) calls the level-1 tab "Spellbook" and gets a third, "Prepare",
+  listing its book picks so the player can choose which are prepared.
   Non-casters get a short "nothing to choose" message instead (the {{else}} of `isSpellcaster`).
   Data from spells-step.mjs context(); clicking a spell fires data-action="pick-spell".
 --}}
@@ -9,6 +11,7 @@
   <!-- Main column: intro, tabs, filters, and the spell list for the active tab -->
   <div class="creator-pick-side">
     <p class="levelup-spells-intro">{{intro}}</p>
+    {{#if prepareNote}}<p class="levelup-spells-intro">{{prepareNote}}</p>{{/if}}
     {{> "modules/sogrom-dnd5e-character-creator/templates/parts/spell-list-notice.hbs" this}}
 
     {{!-- With no list to draw from there is nothing behind any of these: the tabs would count
@@ -27,22 +30,30 @@
       {{#if hasLevel1}}
       <button type="button" class="creator-spell-tab {{#if isLevel1Tab}}is-active{{/if}} {{#if spellsFull}}is-full{{/if}}"
               data-action="stepAction" data-step-action="spell-tab" data-tab="level1">
-        {{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}
+        {{#if isBook}}{{localize "sogrom-dnd5e-character-creator.step.spells.spellbookTab"}}{{else}}{{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}{{/if}}
         <span class="creator-spell-count">{{spellCount}}/{{maxSpells}}</span>
       </button>
       {{/if}}
+      {{#if isBook}}
+      <button type="button" class="creator-spell-tab {{#if isPrepareTab}}is-active{{/if}} {{#if preparedTabFull}}is-full{{/if}}"
+              data-action="stepAction" data-step-action="spell-tab" data-tab="prepare">
+        {{localize "sogrom-dnd5e-character-creator.step.spells.prepareTab"}}
+        <span class="creator-spell-count">{{preparedCount}}/{{maxPrepared}}</span>
+      </button>
+      {{/if}}
     </div>
+    {{#if isPrepareTab}}<p class="levelup-spells-intro">{{localize "sogrom-dnd5e-character-creator.step.spells.prepareIntro" prepared=maxPrepared}}</p>{{/if}}
 
     <div class="creator-toolbar creator-toolbar--stacked">
+      {{!-- No "Choose N more" here: the tab counts ("1/3") and the footer's hint already say it. --}}
       {{> "modules/sogrom-dnd5e-character-creator/templates/parts/spell-filters.hbs" showLevel=isLevel1Tab}}
-      <span class="creator-count">{{needLabel}}</span>
     </div>
 
     <ul class="creator-picklist">
       {{#each list}}
       {{> "modules/sogrom-dnd5e-character-creator/templates/parts/spell-row.hbs" this compareCategory=../compareCategory}}
       {{else}}
-      <p class="creator-empty">{{localize "sogrom-dnd5e-character-creator.step.spells.empty"}}</p>
+      <p class="creator-empty">{{#if isPrepareTab}}{{localize "sogrom-dnd5e-character-creator.step.spells.prepareEmpty"}}{{else}}{{localize "sogrom-dnd5e-character-creator.step.spells.empty"}}{{/if}}</p>
       {{/each}}
     </ul>
     {{/unless}}
@@ -54,24 +65,24 @@
     <div class="creator-pick-desc-scroll">
     {{#if focused}}
     <article class="creator-detail">
-      <header class="creator-detail-head">
-        <img class="creator-detail-img" src="{{focused.img}}" alt="">
-        <div>
-          <h2>{{focused.name}}</h2>
-          <p class="creator-spell-meta">
-            {{focused.school}}{{#if focused.components}} · {{focused.components}}{{/if}}
-            {{#if focused.isConcentration}} · {{localize "sogrom-dnd5e-character-creator.step.spells.concentration"}}{{/if}}
-            {{#if focused.isRitual}} · {{localize "sogrom-dnd5e-character-creator.step.spells.ritual"}}{{/if}}
-          </p>
-        </div>
-        {{!-- Provenance badge, as on the class, species, background and subclass panels. --}}
-        {{#if focused.source}}
-        <span class="creator-detail-source" title="{{focused.source}}">
-          <i class="fa-solid fa-book" aria-hidden="true"></i>{{focused.source}}
-        </span>
-        {{/if}}
-      </header>
+      {{> "modules/sogrom-dnd5e-character-creator/templates/parts/spell-detail-head.hbs" focused}}
 
+      {{#if focused.granted}}
+      {{!-- A spell an origin grants: say which, and offer nothing to press. --}}
+      <p class="creator-swap-note"><i class="fa-solid fa-gift" aria-hidden="true"></i><span>{{focused.grantedNote}}</span></p>
+      {{else if focused.prepareMode}}
+      {{!-- The Prepare tab: the button prepares or unprepares the book pick instead of adding it. --}}
+      <button type="button" class="creator-btn {{#if focused.prepared}}creator-btn-danger{{else}}creator-btn-primary{{/if}}"
+              data-action="stepAction" data-step-action="toggle-prepared"
+              data-uuid="{{focused.uuid}}"
+              {{#if focused.prepareDisabled}}disabled{{/if}}>
+        {{#if focused.prepared}}
+        <i class="fa-solid fa-book"></i> {{localize "sogrom-dnd5e-character-creator.step.spells.unprepare"}}
+        {{else}}
+        <i class="fa-solid fa-book-open"></i> {{localize "sogrom-dnd5e-character-creator.step.spells.prepare"}}
+        {{/if}}
+      </button>
+      {{else}}
       <button type="button" class="creator-btn {{#if focused.active}}creator-btn-danger{{else}}creator-btn-primary{{/if}}"
               data-action="stepAction" data-step-action="pick-spell"
               data-uuid="{{focused.uuid}}" data-level="{{focused.level}}"
@@ -82,6 +93,7 @@
         <i class="fa-solid fa-plus"></i> {{localize "sogrom-dnd5e-character-creator.step.spells.add"}}
         {{/if}}
       </button>
+      {{/if}}
 
       <div class="creator-detail-body">{{{focused.description}}}</div>
     </article>
@@ -109,7 +121,29 @@
           </ul>
         </div>
         {{/if}}
-        {{#if selectedSpells.length}}
+        {{#if isBook}}
+        {{!-- A book caster's picks, split the way they land on the sheet. --}}
+        {{#if preparedChips.length}}
+        <div class="creator-spell-group">
+          <span class="creator-spell-group-label">{{localize "sogrom-dnd5e-character-creator.step.spells.groupPrepared"}}</span>
+          <ul class="creator-spell-chips">
+            {{#each preparedChips}}
+            <li><a class="content-link creator-spell-chip" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
+        {{#if bookOnlyChips.length}}
+        <div class="creator-spell-group">
+          <span class="creator-spell-group-label">{{localize "sogrom-dnd5e-character-creator.step.spells.groupBookOnly"}}</span>
+          <ul class="creator-spell-chips">
+            {{#each bookOnlyChips}}
+            <li><a class="content-link creator-spell-chip is-unprepared" data-uuid="{{uuid}}" data-link data-tooltip="{{ccItemTooltip uuid}}"><img src="{{img}}" alt="">{{name}}</a></li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
+        {{else if selectedSpells.length}}
         <div class="creator-spell-group">
           <span class="creator-spell-group-label">{{localize "sogrom-dnd5e-character-creator.step.spells.level1"}}</span>
           <ul class="creator-spell-chips">

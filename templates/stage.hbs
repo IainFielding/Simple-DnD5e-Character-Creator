@@ -58,6 +58,19 @@
     {{else}}
     {{#if nav.hint}}<span class="creator-nav-hint" role="status"><i class="fa-solid fa-circle-info"></i>{{nav.hint}}</span>{{/if}}
     {{/if}}
+    <div class="creator-stage-foot-end">
+    {{!-- Compare, for any step whose grid can pin cards (spells, class, species, background). In the
+          footer rather than the step's toolbar so it is always in reach and never squeezed off the
+          end of a wrapping filter row. Its label and tooltip are patched in place as pins change
+          (_togglePin), so pinning never re-renders the step. --}}
+    {{#if step.compare}}
+    <button type="button" class="creator-btn creator-btn-ghost creator-compare-btn"
+            data-action="openCompare" data-category="{{step.compare.category}}"
+            data-tooltip="{{step.compare.hint}}" {{#unless step.compare.canCompare}}disabled{{/unless}}>
+      <i class="fa-solid fa-scale-balanced"></i>
+      <span class="creator-compare-btn-label">{{step.compare.label}}</span>
+    </button>
+    {{/if}}
     {{!-- The way back to the quick screen, for a player who left it to browse one category in
           full. Lives in the footer rather than in the step, so no step has to know that screen
           exists — the same reason the entry screens are overlays rather than steps. --}}
@@ -85,6 +98,7 @@
       <span class="creator-btn-icon"><i class="fa-solid fa-arrow-right"></i></span>
     </button>
     {{/if}}
+    </div>
   </footer>
   {{/if}}
 </div>

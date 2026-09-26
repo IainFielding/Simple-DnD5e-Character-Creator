@@ -1,0 +1,387 @@
+/* ---------------------------------------------- Review
+
+   The final summary step. Shows the chosen portrait, a row of summary cards (one per
+   origin choice), and the finished ability scores before the character is created.
+   (Per-origin breakdown blocks for this step live in "Review additions" below.) */
+
+/* Portrait above the ability scores — matched to the Details step's frame size. */
+.creator-review-portrait { display: flex; justify-content: center; margin-bottom: 1.5rem; }
+.creator-review-portrait .creator-portrait-frame { width: 260px; max-width: 100%; }
+
+.creator-review-abilities { text-align: center; }
+.creator-review-abilities h2 { border: none; font-size: 1.2rem; }
+.creator-review-abilities h2 small { color: var(--cc-muted); font-weight: 400; }
+.creator-review-abilities .creator-score-strip { justify-content: center; }
+.creator-score-strip { list-style: none; margin: 0.75rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.creator-score {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  padding: 0.7rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+}
+.creator-score-abbr { font-size: 0.75rem; color: var(--cc-muted); text-transform: uppercase; }
+.creator-score-value { font-size: 1.4rem; font-weight: 700; }
+.creator-score-mod { color: var(--cc-gold); font-variant-numeric: tabular-nums; }
+.creator-score-bonus {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--cc-gold);
+  background: color-mix(in srgb, var(--cc-gold) 22%, var(--cc-panel));
+  border: 1px solid color-mix(in srgb, var(--cc-gold) 50%, transparent);
+  border-radius: var(--cc-radius-pill);
+  cursor: default;
+}
+
+.creator-btn-danger { background: var(--cc-danger); border-color: var(--cc-danger); color: #fff; }
+
+/* ---------------------------------------------- Details step
+
+   The identity step, split into two columns: a media column on the left (portrait,
+   token image with its ring/token tabs, and the token display toggles) and a form
+   column on the right for the character's name and other text fields. */
+
+.creator-details {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1.5rem;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Left column: portrait, a token/ring tab + its image, and the token toggle rows. */
+.creator-details-media {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.25rem 1rem;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  overflow-y: auto;
+  min-height: 0;
+}
+.creator-portrait-frame {
+  width: 100%;
+  max-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--cc-gold);
+  border-radius: var(--cc-radius);
+  box-shadow: 0 0 18px var(--cc-settled-glow), inset 0 0 8px rgba(0, 0, 0, 0.6);
+  background: var(--cc-panel-2);
+  overflow: hidden;
+}
+.creator-portrait-img { width: 100%; height: auto; max-height: 280px; display: block; object-fit: cover; }
+/* Match the dnd5e actor sheet portrait: cover-cropped and anchored to the top so faces stay visible. */
+.creator-portrait-img--photo {
+  height: 100%;
+  min-height: 180px;
+  max-height: 280px;
+  object-fit: cover;
+  object-position: top center;
+}
+/* Match the dnd5e actor sheet token: contained and centered (not cropped) with a soft drop-shadow. */
+.creator-portrait-img--token {
+  height: 100%;
+  min-height: 180px;
+  max-height: 280px;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.85));
+}
+.creator-portrait-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.creator-portrait-btn:hover { color: var(--cc-text); border-color: var(--cc-gold); }
+
+.creator-media-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0;
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--cc-muted);
+}
+.creator-media-divider::before,
+.creator-media-divider::after { content: ""; flex: 1; height: 1px; background: var(--cc-line); }
+
+.creator-token-tabs {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  overflow: hidden;
+}
+.creator-token-tab {
+  flex: 1;
+  padding: 0.45rem 0.25rem;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--cc-line);
+  color: var(--cc-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.creator-token-tab:last-child { border-right: none; }
+.creator-token-tab:hover:not(.is-active) { background: var(--cc-select-soft); color: var(--cc-text); }
+.creator-token-tab.is-active { background: var(--cc-select); color: #1c1408; }
+
+.creator-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0.5rem;
+}
+.creator-setting-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-muted);
+}
+.creator-setting-toggle {
+  min-width: 48px;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.creator-setting-toggle:hover { border-color: var(--cc-gold); color: var(--cc-text); }
+.creator-setting-toggle.is-on { background: var(--cc-select-soft); border-color: var(--cc-gold); color: var(--cc-gold); }
+
+/* Right column: the identity form (title, name, optional fields). */
+.creator-details-form {
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.creator-details-title { margin: 0; border: none; font-size: 1.6rem; color: var(--cc-text); }
+.creator-details-subtitle { margin: -0.6rem 0 0; font-style: italic; font-size: 0.9rem; color: var(--cc-muted); }
+
+.creator-detail-name { display: flex; flex-direction: column; gap: 0.4rem; }
+.creator-detail-name label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cc-gold);
+}
+.creator-details .creator-detail-name input { font-size: 1.1rem; border-color: var(--cc-gold); }
+.creator-name-row { position: relative; display: flex; gap: 0.5rem; align-items: stretch; }
+.creator-name-row input { flex: 1 1 auto; }
+.creator-name-roll {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  /* No explicit height + min-height:0 lets the row's align-items:stretch size these to the
+     input, so the dice box always matches the name box exactly (Foundry's default button
+     min-height would otherwise make them taller). */
+  min-height: 0;
+  padding: 0;
+  font-size: 1.05rem;
+  color: var(--cc-gold);
+  background: transparent;
+  border: 1px solid var(--cc-gold);
+  border-radius: var(--cc-radius);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.creator-name-roll:hover { color: var(--cc-bg, #1b1b1f); background: var(--cc-gold); }
+/* Drop the click/focus box on pointer interaction (this also outranks Foundry
+   core's :focus outline) — the hover colour change is feedback enough. The
+   :not(:focus-visible) guard means keyboard focus still gets the shared accent
+   ring; only mouse-driven focus is stripped. */
+.creator-details .creator-name-roll:focus:not(:focus-visible),
+.creator-details .creator-name-roll:active { outline: none; box-shadow: none; }
+/* The options caret: a quieter sibling to the dice — narrower, muted until used. */
+.creator-name-opts { width: 1.8rem; font-size: 0.85rem; color: var(--cc-muted); border-color: var(--cc-muted); }
+.creator-name-opts:hover,
+.creator-name-opts.is-active { color: var(--cc-bg, #1b1b1f); background: var(--cc-gold); border-color: var(--cc-gold); }
+
+/* Random-name settings live in a popover hung under the name row, opened from the caret. */
+.creator-name-pop {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 16rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--cc-panel, #232331);
+  border: 1px solid var(--cc-gold);
+  border-radius: var(--cc-radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.creator-name-pop.is-open { display: flex; }
+/* A small pointer up toward the caret that opened it. */
+.creator-name-pop::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 0.7rem;
+  width: 8px;
+  height: 8px;
+  background: var(--cc-panel, #232331);
+  border-left: 1px solid var(--cc-gold);
+  border-top: 1px solid var(--cc-gold);
+  transform: rotate(45deg);
+}
+.creator-name-gender {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.creator-name-gender-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-muted, #807d92);
+}
+.creator-name-gender-options { display: inline-flex; border: 1px solid var(--cc-gold); border-radius: var(--cc-radius); overflow: hidden; }
+.creator-name-gender-opt {
+  padding: 0.2rem 0.7rem;
+  font-size: 0.78rem;
+  color: var(--cc-gold);
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--cc-gold);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.creator-name-gender-opt:first-child { border-left: 0; }
+.creator-name-gender-opt:hover { background: rgba(190, 160, 90, 0.18); }
+.creator-name-gender-opt.is-active { color: var(--cc-bg, #1b1b1f); background: var(--cc-gold); }
+.creator-name-style {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.creator-name-style-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-muted, #807d92);
+}
+.creator-name-style-select {
+  flex: 1 1 auto;
+  padding: 0.18rem 0.4rem;
+  font-size: 0.8rem;
+  color: var(--cc-text);
+  background: var(--cc-bg);
+  border: 1px solid var(--cc-gold);
+  border-radius: var(--cc-radius);
+  cursor: pointer;
+}
+.creator-name-style-select:focus { outline: none; border-color: var(--cc-gold-bright); }
+/* The native dropdown list (options) defaults to white — paint it to match the panel. */
+.creator-name-style-select option {
+  color: var(--cc-text);
+  background: var(--cc-panel);
+}
+.creator-required { color: var(--cc-danger); }
+
+.creator-detail-optional {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--cc-muted);
+}
+
+.creator-detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+.creator-detail-textgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+.creator-detail-textwide { width: 100%; }
+.creator-detail-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.creator-detail-field label {
+  /* These are read on every pass through the form, so they sit at the legible end of
+     the engraved-caps scale (0.74rem) rather than the 0.66–0.68rem floor used for
+     one-off dividers and tags elsewhere. */
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-muted);
+}
+.creator-details :is(input, select, textarea) {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius);
+  color: var(--cc-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.creator-details :is(input, select, textarea):focus { border-color: var(--cc-gold); outline: none; }
+.creator-details textarea { resize: vertical; }
+/* Foundry core pins every `input` and `select` to `height: var(--input-height)` (2rem), and gives
+   the select a matching `line-height`. Module CSS sits outside Foundry's cascade layers, so the
+   padding above wins over its `padding: 0 0.5rem` — but the height does not. On a select that left
+   a 2rem line rendering inside a content box the padding had shrunk to ~14px, clipping the text to
+   about half a line.
+   The fix drops only the vertical padding, keeping Foundry's 2rem height: releasing the height
+   instead would size the select from the padding and make it visibly taller than every text input
+   beside it, which are all still pinned at 2rem. Horizontal padding stays, so the text still lines
+   up with its neighbours. */
+.creator-details select { line-height: normal; padding-block: 0; }
+/* The free-text box the alignment list reveals for "Other" — sits directly under its select,
+   sharing the field's own 0.3rem stack gap, so the pair reads as one control rather than two. */
+.creator-detail-alignment-other { margin-top: 0.1rem; }
+
+@media (max-width: 760px) {
+  .creator-detail-grid { grid-template-columns: repeat(2, 1fr); }
+  .creator-detail-textgrid { grid-template-columns: 1fr; }
+}
+

@@ -1,5 +1,5 @@
 import { t, log } from "../config.mjs";
-import { getEnabledPacks } from "./compendium-util.mjs";
+import { getEnabledPacks, packIndex } from "./compendium-util.mjs";
 import { createItemData } from "./item-factory.mjs";
 import { TOOL_IMG, toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
@@ -200,7 +200,7 @@ export class EquipmentSource {
         if ( pack.metadata.system && pack.metadata.system !== "dnd5e" ) continue;
         if ( enabled && !enabled.has(pack.collection) ) continue;
         try {
-          const index = await pack.getIndex({ fields: ["system.identifier"] });
+          const index = await packIndex(pack, { fields: ["system.identifier"] });
           for ( const e of index ) {
             const id = e.system?.identifier;
             if ( !id || !want.has(id) ) continue;

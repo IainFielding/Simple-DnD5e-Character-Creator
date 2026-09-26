@@ -1,0 +1,474 @@
+/* ---------------------------------------------- Creator shell grid
+
+   The creator renders three parts as siblings — the top bar, the dossier and the
+   stage — so its root is a grid: one full-width band across the top, then a fixed
+   dossier column beside a flexible work surface.
+
+   Scoped by :has(.creator-dossier) rather than by the root class, because the root
+   class is shared with the level-up window. That window renders two parts (rail +
+   stage) and keeps the flex column the base rules give it. */
+.sogrom-creator-fullscreen:has(.creator-dossier),
+.sogrom-creator-windowed .window-content:has(.creator-dossier) {
+  display: grid;
+  /* The one fixed column in the layout. Everything else flexes, which is the
+     point: the surface being read is the one that keeps its measure. */
+  grid-template-columns: 292px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.sogrom-creator-fullscreen:has(.creator-dossier) > .creator-topbar,
+.sogrom-creator-windowed .window-content:has(.creator-dossier) > .creator-topbar {
+  grid-column: 1 / -1;
+}
+
+/* ---------------------------------------------- Top bar
+
+   The band across the top of both windows: brand at the left, Cancel at the right,
+   and between them whatever that window uses to show where you are — a progress
+   meter where a character is being created (topbar.hbs, which the Ember hand-off
+   renders too), the step markers in a level-up (rail.hbs). */
+.creator-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.35rem 1.25rem;
+  background: var(--cc-chrome-grad);
+  border-bottom: 1px solid var(--cc-line-2);
+}
+
+.creator-topbar-brand {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-right: 1.5rem;
+  border-right: 1px solid var(--cc-line);
+  font-family: var(--cc-font-heading);
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--cc-bright);
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+/* The brand mark, drawn as a ::before rather than as markup: topbar.hbs and rail.hbs
+   render a wordmark and a version only, and neither wants an <i> whose only job is to
+   carry a background. (One used to exist for exactly that, and outlived the stepper it
+   was drawn for — which is how this ended up a pseudo-element.)
+
+   The mark is the dnd5e system's own gold ampersand, referenced out of the system
+   directory and never copied into this repo. That is deliberate and it is the same rule
+   the Ember skin follows: `systems/dnd5e/ui/official/` ships a LICENSE restricting its
+   artwork to "running the dnd5e game system within Foundry Virtual Tabletop", and the
+   dragon ampersand is a registered trademark of Wizards of the Coast. Referencing a file
+   from the user's own installed system, rendered only inside Foundry, is use within that
+   sentence; shipping a copy of it would not be. Do not vendor it, and do not point this
+   at a file we host.
+
+   The Ember skin overrides the image (not the box) with Ember's own mark. */
+.creator-topbar-brand::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  background: url("../../../systems/dnd5e/ui/official/ampersand-gold.svg") no-repeat center / contain;
+}
+
+.creator-topbar-version {
+  align-self: flex-end;
+  font-family: var(--cc-font-body, inherit);
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  opacity: 0.5;
+}
+
+.creator-topbar-foot { flex: 0 0 auto; margin-left: auto; }
+
+/* --- The progress meter (creator) -------------------------------------
+   One measure of how far through the player is, visible on every step.
+
+   What it replaced was a row of eleven numbered pills that scrolled sideways, plus
+   a "Step 3 of 9" counter in the stage head that was suppressed on exactly the pick
+   steps making up most of the flow — so on most screens the only progress cue was a
+   2px underscore under one pill. The step list itself moved to the dossier, where it
+   is vertical and its labels fit at any width; what a band across the top is actually
+   good at is this. */
+.creator-topbar-progress {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+/* 5px, not 3px. This is the only global progress cue in the creator and it spans the
+   full width of the top bar; at 3px it was a scratch, and the brass fill's leading edge
+   — the thing actually being read — had almost no area to land on. */
+.creator-progress-track {
+  flex: 1;
+  min-width: 60px;
+  height: 5px;
+  position: relative;
+  background: var(--cc-line);
+}
+/* Brass: the fill is the ground already covered — the steps behind the player — which is the
+   warm/settled half of the palette. What is still *outstanding* is the teal chip beside it; the
+   bar deliberately does not try to say that too. See #progressContext() for why. */
+.creator-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--cc-settled);
+  transition: width 0.3s var(--cc-ease);
+}
+.creator-progress-read {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.creator-progress-pos { color: var(--cc-muted); }
+/* The standing answer to "what is left". Teal, like everything outstanding — and
+   absent at zero rather than reading "0 outstanding", which would be a thing to
+   parse where nothing at all is a thing to notice. */
+.creator-progress-todo {
+  color: var(--cc-open);
+  border: 1px solid var(--cc-open);
+  background: var(--cc-open-soft);
+  padding: 0.05rem 0.4rem;
+  font-weight: 600;
+}
+
+/* --- The step pills (level-up only) -----------------------------------
+   Still the level-up window's chrome: a short, fixed list of levels and choices,
+   which is what a horizontal stepper suits. The creator's list outgrew it. */
+.creator-topbar-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.creator-rail-step {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.creator-rail-link {
+  display: flex;
+  align-items: center;
+  /* Override Foundry's button justify-content:center so the circle/text hug the left. */
+  justify-content: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  /* Override Foundry's fixed button height (28px) so the row grows to its content. */
+  height: auto;
+  min-height: auto;
+  padding: 0.4rem 0.65rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--cc-radius-pill);
+  color: var(--cc-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.25s var(--cc-ease), color 0.25s var(--cc-ease),
+    border-color 0.25s var(--cc-ease), transform 0.25s var(--cc-ease);
+}
+.creator-rail-link:hover:not(:disabled) { background: var(--cc-panel); color: var(--cc-text); }
+.creator-rail-link:active:not(:disabled) { transform: scale(0.97); }
+.creator-rail-link:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Active tab: tinted ground plus a gold underscore stamped along its foot,
+   like a tab cut into the edge of a bound book. */
+.creator-rail-step.is-active .creator-rail-link {
+  background: var(--cc-select-soft);
+  border-color: transparent;
+  box-shadow: inset 0 -2px 0 var(--cc-select);
+  color: var(--cc-bright);
+}
+
+/* The marker is a numeral, not a badge — no disc, no ring. What carries the
+   state is colour plus the gold underscore on the active step's tab. */
+.creator-rail-marker {
+  flex: 0 0 auto;
+  min-width: 1.5em;
+  height: auto;
+  display: inline-block;
+  text-align: right;
+  border-radius: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  font-family: var(--cc-font-heading);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  /* A step number is text, so it takes a text token rather than the border colour
+     it used to borrow. */
+  color: var(--cc-text-faint);
+}
+.creator-rail-step.is-active .creator-rail-marker {
+  border-color: transparent;
+  color: var(--cc-gold-bright);
+  background: none;
+  box-shadow: none;
+}
+.creator-rail-step.is-complete .creator-rail-marker {
+  background: transparent;
+  border-color: transparent;
+  color: var(--cc-gold);
+}
+.creator-rail-step.is-complete .creator-rail-marker i { font-size: 0.9rem; }
+
+/* Not-applicable step (e.g. Spells for a non-caster): greyed, dashed marker, no tick. */
+.creator-rail-step.is-skipped .creator-rail-link { opacity: 0.55; }
+.creator-rail-step.is-skipped .creator-rail-marker { color: var(--cc-muted); }
+.creator-rail-step.is-skipped .creator-rail-marker i { font-size: 0.85rem; }
+
+.creator-rail-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------- Dossier
+
+   The creator's left column: the character sheet filling up, and the step
+   navigation, as one object. See templates/dossier.hbs for why they merged.
+
+   It is the sunk surface of the two — a good 30% darker than the work ground it
+   sits beside, with a real border, so the split reads at the brightness Foundry
+   actually gets played at rather than resting on a hairline. */
+.creator-dossier {
+  grid-row: 2;
+  grid-column: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--cc-sunk);
+  border-right: 1px solid var(--cc-line-2);
+}
+
+/* --- Identity --- */
+.creator-dossier-ident {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 0.9rem 0.85rem;
+  border-bottom: 1px solid var(--cc-line);
+}
+.creator-dossier-plate {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--cc-line-2);
+  background: linear-gradient(160deg, #2a2d34, #191b20);
+  overflow: hidden;
+}
+.creator-dossier-plate img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.creator-dossier-names { min-width: 0; }
+.creator-dossier-name {
+  margin: 0;
+  font-family: var(--cc-font-heading);
+  font-size: 1.1rem;
+  line-height: 1.15;
+  color: var(--cc-bright);
+  overflow-wrap: anywhere;
+}
+/* Not yet named. Italic and muted so it reads as a blank on the sheet rather than
+   as a character actually called "Unnamed". */
+.creator-dossier-name.is-unset { color: var(--cc-muted); font-style: italic; font-size: 1rem; }
+.creator-dossier-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  color: var(--cc-muted);
+  letter-spacing: 0.02em;
+}
+
+/* --- The six scores, as a readout ---
+   Plates, not steppers. The dossier reports; the work surface sets. */
+/* No rules between the plates at all — they are separated by space.
+
+   This block has now been through three border treatments and the bottom-right plate looked
+   wrong under every one of them. Gap lines over a coloured container left the right column
+   closed by the dossier's own lighter border; per-cell borders with the right column
+   excepted made those two plates a pixel wider inside and outlined in a different colour;
+   per-cell borders without the exception put a doubled edge down the right-hand column
+   alone. Every version had *some* asymmetry, because a border on a grid cell is always a
+   function of where that cell sits.
+
+   Space cannot be asymmetric. With no cell borders there is no box to be misaligned, the
+   six plates are identical by construction, and the block reads as a stat line rather than
+   a table — which is what it is. The one rule left is the block's own bottom edge, which
+   spans the full width and so is the same for every plate above it. */
+.creator-dossier-scores {
+  list-style: none;
+  margin: 0;
+  padding: 0.55rem 0.4rem 0.7rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.55rem 0;
+  border-bottom: 1px solid var(--cc-line);
+}
+.creator-dossier-score {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+
+/* Every line in a plate has an explicit line-height, so a plate's height is decided by this
+   stylesheet and never by whichever font ends up drawing the glyphs. That is not fussiness:
+   one character falling through to a fallback face (U+2212 did exactly this) makes its line
+   box taller, and the plate holding it ends up taller than the five beside it — a difference
+   that is invisible in the CSS and reads as one misaligned box. */
+.creator-dossier-abbr {
+  display: block;
+  font-size: 0.58rem;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  /* Letter-spacing is applied after the last letter too, and centring counts that trailing
+     space — so a letterspaced label centres slightly left of the number beneath it. Pulling
+     the tracking back off the end re-centres the label over its own score. */
+  margin-right: -0.14em;
+  color: var(--cc-muted);
+}
+.creator-dossier-value {
+  display: block;
+  font-family: var(--cc-font-heading);
+  font-size: 1.25rem;
+  line-height: 1.15;
+  color: var(--cc-bright);
+  font-variant-numeric: tabular-nums;
+}
+.creator-dossier-mod {
+  display: block;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  color: var(--cc-settled);
+  font-variant-numeric: tabular-nums;
+  /* Holds the line open when a plate has no modifier yet, so an unset plate is the same
+     height as a set one. */
+  min-height: 1.2em;
+}
+
+/* Before the scores are set, the plates are blanks — see #dossierAbilities() for why
+   the raw 8/8/8/8/8/8 must not be shown as if the player had chosen it. */
+.creator-dossier-score.is-unset .creator-dossier-value { color: var(--cc-text-faint); }
+/* An origin's increase, in the corner of the plate it raised. */
+.creator-dossier-bonus {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.3rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--cc-settled);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The roll: steps as sheet lines --- */
+.creator-dossier-heading {
+  margin: 0;
+  padding: 0.85rem 0.9rem 0.4rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+  border: 0;
+}
+.creator-dossier-roll { list-style: none; margin: 0; padding: 0 0 1.25rem; }
+
+.creator-dossier-line {
+  display: grid;
+  /* Key, value, then whichever state marker applies. The key column is fixed so the
+     values line up down the sheet. */
+  grid-template-columns: 5.4rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  /* Override Foundry's fixed button height and centring. */
+  height: auto;
+  min-height: auto;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 0.4rem 0.8rem 0.4rem 0.55rem;
+  background: none;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: var(--cc-radius);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.18s var(--cc-ease), border-color 0.18s var(--cc-ease);
+}
+.creator-dossier-line:hover:not(:disabled) { background: rgba(255, 255, 255, 0.035); }
+/* Not reachable yet: every step before it isn't finished. Dimmed and inert — and
+   deliberately *not* marked outstanding, since there is nothing to act on.
+
+   0.42 was too far. A disabled control is exempt from the contrast floor, but this
+   is not one disabled control — it is most of the roll, and the roll is the only
+   place a player can see what the flow ahead of them contains. At 0.42 the keys
+   read 2.1:1 and the values 1.2:1, which is not "dimmed", it is gone. 0.65 keeps
+   the state obvious (still clearly inert next to a reachable line) while leaving
+   the labels legible enough to plan by. */
+.creator-dossier-line:disabled { opacity: 0.65; cursor: default; }
+
+.creator-dossier-key {
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.creator-dossier-value-line {
+  font-size: 0.88rem;
+  line-height: 1.25;
+  color: var(--cc-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Filled in: the value reads as ink on the sheet, and its key warms to match. */
+.creator-dossier-line.is-complete .creator-dossier-value-line { color: var(--cc-text); }
+.creator-dossier-line.is-complete .creator-dossier-key { color: var(--cc-settled); opacity: 0.75; }
+/* You are here. */
+.creator-dossier-line.is-active {
+  background: var(--cc-settled-soft);
+  border-left-color: var(--cc-settled);
+}
+.creator-dossier-line.is-active .creator-dossier-key { color: var(--cc-settled); opacity: 1; }
+/* Doesn't apply to this character (Spells for a non-caster). Struck rather than
+   hidden, so the roll stays the same length and the player can see it was considered. */
+.creator-dossier-line.is-skipped .creator-dossier-value-line {
+  font-style: italic;
+  color: var(--cc-text-faint);
+}
+
+.creator-dossier-tick { color: var(--cc-settled); font-size: 0.72rem; }
+/* Outstanding. Teal plus a word — the colour is never the only cue. */
+.creator-dossier-todo {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cc-open);
+  border: 1px solid var(--cc-open);
+  background: var(--cc-open-soft);
+  padding: 0 0.3rem;
+  white-space: nowrap;
+}
+

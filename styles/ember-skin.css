@@ -17,9 +17,9 @@
       all: Ember's stylesheet declares "Vollkorn" and "Pirate Scroll" globally
       whenever it is active, which is exactly when this skin applies.
 
-   The theme itself works by re-pointing the `--cc-*` design tokens creator.css is
+   The theme itself works by re-pointing the `--cc-*` design tokens the base styles (styles/creator/) are
    built on; the handful of extra rules below the token block cover the few places
-   creator.css hard-codes Arcane Midnight colours (ambience gradients, the top bar,
+   the base styles hard-code Arcane Midnight colours (ambience gradients, the top bar,
    the primary button) plus the borrowed-art section at the end.
 
    ---------------------------------------------- Ember asset manifest
@@ -34,7 +34,7 @@
      ui/elements/codex-background-dark.webp      window ground, fullscreen + windowed
      ui/elements/cosmos-design-weathered.webp    fullscreen watermark
      ui/elements/logo-inner.svg                  top-bar brand mark (replacing the
-                                                 dnd5e ampersand creator.css draws)
+                                                 dnd5e ampersand the base styles draw)
      ui/borders/BlockActorRing.webp              dossier portrait ring
      ui/borders/H2BorderMiddle.webp              centre ornament on page heads
      ui/borders/H2BorderLeft.webp                left rule on page heads
@@ -58,7 +58,7 @@
    IMPORTANT — set the *semantic* tokens, not the legacy aliases.
 
    This block used to override --cc-accent / --cc-gold / --cc-select, which was
-   right when those were creator.css's real tokens. They are not any more: the
+   right when those were the base styles' real tokens. They are not any more: the
    Codex redesign split the palette by meaning and made them aliases —
 
        --cc-accent: var(--cc-open);      // teal: still asking for input
@@ -66,7 +66,7 @@
        --cc-select: var(--cc-settled);
        --cc-good:   var(--cc-settled);
 
-   — with creator.css then using --cc-settled (15 places) and --cc-open (7)
+   — with the base styles then using --cc-settled (15 places) and --cc-open (7)
    *directly* for the progress fill, the dossier ticks, the active dossier line,
    the ability modifiers, the origin bonus corner, and the "to do" chip. Skinning
    only the aliases left every one of those drawing Arcane Midnight brass and teal
@@ -74,7 +74,7 @@
    in the new dossier, which is the column the player reads most.
 
    Setting the two sources fixes all of it and the four aliases follow for free,
-   which is the whole reason creator.css keeps them pointing at these. */
+   which is the whole reason the base styles keep them pointing at these. */
 
 .sogrom-creator.sogrom-ember {
   /* --- Surfaces ------------------------------------------------------
@@ -85,7 +85,7 @@
 
      --cc-sunk stays opaque on purpose: it is the picker drawer's ground, and the
      drawer's job is to cover the page underneath (see the drawer note in
-     creator.css). A translucent drawer would leave the page competing with the
+     the base styles). A translucent drawer would leave the page competing with the
      list for the same pixels. */
   --cc-bg: rgba(11, 10, 19, 0.50);
   --cc-sunk: #07060d;
@@ -123,7 +123,7 @@
      What carries it instead is that colour is never the only cue in this UI: a
      settled row also has a tick, an outstanding one also has the word "to do",
      a complete step also has a filled value on its dossier line. That redundancy
-     was built into creator.css for its own reasons and is what makes this skin
+     was built into the base styles for its own reasons and is what makes this skin
      safe. Do not remove those non-colour cues while this skin exists. */
   --cc-settled: #d0b8a3;       /* light-4 */
   --cc-settled-bright: #f0dab9;/* light-3 */
@@ -147,7 +147,7 @@
 
   /* The top bar. Translucent for the same reason the panels are — Ember's paper reads
      through its chrome. This used to be a rule overriding `.creator-topbar`'s
-     hard-coded gradient; creator.css now holds it as a token, so the two files no
+     hard-coded gradient; the base styles now hold it as a token, so the two files no
      longer declare the same surface. */
   --cc-chrome-grad: linear-gradient(180deg, rgba(11, 10, 19, 0.55), rgba(11, 10, 19, 0.55));
 
@@ -183,7 +183,7 @@
   background: linear-gradient(to bottom, transparent 75%, rgba(178, 50, 53, 0.15) 100%);
 }
 
-/* Ember's cosmos watermark. creator.css leaves ::after free on the fullscreen root;
+/* Ember's cosmos watermark. The base styles leave ::after free on the fullscreen root;
    it sits with the ambience behind the content (z-index -1 in the creator's own
    stacking context) and never catches the pointer. */
 .sogrom-creator-fullscreen.sogrom-ember::after {
@@ -252,11 +252,11 @@
    comment says so. */
 
 /* --- The brand mark ------------------------------------------------
-   creator.css draws the dnd5e system's gold ampersand here. In an Ember world the window
+   The base styles draw the dnd5e system's gold ampersand here. In an Ember world the window
    is meant to read as a continuation of Ember's own, so it wears Ember's mark instead.
 
    Only the *image* is swapped — the box, its size and its place in the brand's flex row
-   are creator.css's, and stay shared. Overriding the whole `background` shorthand would
+   are the base styles', and stay shared. Overriding the whole `background` shorthand would
    fork the geometry of a mark that is the same shape in both themes. */
 .sogrom-ember .creator-topbar-brand::before {
   background-image: url("../../ember/ui/elements/logo-inner.svg");
@@ -281,7 +281,7 @@
 
 /* --- Page heads --------------------------------------------------
    Ember closes a heading with a three-piece rule: a centre ornament with a hairline
-   running out to each side. It replaces the gold rubric hairline creator.css draws,
+   running out to each side. It replaces the gold rubric hairline the base styles draw,
    and it is the one borrowing here that changes a *layout* rather than a surface —
    Ember's treatment is symmetrical, so the head has to centre.
 

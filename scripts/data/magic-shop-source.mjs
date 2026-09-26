@@ -1,4 +1,5 @@
 import { MODULE_ID, SETTINGS, levelUpEnabled, log } from "../config.mjs";
+import { packIndex } from "./compendium-util.mjs";
 import {
   RARITIES, normalizeRarity, itemRarity, rarityLabel, sanitizeMagicEntry, sanitizeWealthTable, tierFor,
   tierGrantsAnything,
@@ -26,13 +27,11 @@ import {
 
 /**
  * The GM's Magic Item Shop configuration, guarded.
- * @returns {{enabled: boolean, inventory: object[], wealthTable: object}}
+ * @returns {{inventory: object[], wealthTable: object}}
  */
 export function magicShopConfig() {
-  let enabled = false;
   let raw = null;
   try {
-    enabled = !!game.settings.get(MODULE_ID, SETTINGS.magicShopEnabled);
     raw = game.settings.get(MODULE_ID, SETTINGS.magicShopConfig);
   } catch {
     raw = null;
@@ -41,7 +40,7 @@ export function magicShopConfig() {
   const inventory = Array.isArray(raw.inventory)
     ? raw.inventory.map(sanitizeMagicEntry).filter(e => e.uuid && e.rarity)
     : [];
-  return { enabled, inventory, wealthTable: sanitizeWealthTable(raw.wealthTable) };
+  return { inventory, wealthTable: sanitizeWealthTable(raw.wealthTable) };
 }
 
 /**
@@ -116,14 +115,15 @@ export function magicShopReview(state) {
 }
 
 /**
- * The wealth tier this build is owed, or null when the step doesn't apply: the GM hasn't switched
- * it on, the creator isn't climbing past level 1 (which needs the level-up mode), or the band the
- * target level lands in grants nothing.
+ * The wealth tier this build is owed, or null when the step doesn't apply: the creator isn't
+ * climbing past level 1 (which needs the level-up mode), or the target level's row grants nothing.
+ * There is no separate on/off switch — a GM turns the step off by setting a level's gold and item
+ * counts to 0 (the config window's "Set all to 0" does every level at once).
  * @param {object} state  The creator state.
  * @param {object} [config]  A {@link magicShopConfig} result, to save re-reading it.
  */
 export function magicShopTier(state, config = magicShopConfig()) {
-  if ( !config.enabled || !levelUpEnabled() ) return null;
+  if ( !levelUpEnabled() ) return null;
   const tier = tierFor(state?.targetLevel ?? 1, config.wealthTable);
   return tierGrantsAnything(tier) ? tier : null;
 }
@@ -195,7 +195,7 @@ export class MagicShopSource {
   static async #defaultPackIndex(collection) {
     const pack = game.packs?.get(collection);
     if ( pack?.documentName !== "Item" ) return null;
-    return pack.getIndex({ fields: INDEX_FIELDS });
+    return packIndex(pack, { fields: INDEX_FIELDS });
   }
 
   static #signatureOf(entries) {
@@ -440,7 +440,7 @@ function isPlainShell(item) {
 }
 
 async function readPack(pack, include) {
-  const index = withUuids(pack, await pack.getIndex({ fields: DROP_INDEX_FIELDS })).filter(include);
+  const index = withUuids(pack, await packIndex(pack, { fields: DROP_INDEX_FIELDS })).filter(include);
   const candidates = index.filter(e => mightBeTemplate(e) || isShell(e));
   const docs = candidates.length ? await pack.getDocuments({ _id__in: candidates.map(e => e._id) }) : [];
   const templates = docs.filter(isTemplate);
@@ -501,7 +501,7 @@ async function baseSummaries(uuids) {
     if ( where?.pack ) {
       if ( !indexes.has(where.pack) ) {
         const pack = game.packs.get(where.pack);
-        indexes.set(where.pack, pack ? await pack.getIndex({ fields: BASE_FIELDS }).catch(() => null) : null);
+        indexes.set(where.pack, pack ? await packIndex(pack, { fields: BASE_FIELDS }).catch(() => null) : null);
       }
       found = indexes.get(where.pack)?.get(where.id);
     } else if ( where ) {

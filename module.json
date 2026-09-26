@@ -1,7 +1,7 @@
 {
   "id": "sogrom-dnd5e-character-creator",
   "title": "Simple D&D Character Creator",
-  "description": "A guided, fullscreen character creation wizard for the D&D 5e system. Walks players through Species, Background, and Class selection in a step-by-step workflow.",
+  "description": "A guided character creation and level-up experience for Dungeons and Dragons 5e/5.5e on Foundry VTT.",
   "version": "#{VERSION}#",
   "compatibility": {
     "minimum": "14.359",
@@ -23,9 +23,9 @@
         "id": "dnd5e",
         "type": "system",
         "compatibility": {
-          "minimum": "5.3.3",
+          "minimum": "6.0.0",
           "maximum": "6.99.99",
-          "verified": "6.0.4"
+          "verified": "6.0.5"
         }
       }
     ]
@@ -35,7 +35,27 @@
   ],
   "styles": [
     "styles/fonts.css",
-    "styles/creator.css",
+    "styles/creator/01-foundation.css",
+    "styles/creator/02-window.css",
+    "styles/creator/03-chrome.css",
+    "styles/creator/04-stage.css",
+    "styles/creator/05-pickers.css",
+    "styles/creator/06-abilities.css",
+    "styles/creator/07-review-details.css",
+    "styles/creator/08-spells.css",
+    "styles/creator/09-choices-equipment.css",
+    "styles/creator/10-review-additions.css",
+    "styles/creator/11-launch-button.css",
+    "styles/creator/12-levelup.css",
+    "styles/creator/13-levelup-class.css",
+    "styles/creator/14-store.css",
+    "styles/creator/15-magic-items.css",
+    "styles/creator/16-source-compare.css",
+    "styles/creator/17-chat-cards.css",
+    "styles/creator/18-pdf-export.css",
+    "styles/creator/19-native-flow.css",
+    "styles/creator/20-entry-paths.css",
+    "styles/creator/21-magic-shop-buying.css",
     "styles/ember-skin.css"
   ],
   "languages": [
@@ -49,5 +69,12 @@
   "manifest": "#{MANIFEST}#",
   "download": "#{DOWNLOAD}#",
   "license": "LICENSE",
-  "readme": "https://github.com/IainFielding/Simple-DnD5e-Character-Creator#readme"
+  "readme": "https://github.com/IainFielding/Simple-DnD5e-Character-Creator#readme",
+  "media": [
+    {
+      "type": "setup",
+      "url": "modules/sogrom-dnd5e-character-creator/img/premade.webp",
+      "loop": false
+    }
+  ]
 }

@@ -13,6 +13,7 @@ import { getSources, warmSources, onWarmProgress, isStale, invalidateSources } f
 import { assembleActor } from "../build/actor-assembler.mjs";
 import { postCreationSummary } from "../build/chat-summary.mjs";
 import { exportCharacterPdf } from "../build/pdf-export.mjs";
+import { addToParty, editableParty } from "../build/party.mjs";
 import { launchLevelUpTo } from "../levelup/intercept.mjs";
 import { chooserContext, premadeContext, applyPremade, takePregen } from "./entry-chooser.mjs";
 import { isQuickLevel, quickClimb } from "../data/quick-climb.mjs";
@@ -59,13 +60,13 @@ export class CreatorShell extends CreatorShellBase {
       entryReturn() { return this._returnToQuick(); },
       entryPremade(event, target) { this._premadeSelect(target.dataset.id); },
       entryPremadeConfirm(event, target) { return this._premadeConfirm(target); },
+      entryPremadeLevel(event, target) { this._premadeLevel(target.dataset.level); },
       thresholdEdition(event, target) { return this._thresholdEdition(target.dataset.rules); },
       thresholdLevel(event, target) { return this._thresholdLevel(target.dataset.level); },
       thresholdRoll(event, target) { return this._thresholdRoll(target.dataset.category); },
       thresholdRollAll() { return this._thresholdRollAll(); },
       thresholdBrowse(event, target) { this._entryBrowse(target.dataset.category); },
-      thresholdCreate(event, target) { return this._thresholdCreate(target); },
-      thresholdName(event, target) { this._thresholdName(target.value); }
+      thresholdCreate(event, target) { return this._thresholdCreate(target); }
     }
   };
 
@@ -142,6 +143,12 @@ export class CreatorShell extends CreatorShellBase {
   #quickClimb = false;
   /** The ready-made character the player has selected but not yet confirmed. */
   #premadeChoice = null;
+
+  /**
+   * The ready-made list's level filter: a level, "all", or null for the default (level 1).
+   * @type {number|"all"|null}
+   */
+  #premadeLevel = null;
   /**
    * Whether this window's work belongs in a draft.
    *
@@ -246,6 +253,7 @@ export class CreatorShell extends CreatorShellBase {
     // A restored draft names its origins by uuid, and the world may have changed since it was
     // written. Now — with the index warm, so "missing" means missing rather than not-yet-loaded —
     // is the only moment those can be checked before a step tries to render one.
+    log("warm settled; leaving the loading screen");
     if ( this.#resumed ) this.#reportPrunedOrigins(pruneMissingOrigins(this.state, this.source));
     this.#loading = false;
     // Resuming an in-progress actor: jump to the first step still needing input.
@@ -277,16 +285,22 @@ export class CreatorShell extends CreatorShellBase {
     // Build the active screen BEFORE reading the completion flags: laying it out can refresh the
     // caches those flags read (the Choices step resolves its requirements into `state.choiceCache`),
     // so the dossier tick and the Next button reflect this very render rather than the previous one.
-    const stepContext = this.#loading ? {} : await step.context(this._ctx());
+    // Timed under the debug log: the first render after the warm has been seen to take tens of
+    // seconds behind a spinner reading "100%", and these awaits are where that time can go.
+    const timed = async (label, work) => {
+      const started = Date.now();
+      try { return await work(); } finally { log(`render ${label} took ${Date.now() - started}ms`); }
+    };
+    const stepContext = this.#loading ? {} : await timed(`step ${step.id}`, () => step.context(this._ctx()));
     // Built before the flags are read, like the step context above and for the same reason: the
     // threshold resolves origin ability increases into the state, and the dossier must show this
     // render rather than the previous one.
-    const entry = this.#entry === "chooser" ? await chooserContext(this._ctx())
+    const entry = this.#entry === "chooser" ? await timed("chooser", () => chooserContext(this._ctx()))
       : this.#entry === "premade"
-        ? { premades: await premadeContext(this._ctx(), this.#premadeChoice) }
+        ? { premades: await timed("premades", () => premadeContext(this._ctx(), this.#premadeChoice, this.#premadeLevel)) }
         : null;
     const threshold = this.#entry === "threshold"
-    ? await thresholdContext(this._ctx(), this.#thresholdRules ?? systemRulesEdition())
+    ? await timed("threshold", () => thresholdContext(this._ctx(), this.#thresholdRules ?? systemRulesEdition()))
     : null;
 
     const flags = this._completeFlags();
@@ -394,6 +408,11 @@ export class CreatorShell extends CreatorShellBase {
     drawFrameSigils(root);
     fitCardArt(root);
     this.#wireEntryEscape(root);
+    // The quick screen's name box. ApplicationV2 dispatches `data-action` on *click* only, so the
+    // box's action read its value when the player clicked into it — before they typed — and a typed
+    // name never reached the state unless they clicked the box again afterwards.
+    root.querySelector("#threshold-name")
+      ?.addEventListener("input", ev => this._thresholdName(ev.currentTarget.value));
     // Above the guard below, and deliberately: a pending focus request has to be *consumed* on the
     // very next render whatever kind it is, or a rail-only render would carry it forward and move
     // focus during some later, unrelated one.
@@ -1031,6 +1050,18 @@ export class CreatorShell extends CreatorShellBase {
     this.render();
   }
 
+  /**
+   * Narrow the ready-made list to one level, or to all of them. The selection is dropped: a card
+   * the filter hides would otherwise stay chosen, and the footer would offer to create someone the
+   * player can no longer see.
+   * @param {string} value  A level, or "all".
+   */
+  _premadeLevel(value) {
+    this.#premadeLevel = (value === "all") ? "all" : (Number(value) || null);
+    this.#premadeChoice = null;
+    this.render();
+  }
+
   /** Create the selected ready-made character. */
   async _premadeConfirm(el) {
     const id = this.#premadeChoice;
@@ -1277,6 +1308,12 @@ export class CreatorShell extends CreatorShellBase {
     // of re-running assembly on top of the partial one (which duplicates every already-written item).
     // A resumed character's actor pre-exists in state, so this stays false and we never delete it.
     let createdActor = false;
+    // A sheet we didn't make — a blank character the GM prepared — can't be deleted on failure, but
+    // it can be put back: note what was on it, and a failed build removes only what it added.
+    const before = actor ? {
+      items: new Set(actor.items.map(i => i.id)),
+      effects: new Set(actor.effects.map(e => e.id))
+    } : null;
     try {
       // The draft actor is created only now, at Create — so a cancelled build never leaves an
       // orphan "New Character" in the directory. Resuming an existing character reuses its actor.
@@ -1300,6 +1337,8 @@ export class CreatorShell extends CreatorShellBase {
           log("failed to clean up half-built actor", cleanupErr);
         }
         this.state.actor = null;
+      } else if ( before ) {
+        await this.#rollBackInto(actor, before);
       }
       this.#reopenForRetry(target);
       return;
@@ -1307,6 +1346,10 @@ export class CreatorShell extends CreatorShellBase {
     // The draft has become a character, so it has nothing left to protect. Cleared before the
     // close so the close's own prompt — which `force` skips anyway — can never re-save it.
     if ( this.#draftable ) await clearDraft();
+    // Join the party now rather than after any climb: membership doesn't depend on level, and the
+    // creation card (posted here or at the end of the climb) then already reads "In {party}".
+    // Re-checked against ownership here, not only when Review rendered, since it can have changed.
+    if ( this.state.joinParty && editableParty() ) await addToParty(actor);
     await this.close();
     actor?.sheet?.render(true);
     // The build above always produces a level-1 character. When the player asked for more on the
@@ -1347,6 +1390,24 @@ export class CreatorShell extends CreatorShellBase {
       // The sheet PDF, when it was asked for. Same rule as the card: a climb isn't finished here,
       // and that wizard prints it at the level the player actually asked for.
       if ( this.state.exportPdf ) await exportCharacterPdf(actor);
+    }
+  }
+
+  /**
+   * Remove what a failed build added to a sheet it didn't create, so a retry starts from the sheet
+   * the GM handed over rather than stacking a second class on a half-built one. The actor-level
+   * update (scores, details, portrait) is left: the retry writes every one of those again.
+   * @param {Actor5e} actor
+   * @param {{items: Set<string>, effects: Set<string>}} before  What was on the sheet beforehand.
+   */
+  async #rollBackInto(actor, before) {
+    try {
+      const items = actor.items.filter(i => !before.items.has(i.id)).map(i => i.id);
+      if ( items.length ) await actor.deleteEmbeddedDocuments("Item", items);
+      const effects = actor.effects.filter(e => !before.effects.has(e.id)).map(e => e.id);
+      if ( effects.length ) await actor.deleteEmbeddedDocuments("ActiveEffect", effects);
+    } catch ( err ) {
+      log("failed to roll back the half-built character", err);
     }
   }
 

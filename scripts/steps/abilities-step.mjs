@@ -142,14 +142,22 @@ export async function abilitiesHandle(action, el, state) {
   }
 }
 
-/** Template context for the ability panel (nested under `abilities` by the Class step). */
-export function abilitiesContext(state) {
+/**
+ * Template context for the ability panel (nested under `abilities` by the Class step).
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ * @param {object} [options]
+ * @param {{className: string, order: string[]|null}|null} [options.suggest]  The chosen class, and
+ *   its ability priorities where they are known without a document read. Null with no class chosen,
+ *   which leaves the Suggest button out.
+ */
+export function abilitiesContext(state, { suggest = null } = {}) {
   const method = effectiveMethod(state);
   // Write the fallback back before anything reads the scores. `resolvedScores()` keys off the
   // stored method, so leaving "manual" in place after the GM withdrew it would build a character
   // from typed numbers while the panel showed a point-buy spread — two answers to one question.
   state.abilityMethod = method;
   return {
+    suggest: suggestContext(method, state, suggest),
     method,
     isPointBuy: method === "point-buy",
     isArray: method === "standard-array",
@@ -161,6 +169,83 @@ export function abilitiesContext(state) {
     })),
     ...methodContext(method, state)
   };
+}
+
+/* -------------------------------------------- */
+/*  Suggested allocation                        */
+/* -------------------------------------------- */
+
+/**
+ * The Suggest button's context, or null when it has nothing to offer.
+ *
+ * Not offered for manual entry, whose scores were settled somewhere this window can't see, nor
+ * for a roll that hasn't happened yet — there is nothing to arrange until the dice have spoken.
+ */
+function suggestContext(method, state, suggest) {
+  if ( !suggest?.className || (method === "manual") ) return null;
+  if ( (method === "roll") && !(state.abilityPool() ?? []).length ) return null;
+  return {
+    label: t("step.abilities.suggest", { name: suggest.className }),
+    // The order is known up front for every class the Quick Build table covers; a homebrew class
+    // only resolves its own `primaryAbility` on click, so its button simply carries no tooltip.
+    hint: suggest.order?.length
+      ? t("step.abilities.suggestHint", { order: suggest.order.map(abilityLabel).join(" › ") })
+      : ""
+  };
+}
+
+/**
+ * A point-buy spread for the given priorities, within the budget.
+ *
+ * Each ability is raised in turn toward the standard array's shape [15, 14, 13, 12, 10, 8] —
+ * whose cost is exactly the PHB's 27 points, so the default budget lands on that array. A smaller
+ * budget runs out partway down the list, keeping the class's main ability high rather than
+ * flattening every score. A larger one keeps climbing in the same order, up to point-buy's cap.
+ * @param {string[]} priorities  All six ability keys, highest first.
+ * @param {number} budget
+ * @returns {Record<string, number>}
+ */
+export function suggestPointBuy(priorities, budget) {
+  const TARGET = [15, 14, 13, 12, 10, 8];
+  const scores = Object.fromEntries(ABILITIES.map(k => [k, PB_MIN]));
+  let left = budget;
+  const raiseTo = (key, cap) => {
+    while ( scores[key] < cap ) {
+      const step = POINT_BUY_COST[scores[key] + 1] - POINT_BUY_COST[scores[key]];
+      if ( step > left ) return;
+      scores[key] += 1;
+      left -= step;
+    }
+  };
+  const order = priorities.filter(k => ABILITIES.includes(k));
+  order.forEach((key, i) => raiseTo(key, TARGET[i] ?? PB_MIN));
+  for ( const key of order ) raiseTo(key, PB_MAX);
+  return scores;
+}
+
+/**
+ * Lay out the current method's scores in the class's priority order.
+ *
+ * Point buy gets {@link suggestPointBuy}; the standard array and a rolled pool are both sorted
+ * highest-first, so the i-th priority takes pool slot i. Manual entry is left alone.
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ * @param {string[]} priorities  All six ability keys, highest first.
+ * @returns {boolean}  Whether anything was changed.
+ */
+export function applySuggestion(state, priorities) {
+  const method = effectiveMethod(state);
+  if ( !priorities?.length || (method === "manual") ) return false;
+  if ( method === "point-buy" ) {
+    Object.assign(state.pointBuy, suggestPointBuy(priorities, pointBuyBudget()));
+    return true;
+  }
+  const pool = state.abilityPool() ?? [];
+  if ( !pool.length ) return false;
+  state.assignment = blankAssignment();
+  priorities.filter(k => ABILITIES.includes(k)).forEach((key, i) => {
+    if ( i < pool.length ) state.assignment[key] = i;
+  });
+  return true;
 }
 
 /** The per-method half of the panel context. */

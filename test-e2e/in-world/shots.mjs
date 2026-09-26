@@ -20,7 +20,7 @@ const { StoreConfigApp } = await import(`${MODULE}/app/store-config.mjs`);
 const { MagicShopConfigApp } = await import(`${MODULE}/app/magic-shop-config.mjs`);
 const { magicEntryFromItem } = await import(`${MODULE}/data/magic-shop.mjs`);
 const { applyQuickBuild } = await import(`${MODULE}/data/quick-build.mjs`);
-const { getSources } = await import(`${MODULE}/data/source-cache.mjs`);
+const { getSources, warmStatus } = await import(`${MODULE}/data/source-cache.mjs`);
 const { launchWindowOptions, MODULE_ID, SETTINGS } = await import(`${MODULE}/config.mjs`);
 
 /** The open shell, so successive calls from Node act on the same window. */
@@ -63,7 +63,12 @@ async function waitForStage(timeout = 420_000) {
     await pause(500);
   }
   const label = document.querySelector(".creator-loading p")?.textContent ?? "(no stage at all)";
-  throw new Error(`creator stage never finished loading — stuck at: ${label}`);
+  // Which warm phase is still running, and how far it got — the bar reads 100% once nearly every
+  // tick is in, so without this a phase stuck on its last read is indistinguishable from done.
+  const status = warmStatus();
+  const phases = status?.phases.map(p => `${p.name}: ${p.done ? "done" : "RUNNING"} ${p.ticks}/${p.expected ?? "?"}`
+    + ` in ${p.ms}ms${p.error ? ` (${p.error})` : ""}`).join("; ") ?? "no warm has started";
+  throw new Error(`creator stage never finished loading — stuck at: ${label}. Warm phases: ${phases}`);
 }
 
 /**
@@ -215,9 +220,14 @@ let built = null;
 
 /** Build the character for real and open its sheet — the "finished actor" picture. */
 export async function buildActor() {
+  // Found by diffing the directory, not by name: the screenshot world keeps characters from earlier
+  // runs, and a name lookup returns the first "Aria Nightbreeze" — an old one, whose creation card is
+  // not from this run.
+  const before = new Set(game.actors.map(a => a.id));
   await shell._finish(null);
   await pause(2500);
-  built = game.actors.find(a => a.name === shell.state.details.name)
+  built = game.actors.find(a => !before.has(a.id) && (a.type === "character"))
+    ?? game.actors.find(a => a.name === shell.state.details.name)
     ?? game.actors.contents.at(-1);
   await closeAll();
   await built.sheet.render(true);
@@ -299,6 +309,206 @@ export async function emberActor({ classUuid = "Compendium.dnd-players-handbook.
   await built.createEmbeddedDocuments("Item", [{ ...klass.toObject(), system: { ...klass.toObject().system, levels: 1 } }]);
   await pause(1500);
   return built.uuid;
+}
+
+/* -------------------------------------------- */
+/*  3.3.0: party, XP glow, blank sheets         */
+/* -------------------------------------------- */
+
+/** The party the Review and chat-card shots add to. A plain name, since it is on screen. */
+const PARTY_NAME = "The Company";
+/** The blank character the Build Character shots are of. */
+const BLANK_NAME = "New Recruit";
+/** The screenshot character's name (screenshots.mjs CHARACTER.name), removed by cleanup. */
+const CHARACTER_NAME = "Aria Nightbreeze";
+
+/**
+ * Make sure the world has a primary party the GM owns, so the Review page shows its
+ * "Add to {party}" switch and the creation card its button. Reused across runs rather than created
+ * each time, so repeated captures don't fill the world with parties.
+ */
+export async function ensureParty() {
+  let party = game.actors.find(a => (a.type === "group") && (a.name === PARTY_NAME));
+  party ??= await Actor.implementation.create({ name: PARTY_NAME, type: "group" }, { renderSheet: false });
+  await game.settings.set("dnd5e", "primaryParty", { actor: party.id });
+  if ( shell ) { shell.render(); await settleRender(); }
+  return party.id;
+}
+
+/**
+ * The built character's sheet once they have the XP for their next level: the Level Up button
+ * wears its golden outline. The glow animates, so any frame of it is a fair picture.
+ */
+/** The world's levelling mode before `xpReadySheet` changed it, so `cleanupShots` can put it back. */
+let levelingModeBefore = null;
+
+export async function xpReadySheet() {
+  await closeAll();
+  if ( !built ) throw new Error("no built character: run buildActor first");
+  // The glow only exists in a world that levels by XP; a milestone world ("noxp") never lights it.
+  const mode = game.settings.get("dnd5e", "levelingMode");
+  if ( mode === "noxp" ) {
+    levelingModeBefore ??= mode;
+    await game.settings.set("dnd5e", "levelingMode", "xp");
+  }
+  const max = built.system.details.xp.max;
+  if ( Number.isFinite(max) ) await built.update({ "system.details.xp.value": max });
+  await built.sheet.render(true);
+  await pause(2000);
+  return built.uuid;
+}
+
+/**
+ * The sheet's repair wrench, which dnd5e's own header never shows: it appears only while a level has
+ * a choice that was never made.
+ *
+ * The picture needs such a character, and the built one is whole — so this copies it and blanks one
+ * answered decision on the copy, the class's skill picks, which is exactly the shape a skipped choice
+ * leaves (`value.chosen` short of the count). The copy keeps the character's name, so the cleanup
+ * step removes it with everything else, and the built character stays whole for the shots after
+ * this one. XP is zeroed so the Level Up button beside the wrench is its ordinary self rather than
+ * the glowing ready state the previous shot shows.
+ */
+export async function repairSheet() {
+  await closeAll();
+  if ( !built ) throw new Error("no built character: run buildActor first");
+  const [copy] = await Actor.implementation.createDocuments([built.toObject()]);
+  const cls = copy.items.find(i => i.type === "class");
+  // Read from the source: on a live item `system.advancement` may hold prepared objects.
+  // One that was actually answered: a class also carries its multiclass Trait (restricted to a
+  // secondary class), which the original class never answers — blanking that one changes nothing.
+  const advancement = cls?.toObject().system?.advancement ?? {};
+  const trait = Object.values(advancement)
+    .find(a => (a.type === "Trait") && (a.configuration?.choices ?? []).some(c => c?.count > 0)
+      && (a.value?.chosen?.length > 0));
+  if ( !trait ) throw new Error(`${cls?.name ?? "the class"} has no answered Trait choice to blank`);
+  trait.value.chosen = [];
+  // Written back whole, so it lands whether the source keeps advancements as an array or keyed by id.
+  await cls.update({ "system.advancement": advancement });
+  await copy.update({ "system.details.xp.value": 0 });
+  const { canRepair } = await import("/modules/sogrom-dnd5e-character-creator/scripts/levelup/repair.mjs");
+  if ( !canRepair(copy) ) throw new Error("the copy has nothing to repair; the wrench would not show");
+  await copy.sheet.render(true);
+  await pause(2000);
+  return copy.uuid;
+}
+
+/**
+ * The creation chat card for the built character, with its "Add to {party}" button.
+ *
+ * Rendered on its own rather than photographed in the chat log: `closeAll` closes the sidebar with
+ * everything else, and a card cropped out of a scrolled log is at the mercy of whatever else was
+ * posted. `renderHTML` runs the same hooks the log does, so the button is filled in exactly as a
+ * GM would see it.
+ */
+export async function creationCard() {
+  await closeAll();
+  if ( !built ) throw new Error("no built character: run buildActor first");
+  const message = [...game.messages].reverse().find(m =>
+    (m.getFlag(MODULE_ID, "summary") === "creation") && (m.speaker?.actor === built.id));
+  if ( !message ) throw new Error("the built character has no creation card (is the summary setting off?)");
+  // The real message in the real chat log, as a GM sees it — a card rendered on its own elsewhere
+  // loses the log's theme, and its text came out pale on the parchment.
+  ui.sidebar.expand?.();
+  await ui.sidebar.changeTab?.("chat", "primary");
+  await pause(1000);
+  const el = document.querySelector(`#chat [data-message-id="${message.id}"], .chat-log [data-message-id="${message.id}"]`);
+  if ( !el ) throw new Error("the creation card is not in the chat log");
+  el.scrollIntoView({ block: "center" });
+  el.classList.add("sogrom-shot-target");
+  await pause(800);
+  return message.id;
+}
+
+/** Set the Review page's "Add to {party}" switch — the state the next Create honours. */
+export async function joinParty(on = true) {
+  if ( !shell ) throw new Error("no creator open");
+  shell.state.joinParty = !!on;
+  shell.render();
+  await settleRender();
+  return shell.state.joinParty;
+}
+
+/** A blank character the GM has prepared: no class, species or background. Reused across runs. */
+async function blankCharacter() {
+  let actor = game.actors.find(a => (a.type === "character") && (a.name === BLANK_NAME));
+  actor ??= await Actor.implementation.create({ name: BLANK_NAME, type: "character" }, { renderSheet: false });
+  const origins = actor.items.filter(i => ["class", "race", "background"].includes(i.type)).map(i => i.id);
+  if ( origins.length ) await actor.deleteEmbeddedDocuments("Item", origins);
+  return actor;
+}
+
+/** The blank character's sheet, with the gold Build Character hammer in its header. */
+export async function blankSheet() {
+  await closeAll();
+  const actor = await blankCharacter();
+  await actor.sheet.render(true);
+  await pause(2000);
+  return actor.uuid;
+}
+
+/**
+ * The Actors sidebar's right-click menu on the blank character, offering Build Character.
+ *
+ * The sidebar is switched to its Actors tab (and expanded) before the right-click. The click is a real `contextmenu` event on the row, so the menu
+ * is the one Foundry builds, not a copy of it.
+ */
+export async function blankMenu() {
+  await closeAll();
+  const actor = await blankCharacter();
+  await actor.sheet?.close({ force: true }).catch(() => {});
+  // The sidebar is on screen in this one, so it should not advertise the harness: drop the actors
+  // other runs left behind (the `[e2e] ` prefix is the harness's own, and older copies of the
+  // screenshot character), keeping the one this run built.
+  const stale = game.actors.filter(a => a.name.startsWith("[e2e] ")
+    || ((a.name === CHARACTER_NAME) && (a.id !== built?.id))).map(a => a.id);
+  if ( stale.length ) await Actor.implementation.deleteDocuments(stale);
+  ui.sidebar.expand?.();
+  await ui.sidebar.changeTab?.("actors", "primary");
+  await ui.actors.render();
+  await pause(1000);
+  const row = ui.actors.element?.querySelector(`.directory-item[data-entry-id="${actor.id}"]`);
+  if ( !row ) throw new Error("the blank character has no row in the Actors sidebar");
+  row.scrollIntoView({ block: "center" });
+  await pause(300);
+  // The world opens paused, and the banner would fill the middle of the picture.
+  if ( game.paused ) game.togglePause(false, { broadcast: true });
+  // Right-clicked near the row's bottom edge, so the menu opens beneath the name rather than over it.
+  const box = row.getBoundingClientRect();
+  row.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true, cancelable: true, button: 2, clientX: box.left + 60, clientY: box.bottom - 3
+  }));
+  await pause(800);
+  return actor.uuid;
+}
+
+/** The GM's Level-Up Options window, where "Maximum only" hit points is chosen. */
+export async function levelUpOptions() {
+  await closeAll();
+  const { LevelUpOptionsApp } = await import(`${MODULE}/app/levelup-options.mjs`);
+  await new LevelUpOptionsApp().render(true);
+  await pause(1500);
+  return true;
+}
+
+/**
+ * Put the world back: drop the party, the blank character and the screenshot character this file
+ * created, leave no primary party set, and restore the levelling mode. Run last, so the next
+ * capture starts from the same world.
+ */
+export async function cleanupShots() {
+  await closeAll();
+  await game.settings.set("dnd5e", "primaryParty", { actor: null });
+  if ( levelingModeBefore ) {
+    await game.settings.set("dnd5e", "levelingMode", levelingModeBefore);
+    levelingModeBefore = null;
+  }
+  const ids = game.actors
+    .filter(a => ((a.type === "group") && (a.name === PARTY_NAME))
+      || ((a.type === "character") && [BLANK_NAME, CHARACTER_NAME].includes(a.name)))
+    .map(a => a.id);
+  if ( ids.length ) await Actor.implementation.deleteDocuments(ids);
+  return ids.length;
 }
 
 /** Open the GM's store configuration window. */
@@ -407,7 +617,12 @@ export async function walkTo({ until, limit = 60 } = {}) {
     const next = document.querySelector('.creator-stage-foot [data-action="navNext"]');
     if ( next && !next.disabled ) {
       next.click();
+      // Wait for the next screen rather than a fixed beat. The Ember Store's first render loads the
+      // whole shop index and took over a minute cold, and clicking Next again meanwhile only moves
+      // the index on under a heading that has not changed yet.
+      const started = Date.now();
       await pause(900);
+      while ( (currentStep() === here) && ((Date.now() - started) < 180_000) ) await pause(500);
       continue;
     }
     const option = document.querySelector(`.creator-stage ${SELECTABLE}`);
@@ -442,8 +657,19 @@ export async function gotoRail(label) {
 
 /** Close every open application, so one picture never has the last one's window in it. */
 export async function closeAll() {
-  for ( const app of Object.values(ui.windows ?? {}) ) await app.close?.().catch(() => {});
-  for ( const app of foundry.applications.instances.values() ) await app.close?.().catch(() => {});
+  // The staged chat card (see {@link creationCard}) is not an application; it goes with them.
+  document.getElementById("sogrom-shot-chat")?.remove();
+  document.querySelectorAll(".sogrom-shot-target").forEach(el => el.classList.remove("sogrom-shot-target"));
+  // Foundry's own interface (the sidebar and its tabs, chat, hotbar…) is everything reachable from
+  // `ui`, and is left alone: closing it and rendering it back fails ("Failed to render Sidebar tab
+  // chat"), which is what stopped the right-click shot. hooks.mjs `closeAll` learned the same.
+  const core = new Set(Object.values(ui).filter(v => v && (typeof v === "object")));
+  const closeOne = async app => {
+    if ( !app || core.has(app) || (typeof app.close !== "function") ) return;
+    await Promise.resolve(app.close({ force: true })).catch(() => {});
+  };
+  for ( const app of Object.values(ui.windows ?? {}) ) await closeOne(app);
+  for ( const app of [...foundry.applications.instances.values()] ) await closeOne(app);
   shell = null;
   await pause(400);
   return true;
@@ -591,12 +817,11 @@ export async function compare({ category = "class", count = 3 } = {}) {
  * own `magicEntryFromItem`, so the rows are shaped exactly as a drag-and-drop would leave them
  * rather than by a second, divergent implementation of that mapping.
  *
- * The wealth table is left at its DMG default; only `targetLevel` decides whether the step appears.
+ * The wealth table is left at its DMG default (there is no on/off switch; a level whose row grants
+ * nothing has no step), so only `targetLevel` decides whether the step appears.
  * @param {{packs?: string[], limit?: number}} options
  */
 export async function stockMagicShop({ packs = null, limit = 60 } = {}) {
-  await game.settings.set(MODULE_ID, SETTINGS.magicShopEnabled, true);
-
   const wanted = packs ?? ["dnd-dungeon-masters-guide.items", "dnd5e.items24", "dnd5e.items"];
   const inventory = [];
   for ( const packId of wanted ) {

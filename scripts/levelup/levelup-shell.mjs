@@ -209,6 +209,8 @@ export class LevelUpShell extends CreatorShellBase {
     // The Ember hand-off renders the creator's top bar and dossier instead of the rail, so it needs
     // their two view-models; an ordinary level-up leaves both null and renders neither template.
     const ember = this.state.emberCreation;
+    // Per-level steps carry a resolved label ("Level 4"); the review step uses its labelKey.
+    const label = step.label ?? t(step.labelKey);
 
     return {
       loading: false,
@@ -224,10 +226,12 @@ export class LevelUpShell extends CreatorShellBase {
       step: {
         id: step.id,
         template: tpl(`${step.template}.hbs`),
-        // Per-level steps carry a resolved label ("Level 4"); the review step uses its labelKey.
-        label: step.label ?? t(step.labelKey),
+        label,
         ...stepContext
       },
+      // The stage band reads `heading`, not the step, since the creator's entry screens took it
+      // over; without this the level-up and Ember hand-off band rendered an empty title.
+      heading: { title: label, instruction: stepContext.instruction },
       // The finish button (Apply) replaces Next in the footer on the review step only.
       isReview: step.id === "review",
       nav: {
@@ -514,13 +518,18 @@ export class LevelUpShell extends CreatorShellBase {
     // The sourceTag guard covers a rare edge: picks staged while the class was briefly a caster
     // (an Eldritch Knight pick later undone) must not be created against a non-caster.
     const { actor } = this.state;
-    const { sourceTag, method, create, deleteIds } = spellChanges(this.state);
-    if ( !ember && sourceTag && (create.length || deleteIds.length) ) {
+    const { sourceTag, method, create, deleteIds, prepareUpdates, bookLedger } = spellChanges(this.state);
+    if ( !ember && sourceTag && (create.length || deleteIds.length || prepareUpdates.length) ) {
       try {
         // Create the replacements before deleting the swapped-out spell, so a failure part-way
         // can only ever leave an extra spell to tidy up — never a destroyed one.
         await applyLevelUpSpells(actor, sourceTag, create, method);
         if ( deleteIds.length ) await actor.deleteEmbeddedDocuments("Item", deleteIds, { render: false });
+        // A Wizard's Prepare tab: owned book spells prepared or unprepared, in one update. Only
+        // spells still on the actor, in case something removed one while the window was open.
+        // And the free book picks just made, recorded on the class (see module:data/spellbook).
+        const updates = [...prepareUpdates, ...(bookLedger ? [bookLedger] : [])].filter(u => actor.items.get(u._id));
+        if ( updates.length ) await actor.updateEmbeddedDocuments("Item", updates, { render: false });
       } catch ( err ) {
         log("level-up spell grant failed", err);
         ui.notifications?.error(t("levelup.notify.spellsFailed"));

@@ -163,8 +163,11 @@ export class LevelUpState {
    */
   spellListOverride = "";
 
-  /** Transient UI state for the spell step: the active tab and the focused spell's UUID. */
-  spellTab = "cantrips";
+  /**
+   * Transient UI state for the spell step: the active tab and the focused spell's UUID. An empty
+   * tab means "the first the step has": Cantrips whenever there are cantrips to learn.
+   */
+  spellTab = "";
   focusedSpellUuid = null;
 
   /**
@@ -195,14 +198,24 @@ export class LevelUpState {
   spellRangeFilter = "";
 
   /**
-   * Phase 4b spell swaps: an owned cantrip / leveled spell the player has marked to replace this
+   * Phase 4b spell swaps: an owned cantrip / leveled spells the player has marked to replace this
    * level-up (the 2024 "swap one spell" rule). Marking one frees a slot in that bucket to learn a
-   * different spell; on Finish the marked item is deleted only if the freed slot was actually used.
-   * `{ id, name }` of the actor's spell item, or null.
+   * different spell; on Finish a marked item is deleted only if the freed slot was actually used.
+   * `{ id, name }` of the actor's spell item. Leveled spells are a list: most classes may mark one,
+   * but a Cleric or Druid may change any number of prepared spells ({@link module:data/spell-swap}).
    * @type {{id:string, name:string}|null}
    */
   swapCantrip = null;
-  swapSpell = null;
+  /** @type {{id:string, name:string}[]} */
+  swapSpells = [];
+
+  /**
+   * A book caster's Prepare tab changes to spells it already owns: item id → the prepared state
+   * (0 or 1) it should have after Apply. An entry that returns to what the sheet already has is
+   * dropped, so this only ever holds real changes. New picks carry their own `prepared` flag.
+   * @type {Record<string, 0|1>}
+   */
+  preparedChanges = {};
 
   /**
    * Which chat card this session owes the table when it finishes (see
@@ -328,8 +341,9 @@ export class LevelUpState {
     this.selectedCantrips = [];
     this.selectedSpells = [];
     this.swapCantrip = null;
-    this.swapSpell = null;
-    this.spellTab = "cantrips";
+    this.swapSpells = [];
+    this.preparedChanges = {};
+    this.spellTab = "";
     this.focusedSpellUuid = null;
     // The filters narrowed the old class's list. A school or casting time that matched half of it
     // can easily match none of the next one, leaving the player on an empty list with no clue why.
@@ -489,7 +503,7 @@ export class LevelUpState {
     // On the Class step nothing exists to lose: a bare class pick costs one click to redo.
     if ( !d ) return false;
     return this.hasStagedSpells()
-      || this.hpSteps.some(r => r.mode !== "avg")
+      || this.hpSteps.some(r => r.mode !== (r.seedMode ?? "avg"))
       || this.subclassSteps.some(r => d.subclassState(r).chosen)
       || this.traitSteps.some(r => d.traitState(r).chosen.size > 0)
       || this.choiceSteps.some(r => {
@@ -503,13 +517,14 @@ export class LevelUpState {
   }
 
   /**
-   * Whether the spell step holds staged, unsaved picks (or a marked swap) that closing the
-   * window would silently discard.
+   * Whether the spell step holds staged, unsaved picks (a marked swap, or a Prepare tab change)
+   * that closing the window would silently discard.
    * @returns {boolean}
    */
   hasStagedSpells() {
     return this.selectedCantrips.length > 0 || this.selectedSpells.length > 0
-      || !!this.swapCantrip || !!this.swapSpell;
+      || !!this.swapCantrip || (this.swapSpells?.length > 0)
+      || (Object.keys(this.preparedChanges ?? {}).length > 0);
   }
 
   /**

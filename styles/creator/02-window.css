@@ -1,0 +1,163 @@
+/* ---------------------------------------------- Fullscreen mode (default)
+
+   Cover the whole viewport with no window chrome. These layout properties are
+   scoped to the .sogrom-creator-fullscreen class (added at launch) rather than
+   the base class, so windowed mode can sit inside Foundry's draggable frame
+   without the fixed-position rules forcing it back to fullscreen. */
+.sogrom-creator-fullscreen {
+  position: fixed;
+  /* `inset: 0` alone sizes this to the viewport, so the `width: 100vw; height: 100vh`
+     that used to sit here was redundant — and not equivalent: 100vw *includes* the
+     scrollbar gutter, so whenever the page behind the takeover has a vertical
+     scrollbar the window comes out wider than the space available and puts the
+     document into a horizontal scroll. Harmless while nothing sat flush to the left
+     edge; the dossier does. */
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  /* The creator's own three parts (top bar / dossier / stage) re-layer this as a grid
+     below; the level-up window has two parts and keeps this flex column. */
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--cc-bg);
+  /* Sit above Foundry's window layer (--z-index-window: 100, bumped higher each time a
+     window is focused) so an open app — e.g. the actor sheet a level-up launches from —
+     can't peek through the takeover. Kept just under the tooltip/notification layers so
+     our own tooltips and ui.notifications still surface over the creator. */
+  z-index: calc(var(--z-index-tooltip, 9999) - 1);
+}
+
+/* Let Dice So Nice's rolling canvas show over the fullscreen takeover. DSN appends
+   #dice-box-canvas to <body> and, on each roll, writes an inline z-index equal to
+   Foundry's window counter (++ApplicationV2._maxZ, ~100s) — far below our ~9998
+   fullscreen layer, so in-creator rolls (HP, abilities) would be hidden behind it.
+   Scoped to when the fullscreen creator is open, and !important to beat the inline
+   style DSN sets per roll. Windowed mode needs no override: its real Foundry window
+   participates in _maxZ, so a roll naturally lands above it. */
+body:has(.sogrom-creator-fullscreen) #dice-box-canvas {
+  z-index: var(--z-index-tooltip, 9999) !important;
+}
+
+/* A window opened from inside the takeover — the Details step's file picker, and any document
+   sheet a content link opens, which is how the Review screen's features, spells and gear become
+   clickable at all. Put on that window's own element by `yieldTakeoverTo()` (app/takeover.mjs),
+   which can do that because the render hook hands it the application.
+
+   This used to work the other way round: `.sogrom-creator-fullscreen.is-yielding { z-index: 90 }`
+   dropped the takeover below Foundry's window layer instead. That was the wrong lever. Lowering
+   ourselves does not reveal *the* window that was opened, it reveals *every* window — including
+   the actor sheet the fullscreen rule above is explicitly sized to hide. Clicking one item on the
+   Review screen brought up the item sheet and the character sheet behind it.
+
+   Same shape, same scope and the same z-index as the dice-box and Compendium Browser rules either
+   side of it, for the same reasons: !important beats the inline z-index Foundry rewrites on render
+   and focus, and gating on the takeover being present means the class goes inert the moment the
+   wizard closes. Without that gate a sheet opened from the Review screen would outlive the window
+   it was opened from and sit over everything else for the rest of the session — the class is on
+   someone else's element, so there is nothing of ours left to take it off. */
+body:has(.sogrom-creator-fullscreen) .sogrom-above-takeover {
+  z-index: var(--z-index-tooltip, 9999) !important;
+}
+
+/* Same trap for the dnd5e Compendium Browser opened from inside the creator (e.g. the
+   feat picker on an ASI level-up, CompendiumBrowser.selectOne). It renders as its own
+   ApplicationV2 window whose z-index is Foundry's inline _maxZ (~100s), so the ~9998
+   fullscreen takeover buries it. Lift it above the takeover while fullscreen is open;
+   !important beats the inline z-index Foundry rewrites on render/focus. */
+body:has(.sogrom-creator-fullscreen) .application.compendium-browser {
+  z-index: var(--z-index-tooltip, 9999) !important;
+}
+
+/* Ambience — soft teal auras top and bottom over a faint brass core, the same warm/cool
+   pair the interface itself runs on. Sits behind the static content (z-index:-1 within
+   the creator's own stacking context) so it tints the backdrop without catching
+   pointer events. */
+.sogrom-creator-fullscreen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(79, 179, 168, 0.10), transparent 52%),
+    radial-gradient(100% 60% at 50% 115%, rgba(79, 179, 168, 0.07), transparent 52%),
+    radial-gradient(60% 40% at 50% 50%,   rgba(201, 162, 39, 0.035), transparent 70%);
+}
+
+/* ---------------------------------------------- Windowed mode
+
+   Opens inside Foundry's standard draggable/resizable window frame at ~90% of
+   the screen. The frame header and resize corner are re-themed to the Arcane
+   Midnight palette so the window reads as part of the creator, not stock chrome. */
+
+.sogrom-creator-windowed .window-header {
+  background: linear-gradient(180deg, #1b1d22, #101116);
+  border-bottom: 1px solid var(--cc-line);
+  color: var(--cc-text);
+}
+.sogrom-creator-windowed .window-title {
+  color: var(--cc-text);
+  letter-spacing: 0.02em;
+}
+
+/* The flex column holding the topbar + stage parts. */
+.sogrom-creator-windowed .window-content {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+  padding: 0;
+  background: var(--cc-bg);
+  color: var(--cc-text);
+}
+
+/* Ambience, mirrored inside the window content. */
+.sogrom-creator-windowed .window-content::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(79, 179, 168, 0.10), transparent 52%),
+    radial-gradient(100% 60% at 50% 115%, rgba(79, 179, 168, 0.07), transparent 52%),
+    radial-gradient(60% 40% at 50% 50%,   rgba(201, 162, 39, 0.035), transparent 70%);
+}
+
+/* Keep the content above the ambience layer. */
+.sogrom-creator-windowed .creator-topbar,
+.sogrom-creator-windowed .creator-dossier,
+.sogrom-creator-windowed .creator-stage {
+  position: relative;
+  z-index: 1;
+}
+
+/* Foundry's default resize handle is a near-invisible transparent corner that's
+   easy to miss on a large dark window. Enlarge the grab area and draw a visible
+   gold grip so the bottom-right corner is obviously draggable. */
+.sogrom-creator-windowed .window-resize-handle {
+  width: 22px;
+  height: 22px;
+  inset: auto 0 0 auto;
+  z-index: 10;
+  pointer-events: auto;
+  background: none;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+.sogrom-creator-windowed .window-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: auto 3px 3px auto;
+  width: 11px;
+  height: 11px;
+  background:
+    linear-gradient(135deg, transparent 0 45%, var(--cc-gold) 45% 55%, transparent 55% 100%),
+    linear-gradient(135deg, transparent 0 70%, var(--cc-gold) 70% 80%, transparent 80% 100%);
+  pointer-events: none;
+}
+.sogrom-creator-windowed .window-resize-handle:hover { opacity: 1; }
+

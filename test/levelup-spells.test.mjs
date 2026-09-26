@@ -187,9 +187,11 @@ describe("computeSpellPlan", () => {
   });
 
   it("reports no delta when every capacity is already filled", () => {
+    // Three cantrips, five prepared, and a full level-2 book of eight.
+    const book = Array.from({ length: 8 }, () => spell(1, "class:wizard"));
     const { actor, cls } = makeWizardActor({
       classLevel: 2, preparedMax: 5, preparedValue: 5, slots: { spell1: 3 },
-      items: [spell(0, "class:wizard"), spell(0, "class:wizard"), spell(0, "class:wizard")]
+      items: [spell(0, "class:wizard"), spell(0, "class:wizard"), spell(0, "class:wizard"), ...book]
     });
     const plan = computeSpellPlan(actor, cls);
     expect(plan.addCantrips).toBe(0);
@@ -203,13 +205,13 @@ describe("computeSpellPlan", () => {
 /* -------------------------------------------- */
 
 /** A state-like with a fixed plan and staged picks, as spellChanges reads it. */
-function makeState({ addCantrips = 1, addSpells = 2, cantrips = [], spells = [], swapCantrip = null, swapSpell = null } = {}) {
+function makeState({ addCantrips = 1, addSpells = 2, cantrips = [], spells = [], swapCantrip = null, swapSpells = [] } = {}) {
   return {
-    spellPlan: () => ({ sourceTag: "class:wizard", addCantrips, addSpells }),
+    spellPlan: () => ({ sourceTag: "class:sorcerer", addCantrips, addSpells, canSwapSpell: true }),
     selectedCantrips: cantrips,
     selectedSpells: spells,
     swapCantrip,
-    swapSpell
+    swapSpells
   };
 }
 
@@ -219,7 +221,7 @@ describe("spellChanges", () => {
   it("creates every staged pick and deletes nothing without a swap", () => {
     const state = makeState({ cantrips: [pick("light")], spells: [pick("shield"), pick("sleep")] });
     const { sourceTag, create, deleteIds } = spellChanges(state);
-    expect(sourceTag).toBe("class:wizard");
+    expect(sourceTag).toBe("class:sorcerer");
     expect(create.map(c => c.name)).toEqual(["light", "shield", "sleep"]);
     expect(deleteIds).toEqual([]);
   });
@@ -229,7 +231,7 @@ describe("spellChanges", () => {
     const used = makeState({
       addSpells: 2,
       spells: [pick("shield"), pick("sleep"), pick("thunderwave")],
-      swapSpell: { id: "oldSpell00000000", name: "Jump" }
+      swapSpells: [{ id: "oldSpell00000000", name: "Jump" }]
     });
     expect(spellChanges(used).deleteIds).toEqual(["oldSpell00000000"]);
 
@@ -237,7 +239,7 @@ describe("spellChanges", () => {
     const unused = makeState({
       addSpells: 2,
       spells: [pick("shield"), pick("sleep")],
-      swapSpell: { id: "oldSpell00000000", name: "Jump" }
+      swapSpells: [{ id: "oldSpell00000000", name: "Jump" }]
     });
     expect(spellChanges(unused).deleteIds).toEqual([]);
   });
@@ -248,7 +250,7 @@ describe("spellChanges", () => {
       cantrips: [pick("light")],                  // uses the cantrip swap's freed slot
       spells: [pick("shield")],                   // within budget: leveled swap unused
       swapCantrip: { id: "oldCantrip000000", name: "Ray of Frost" },
-      swapSpell: { id: "oldSpell00000000", name: "Jump" }
+      swapSpells: [{ id: "oldSpell00000000", name: "Jump" }]
     });
     expect(spellChanges(state).deleteIds).toEqual(["oldCantrip000000"]);
   });
@@ -279,10 +281,20 @@ describe("computeSpellPlan swap allowance", () => {
   }
 
   it("offers both swaps under the 2024 rules", () => {
-    const { cls, actor } = editionWizard("2024");
+    const { cls, actor } = editionWizard("2024", "sorcerer");
     const plan = computeSpellPlan(actor, cls);
     expect(plan.canSwapCantrip).toBe(true);
     expect(plan.canSwapSpell).toBe(true);
+    expect(plan.spellSwaps).toBe("one");
+  });
+
+  it("gives a Wizard no leveled-spell swap: its Prepare tab changes what is prepared instead", () => {
+    for ( const rules of ["2014", "2024"] ) {
+      const { cls, actor } = editionWizard(rules);
+      const plan = computeSpellPlan(actor, cls);
+      expect(plan.bookRule).toEqual({ start: 6, perLevel: 2 });
+      expect(plan.canSwapSpell).toBe(false);
+    }
   });
 
   it("withholds the cantrip swap under the 2014 rules", () => {
@@ -294,11 +306,27 @@ describe("computeSpellPlan swap allowance", () => {
     expect(plan.swapLabelKey).toBe("levelup.step.spells.swapHint");
   });
 
-  it("re-words the swap for a 2014 prepared caster rather than removing it", () => {
-    const { cls, actor } = editionWizard("2014", "wizard");
-    const plan = computeSpellPlan(actor, cls);
-    expect(plan.canSwapSpell).toBe(true);
-    expect(plan.swapLabelKey).toBe("levelup.step.spells.swapHintPrepared");
+  it("lets a Cleric or Druid change any number of prepared spells, in both editions", () => {
+    for ( const [rules, identifier] of [["2014", "cleric"], ["2024", "cleric"], ["2014", "druid"], ["2024", "druid"]] ) {
+      const { cls, actor } = editionWizard(rules, identifier);
+      const plan = computeSpellPlan(actor, cls);
+      expect(plan.canSwapSpell).toBe(true);
+      expect(plan.spellSwaps).toBe("any");
+      expect(plan.preparedWording).toBe(true);
+      expect(plan.swapLabelKey).toBe("levelup.step.spells.swapHintAny");
+      // The cantrip rule is still the edition's.
+      expect(plan.canSwapCantrip).toBe(rules === "2024");
+    }
+  });
+
+  it("keeps the 2014 Paladin and Artificer on any-number, and the 2024 Paladin on one", () => {
+    const swapsFor = (rules, identifier) => {
+      const { cls, actor } = editionWizard(rules, identifier);
+      return computeSpellPlan(actor, cls).spellSwaps;
+    };
+    expect(swapsFor("2014", "paladin")).toBe("any");
+    expect(swapsFor("2014", "artificer")).toBe("any");
+    expect(swapsFor("2024", "paladin")).toBe("one");
   });
 
   it("treats a class that names no edition as 2024, so homebrew keeps every option", () => {
@@ -344,6 +372,7 @@ describe("owned spell rows", () => {
   };
 
   function stateFor({ prepared = false, swapSpell = null, focus = null } = {}) {
+    const swapSpells = swapSpell ? [swapSpell] : [];
     return {
       actor: { items: [KNOWN] },
       spellSource: { items: [] },     // nothing owned *by identity*, so the pool row survives
@@ -351,7 +380,7 @@ describe("owned spell rows", () => {
       spellTab: "spells",
       focusedSpellUuid: focus,
       selectedCantrips: [], selectedSpells: [],
-      swapCantrip: null, swapSpell,
+      swapCantrip: null, swapSpells,
       spellListOverride: "",
       spellPlan: () => ({
         isSpellcaster: true, sourceTag: "class:wizard", castUuid: "Compendium.x.Item.wiz",

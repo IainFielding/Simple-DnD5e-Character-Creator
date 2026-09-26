@@ -6,6 +6,8 @@
  *   node screenshots.mjs --world=playwright-ember
  *   node screenshots.mjs --world=playwright-bare    # no content modules; writes to no-content/
  *   HEADED=1 node screenshots.mjs --only=class --hold   # watch it, then poke at the result
+ *   node screenshots.mjs --profile           # also writes shots-profile.log: a timed browser console
+ *   node screenshots.mjs --canvas            # draw the game board too (much slower; see Session.open below)
  *
  * Why this exists: the README's pictures are the module's shop window, and they go stale the
  * moment the UI is restyled. Taking fourteen of them by hand means fourteen chances to catch a
@@ -18,7 +20,7 @@
  * sets never overwrite one another.
  */
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { WORLDS } from "./config.mjs";
 import { startFoundry } from "./lib/server.mjs";
@@ -32,6 +34,15 @@ import { ensureWorld } from "./lib/worlds.mjs";
  */
 const VIEWPORT = { width: 1667, height: 957 };
 const SCALE = 2;
+
+/**
+ * The box every saved picture is shrunk to fit, so the files drop straight into the README at
+ * their natural size. Rendering stays at the viewport and pixel ratio above — laying the page out
+ * at 800 wide would squash the creator into its narrow layout — and the 2x capture is downscaled
+ * afterwards, which keeps text sharper than a 1x render would. Full-screen shots come out 800x459;
+ * element crops keep their own shape inside the box. `--full-size` keeps the raw 2x capture.
+ */
+const FIT = { width: 800, height: 460 };
 
 /**
  * Where each world's pictures land. The bare world writes to its own folder rather than over the
@@ -62,6 +73,10 @@ const CHARACTER = {
 const argv = process.argv.slice(2);
 const value = name => argv.find(a => a.startsWith(`--${name}=`))?.split("=")[1] ?? null;
 const hold = argv.includes("--hold");
+const fullSize = argv.includes("--full-size");
+const profile = argv.includes("--profile");
+const withCanvas = argv.includes("--canvas");
+const profileLog = [];
 const worldId = value("world") ?? "playwright";
 const only = value("only")?.split(",").map(s => s.trim()).filter(Boolean) ?? null;
 
@@ -125,6 +140,14 @@ const SHOTS = {
       }
     },
     {
+      // Cropped to the grid itself: the complexity dots under each icon and the one-line role are
+      // what the caption is about, and at full width they are too small to read.
+      name: "class-guide",
+      note: "The class grid's complexity dots and one-line summaries.",
+      selector: ".creator-drawer-grid",
+      async setup() { /* same screen as welcome */ }
+    },
+    {
       name: "class-step",
       note: "A class chosen, with its detail panel.",
       async setup(call) {
@@ -151,7 +174,7 @@ const SHOTS = {
       // Everything from here on shows a filled character. Quick Build is the fastest way to get
       // one, it is seeded, and it fills exactly the fields a player would have filled by hand.
       name: "abilities",
-      note: "The ability-score panel, with points spent.",
+      note: "The ability-score panel, with points spent and the Suggest button.",
       selector: ".creator-work-side",
       async setup(call) {
         // Clears whatever overlay the previous shot left up — the comparison grid, here.
@@ -236,22 +259,71 @@ const SHOTS = {
     },
     {
       name: "review",
-      note: "The review screen.",
+      note: "The review screen, with the Add to party option ticked.",
       async setup(call) {
+        // A primary party the GM owns is what puts the "Add to {party}" switch on this page.
+        await call("ensureParty");
         await call("startAtLevel", 1);
         await call("goto", "review");
       }
     },
     {
+      // The finishing options sit at the foot of the scrolling Review page, below what the full-screen
+      // shot shows; the crop scrolls them into view.
+      name: "review-finish",
+      note: "The Review page's finishing options: Add to party (and Export PDF when its module is installed).",
+      selector: ".creator-review-finish",
+      async setup() { /* same screen as review */ }
+    },
+    {
       name: "actor",
       note: "The finished character sheet.",
       selector: ".app.sheet, .application.sheet",
-      async setup(call) { await call("buildActor"); }
+      async setup(call) {
+        // Built outside the party, so the chat-card shot below shows its "Add to" button rather
+        // than the spent "In The Company" state.
+        await call("joinParty", false);
+        await call("buildActor");
+      }
     },
     {
       name: "levelup",
       note: "The level-up wizard on the character just built.",
       async setup(call) { await call("levelUp"); }
+    },
+    {
+      // Cropped to the sheet's header: at full-sheet scale the outline is a few pixels wide.
+      name: "levelup-ready",
+      note: "The Level Up button's golden outline once the character has the XP for their next level.",
+      selector: ".application.sheet .sheet-header",
+      async setup(call) { await call("xpReadySheet"); }
+    },
+    {
+      // The same header crop, on a copy of the character with one choice left unanswered.
+      name: "repair-button",
+      note: "The repair wrench in the sheet header, shown only while a level has a skipped choice.",
+      selector: ".application.sheet .sheet-header",
+      async setup(call) { await call("repairSheet"); }
+    },
+    {
+      name: "chat-card",
+      note: "The creation chat card, with the GM's Add to party button.",
+      selector: ".sogrom-shot-target",
+      async setup(call) { await call("creationCard"); }
+    },
+    {
+      name: "blank-sheet",
+      note: "A blank character the GM prepared, with the gold Build Character hammer.",
+      selector: ".app.sheet, .application.sheet",
+      async setup(call) { await call("blankSheet"); }
+    },
+    {
+      // Clipped to the sidebar strip: the menu is fixed-position and appended to the page body, so no
+      // element crop would include both the row and the menu.
+      name: "blank-menu",
+      note: "Build Character in the Actors sidebar's right-click menu.",
+      clip: { x: 1290, y: 0, width: 377, height: 820 },
+      async setup(call) { await call("blankMenu"); }
     },
     {
       name: "store-config",
@@ -264,6 +336,18 @@ const SHOTS = {
       note: "The GM's magic-item shop: the per-level wealth table and the stocked inventory.",
       selector: ".application",
       async setup(call) { await call("magicShopConfig"); }
+    },
+    {
+      name: "levelup-options",
+      note: "The GM's Level-Up Options, including the hit-point choices.",
+      selector: ".application",
+      async setup(call) { await call("levelUpOptions"); }
+    },
+    {
+      // Not a picture: puts the world back (no party, no blank character) for the next run.
+      name: "cleanup",
+      capture: false,
+      async setup(call) { await call("cleanupShots"); }
     }
   ],
 
@@ -422,13 +506,26 @@ const OUT_DIR = OUT_DIRS[worldId] ?? OUT_DIRS.playwright;
 mkdirSync(OUT_DIR, { recursive: true });
 ensureWorld(worldId);
 
+const runStarted = Date.now();
+const secs = since => `${Math.round((Date.now() - since) / 1000)}s`;
+let taken = 0;
+
 const server = await startFoundry(worldId);
 console.log(`Foundry up with world "${worldId}"`);
 
 let session;
 let exitCode = 0;
 try {
-  session = await Session.open({ viewport: VIEWPORT, deviceScaleFactor: SCALE, canvas: true });
+  // Canvas off unless `--canvas`. Every full-screen shot is a window that covers the board, and
+  // headless Chromium draws the board in software (SwiftShader) every frame, which starved the
+  // page: a full run took 764s with it on and 176s with it off, for the same pictures.
+  session = await Session.open({ viewport: VIEWPORT, deviceScaleFactor: SCALE, canvas: withCanvas });
+  if ( profile ) {
+    // The module's debug log names each warm phase and times each render; stamping every console
+    // line with the run's clock shows where a slow shot's seconds actually went.
+    session.page.on("console", msg => profileLog.push(`+${((Date.now() - runStarted) / 1000).toFixed(1)}s ${msg.text()}`));
+    await session.eval(() => game.settings.set("sogrom-dnd5e-character-creator", "debugLogging", true));
+  }
   const call = await load(session);
 
   const shots = SHOTS[worldId];
@@ -445,11 +542,14 @@ try {
   const lastWanted = only ? shots.findLastIndex(s => only.includes(s.name)) : shots.length - 1;
 
   for ( const shot of shots.slice(0, lastWanted + 1) ) {
-    const capture = !only || only.includes(shot.name);
+    // `capture: false` marks a step that only changes the world (the cleanup at the end of a list).
+    const capture = (shot.capture !== false) && (!only || only.includes(shot.name));
     process.stdout.write(`  ${shot.name} … `);
+    if ( profile ) profileLog.push(`+${((Date.now() - runStarted) / 1000).toFixed(1)}s ===== ${shot.name}`);
+    const shotStarted = Date.now();
     await shot.setup(call);
     if ( !capture ) {
-      console.log("(setup only)");
+      console.log(`(setup only, ${secs(shotStarted)})`);
       continue;
     }
     await sleep(600);
@@ -459,14 +559,20 @@ try {
     // caught by that, rather than each helper having to remember.
     await call("depersonalise");
     const path = new URL(`./${shot.name}.png`, OUT_DIR).pathname.slice(1);
-    if ( shot.selector ) {
+    let png;
+    if ( shot.clip ) {
+      png = await session.page.screenshot({ clip: shot.clip });
+    } else if ( shot.selector ) {
       const target = session.page.locator(shot.selector).last();
       await target.waitFor({ timeout: 15_000 });
-      await target.screenshot({ path });
+      png = await target.screenshot();
     } else {
-      await session.page.screenshot({ path });
+      png = await session.page.screenshot();
     }
-    console.log("ok");
+    const out = fullSize ? png : await fit(session, png);
+    writeFileSync(path, out);
+    taken++;
+    console.log(`ok (${secs(shotStarted)})`);
   }
 
   if ( hold ) {
@@ -477,17 +583,51 @@ try {
   exitCode = 1;
   console.error(`\n${err.message}`);
   if ( session ) {
-    const { writeFileSync } = await import("node:fs");
     writeFileSync(new URL("./console.log", import.meta.url), session.consoleLog.join("\n"), "utf8");
     await session.page.screenshot({ path: new URL("./failure.png", import.meta.url).pathname.slice(1) })
       .catch(() => {});
     console.error("wrote console.log and failure.png");
   }
 } finally {
+  if ( profile ) writeFileSync(new URL("./shots-profile.log", import.meta.url), profileLog.join("\n"), "utf8");
   if ( session ) await session.close();
   await server.stop();
 }
+// A closing line of its own, so a finished run can be told apart from one still loading.
+console.log(`${exitCode ? "FAILED" : "Done"}: ${taken} shot(s) written to ${OUT_DIR.pathname.slice(1)} in ${secs(runStarted)}`);
 process.exit(exitCode);
+
+/**
+ * Shrink a PNG to fit inside `FIT`, keeping its aspect ratio; one already inside is left alone.
+ * The resize runs in a scratch browser page rather than the Foundry one, so the world is never
+ * touched, and uses the browser's own high-quality scaler, so the harness needs no image library.
+ * @param {Session} session
+ * @param {Buffer} png
+ * @returns {Promise<Buffer>}
+ */
+async function fit(session, png) {
+  const page = await session.page.context().newPage();
+  try {
+    const b64 = await page.evaluate(async ({ src, box }) => {
+      const blob = await (await fetch(`data:image/png;base64,${src}`)).blob();
+      const full = await createImageBitmap(blob);
+      const ratio = Math.min(box.width / full.width, box.height / full.height, 1);
+      if ( ratio === 1 ) return src;
+      const width = Math.round(full.width * ratio);
+      const height = Math.round(full.height * ratio);
+      const scaled = await createImageBitmap(blob, { resizeWidth: width, resizeHeight: height, resizeQuality: "high" });
+      const canvas = new OffscreenCanvas(width, height);
+      canvas.getContext("2d").drawImage(scaled, 0, 0);
+      const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer());
+      let bin = "";
+      for ( let i = 0; i < bytes.length; i += 0x8000 ) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
+    }, { src: png.toString("base64"), box: FIT });
+    return Buffer.from(b64, "base64");
+  } finally {
+    await page.close();
+  }
+}
 
 /**
  * Import `in-world/shots.mjs` into the page and return a caller for its exports — the same

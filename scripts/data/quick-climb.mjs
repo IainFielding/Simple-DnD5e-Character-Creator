@@ -1,8 +1,9 @@
-import { log } from "../config.mjs";
+import { log, levelUpHpDefault } from "../config.mjs";
 import { QUICK_BUILD, FEATURE_PREFERENCES } from "./quick-build-data.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { reconcileGrantedSpells } from "../build/spell-reconcile.mjs";
 import { computeSpellPlan, applyLevelUpSpells } from "../levelup/steps/lvl-spells-step.mjs";
+import { bookFreeUpdate, bookSpells } from "./spellbook.mjs";
 import { pickSpells } from "./quick-build.mjs";
 import { spellKey, ownedSpellKeys } from "./spell-identity.mjs";
 
@@ -142,12 +143,13 @@ export class QuickClimbProvider {
   /* -------------------------------------------- */
 
   /**
-   * Hit points: the average, which is what the level-up screen defaults to and what a player who
-   * declined to make any decisions should get. Rolling would make the same three choices produce a
-   * different character each time, which the screen's "seeded" promise rules out.
+   * Hit points: whatever the level-up screen starts on — the average, or the maximum in a world set
+   * to "Maximum only" — which is what a player who declined to make any decisions should get.
+   * Rolling would make the same three choices produce a different character each time, which the
+   * screen's "seeded" promise rules out.
    */
   hp() {
-    return "avg";
+    return levelUpHpDefault();
   }
 
   /** No opinion — a size decision above 1st level is content we have no suggestion for. */
@@ -402,12 +404,46 @@ async function learnSpells(actor, classItem, profile, spells) {
   // the pool, so the suggestions cost nothing where they do not apply.
   // `forClassAtLevel` indexes everything under `byLevel` — cantrips are level 0, not a separate
   // `cantrips` bucket as the creation view's `forClass` returns.
+  const cantrips = pickSpells(free(pool.byLevel?.[0]), profile.cantrips, plan.addCantrips);
+
+  // A Wizard writes its free book spells, highest level first like everyone else's picks, and
+  // prepares as many of them as its prepared limit now has room for. Room left over goes to the
+  // best of what the book already holds unprepared, so the climb never ends a level under its limit.
+  if ( plan.bookRule ) {
+    const leveled = pickSpells(free(byLevelUpTo(pool, plan.maxSpellLevel)), profile.spells, plan.addBook);
+    let room = Math.max(0, plan.spellTarget - (plan.spellHave - (plan.releasedSpells ?? 0)));
+    for ( const pick of leveled ) pick.prepared = (room-- > 0);
+    const picks = [...cantrips, ...leveled];
+    // The free picks recorded on the class, read before the spells land (see module:data/spellbook).
+    const ledger = bookFreeUpdate(actor, plan.castItem, leveled.length);
+    if ( picks.length ) await applyLevelUpSpells(actor, plan.sourceTag, picks, plan.method);
+    if ( ledger ) await actor.updateEmbeddedDocuments("Item", [ledger], { render: false });
+    if ( room > 0 ) await prepareFromBook(actor, plan.castItem, room);
+    return;
+  }
+
   const picks = [
-    ...pickSpells(free(pool.byLevel?.[0]), profile.cantrips, plan.addCantrips),
+    ...cantrips,
     ...pickSpells(free(byLevelUpTo(pool, plan.maxSpellLevel)), profile.spells, plan.addSpells)
   ];
   if ( !picks.length ) return;
   await applyLevelUpSpells(actor, plan.sourceTag, picks, plan.method);
+}
+
+/**
+ * Prepare up to `count` of the unprepared spells already in a book caster's book, highest level
+ * first — the spells a player would reach for when a level raises their prepared limit by more
+ * than the new spells they wrote in.
+ * @param {Actor5e} actor
+ * @param {Item5e} classItem  The book class's item on the actor.
+ * @param {number} count
+ */
+async function prepareFromBook(actor, classItem, count) {
+  const waiting = bookSpells(actor, classItem).all
+    .filter(i => Number(i.system?.prepared ?? 0) === 0)
+    .sort((a, b) => (Number(b.system?.level ?? 0) - Number(a.system?.level ?? 0)) || a.name.localeCompare(b.name));
+  const updates = waiting.slice(0, count).map(i => ({ _id: i.id, "system.prepared": 1 }));
+  if ( updates.length ) await actor.updateEmbeddedDocuments("Item", updates, { render: false });
 }
 
 /**

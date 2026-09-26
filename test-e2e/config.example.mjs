@@ -60,7 +60,7 @@ export const BASE_MODULES = [
 
 /** The system the test worlds run, and the version this harness was written against. */
 export const SYSTEM = "dnd5e";
-export const SYSTEM_VERSION = "6.0.2";
+export const SYSTEM_VERSION = "6.0.5";
 export const CORE_VERSION = "14.368";
 
 /**
