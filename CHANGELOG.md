@@ -2,6 +2,37 @@
 
 All notable changes to the Simple D&D Character Creator.
 
+## 3.3.3
+
+### Improved
+
+- **Spell-level chips on the level-up's Spells step.** When a level-up gains more than one level,
+  a row of chips shows how many of your new spells can be of each spell level, and how many you've
+  used, such as **Lvl 3 1/2**. Click a chip to show only the spells that pick can take, its level
+  and below, and click it again to show everything. It works alongside the search and the other
+  filters. A level-up of one level shows a single chip.
+- **The magic shop's slot chips filter the shelf.** Click a rarity slot to show the items it can
+  take, that rarity and lower, and click it again to show everything. It works alongside the
+  category and rarity filters.
+- **One spell swap for each level gained.** Classes that replace one spell when they gain a level
+  now replace one for each level a level-up gains, rather than one per level-up. A Sorcerer going
+  from 9th to 12th level can replace three. Each replacement follows the same spell-level limit as
+  a new spell.
+
+### Fixed
+
+- **Spells learned across several levels are limited to the level they're learned at.** A level-up
+  of several levels, including a Custom build above 1st level, asked for every new spell on one
+  screen and allowed any spell up to the final level's highest slot. A 2014 Sorcerer built at 9th
+  level could learn eight 5th-level spells, and a Wizard could write sixteen into its book. Each
+  new spell is now limited to what the class could cast at the level it comes from, so that
+  Sorcerer learns one 5th-level spell at most. This covers the Wizard's spellbook and the classes
+  that change their spells only when they level up: the Bard, Sorcerer and Warlock, the 2014
+  Ranger, the Eldritch Knight and the Arcane Trickster. Classes that change their spells after a
+  long rest, such as the Cleric, Druid and 2024 Paladin, are limited only by their final level, as
+  before, since they could have changed their list between levels anyway. Quick Build already
+  levelled one level at a time and is unchanged.
+
 ## 3.3.0 — Wizard Spellbook Support & Spell Swapping
 
 ### New
