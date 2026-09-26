@@ -95,7 +95,8 @@ export function trimToCaps(picks, caps) {
  * as long as anything could still use them.
  * @param {number[]} levels
  * @param {number[]} caps
- * @returns {{level:number, used:number, allowed:number, full:boolean}[]}  Highest cap first.
+ * @returns {{level:number, used:number, allowed:number, full:boolean}[]}  Lowest cap first, the way
+ *   the magic shop lists its rarities.
  */
 export function capSummary(levels, caps) {
   const allowed = new Map();
@@ -109,7 +110,7 @@ export function capSummary(levels, caps) {
     free.set(cap, free.get(cap) - 1);
     used.set(cap, (used.get(cap) ?? 0) + 1);
   }
-  return [...allowed.keys()].sort(desc).map(level => {
+  return ladder.map(level => {
     const n = used.get(level) ?? 0;
     return { level, used: n, allowed: allowed.get(level), full: n >= allowed.get(level) };
   });
