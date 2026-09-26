@@ -177,3 +177,14 @@ export async function rulesPageFor(topic, edition) {
 export async function hasRulesPage(topic, edition) {
   return !!(await rulesPageFor(topic, edition));
 }
+
+/**
+ * Resolve every topic under both editions ahead of need. Part of the `ready` warm: each step's
+ * context awaits {@link hasRulesPage} before it renders, so a cold lookup delayed the first visit.
+ * @returns {Promise<void>}
+ */
+export async function warmRulesPages() {
+  for ( const edition of ["2024", "2014"] ) {
+    for ( const topic of RULE_TOPICS ) await rulesPageFor(topic, edition);
+  }
+}

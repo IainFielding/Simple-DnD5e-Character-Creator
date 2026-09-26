@@ -7,8 +7,8 @@ import { warmChoices, resetRestrictedCache } from "./choice-resolver.mjs";
 import { resetToolCache } from "./tool-source.mjs";
 import { resetWeaponIcons } from "./weapon-source.mjs";
 import { getEnabledPacks, resetPackIndexes } from "./compendium-util.mjs";
-import { invalidateJournalIndex } from "./journal-source.mjs";
-import { invalidateRulesPages } from "./rules-source.mjs";
+import { invalidateJournalIndex, warmSourcePages } from "./journal-source.mjs";
+import { invalidateRulesPages, warmRulesPages } from "./rules-source.mjs";
 import { invalidateArtCache } from "./art-cache.mjs";
 import { foundryPregens, invalidatePregenCache } from "./premades.mjs";
 
@@ -168,6 +168,9 @@ export function warmSources() {
       // Done here it overlaps the phases above; left to the chooser's first render it ran on its
       // own after the warm, holding a "100%" spinner up for a further seventeen seconds. Untracked
       // by the bar, which counts origins. Ember never shows the chooser, so it is spared the reads.
+      // The class step awaits both of these before it renders, so left cold they sat behind the
+      // first class click: over a second in the harness world, more in one with more journal packs.
+      phase("bookPages", () => Promise.all([warmSourcePages(), warmRulesPages()]), () => {}),
       emberActive() ? null : phase("pregens", () => foundryPregens(), tick)
     ]);
     emit(100);
