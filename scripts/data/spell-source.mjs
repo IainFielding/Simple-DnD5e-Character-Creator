@@ -1,7 +1,7 @@
 import { DEFAULT_CANTRIPS, DEFAULT_LEVEL1_SPELLS, FALLBACK_CANTRIP_SCALES, log } from "../config.mjs";
 import { spellbookRule } from "./spellbook.mjs";
 import { advancementArray, advancementTitle} from "./advancement-util.mjs";
-import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
+import { getEnabledPacks, isUsableItemPack, packIndex, ITEM_INDEX_FIELDS } from "./compendium-util.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
 
 /** The class spell lists a Magic Initiate-style feat can draw from — warmed up front so the
@@ -222,7 +222,8 @@ export class SpellSource {
         const all = await browser.fetch(Item, {
           types: new Set(["spell"]),
           filters: [{ k: "system.level", o: "lte", v: maxLevel }],
-          indexFields: SPELL_INDEX_FIELDS
+          // A superset of SPELL_INDEX_FIELDS, shared with every other fetch — see ITEM_INDEX_FIELDS.
+          indexFields: new Set(ITEM_INDEX_FIELDS)
         });
         const map = new Map();
         for ( const e of all ) if ( e.uuid ) map.set(e.uuid, e);
@@ -711,7 +712,7 @@ async function scanSpellListPacks(classId, uuids) {
   for ( const pack of game.packs ) {
     if ( !isUsableItemPack(pack, enabled) ) continue;
     try {
-      const index = await pack.getIndex({ fields: ["type", "system.identifier"] });
+      const index = await packIndex(pack, { fields: ["type", "system.identifier"] });
       for ( const entry of index ) {
         if ( entry.type !== "spellList" || (entry.system?.identifier ?? "") !== classId ) continue;
         const doc = await pack.getDocument(entry._id);
@@ -774,7 +775,7 @@ async function scanAllSpells(maxLevel) {
   for ( const pack of game.packs ) {
     if ( !isUsableItemPack(pack, enabled) ) continue;
     try {
-      const index = await pack.getIndex({ fields: ["type", ...SPELL_INDEX_FIELDS] });
+      const index = await packIndex(pack, { fields: ["type", ...SPELL_INDEX_FIELDS] });
       for ( const entry of index ) {
         if ( (entry.type === "spell") && ((entry.system?.level ?? 99) <= maxLevel) ) out.push(entry);
       }
@@ -793,7 +794,7 @@ async function scanSpellsByClassTag(classId, maxLevel = 1) {
   for ( const pack of game.packs ) {
     if ( !isUsableItemPack(pack, enabled) ) continue;
     try {
-      const index = await pack.getIndex({ fields: ["type", "system.level"] });
+      const index = await packIndex(pack, { fields: ["type", "system.level"] });
       for ( const entry of index ) {
         if ( entry.type !== "spell" || (entry.system?.level ?? 99) > maxLevel || seen.has(entry._id) ) continue;
         seen.add(entry._id);

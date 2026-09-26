@@ -253,6 +253,7 @@ export class CreatorShell extends CreatorShellBase {
     // A restored draft names its origins by uuid, and the world may have changed since it was
     // written. Now — with the index warm, so "missing" means missing rather than not-yet-loaded —
     // is the only moment those can be checked before a step tries to render one.
+    log("warm settled; leaving the loading screen");
     if ( this.#resumed ) this.#reportPrunedOrigins(pruneMissingOrigins(this.state, this.source));
     this.#loading = false;
     // Resuming an in-progress actor: jump to the first step still needing input.
@@ -284,16 +285,22 @@ export class CreatorShell extends CreatorShellBase {
     // Build the active screen BEFORE reading the completion flags: laying it out can refresh the
     // caches those flags read (the Choices step resolves its requirements into `state.choiceCache`),
     // so the dossier tick and the Next button reflect this very render rather than the previous one.
-    const stepContext = this.#loading ? {} : await step.context(this._ctx());
+    // Timed under the debug log: the first render after the warm has been seen to take tens of
+    // seconds behind a spinner reading "100%", and these awaits are where that time can go.
+    const timed = async (label, work) => {
+      const started = Date.now();
+      try { return await work(); } finally { log(`render ${label} took ${Date.now() - started}ms`); }
+    };
+    const stepContext = this.#loading ? {} : await timed(`step ${step.id}`, () => step.context(this._ctx()));
     // Built before the flags are read, like the step context above and for the same reason: the
     // threshold resolves origin ability increases into the state, and the dossier must show this
     // render rather than the previous one.
-    const entry = this.#entry === "chooser" ? await chooserContext(this._ctx())
+    const entry = this.#entry === "chooser" ? await timed("chooser", () => chooserContext(this._ctx()))
       : this.#entry === "premade"
-        ? { premades: await premadeContext(this._ctx(), this.#premadeChoice, this.#premadeLevel) }
+        ? { premades: await timed("premades", () => premadeContext(this._ctx(), this.#premadeChoice, this.#premadeLevel)) }
         : null;
     const threshold = this.#entry === "threshold"
-    ? await thresholdContext(this._ctx(), this.#thresholdRules ?? systemRulesEdition())
+    ? await timed("threshold", () => thresholdContext(this._ctx(), this.#thresholdRules ?? systemRulesEdition()))
     : null;
 
     const flags = this._completeFlags();

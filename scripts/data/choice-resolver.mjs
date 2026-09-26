@@ -5,7 +5,7 @@ import {
 } from "./advancement-util.mjs";
 import { matchesRules, packageTypeOf, readAsi } from "./source-index.mjs";
 import { packageOf, rankPackage } from "./dedupe.mjs";
-import { getEnabledPacks, isUsableItemPack } from "./compendium-util.mjs";
+import { getEnabledPacks, isUsableItemPack, packIndex } from "./compendium-util.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { phbWeaponIcon } from "./weapon-source.mjs";
 import { bg3TraitIcon } from "./bg3-icons.mjs";
@@ -1131,7 +1131,7 @@ export async function findRestrictedItems(cfg, maxLevel = null, rules = null) {
     // something out of a pack their permissions hide from them.
     if ( !pack.visible || !isUsableItemPack(pack, enabled) ) continue;
     try {
-      const index = await pack.getIndex({
+      const index = await packIndex(pack, {
         fields: ["type", "system.type.value", "system.type.subtype", "system.source",
           "system.prerequisites.level", "system.prerequisites.items"]
       });
@@ -1239,7 +1239,7 @@ export async function findAsiFeats(level) {
   for ( const pack of game.packs ) {
     if ( !pack.visible || !isUsableItemPack(pack, enabled) ) continue;
     try {
-      const index = await pack.getIndex({
+      const index = await packIndex(pack, {
         fields: ["type", "system.type.value", "system.type.subtype", "system.identifier",
           "system.prerequisites.level", "system.prerequisites.items"]
       });

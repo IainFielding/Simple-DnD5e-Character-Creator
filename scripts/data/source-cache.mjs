@@ -1,4 +1,4 @@
-import { log } from "../config.mjs";
+import { log, emberActive } from "../config.mjs";
 import { SourceIndex, resetPackageTypes } from "./source-index.mjs";
 import { SpellSource, MAGIC_INITIATE_LISTS } from "./spell-source.mjs";
 import { EquipmentSource } from "./equipment-source.mjs";
@@ -6,11 +6,11 @@ import { StoreSource } from "./store-source.mjs";
 import { warmChoices, resetRestrictedCache } from "./choice-resolver.mjs";
 import { resetToolCache } from "./tool-source.mjs";
 import { resetWeaponIcons } from "./weapon-source.mjs";
-import { getEnabledPacks } from "./compendium-util.mjs";
+import { getEnabledPacks, resetPackIndexes } from "./compendium-util.mjs";
 import { invalidateJournalIndex } from "./journal-source.mjs";
 import { invalidateRulesPages } from "./rules-source.mjs";
 import { invalidateArtCache } from "./art-cache.mjs";
-import { invalidatePregenCache } from "./premades.mjs";
+import { foundryPregens, invalidatePregenCache } from "./premades.mjs";
 
 /**
  * Shared, warm-once compendium data for the builder.
@@ -43,6 +43,57 @@ let signature = null;
 /** Progress subscribers (0–100) and the latest reported value, so late subscribers catch up. */
 const listeners = new Set();
 let lastPct = 0;
+
+/**
+ * Per-phase timings of the current warm, for diagnosing one that never settles. The bar rounds to
+ * 100% once nearly every tick is in, so a phase stuck on its last read looks finished; this names it.
+ * @type {{startedAt: number, phases: Record<string, {startedAt: number, endedAt: number|null, ticks: number, expected: number|null, error: string|null}>}|null}
+ */
+let warmTrace = null;
+
+/**
+ * A snapshot of the current (or last) warm's phases: which have finished, which are still running,
+ * and for how long. Read by the e2e harness when the loading screen outstays its timeout.
+ * @returns {{elapsedMs: number, pct: number, phases: object[]}|null}
+ */
+export function warmStatus() {
+  if ( !warmTrace ) return null;
+  const now = Date.now();
+  return {
+    elapsedMs: now - warmTrace.startedAt,
+    pct: lastPct,
+    phases: Object.entries(warmTrace.phases).map(([name, p]) => ({
+      name,
+      done: p.endedAt != null,
+      ms: (p.endedAt ?? now) - p.startedAt,
+      ticks: p.ticks,
+      expected: p.expected,
+      error: p.error
+    }))
+  };
+}
+
+/**
+ * Run one warm phase under the trace: its ticks are counted against its own name, and its start,
+ * end and failure are logged so a debug log shows which phase a stalled warm is waiting on.
+ * @param {string} name
+ * @param {(tick: () => void) => Promise<any>} fn
+ * @param {() => void} tick   The shared progress tick.
+ * @param {number} [expected]  Ticks the phase should make, so a stalled one shows how far it got.
+ */
+async function phase(name, fn, tick, expected = null) {
+  const trace = warmTrace;
+  const p = trace.phases[name] = { startedAt: Date.now(), endedAt: null, ticks: 0, expected, error: null };
+  try {
+    return await fn(() => { p.ticks++; tick(); });
+  } catch ( err ) {
+    p.error = String(err?.message ?? err);
+    throw err;
+  } finally {
+    p.endedAt = Date.now();
+    log(`warm phase ${name} ${p.error ? "failed" : "done"} in ${p.endedAt - p.startedAt}ms (${p.ticks} ticks)`);
+  }
+}
 
 /** A cheap signature of the world's enabled compendium sources; changes invalidate the cache. */
 function packSignature() {
@@ -89,8 +140,9 @@ export function warmSources() {
   const { source, spells, equipment } = getSources();
   signature = packSignature();
   lastPct = 0;
+  warmTrace = { startedAt: Date.now(), phases: {} };
   warming = (async () => {
-    await source.load();
+    await phase("index", () => source.load(), () => {});
     const classes = source.classes();
     const species = source.species();
     const backgrounds = source.backgrounds();
@@ -107,11 +159,16 @@ export function warmSources() {
     // reads (forEachLimit), and the shared `done` counter still totals every tick, so the
     // bar advances smoothly to 100 however the phases interleave.
     await Promise.all([
-      source.warmAll(tick),
-      spells.warmClasses(classes.map(c => c.uuid), tick),
-      warmChoices(source, tick),
-      equipment.warmAll(source, tick),
-      spells.warmLists(MAGIC_INITIATE_LISTS, 1, tick)
+      phase("origins", t => source.warmAll(t), tick, origins),
+      phase("classSpells", t => spells.warmClasses(classes.map(c => c.uuid), t), tick, classes.length),
+      phase("choices", t => warmChoices(source, t), tick, origins),
+      phase("equipment", t => equipment.warmAll(source, t), tick, classes.length + backgrounds.length),
+      phase("spellLists", t => spells.warmLists(MAGIC_INITIATE_LISTS, 1, t), tick, MAGIC_INITIATE_LISTS.length),
+      // The entry chooser counts the ready-made characters, which means reading every one in full.
+      // Done here it overlaps the phases above; left to the chooser's first render it ran on its
+      // own after the warm, holding a "100%" spinner up for a further seventeen seconds. Untracked
+      // by the bar, which counts origins. Ember never shows the chooser, so it is spared the reads.
+      emberActive() ? null : phase("pregens", () => foundryPregens(), tick)
     ]);
     emit(100);
     return cache;
@@ -160,4 +217,6 @@ export function invalidateSources() {
   invalidateArtCache();
   // The Ready-made shelf lists whichever pregen packs are enabled, so it answers to the same change.
   invalidatePregenCache();
+  // A rebuild re-reads the packs from scratch, so the record of fields already fetched goes too.
+  resetPackIndexes();
 }

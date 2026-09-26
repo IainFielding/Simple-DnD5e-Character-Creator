@@ -20,7 +20,7 @@ const { StoreConfigApp } = await import(`${MODULE}/app/store-config.mjs`);
 const { MagicShopConfigApp } = await import(`${MODULE}/app/magic-shop-config.mjs`);
 const { magicEntryFromItem } = await import(`${MODULE}/data/magic-shop.mjs`);
 const { applyQuickBuild } = await import(`${MODULE}/data/quick-build.mjs`);
-const { getSources } = await import(`${MODULE}/data/source-cache.mjs`);
+const { getSources, warmStatus } = await import(`${MODULE}/data/source-cache.mjs`);
 const { launchWindowOptions, MODULE_ID, SETTINGS } = await import(`${MODULE}/config.mjs`);
 
 /** The open shell, so successive calls from Node act on the same window. */
@@ -63,7 +63,12 @@ async function waitForStage(timeout = 420_000) {
     await pause(500);
   }
   const label = document.querySelector(".creator-loading p")?.textContent ?? "(no stage at all)";
-  throw new Error(`creator stage never finished loading — stuck at: ${label}`);
+  // Which warm phase is still running, and how far it got — the bar reads 100% once nearly every
+  // tick is in, so without this a phase stuck on its last read is indistinguishable from done.
+  const status = warmStatus();
+  const phases = status?.phases.map(p => `${p.name}: ${p.done ? "done" : "RUNNING"} ${p.ticks}/${p.expected ?? "?"}`
+    + ` in ${p.ms}ms${p.error ? ` (${p.error})` : ""}`).join("; ") ?? "no warm has started";
+  throw new Error(`creator stage never finished loading — stuck at: ${label}. Warm phases: ${phases}`);
 }
 
 /**

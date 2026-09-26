@@ -1,4 +1,5 @@
 import { log } from "../config.mjs";
+import { packIndex } from "./compendium-util.mjs";
 
 /**
  * Finding the source book's own Journal page for a class or subclass.
@@ -50,7 +51,7 @@ async function buildIndex() {
   for ( const pack of game.packs ?? [] ) {
     if ( !isJournalPack(pack) ) continue;
     try {
-      const index = await pack.getIndex();
+      const index = await packIndex(pack);
       // Narrow by the index where we can: only entries that actually contain a class/subclass page
       // are worth loading. Some index shapes omit `pages` entirely, in which case every entry in
       // this pack has to be loaded — correctness first, and the result is cached either way.

@@ -1,4 +1,5 @@
 import { log } from "../config.mjs";
+import { ITEM_INDEX_FIELDS } from "./compendium-util.mjs";
 
 /**
  * Shared resolution of D&D tool *categories* into the concrete tools a player can pick —
@@ -63,7 +64,8 @@ export async function toolChoices(category) {
     try {
       const all = await browser.fetch(Item, {
         types: new Set(["tool"]),
-        indexFields: new Set(["system.type.value", "system.type.baseItem"])
+        // Reads `system.type.value` and `.baseItem`; asks for the shared set (ITEM_INDEX_FIELDS).
+        indexFields: new Set(ITEM_INDEX_FIELDS)
       });
       entries = all.filter(e => (e.system?.type?.value ?? "") === category);
     } catch ( err ) {

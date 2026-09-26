@@ -1,4 +1,5 @@
 import { MODULE_ID, SETTINGS, levelUpEnabled, log } from "../config.mjs";
+import { packIndex } from "./compendium-util.mjs";
 import {
   RARITIES, normalizeRarity, itemRarity, rarityLabel, sanitizeMagicEntry, sanitizeWealthTable, tierFor,
   tierGrantsAnything,
@@ -194,7 +195,7 @@ export class MagicShopSource {
   static async #defaultPackIndex(collection) {
     const pack = game.packs?.get(collection);
     if ( pack?.documentName !== "Item" ) return null;
-    return pack.getIndex({ fields: INDEX_FIELDS });
+    return packIndex(pack, { fields: INDEX_FIELDS });
   }
 
   static #signatureOf(entries) {
@@ -439,7 +440,7 @@ function isPlainShell(item) {
 }
 
 async function readPack(pack, include) {
-  const index = withUuids(pack, await pack.getIndex({ fields: DROP_INDEX_FIELDS })).filter(include);
+  const index = withUuids(pack, await packIndex(pack, { fields: DROP_INDEX_FIELDS })).filter(include);
   const candidates = index.filter(e => mightBeTemplate(e) || isShell(e));
   const docs = candidates.length ? await pack.getDocuments({ _id__in: candidates.map(e => e._id) }) : [];
   const templates = docs.filter(isTemplate);
@@ -500,7 +501,7 @@ async function baseSummaries(uuids) {
     if ( where?.pack ) {
       if ( !indexes.has(where.pack) ) {
         const pack = game.packs.get(where.pack);
-        indexes.set(where.pack, pack ? await pack.getIndex({ fields: BASE_FIELDS }).catch(() => null) : null);
+        indexes.set(where.pack, pack ? await packIndex(pack, { fields: BASE_FIELDS }).catch(() => null) : null);
       }
       found = indexes.get(where.pack)?.get(where.id);
     } else if ( where ) {

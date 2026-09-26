@@ -1,4 +1,5 @@
 import { log } from "../config.mjs";
+import { packIndex } from "./compendium-util.mjs";
 
 /**
  * Finding the rulebook's own page for a topic the wizard is currently asking about.
@@ -132,7 +133,7 @@ async function firstEntry(packIds, find) {
     const pack = game.packs?.get?.(id);
     if ( !pack ) continue;
     try {
-      const hit = find(await pack.getIndex());
+      const hit = find(await packIndex(pack));
       if ( hit ) return await pack.getDocument(hit._id);
     } catch ( err ) {
       log(`could not read the rules pack ${id}`, err);

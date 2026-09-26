@@ -1,5 +1,5 @@
 import { log } from "../config.mjs";
-import { getEnabledPacks } from "./compendium-util.mjs";
+import { getEnabledPacks, packIndex } from "./compendium-util.mjs";
 
 /**
  * Weapon icon resolution from the D&D Player's Handbook pack. A weapon-trait pick
@@ -57,7 +57,7 @@ async function phbWeaponMap() {
     if ( !pack.collection.startsWith(PHB_PREFIX) ) continue;
     if ( enabled && !enabled.has(pack.collection) ) continue;   // PHB present but disabled in source config
     try {
-      const index = await pack.getIndex({ fields: ["type", "system.type.baseItem"] });
+      const index = await packIndex(pack, { fields: ["type", "system.type.baseItem"] });
       for ( const e of index ) {
         if ( e.type !== "weapon" ) continue;
         const base = e.system?.type?.baseItem;

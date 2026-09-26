@@ -1,7 +1,7 @@
 import { log, t } from "../config.mjs";
 import { slugify } from "./origin-art.mjs";
 import { isPlaceholderName } from "../state/creator-state.mjs";
-import { getEnabledPacks } from "./compendium-util.mjs";
+import { getEnabledPacks, packIndex } from "./compendium-util.mjs";
 
 /**
  * Ready-made characters: the third way into the creator.
@@ -78,7 +78,7 @@ export function portraitFor(doc, cls) {
   return cls?.img || "icons/svg/mystery-man.svg";
 }
 
-/** Resolved pregens, memoised — these Actor documents are not a load to repeat on every render. */
+/** The pregen load, memoised as its promise — these Actor documents are not a load to repeat on every render. */
 let pregenCache = null;
 
 /** A character's level: the sum of its class items, which is the only place the truth lives. */
@@ -156,14 +156,15 @@ function groupFor(pack) {
  *
  * @returns {Promise<Array<{label: string, badge: string|null, pack: string, entries: object[]}>>}
  */
-export async function foundryPregens() {
-  if ( pregenCache ) return pregenCache;
-  const groups = [];
-  for ( const source of PREGEN_SOURCES ) {
+export function foundryPregens() {
+  // The promise is what is cached, not the result: the warm and the chooser's first render both ask,
+  // and reading every pregen in full is seconds of work that must not run twice side by side. The
+  // packs are read together, since none depends on another.
+  pregenCache ??= Promise.all(PREGEN_SOURCES.map(async source => {
     const entries = await readPregenPack(source);
-    if ( entries.length ) groups.push({ ...groupFor(source.pack), pack: source.pack, entries });
-  }
-  return (pregenCache = groups);
+    return entries.length ? { ...groupFor(source.pack), pack: source.pack, entries } : null;
+  })).then(groups => groups.filter(Boolean));
+  return pregenCache;
 }
 
 /**
@@ -179,7 +180,7 @@ async function readPregenPack({ pack: packId, idHint, describe = true }) {
   const enabled = getEnabledPacks();
   if ( enabled && !enabled.has(packId) ) return [];
   try {
-    const index = await pack.getIndex();
+    const index = await packIndex(pack);
     const wanted = [...index].filter(e => {
       if ( idHint && !idHint.test(String(e._id)) ) return false;
       // `type` is in every index; filtering on it here is what keeps a 166-actor pack of monsters
