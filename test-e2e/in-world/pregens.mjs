@@ -12,7 +12,7 @@
  * that does not is either a copy that isn't a copy or a pack this code cannot read.
  *
  * It also covers the discovery half, which is where the fiddly rules live: "a character document
- * whose class levels total one", read from a partial index so a 471-entry pack is not loaded in
+ * whose class levels total at least one", listed at that level, read from a partial index so a 471-entry pack is not loaded in
  * full. A source that silently stops matching leaves the Ready-made screen empty, which no unit test
  * can see because the packs are the input.
  */
@@ -80,15 +80,16 @@ async function runCase(entry) {
       if ( !want.has(name) ) failures.push(`"${name}" (×${count}) is on the import but not the source`);
     }
 
-    // 2. Class levels. The discovery rule is "class levels total one", so an import that landed on
-    //    a different total means either the wrong document or a rebuild that re-ran advancement.
+    // 2. Class levels. An import that landed on a different total means either the wrong document or
+    //    a rebuild that re-ran advancement. Pregens are offered at every level they ship at (1, 3, 5,
+    //    11, 17), so the list's level filter is only honest if the entry's level is the real one.
     const sourceLevels = classLevels(expected.items);
     const actorLevels = classLevels(mine.items);
     if ( actorLevels !== sourceLevels ) {
       failures.push(`class levels: source has ${sourceLevels}, import has ${actorLevels}`);
     }
-    if ( sourceLevels !== 1 ) {
-      failures.push(`offered as a 1st-level pregen but its class levels total ${sourceLevels}`);
+    if ( entry.level !== sourceLevels ) {
+      failures.push(`offered at level ${entry.level} but its class levels total ${sourceLevels}`);
     }
 
     // 3. Ability scores, verbatim. The cheapest possible tell that the character was regenerated:

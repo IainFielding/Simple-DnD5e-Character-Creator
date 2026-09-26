@@ -1,5 +1,5 @@
 # Simple D&D 5e Character Creator
-A guided character creation and level-up experience for Dungeons and Dragons 5e/5.5e on Foundry VTT.
+A guided character creation and level-up experience for Dungeons & Dragons 5e/5.5e on Foundry VTT.
 
 Create characters through a step-by-step wizard, generate characters in seconds with Quick Build, import premade characters, and replace the standard D&D 5e level-up workflow with a streamlined, player-focused experience.
 
@@ -86,7 +86,7 @@ This module will automatically detect if you have any of the official modules in
 | Component | Version |
 |------------|------------|
 | Foundry VTT | v14 |
-| D&D 5e System | 6.x |
+| D&D 5e System | 6.0+ |
 | Verified On | Foundry 14.368 / D&D 5e 6.0.5 |
 
 ### Reporting Issues
