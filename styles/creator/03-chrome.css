@@ -71,7 +71,7 @@
   flex: 0 0 auto;
   width: 1.5rem;
   height: 1.5rem;
-  background: url("../../../systems/dnd5e/ui/official/ampersand-gold.svg") no-repeat center / contain;
+  background: url("../../../../systems/dnd5e/ui/official/ampersand-gold.svg") no-repeat center / contain;
 }
 
 .creator-topbar-version {

@@ -21,3 +21,29 @@ describe("module.json styles", () => {
     expect(listed.at(-1)).toBe("styles/ember-skin.css");
   });
 });
+
+/**
+ * A relative `url()` resolves against the stylesheet's own served path, so moving a file a
+ * directory deeper silently breaks every `../` in it. Splitting creator.css into `styles/creator/`
+ * did exactly that to the dnd5e ampersand: `../../../systems/…` began resolving to
+ * `/modules/systems/…` and 404'd, which no e2e run notices because a missing background paints
+ * nothing. Each relative url must land in this module's folder, the system's, or another module's.
+ */
+describe("stylesheet urls", () => {
+  const listed = JSON.parse(readFileSync("module.json", "utf8")).styles;
+  const base = "http://host/modules/sogrom-dnd5e-character-creator/";
+
+  it.each(listed)("%s resolves every relative url inside the Data folder", file => {
+    const css = readFileSync(file, "utf8");
+    const bad = [];
+    for ( const [, raw] of css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g) ) {
+      if ( /^(data:|https?:|\/|#)/.test(raw) ) continue;
+      const path = new URL(raw, base + file).pathname;
+      const own = path.startsWith("/modules/sogrom-dnd5e-character-creator/");
+      const system = path.startsWith("/systems/");
+      const other = /^\/modules\/(?!systems\/|modules\/)[^/]+\/./.test(path);
+      if ( !own && !system && !other ) bad.push(`${raw} → ${path}`);
+    }
+    expect(bad).toEqual([]);
+  });
+});
