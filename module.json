@@ -1,7 +1,7 @@
 {
   "id": "sogrom-dnd5e-character-creator",
   "title": "Simple D&D Character Creator",
-  "description": "A guided, fullscreen character creation wizard for the D&D 5e system. Walks players through Species, Background, and Class selection in a step-by-step workflow.",
+  "description": "A guided character creation and level-up experience for Dungeons and Dragons 5e/5.5e on Foundry VTT.",
   "version": "#{VERSION}#",
   "compatibility": {
     "minimum": "14.359",

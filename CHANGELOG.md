@@ -2,7 +2,7 @@
 
 All notable changes to the Simple D&D Character Creator.
 
-## 3.3.0
+## 3.3.0 — Wizard Spellbook Support & Spell Swapping
 
 ### New
 

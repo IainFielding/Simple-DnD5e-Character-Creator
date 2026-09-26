@@ -1,7 +1,7 @@
 # Simple D&D 5e Character Creator
-A guided character creation and level-up experience for Dungeon and Dragons 5e/5.5e on Foundry VTT.
+A guided character creation and level-up experience for Dungeons and Dragons 5e/5.5e on Foundry VTT.
 
-Create characters through a step-by-step wizard, generate characters in seconds with Quick Build, import premade characters, and replace the standard D&D 5e level-up workflow with a streamlined, player focused experience.
+Create characters through a step-by-step wizard, generate characters in seconds with Quick Build, import premade characters, and replace the standard D&D 5e level-up workflow with a streamlined, player-focused experience.
 
 > [!TIP]
 > This module works best with the [Official FoundryVTT game expansion modules from Wizards of the Coast](https://www.foundryvtt.store/creators/wizards-of-the-coast) 
@@ -16,16 +16,16 @@ Build a character from start to finish with the guided workflow:
 - Configure ability scores
 - Choose spells and advancement options
 - Select starting equipment
-- Equipment Shop to spend that srting gold
+- Equipment Shop to spend that starting gold
 - Starting magic items for higher-level characters
 - Review everything before creation
 
 ![Species Selection window](docs\screenshots\species.png)
 
 ### Quick Build
-Need a character fast ?
+Need a character fast?
 
-Just Choose:
+Just choose:
 
 - Class
 - Species
@@ -38,9 +38,9 @@ The module automatically completes the remaining choices using recommended defau
 ### Premade Characters
 Import pregenerated characters directly from the system or modules you have installed.
 
-Perfect for One-shots or new players just looking to get in and play
+Perfect for one-shots or new players just looking to get in and play.
 
-- Use this to choose your [Heroes on the borderlands](https://www.foundryvtt.store/products/dnd-heroes-borderlands/) starter charcters
+- Use this to choose your [Heroes of the Borderlands](https://www.foundryvtt.store/products/dnd-heroes-borderlands/) starter characters
 
 ![Prebuilt character selection](docs\screenshots\ready-made.png)
 
@@ -57,7 +57,7 @@ Replaces the standard D&D 5e advancement wizard with a level-up workflow that:
 
 ## Optional Extras
 
-Build in to the module are small optional extras which can help you players create their characters such as:
+Built into the module are small optional extras which can help your players create their characters such as:
 
 ### Starting Equipment Store
 This is a step in the character creation process whereby players can spend their starting gold before character creation is finished.  A prestocked SRD aligned store is supplied out of the box but you can customise it with items from any compendiums or modules you have.
@@ -65,20 +65,20 @@ This is a step in the character creation process whereby players can spend their
 ![Starting Equipment store](docs\screenshots\store.png)
 
 ### Starting with Magic items
-This is a step in the character creation process, if your creating characters at higher levels and they would have a number of magical items like in the new [Arcana Unleashed: Deadfall campaign](https://www.foundryvtt.store/products/dnd-deadfall)
+This is a step in the character creation process, if you're creating characters at higher levels and they would have a number of magical items like in the new [Arcana Unleashed: Deadfall campaign](https://www.foundryvtt.store/products/dnd-deadfall)
 
-- Players can get free magic items up the rarity cap you set eg. (3 common, 2 rare, 1 very rare)
+- Players can get free magic items up to the rarity cap you set eg. (3 common, 2 rare, 1 very rare)
 - Players can spend their extra gold on additional magical items 
 
 ![Magic Item Store](docs\screenshots\magic-shop.png)
 
 ### Full Ember Support
-If your playing an [Ember](https://www.foundryvtt.store/products/ember) campaign, this module extends Ember's character creation wizard to now include all of the advancements, starting store and level up workflow.
+If you're playing an [Ember](https://www.foundryvtt.store/products/ember) campaign, this module extends Ember's character creation wizard to now include all of the advancements, starting store and level up workflow.
 
-![Ember Intergration](docs\screenshots\ember-handoff.png)
+![Ember Integration](docs\screenshots\ember-handoff.png)
 
 ### Additional Artwork Support
-This module will automatically detects if you have any of the official modules installed and will use thier artwork to make your character creation expereince even better.
+This module will automatically detect if you have any of the official modules installed and will use their artwork to make your character creation experience even better.
 
 ## Support information
 
@@ -86,7 +86,7 @@ This module will automatically detects if you have any of the official modules i
 | Component | Version |
 |------------|------------|
 | Foundry VTT | v14 |
-| D&D 5e System | 5.3.3 - 6.x |
+| D&D 5e System | 6.x |
 | Verified On | Foundry 14.368 / D&D 5e 6.0.5 |
 
 ### Reporting Issues
