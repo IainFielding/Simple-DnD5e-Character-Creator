@@ -358,8 +358,8 @@ Hooks.on("renderActorDirectory", (_app, html) => {
 registerBlankBuildMenu();
 
 // Add a right-click "Level Up" entry to character actors in the sidebar. Foundry passes
-// us the menu's option array and we push our own entry onto it; `condition` decides per-actor
-// whether the entry shows, `callback` runs when it's clicked. It rides the same trigger path
+// us the menu's option array and we push our own entry onto it; `visible` decides per-actor
+// whether the entry shows, `onClick` runs when it's clicked. It rides the same trigger path
 // as the sheet's Level Up button, so both entry points behave identically.
 Hooks.on("getActorContextOptions", (_directory, options) => {
   if ( game.system?.id !== "dnd5e" ) return;

@@ -146,15 +146,20 @@
 
     {{!-- Several levels gained at once: each pick belongs to the level it comes from, so it can only
           reach the spell level that level could cast. One chip per cap, the magic shop's rarity
-          slots with spell levels for rarities. --}}
+          slots with spell levels for rarities. A chip is also a filter: clicking it shows every spell
+          that pick could take, its level and below, and clicking it again shows them all (the
+          shell's _wireSpellFilters and _applySpellFilters). --}}
     {{#if levelCaps.length}}
     <div class="creator-spell-caps">
       <span class="creator-spell-selected-label">{{localize "sogrom-dnd5e-character-creator.levelup.step.spells.capsLabel"}}</span>
       <ul class="creator-magic-slots" aria-label="{{localize 'sogrom-dnd5e-character-creator.levelup.step.spells.capsLabel'}}">
         {{#each levelCaps}}
-        <li class="creator-magic-slot {{#if full}}is-full{{/if}}">
-          <span>{{label}}</span>
-          <span class="creator-magic-slot-count">{{used}}/{{allowed}}</span>
+        <li>
+          <button type="button" class="creator-magic-slot {{#if full}}is-full{{/if}}" data-spell-cap-level="{{level}}"
+                  aria-pressed="false" data-tooltip="{{localize 'sogrom-dnd5e-character-creator.levelup.step.spells.capFilterTip' level=level}}">
+            <span>{{label}}</span>
+            <span class="creator-magic-slot-count">{{used}}/{{allowed}}</span>
+          </button>
         </li>
         {{/each}}
       </ul>

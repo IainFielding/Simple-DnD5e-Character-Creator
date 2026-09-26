@@ -146,6 +146,12 @@ export const magicShopStep = {
       state.magicShopRarity = el.value ?? "";
       return;
     }
+    // A slot chip: show what that slot can take, clicking it again shows everything.
+    if ( action === "magic-slot-filter" ) {
+      const rarity = el.dataset.rarity ?? "";
+      state.magicShopSlotFilter = (state.magicShopSlotFilter === rarity) ? "" : rarity;
+      return;
+    }
     if ( action === "magic-group" ) {
       const key = el.dataset.group;
       const open = new Set(state.magicShopOpenGroups ?? []);
@@ -215,9 +221,12 @@ export const magicShopStep = {
     const spentCp = magicCartCp(state);
     const leftCp = budgetCp - spentCp;
 
+    // A slot chip narrows to what that slot holds: its own rarity and anything lower. Unlike the
+    // rarity dropdown, which matches one rarity exactly; the two combine.
+    const slotRank = slotFilterRank(state, tier);
     const cards = eligible
       .filter(e => (!category || e.type === category) && (!subtype || e.subtype === subtype)
-        && (!rarity || e.rarity === rarity))
+        && (!rarity || e.rarity === rarity) && ((slotRank < 0) || (rarityRank(e.rarity) <= slotRank)))
       .map(e => {
         const qty = picks[e.uuid]?.qty ?? 0;
         const boughtQty = cart[e.uuid]?.qty ?? 0;
@@ -303,6 +312,19 @@ export const magicShopStep = {
   }
 };
 
+/**
+ * The rank of the rarity the shelf is narrowed to by a slot chip, or -1 for none. A chip left set
+ * from another tier (the level changed) that this tier grants no slot for is ignored rather than
+ * hiding the shelf behind a chip that is no longer on screen.
+ * @param {object} state
+ * @param {{allowance: Record<string, number>}} tier
+ * @returns {number}
+ */
+export function slotFilterRank(state, tier) {
+  const rarity = state.magicShopSlotFilter ?? "";
+  return (rarity && ((tier?.allowance?.[rarity] ?? 0) > 0)) ? rarityRank(rarity) : -1;
+}
+
 /** The right-hand column: the gold roll, the slot chips and the picks. Needs no stock. */
 function asideContext(state, tier, d10, counts) {
   const rollable = goldNeedsRoll(tier);
@@ -311,7 +333,10 @@ function asideContext(state, tier, d10, counts) {
   const hasGold = (tier.baseGp > 0) || rollable;
   const range = goldRange(tier);
   const picks = pickList(state).map(p => ({ ...p, multi: p.qty > 1, rarityLabel: rarityLabel(p.rarity) }));
-  const slots = slotsSummary(counts, tier.allowance).map(s => ({ ...s, label: rarityLabel(s.rarity) }));
+  const slotRank = slotFilterRank(state, tier);
+  const slots = slotsSummary(counts, tier.allowance).map(s => ({
+    ...s, label: rarityLabel(s.rarity), active: (slotRank >= 0) && (rarityRank(s.rarity) === slotRank)
+  }));
   const fits = withinAllowance(counts, tier.allowance);
   return {
     tierLabel: t("step.magicShop.tier", { level: tier.level ?? tier.from }),

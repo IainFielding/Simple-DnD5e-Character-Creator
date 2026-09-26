@@ -161,9 +161,15 @@
       {{#if hasSlots}}
       <ul class="creator-magic-slots" aria-label="{{localize 'sogrom-dnd5e-character-creator.step.magicShop.slotsAria'}}">
         {{#each slots}}
-        <li class="creator-magic-slot {{#if full}}is-full{{/if}}">
-          <span class="cc-rarity-text rarity-{{rarity}}">{{label}}</span>
-          <span class="creator-magic-slot-count">{{used}}/{{allowed}}</span>
+        {{!-- A slot is also a filter: the shelf shows what it can take, its rarity and lower. --}}
+        <li>
+          <button type="button" class="creator-magic-slot {{#if full}}is-full{{/if}} {{#if active}}is-active{{/if}}"
+                  data-action="stepAction" data-step-action="magic-slot-filter" data-rarity="{{rarity}}"
+                  aria-pressed="{{#if active}}true{{else}}false{{/if}}"
+                  data-tooltip="{{localize 'sogrom-dnd5e-character-creator.step.magicShop.slotFilterTip' rarity=label}}">
+            <span class="cc-rarity-text rarity-{{rarity}}">{{label}}</span>
+            <span class="creator-magic-slot-count">{{used}}/{{allowed}}</span>
+          </button>
         </li>
         {{/each}}
       </ul>

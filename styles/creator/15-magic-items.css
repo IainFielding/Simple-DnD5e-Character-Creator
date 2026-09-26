@@ -79,18 +79,36 @@
   flex-wrap: wrap;
   gap: 0.35rem;
 }
-.creator-magic-slot {
+/* A slot chip, here and on the level-up's spell-level caps: a button that filters the list to what
+   the slot can take. Two classes throughout, so Foundry's blanket button rules (height, background,
+   shadow) can't out-specify the pill. */
+.creator-magic-slots .creator-magic-slot {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
   padding: 0.2rem 0.55rem;
+  background: transparent;
   border: 1px solid var(--cc-line);
   border-radius: 999px;
+  box-shadow: none;
   font-size: 0.8rem;
+  line-height: 1.2;
   color: var(--cc-text);
+  cursor: pointer;
+  transition: border-color 0.18s var(--cc-ease), color 0.18s var(--cc-ease);
 }
+.creator-magic-slots .creator-magic-slot:hover { border-color: var(--cc-gold); color: var(--cc-gold); }
 .creator-magic-slot-count { color: var(--cc-muted); font-variant-numeric: tabular-nums; }
-.creator-magic-slot.is-full { opacity: 0.6; }
+.creator-magic-slots .creator-magic-slot.is-full { opacity: 0.6; }
+.creator-magic-slots .creator-magic-slot.is-active {
+  opacity: 1;
+  border-color: var(--cc-select);
+  background: var(--cc-select-soft);
+}
 .creator-magic-slots-hint { margin: 0.3rem 0 0.4rem; color: var(--cc-muted); font-size: 0.72rem; }
 .creator-magic-die { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; }
 /* The bonus-gold roll, before it is made: a small button in the gold panel, styled like the HP roll. */
