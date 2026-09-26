@@ -48,41 +48,62 @@ function isJournalPack(pack) {
  */
 async function buildIndex() {
   const map = new Map();
-  for ( const pack of game.packs ?? [] ) {
-    if ( !isJournalPack(pack) ) continue;
-    try {
-      const index = await packIndex(pack);
-      // Narrow by the index where we can: only entries that actually contain a class/subclass page
-      // are worth loading. Some index shapes omit `pages` entirely, in which case every entry in
-      // this pack has to be loaded — correctness first, and the result is cached either way.
-      const wanted = [];
-      let indexCarriesPages = false;
-      for ( const entry of index ) {
-        if ( Array.isArray(entry.pages) ) {
-          indexCarriesPages = true;
-          if ( entry.pages.some(page => PAGE_TYPES.has(page.type)) ) wanted.push(entry._id);
-        }
+  // Every pack is read at once rather than one after another: the build used to sit behind the
+  // first class click, and a serial walk over a world's journal packs cost that click over a second.
+  // Results are merged below in Foundry's own pack order, so "first page wins" is unchanged.
+  const packs = [...(game.packs ?? [])].filter(isJournalPack);
+  const scanned = await Promise.all(packs.map(scanPack));
+  for ( const documents of scanned ) {
+    for ( const journal of documents ) {
+      for ( const page of journal?.pages ?? [] ) {
+        if ( !PAGE_TYPES.has(page.type) ) continue;
+        const itemUuid = String(page.system?.item ?? "").trim();
+        // First page to claim an item wins. Packs are iterated in Foundry's own order, and a
+        // second package describing the same class is an edge case not worth a preference rule.
+        if ( itemUuid && !map.has(itemUuid) ) map.set(itemUuid, page);
       }
-      const documents = indexCarriesPages
-        ? await Promise.all(wanted.map(id => pack.getDocument(id).catch(() => null)))
-        : await pack.getDocuments();
-
-      for ( const journal of documents ) {
-        for ( const page of journal?.pages ?? [] ) {
-          if ( !PAGE_TYPES.has(page.type) ) continue;
-          const itemUuid = String(page.system?.item ?? "").trim();
-          // First page to claim an item wins. Packs are iterated in Foundry's own order, and a
-          // second package describing the same class is an edge case not worth a preference rule.
-          if ( itemUuid && !map.has(itemUuid) ) map.set(itemUuid, page);
-        }
-      }
-    } catch ( err ) {
-      // A single unreadable pack must not cost us every other book's pages.
-      log(`could not scan journal pack ${pack.collection}`, err);
     }
   }
   log(`indexed ${map.size} source journal page(s)`);
   return map;
+}
+
+/**
+ * Load the entries of one pack that can hold a class or subclass page.
+ * @param {CompendiumCollection} pack
+ * @returns {Promise<JournalEntry[]>}   Empty when the pack cannot be read.
+ */
+async function scanPack(pack) {
+  try {
+    const index = await packIndex(pack);
+    // Narrow by the index where we can: only entries that actually contain a class/subclass page
+    // are worth loading. Some index shapes omit `pages` entirely, in which case every entry in
+    // this pack has to be loaded — correctness first, and the result is cached either way.
+    const wanted = [];
+    let indexCarriesPages = false;
+    for ( const entry of index ) {
+      if ( Array.isArray(entry.pages) ) {
+        indexCarriesPages = true;
+        if ( entry.pages.some(page => PAGE_TYPES.has(page.type)) ) wanted.push(entry._id);
+      }
+    }
+    return indexCarriesPages
+      ? await Promise.all(wanted.map(id => pack.getDocument(id).catch(() => null)))
+      : await pack.getDocuments();
+  } catch ( err ) {
+    // A single unreadable pack must not cost us every other book's pages.
+    log(`could not scan journal pack ${pack.collection}`, err);
+    return [];
+  }
+}
+
+/**
+ * Build the page index ahead of need. Part of the `ready` warm, so the first class the player
+ * picks does not wait on the scan before its page can render.
+ * @returns {Promise<void>}
+ */
+export async function warmSourcePages() {
+  await sourcePageFor({ uuid: "warm" });
 }
 
 /**
