@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import { MODULE_ID } from "../scripts/config.mjs";
 import { MILESTONE_FLAG, grantedLevel, hasGrantedLevel, nextGrantTarget } from "../scripts/levelup/milestone.mjs";
-import { canGrantLevel, grantLevels, grantRows, milestonesOffered } from "../scripts/levelup/milestone-grant.mjs";
+import { canGrantLevel, grantCandidates, grantLevels, grantRows, milestonesOffered } from "../scripts/levelup/milestone-grant.mjs";
 
 /**
  * Milestone grants: a GM granting a level in a world that doesn't level by XP. The grant is stored as
@@ -115,6 +115,36 @@ describe("granting", () => {
     expect(granted.map(a => a.id)).toEqual(["a1"]);
     expect(grantedLevel(capped)).toBeNull();
     expect(ChatMessage.created).toHaveLength(1);
+  });
+});
+
+describe("who the batch dialog lists", () => {
+  const ash = character({ id: "a", name: "Ash" });
+  const bo = character({ id: "b", name: "Bo" });
+  const npc = character({ id: "n", name: "Hireling", playerOwned: false });
+  const world = [ash, bo, npc];
+
+  beforeEach(() => {
+    game.actors = Object.assign([...world], { party: null });
+  });
+
+  it("lists only the group's own characters when opened from a group, all ticked", () => {
+    const group = { system: { playerCharacters: [bo] } };
+    const { characters, preselect } = grantCandidates(group);
+    expect(characters.map(a => a.id)).toEqual(["b"]);
+    expect([...preselect]).toEqual(["b"]);
+  });
+
+  it("lists every character from the sidebar, ticking the primary party's", () => {
+    game.actors.party = { system: { playerCharacters: [ash] } };
+    const { characters, preselect } = grantCandidates(null);
+    expect(characters.map(a => a.id)).toEqual(["a", "b", "n"]);
+    expect([...preselect]).toEqual(["a"]);
+  });
+
+  it("ticks every player-owned character from the sidebar when there is no party", () => {
+    const { preselect } = grantCandidates(null);
+    expect([...preselect].sort()).toEqual(["a", "b"]);
   });
 });
 

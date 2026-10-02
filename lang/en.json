@@ -489,6 +489,24 @@
         "sub": "Your GM has granted level {level}"
       }
     },
+    "check": {
+      "button": "Check Character",
+      "title": "Check: {name}",
+      "clean": "Nothing to report. Every level's choices are made and the spells are within their limits.",
+      "summary": "Problems: {problems}. Notes: {notes}.",
+      "recheck": "Check Again",
+      "repairButton": "Repair",
+      "levelUpButton": "Level Up",
+      "unanswered": "{class} {level}: never chosen — {titles}",
+      "cantrips": "{class}: {count} cantrip(s) not chosen",
+      "spellsOver": "{class}: {count} spell(s) over the prepared limit",
+      "spellsUnder": "{class}: room to prepare {count} more spell(s)",
+      "bookOwed": "{class}: spellbook is owed {count} free spell(s); the next level-up offers them",
+      "alsoGranted": "{class}: {count} chosen spell(s) also granted by a feature; the next level-up frees the pick",
+      "duplicate": "{name} is on the sheet {count} times from the same source",
+      "levelWaiting": "A level is waiting to be taken",
+      "xpBehind": "XP ({value}) is below the {min} this level needs"
+    },
     "milestone": {
       "grantOne": "Grant a Level",
       "grantGroup": "Grant Levels to Members",

@@ -12,7 +12,7 @@
  *   node run.mjs --sidekicks              # assert Tasha's sidekick classes are not offered
  *   node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
  *   node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
- *   node run.mjs --repair                 # a skipped-choice build, repaired, against the full build
+ *   node run.mjs --repair                 # skipped-choice builds repaired, plus Check Character
  *   node run.mjs --quick-build            # Quick Build every class; assert the finished character
  *   node run.mjs --quick-build --level 5  # ...and again at each higher starting rung (3, 5)
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt

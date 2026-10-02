@@ -106,18 +106,31 @@ export function grantRows(actors, preselect) {
 }
 
 /**
- * The batch dialog: tick the characters to grant a level to. Opened from a group actor (its
- * members ticked) or the Actors sidebar header (the primary party's characters ticked, or every
- * player-owned character when there is no party).
+ * The characters the batch dialog lists, and which of them start ticked. From a group actor: that
+ * group's characters only, all ticked. From the Actors sidebar header: every character, with the
+ * primary party's ticked, or every player-owned one when there is no party.
+ * @param {Actor5e|null} group  The group it was opened from.
+ * @returns {{characters: Actor5e[], preselect: Set<string>}}
+ */
+export function grantCandidates(group) {
+  if ( group ) {
+    const members = group.system?.playerCharacters ?? [];
+    return { characters: members, preselect: new Set(members.map(a => a.id)) };
+  }
+  const characters = game.actors?.filter(a => a.type === "character") ?? [];
+  const party = game.actors?.party?.system?.playerCharacters ?? [];
+  const ticked = party.length ? party : characters.filter(a => a.hasPlayerOwner);
+  return { characters, preselect: new Set(ticked.map(a => a.id)) };
+}
+
+/**
+ * The batch dialog: tick the characters to grant a level to (see {@link grantCandidates}).
  * @param {object} [options]
  * @param {Actor5e} [options.group]  The group it was opened from.
  * @returns {Promise<Actor5e[]>}  The characters granted a level; empty when cancelled.
  */
 export async function promptGrantLevels({ group = null } = {}) {
-  const party = group ?? game.actors?.party ?? null;
-  const members = party?.system?.playerCharacters ?? [];
-  const characters = game.actors?.filter(a => a.type === "character") ?? [];
-  const preselect = new Set((members.length ? members : characters.filter(a => a.hasPlayerOwner)).map(a => a.id));
+  const { characters, preselect } = grantCandidates(group);
   const rows = grantRows(characters, preselect);
   if ( !rows.length ) {
     ui.notifications?.info(t("milestone.none"));

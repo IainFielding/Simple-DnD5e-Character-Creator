@@ -333,8 +333,23 @@ async function milestoneGrants(r, ctx) {
     await actor.sheet.close();
     r.notes.push(`right-click granted level ${level + 1}; sheet button lit; card whispered`);
 
-    // The group's own entry.
-    if ( !(await sidebarMenu(ctx.party)).includes(grantGroup) ) r.failures.push(`no "${grantGroup}" on the party's right-click menu`);
+    // The group's own entry opens the dialog on that group's characters, and no one else.
+    if ( !(await sidebarMenu(ctx.party, grantGroup)).includes(grantGroup) ) {
+      r.failures.push(`no "${grantGroup}" on the party's right-click menu`);
+    } else {
+      const groupDialog = await until(() => document.querySelector(".sogrom-grant-dialog"), 10_000)
+        ? document.querySelector(".sogrom-grant-dialog") : null;
+      if ( !groupDialog ) r.failures.push("the party's entry opened no dialog");
+      else {
+        const listed = [...groupDialog.querySelectorAll("input[type=checkbox]")].map(i => i.name).sort();
+        const members = ctx.party.system.playerCharacters.map(a => a.id).sort();
+        if ( listed.join() !== members.join() ) {
+          r.failures.push(`the party's dialog lists ${listed.length} character(s), not its ${members.length} member(s)`);
+        } else r.notes.push(`the party's dialog lists only its ${members.length} member(s)`);
+        groupDialog.querySelector('button[data-action="cancel"]')?.click();
+        await until(() => !document.querySelector(".sogrom-grant-dialog"), 5_000);
+      }
+    }
 
     // The batch dialog, from the sidebar header: the party member arrives ticked.
     await ui.actors.render();

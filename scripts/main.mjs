@@ -8,6 +8,7 @@ import { registerLevelUp, triggerLevelUp, canLevelUp } from "./levelup/intercept
 import { canRepair, promptRepair } from "./levelup/repair.mjs";
 import { registerXpNotice } from "./levelup/xp-notice.mjs";
 import { registerMilestoneGrants } from "./levelup/milestone-grant.mjs";
+import { registerCharacterCheck } from "./levelup/character-check.mjs";
 import { registerPartyButton } from "./build/chat-summary.mjs";
 import { registerBlankBuild, registerBlankBuildMenu } from "./app/blank-build.mjs";
 import { StoreConfigApp } from "./app/store-config.mjs";
@@ -361,6 +362,10 @@ registerBlankBuildMenu();
 // The GM's milestone grants: right-click entries on characters and groups, and a sidebar header
 // button. At load for the same reason; each gates itself on GM, milestone levelling and level-up.
 registerMilestoneGrants();
+
+// "Check Character": a read-only report, in the character sheet's ⋯ menu. It gates itself on
+// ownership and the level-up flow being on.
+registerCharacterCheck();
 
 // Add a right-click "Level Up" entry to character actors in the sidebar. Foundry passes
 // us the menu's option array and we push our own entry onto it; `visible` decides per-actor
