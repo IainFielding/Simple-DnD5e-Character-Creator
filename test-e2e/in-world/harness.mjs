@@ -1144,7 +1144,7 @@ export async function probeSpellChoice({ match = "conjur", to = 5, jump = false 
           const section = blocks.flatMap(b => b.sections).find(s => s.index === ctx.state.choiceSteps.indexOf(record));
           const st = ctx.driver.choiceState(record);
           const entry = {
-            title: record.advancement.title, level: record.level, restriction: record.advancement.configuration.restriction?.level,
+            title: record.advancement.name, level: record.level, restriction: record.advancement.configuration.restriction?.level,
             max: st.max, offered: section?.options?.length ?? 0, exhausted: !!record.exhausted,
             spellLevels: [...new Set(await Promise.all((section?.options ?? []).map(async o => (await fromUuid(o.uuid))?.system?.level)))].sort(),
             // What the data restricts to, and what was actually offered — equal once #1748 is fixed.
@@ -1789,7 +1789,7 @@ export async function describeAdvancements(uuid) {
   const out = [];
   for ( const adv of Object.values(doc.advancement?.byId ?? {}) ) {
     const cfg = adv.configuration ?? {};
-    const entry = { id: adv.id, type: adv.type, title: adv.title, level: adv.level ?? 0 };
+    const entry = { id: adv.id, type: adv.type, title: adv.name, level: adv.level ?? 0 };
 
     if ( adv.type === "Trait" ) {
       // The mode matters when writing an answer: an "expertise" Trait only offers skills the

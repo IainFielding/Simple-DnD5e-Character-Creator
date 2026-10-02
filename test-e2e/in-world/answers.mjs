@@ -166,10 +166,10 @@ async function generateTrait(adv, offered, reserved = new Set()) {
       // choice of 1 over no options at all. Recorded as a note so the oddity stays visible in the
       // report rather than failing a scenario over a non-difference.
       if ( !pool.length ) {
-        return { answer: null, note: `"${adv.title}" offers no options for a choice of ${count}` };
+        return { answer: null, note: `"${adv.name}" offers no options for a choice of ${count}` };
       }
       return {
-        missing: `"${adv.title}" offers ${pool.length} key(s) for a choice of ${count}`
+        missing: `"${adv.name}" offers ${pool.length} key(s) for a choice of ${count}`
           + `${available.size ? "" : " (the asker showed no pool, so this is the configured one)"}`
       };
     }
@@ -253,7 +253,7 @@ async function generateItemChoice(adv, level, offered, reserved = new Set()) {
     uuids.push(uuid);
   }
   if ( uuids.length < count ) {
-    return { missing: `"${adv.title}" has ${uuids.length} eligible option(s) for a choice of ${count} at level ${level}` };
+    return { missing: `"${adv.name}" has ${uuids.length} eligible option(s) for a choice of ${count} at level ${level}` };
   }
   return { answer: ability ? { uuids, ability } : uuids };
 }
@@ -395,7 +395,7 @@ async function generateSpellChoice(adv, level, { offered, reserved, maxSpellSlot
   const uuids = [...byName.keys()].sort().slice(0, count).map(n => byName.get(n));
   if ( uuids.length < count ) {
     const shown = levels ? [...levels].join("/") : "any";
-    return { missing: `"${adv.title}" has ${uuids.length} eligible spell(s) on ${lists.join(", ") || "any list"} `
+    return { missing: `"${adv.name}" has ${uuids.length} eligible spell(s) on ${lists.join(", ") || "any list"} `
       + `at level(s) ${shown} for a choice of ${count} at level ${level}` };
   }
   return { answer: ability ? { uuids, ability } : uuids };
@@ -570,7 +570,7 @@ function generateAsi(adv) {
     totals[key] = (totals[key] ?? 0) + spend;
     points -= spend;
   }
-  if ( points ) return { missing: `"${adv.title}" has ${points} unspendable point(s) — every ability is locked or capped` };
+  if ( points ) return { missing: `"${adv.name}" has ${points} unspendable point(s) — every ability is locked or capped` };
   return { answer: totals };
 }
 
@@ -754,7 +754,7 @@ export class AnswerBook {
     let entry = this.#memo.get(key);
     if ( !entry ) {
       entry = {
-        advId: adv.id, level, type: adv.type, title: adv.title ?? null,
+        advId: adv.id, level, type: adv.type, title: adv.name ?? null,
         item: adv.item?.name ?? null, source: null, answer: undefined,
         missing: null, note: null, askedBy: [],
         // Recorded so the ledger can tell a forced increase a scenario states from a real choice.

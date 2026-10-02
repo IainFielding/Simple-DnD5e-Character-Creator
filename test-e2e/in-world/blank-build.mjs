@@ -165,7 +165,7 @@ function orphanedGrants(actor) {
   };
   for ( const item of actor.items ) {
     for ( const adv of item.system?.advancement ?? [] ) {
-      walk(adv.value?.added, `${item.name} › ${adv.title || adv.constructor?.typeName || adv.type}`);
+      walk(adv.value?.added, `${item.name} › ${adv.name || adv.constructor?.typeName || adv.type}`);
     }
   }
   return missing;

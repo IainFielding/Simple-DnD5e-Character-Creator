@@ -1,4 +1,4 @@
-import { ABILITIES, formatMod, storeConfig, t } from "../config.mjs";
+import { ABILITIES, formatMod, storeConfig, t, log } from "../config.mjs";
 import { cartSummary } from "../data/store-source.mjs";
 import { magicShopReview } from "../data/magic-shop-source.mjs";
 import { DETAIL_FIELDS, DETAIL_TEXT_FIELDS } from "./details-step.mjs";
@@ -120,7 +120,14 @@ async function originGrantedSpells(doc, sel) {
  */
 async function reviewEquipment(state, source, equipment) {
   if ( !equipment ) return {};
-  return summarizeEquipment(await equipment.load(state, source), state.equipment);
+  // A failure here costs the review its equipment panels, not the whole screen, the same as the
+  // level-up review's copy of this summary.
+  try {
+    return summarizeEquipment(await equipment.load(state, source), state.equipment);
+  } catch ( err ) {
+    log("review equipment summary failed", err);
+    return {};
+  }
 }
 
 /**

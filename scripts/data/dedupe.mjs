@@ -1,3 +1,6 @@
+// A world item reads as no package (null), which ranks it as a real package, as its own id used to.
+import { packageOf } from "./ids.mjs";
+
 /**
  * Collapsing the same content republished by more than one package.
  *
@@ -20,15 +23,6 @@
  * losing it would visibly downgrade those grids, not just swap one identical card for another.
  */
 export const PREFERRED_PACKAGE = "dnd-players-handbook";
-
-/**
- * The content package a compendium uuid belongs to: `Compendium.<packageId>.<pack>.Item.<id>`.
- * @param {string} uuid
- * @returns {string}
- */
-export function packageOf(uuid) {
-  return String(uuid).split(".")[1] ?? "";
-}
 
 /**
  * How strongly a package's copy is preferred — lower wins.

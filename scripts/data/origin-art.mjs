@@ -1,3 +1,5 @@
+import { slugify, packageOf } from "./ids.mjs";
+
 /**
  * Banner art for a class, species or background — resolved out of the content modules the GM has
  * already bought and installed.
@@ -125,37 +127,10 @@ const NAMED_ART = {
   }
 };
 
-/**
- * Fold a display name or identifier into the slug the art files are named with: lowercase, curly
- * and straight apostrophes dropped, every other run of non-alphanumerics collapsed to one hyphen.
- *
- * Deliberately the same shape as `name-generator.mjs`'s own slugify, and for the same reason: a
- * fair amount of content ships without a `system.identifier`, so the name has to be usable as a
- * fallback key.
- * @param {string} [value]
- * @returns {string}
- */
-export function slugify(value) {
-  return String(value ?? "").trim().toLowerCase()
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-/**
- * The package a compendium document belongs to, read off its UUID.
- *
- * A compendium uuid is `Compendium.<package>.<pack>.<DocType>.<id>`, so the package id is the
- * second segment. Anything that is not a compendium uuid — a world item, an empty string — returns
- * null, and the caller falls through to the next art tier.
- * @param {string} [uuid]
- * @returns {string|null}
- */
-export function packageOf(uuid) {
-  const parts = String(uuid ?? "").split(".");
-  if ( parts[0] !== "Compendium" || parts.length < 3 ) return null;
-  return parts[1] || null;
-}
+// The art files are named with the same slug content is matched on, and a non-compendium card has
+// no package, so the caller falls through to the next art tier. Both readers live in data/ids.mjs;
+// re-exported for this module's importers.
+export { slugify, packageOf };
 
 /**
  * The directories a category's art could live in for one package, in search order. Empty for an

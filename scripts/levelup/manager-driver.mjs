@@ -1363,12 +1363,11 @@ export class LevelUpDriver {
   async applyAsiFeat(record, uuid, { showMessage = true } = {}) {
     const item = await fromUuid(uuid).catch(() => null);
     if ( !item ) { log("ASI feat not found", uuid); return false; }
-    // dnd5e 6.0 renamed this check `assertPrerequisites` (same arguments) and gave the old name to a
-    // results-map validator, which still forwards an Actor with a deprecation warning. 5.3.x had
-    // only the old name, so take the new one when it exists (the fallback predates the 6.0.0 floor).
+    // dnd5e 6.0 renamed this check `assertPrerequisites` and gave the old name, `validatePrerequisites`,
+    // to a different, results-map validator — so the old name is never a fallback. An item without
+    // the check (not a feat a 6.0 system knows) is rejected rather than taken unchecked.
     const system = item.system;
-    const assert = system.assertPrerequisites ?? system.validatePrerequisites;
-    if ( assert?.call(system, this.clone, { showMessage }) !== true ) {
+    if ( system.assertPrerequisites?.(this.clone, { showMessage }) !== true ) {
       log("ASI feat rejected by its own prerequisites", uuid);
       return false;
     }

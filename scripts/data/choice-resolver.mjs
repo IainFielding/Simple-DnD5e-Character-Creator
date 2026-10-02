@@ -4,7 +4,8 @@ import {
   replacementGroups, withItemSegment
 } from "./advancement-util.mjs";
 import { matchesRules, packageTypeOf, readAsi } from "./source-index.mjs";
-import { packageOf, rankPackage } from "./dedupe.mjs";
+import { rankPackage } from "./dedupe.mjs";
+import { packageOf } from "./ids.mjs";
 import { getEnabledPacks, isUsableItemPack, packIndex } from "./compendium-util.mjs";
 import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { phbWeaponIcon } from "./weapon-source.mjs";

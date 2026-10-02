@@ -32,8 +32,11 @@ import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
  *
  * @param {import("../state/creator-state.mjs").CreatorState} state
  * @param {import("../data/source-index.mjs").SourceIndex} source
- * @returns {Promise<Actor>} The built actor.
+ * @returns {Promise<{actor: Actor, magicShop: object|null}>} The built actor, and what the 1st-level
+ *   magic shop granted (null when it granted nothing) for the creation card to report.
  */
+// `addSpells`, `buildFeatSpell` and `detailsUpdate` are exported for their unit tests: they decide
+// the data written to the actor, which the e2e runs check only as a whole character.
 export async function assembleActor(state, source, equipment) {
   const actor = state.actor;
 
@@ -142,9 +145,9 @@ export async function assembleActor(state, source, equipment) {
   // shop, which is the last thing to pay out.
   await consolidateCurrency(actor);
 
-  // Handed back so the caller's chat card can report it, the way the climb's does.
-  actor.sogromMagicShopGrant = magicShop;
-  return actor;
+  // The magic-shop grant is handed back so the caller's chat card can report it, the way the
+  // climb's does.
+  return { actor, magicShop };
 }
 
 /**
@@ -228,7 +231,7 @@ function advancementOn(item, id) {
  * The hand-rolled block below remains for the advancement-less feat, where there is no
  * configuration to borrow and the PHB's fixed Magic Initiate shape is all we have.
  */
-async function buildFeatSpell(uuid, { ability, cantrip, feat, advId = null, sourceTag, spellConfig }) {
+export async function buildFeatSpell(uuid, { ability, cantrip, feat, advId = null, sourceTag, spellConfig }) {
   const doc = await fromUuid(uuid).catch(() => null);
   if ( !doc ) { log(`feat spell not found: ${uuid}`); return null; }
   const obj = doc.toObject();
@@ -310,7 +313,7 @@ async function grantEquipment(actor, state, source, equipment) {
  * "spell"), so a Warlock's level-1 spells land in the pact section instead of leaking into the
  * standard slots. Cantrips still resolve to the shared "Cantrips" section regardless of method.
  */
-async function addSpells(actor, state) {
+export async function addSpells(actor, state) {
   const picks = [...state.selectedCantrips, ...state.selectedSpells];
   if ( !picks.length ) return;
 
@@ -356,7 +359,7 @@ async function addSpells(actor, state) {
  * prototype-token visuals, and the `system.details.*` identity/biography fields.
  * `ideals`/`bonds`/`flaws` map to the singular dnd5e keys; biography is rich text.
  */
-function detailsUpdate(state) {
+export function detailsUpdate(state) {
   const d = state.details;
   const name = d.name?.trim() || state.actor?.name || "";
   return {

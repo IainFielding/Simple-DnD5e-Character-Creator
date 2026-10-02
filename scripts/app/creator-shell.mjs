@@ -1308,6 +1308,8 @@ export class CreatorShell extends CreatorShellBase {
     // of re-running assembly on top of the partial one (which duplicates every already-written item).
     // A resumed character's actor pre-exists in state, so this stays false and we never delete it.
     let createdActor = false;
+    // What the 1st-level magic shop granted, for the creation card.
+    let magicShop = null;
     // A sheet we didn't make — a blank character the GM prepared — can't be deleted on failure, but
     // it can be put back: note what was on it, and a failed build removes only what it added.
     const before = actor ? {
@@ -1323,7 +1325,7 @@ export class CreatorShell extends CreatorShellBase {
         this.state.actor = actor;
         createdActor = true;
       }
-      await assembleActor(this.state, this.source, this.equipment);
+      ({ magicShop } = await assembleActor(this.state, this.source, this.equipment));
     } catch ( err ) {
       log("character build failed", err);
       ui.notifications?.error(t("notify.buildFailed"));
@@ -1386,7 +1388,7 @@ export class CreatorShell extends CreatorShellBase {
     // other modules and fires either way.
     if ( !climbing ) {
       fireHook(HOOKS.characterCreated, { actor, state: this.state, targetLevel });
-      await postCreationSummary(actor, { magicShop: actor.sogromMagicShopGrant ?? null });
+      await postCreationSummary(actor, { magicShop });
       // The sheet PDF, when it was asked for. Same rule as the card: a climb isn't finished here,
       // and that wizard prints it at the level the player actually asked for.
       if ( this.state.exportPdf ) await exportCharacterPdf(actor);
