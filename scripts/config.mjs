@@ -192,6 +192,8 @@ export const SETTINGS = {
   storeConfig: "storeConfig",
   recommendedPath: "recommendedPath",
   magicShopConfig: "magicShopConfig",
+  welcomeCards: "showWelcomeCards",
+  welcomeVersion: "welcomeVersion",
   debug: "debugLogging"
 };
 
@@ -219,6 +221,7 @@ export const DEFAULTS = {
   manualAbilities: false,
   bannedAlignments: [],
   storeEnabled: true,
+  welcomeCards: true,
   storeConfig: {
     priceMultiplier: 1.0,
     inventory: null            // null = the factory default list; [] = deliberately emptied

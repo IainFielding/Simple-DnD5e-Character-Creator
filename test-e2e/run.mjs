@@ -17,7 +17,7 @@
  *   node run.mjs --quick-build --level 5  # ...and again at each higher starting rung (3, 5)
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
  *   node run.mjs --blank-build            # Build Character on a GM-prepared blank sheet, end to end
- *   node run.mjs --features               # party switch + card, milestone grants, Suggest, class guide, quick name
+ *   node run.mjs --features               # party switch + card, milestone grants, welcome card, Suggest, class guide
  *   node run.mjs --spellbook              # Wizard spellbook, Prepare tab, granted cards, Cleric swaps
  *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
  *                                         # native only, per level, in a world without this module

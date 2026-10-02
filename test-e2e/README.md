@@ -815,7 +815,7 @@ node run.mjs --quick-build            # Quick Build for every class, at level 1
 node run.mjs --quick-build --level 5  # ...and climbed headlessly to 3 and 5
 node run.mjs --pregens                # every ready-made character imported whole, not rebuilt
 node run.mjs --blank-build            # Build Character on a blank sheet: gate, real right-click, build, rollback, ready-made
-node run.mjs --features               # party switch + card, level-up-ready card + XP glow, milestone grants,
+node run.mjs --features               # party switch + card, level-up-ready card + XP glow, milestone grants, welcome card,
                                       # Suggest, class guide, typed quick name, art without file-browse,
                                       # Maximum only HP
 node run.mjs --spellbook              # Wizard spellbook at creation and level-up (both editions), Prepare tab,

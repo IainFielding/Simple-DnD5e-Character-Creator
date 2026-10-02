@@ -9,6 +9,7 @@ import { canRepair, promptRepair } from "./levelup/repair.mjs";
 import { registerXpNotice } from "./levelup/xp-notice.mjs";
 import { registerMilestoneGrants } from "./levelup/milestone-grant.mjs";
 import { registerCharacterCheck } from "./levelup/character-check.mjs";
+import { registerWelcomeButtons, postWelcomeIfDue } from "./app/welcome.mjs";
 import { registerPartyButton } from "./build/chat-summary.mjs";
 import { registerBlankBuild, registerBlankBuildMenu } from "./app/blank-build.mjs";
 import { StoreConfigApp } from "./app/store-config.mjs";
@@ -278,6 +279,16 @@ function registerSettings() {
     type: MagicShopConfigApp,
     restricted: true
   });
+  // The GM's welcome and what's-new cards (see app/welcome.mjs), and the release this world last
+  // announced. The second is bookkeeping, so it stays out of the settings list.
+  game.settings.register(MODULE_ID, SETTINGS.welcomeCards, {
+    name: t("settings.welcomeCards.name"),
+    hint: t("settings.welcomeCards.hint"),
+    scope: "world", config: true, type: Boolean, default: DEFAULTS.welcomeCards
+  });
+  game.settings.register(MODULE_ID, SETTINGS.welcomeVersion, {
+    scope: "world", config: false, type: String, default: ""
+  });
   // The one `client` setting: what this module prints to *your* console is your business, not a
   // world-wide decision the GM makes for everybody. Off by default — a working game should say
   // nothing — and turned on when someone is asked to reproduce a bug.
@@ -315,6 +326,10 @@ Hooks.once("ready", () => {
   // "Build Character" on a blank character the GM prepared — the way in for a player who may not
   // create actors. Self-gates on the module offering creation and on ownership of the sheet.
   registerBlankBuild();
+
+  // The GM's welcome card on a world's first run, or what's new after a feature release; posted by
+  // the one active GM, and only when due. Its buttons are wired at load, below.
+  postWelcomeIfDue();
 
   // Pre-warm the shared compendium index in the background, so the builder opens instantly
   // instead of showing its loading screen on first use. Gated to the audiences that will
@@ -366,6 +381,10 @@ registerMilestoneGrants();
 // "Check Character": a read-only report, in the character sheet's ⋯ menu. It gates itself on
 // ownership and the level-up flow being on.
 registerCharacterCheck();
+
+// The welcome card's settings buttons. At load, not `ready`: the chat log renders the messages
+// already in it before `ready` fires, so the card from an earlier session must be covered too.
+registerWelcomeButtons();
 
 // Add a right-click "Level Up" entry to character actors in the sidebar. Foundry passes
 // us the menu's option array and we push our own entry onto it; `visible` decides per-actor

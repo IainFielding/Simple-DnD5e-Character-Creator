@@ -489,6 +489,27 @@
         "sub": "Your GM has granted level {level}"
       }
     },
+    "welcome": {
+      "heading": "Welcome",
+      "intro": "Players build characters in a guided creator and level up through the same step-by-step screens. Where to find things:",
+      "place": {
+        "create": "Create Character: the button at the top of the Actors tab.",
+        "levelUp": "Level Up: the trophy on a character sheet.",
+        "repair": "Repair Skipped Choices: the wrench that appears on a sheet when a level has choices never made.",
+        "check": "Check Character: in a character sheet's ⋯ menu, a report of anything skipped or over its limits.",
+        "grant": "Grant a Level: for milestone tables, in a character's or group's right-click menu and the Grant Levels button."
+      },
+      "newTitle": "New in {version}",
+      "whatsNewHeading": "What's new in {version}",
+      "new": {
+        "milestones": "Milestone grants: grant a level to one character, a group or several at once. Their Level Up button lights and they get a card to take it.",
+        "check": "Check Character, in the sheet's ⋯ menu, lists skipped choices, spell-count problems and duplicate spells, with buttons to fix them.",
+        "cards": "This card: a welcome for new worlds, and a short note like it when an update adds features."
+      },
+      "settingsTitle": "Worth a look before your players start",
+      "guide": "Read the guide",
+      "optOut": "Turn these cards off in Configure Settings."
+    },
     "check": {
       "button": "Check Character",
       "title": "Check: {name}",
@@ -976,6 +997,10 @@
         "name": "Magic Item Shop",
         "label": "Configure Magic Items",
         "hint": "Bonus gold and free magic items for characters who start above 1st level, per level. On by default with the Dungeon Master’s Guide table; set every level to 0 to turn it off."
+      },
+      "welcomeCards": {
+        "name": "Welcome and what's new cards",
+        "hint": "Whisper the GMs a welcome card the first time the module runs in this world, and a short note after an update that adds features. Patch releases post nothing."
       },
       "debugLogging": {
         "name": "Debug logging",

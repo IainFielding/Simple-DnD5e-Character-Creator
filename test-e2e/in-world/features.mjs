@@ -386,6 +386,68 @@ async function milestoneGrants(r, ctx) {
   }
 }
 
+/**
+ * 2d. The GM's welcome card: posted once to the GMs on a world's first run, a what's-new card for a
+ * world that saw an older release, nothing with the setting off, and its settings buttons open the
+ * window their menu registered. The world's record of what it announced is put back afterwards.
+ */
+async function welcomeCard(r) {
+  const { postWelcomeIfDue, WHATS_NEW } = await import(`${MODULE}/app/welcome.mjs`);
+  const seenBefore = game.settings.get(MODULE_ID, SETTINGS.welcomeVersion);
+  const onBefore = game.settings.get(MODULE_ID, SETTINGS.welcomeCards);
+  const cards = kind => game.messages.filter(m => m.getFlag(MODULE_ID, "summary") === kind);
+  const latest = WHATS_NEW.at(-1).version;
+  try {
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeCards, true);
+
+    // A first run: the welcome, whispered to the GMs, recorded.
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeVersion, "");
+    const welcomesBefore = cards("welcome").length;
+    await postWelcomeIfDue();
+    if ( !(await until(() => cards("welcome").length === welcomesBefore + 1)) ) return r.failures.push("no welcome card on a first run");
+    const card = cards("welcome").at(-1);
+    if ( !card.whisper?.length ) r.failures.push("the welcome card is not whispered");
+    if ( game.settings.get(MODULE_ID, SETTINGS.welcomeVersion) !== latest ) r.failures.push("the welcome did not record the release it announced");
+
+    // Not again.
+    await postWelcomeIfDue();
+    await pause(500);
+    if ( cards("welcome").length !== welcomesBefore + 1 ) r.failures.push("the welcome posted twice");
+
+    // Its settings button opens the window its menu registered, even on a card no render hook ever
+    // touched: the chat log renders the messages already in it before `ready`, so after a reload the
+    // card has no per-render listeners. A deep clone carries none either, which is that state exactly.
+    const html = await card.renderHTML();
+    const bare = html.cloneNode(true);
+    document.body.append(bare);
+    const button = bare.querySelector('[data-sogrom-settings-menu="houseRulesMenu"]');
+    if ( !button ) { bare.remove(); return r.failures.push("the welcome card has no House Rules button"); }
+    button.click();
+    bare.remove();
+    const menuType = game.settings.menus.get(`${MODULE_ID}.houseRulesMenu`)?.type;
+    const opened = await until(() => [...(foundry.applications.instances?.values() ?? [])]
+      .some(app => (app instanceof menuType) && app.rendered), 10_000);
+    if ( !opened ) r.failures.push("the House Rules button opened no window");
+    r.notes.push(`welcome whispered once, recorded ${latest}; its House Rules button opened the window`);
+
+    // An older world gets what's new instead; the setting off posts nothing.
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeVersion, "0.0.1");
+    const newsBefore = cards("whatsNew").length;
+    await postWelcomeIfDue();
+    if ( !(await until(() => cards("whatsNew").length === newsBefore + 1)) ) r.failures.push("no what's-new card for a world that saw an older release");
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeVersion, "");
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeCards, false);
+    await postWelcomeIfDue();
+    await pause(500);
+    if ( cards("welcome").length !== welcomesBefore + 1 ) r.failures.push("a welcome posted with the setting off");
+    else r.notes.push("what's new for an older world; nothing with the setting off");
+  } finally {
+    await closeAll();
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeCards, onBefore);
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeVersion, seenBefore);
+  }
+}
+
 /** 3. Suggest for {class}, through real clicks. */
 async function suggest(r) {
   const shell = await openOnClass("Wizard");
@@ -643,6 +705,7 @@ export async function checkFeatures() {
     ["Add to party from the chat card", partyFromCard],
     ["The level-up-ready card's button", levelUpReadyCard],
     ["Milestone grants", milestoneGrants],
+    ["The GM's welcome card", welcomeCard],
     ["Suggest for a class", suggest],
     ["Class guide on the drawer and the quick screen", classGuide],
     ["The quick screen keeps a typed name", quickTypedName],
