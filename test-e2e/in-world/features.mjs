@@ -738,3 +738,99 @@ export async function checkFeatures() {
   }
   return { ok: !failures.length, failures, cases: results };
 }
+
+/* -------------------------------------------- */
+/*  Cards already in chat at load               */
+/* -------------------------------------------- */
+
+/**
+ * The first half of the reload check, run before `run.mjs` reloads the page. Posts a creation card
+ * and a level-up-ready card for a fresh level-1 Fighter outside a fresh primary party, through the
+ * module's real paths, and returns what the second half needs to find them and put the world back.
+ *
+ * The point is the reload in between: the chat log renders the messages already in it *before*
+ * `ready`, so this is the only way to test that the cards' buttons are wired for a card from an
+ * earlier session, not just for one posted while the page was open.
+ */
+export async function stageReloadCards() {
+  const { postCreationSummary } = await import(`${MODULE}/build/chat-summary.mjs`);
+  const before = {
+    party: game.actors.party?.id ?? null,
+    summary: game.settings.get(MODULE_ID, SETTINGS.creationSummary),
+    mode: game.settings.get("dnd5e", "levelingMode"),
+    notice: game.settings.get(MODULE_ID, SETTINGS.levelUpReadyNotice)
+  };
+  await game.settings.set(MODULE_ID, SETTINGS.creationSummary, "public");
+  await game.settings.set("dnd5e", "levelingMode", "xp");
+  await game.settings.set(MODULE_ID, SETTINGS.levelUpReadyNotice, "gm");
+
+  const party = await Actor.implementation.create({ name: `${PREFIX}Reload Party`, type: "group" }, { renderSheet: false });
+  await game.settings.set("dnd5e", "primaryParty", { actor: party.id });
+  const actor = await Actor.implementation.create({ name: `${PREFIX}Reload Fighter`, type: "character" }, { renderSheet: false });
+  const fighter = classCard("Fighter");
+  const cls = fighter ? await fromUuid(fighter.uuid) : null;
+  if ( cls ) await actor.createEmbeddedDocuments("Item", [cls.toObject()]);
+
+  await postCreationSummary(actor);
+  await actor.update({ "system.details.xp.value": actor.system.details.xp.max });
+  const posted = await until(() => game.messages.some(m =>
+    (m.getFlag(MODULE_ID, "summary") === "levelUpReady") && (m.speaker?.actor === actor.id)));
+  return {
+    before, partyId: party.id, actorId: actor.id, hasClass: !!cls,
+    creationId: creationCard(actor)?.id ?? null,
+    readyId: posted ? [...game.messages].reverse().find(m =>
+      (m.getFlag(MODULE_ID, "summary") === "levelUpReady") && (m.speaker?.actor === actor.id))?.id : null
+  };
+}
+
+/**
+ * The second half, after the reload: the two cards as the chat log rendered them on load. The party
+ * button must be showing and add the character; the Level Up button must open the wizard. Then the
+ * world is put back as {@link stageReloadCards} found it.
+ * @param {Awaited<ReturnType<typeof stageReloadCards>>} staged
+ */
+export async function checkReloadedCards(staged) {
+  const r = { label: "Card buttons work on cards already in chat when the world loads", failures: [], notes: [] };
+  const actor = game.actors.get(staged.actorId);
+  const party = game.actors.get(staged.partyId);
+  try {
+    if ( !staged.hasClass ) r.failures.push("no Fighter class to give the character");
+    if ( !staged.creationId || !staged.readyId ) r.failures.push("the cards were not posted before the reload");
+    await ui.sidebar?.changeTab?.("chat", "primary");
+    const inLog = id => ui.chat.element?.querySelector(`[data-message-id="${id}"]`) ?? null;
+
+    const partyBtn = inLog(staged.creationId)?.querySelector("[data-sogrom-party-actor]");
+    if ( !partyBtn ) r.failures.push("the creation card in the chat log has no party button after a reload");
+    else if ( partyBtn.hidden ) r.failures.push("the party button stayed hidden on a card rendered at load");
+    else {
+      partyBtn.click();
+      if ( !(await until(() => party?.system.members.ids.has(actor.id))) ) r.failures.push("the party button did nothing after a reload");
+      else r.notes.push("party button shown and working on a card rendered at load");
+    }
+
+    const levelBtn = inLog(staged.readyId)?.querySelector("[data-sogrom-levelup-actor]");
+    if ( !levelBtn ) r.failures.push("the level-up-ready card in the chat log has no button after a reload");
+    else {
+      levelBtn.click();
+      const opened = await until(() => [...(foundry.applications.instances?.values() ?? [])]
+        .some(app => app.constructor?.name === "LevelUpShell"), 60_000);
+      if ( !opened ) r.failures.push("the Level Up button did nothing after a reload");
+      else r.notes.push("Level Up button opened the wizard from a card rendered at load");
+    }
+  } catch ( err ) {
+    r.failures.push(`threw: ${err.message}`);
+  } finally {
+    await closeAll();
+    const { before } = staged;
+    await game.settings.set("dnd5e", "primaryParty", { actor: before.party });
+    await game.settings.set(MODULE_ID, SETTINGS.creationSummary, before.summary);
+    await game.settings.set("dnd5e", "levelingMode", before.mode);
+    await game.settings.set(MODULE_ID, SETTINGS.levelUpReadyNotice, before.notice);
+    const ids = [staged.actorId, staged.partyId].filter(id => game.actors.get(id));
+    if ( ids.length ) await Actor.implementation.deleteDocuments(ids, { render: false }).catch(() => {});
+    const msgs = [staged.creationId, staged.readyId].filter(id => game.messages.get(id));
+    if ( msgs.length ) await ChatMessage.implementation.deleteDocuments(msgs).catch(() => {});
+  }
+  r.ok = !r.failures.length;
+  return r;
+}

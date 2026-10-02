@@ -94,7 +94,7 @@ async function postNotice(actor, threshold, mode) {
 }
 
 /**
- * Wire the XP watcher and the card's button.
+ * Wire the XP watcher. The card's button is wired separately, at load ({@link registerXpNoticeButton}).
  *
  * The `updateActor` hook fires on **every** connected client, so the post is gated on
  * `isActiveGM` — the one client Foundry designates — rather than `isGM`, which would post one
@@ -122,10 +122,20 @@ export function registerXpNotice() {
       log("could not post the level-up-ready notice", err);
     }
   });
+}
 
-  // The card's own button. Scoped to our selector so no other module's chat cards are touched.
-  // dnd5e's hook, which fires once the system has finished its own changes to the card — core's
-  // `renderChatMessageHTML` fires before them.
+/**
+ * Wire the card's Level Up button, on this card and on the level-granted card that shares its
+ * template (see {@link module:levelup/milestone-grant}).
+ *
+ * Registered when the module loads, not at `ready` with the watcher: the chat log renders the
+ * messages already in it before `ready` fires, so a card from an earlier session would otherwise
+ * render without its listener and its button would do nothing.
+ */
+export function registerXpNoticeButton() {
+  // Scoped to our selector so no other module's chat cards are touched. dnd5e's hook, which fires
+  // once the system has finished its own changes to the card — core's `renderChatMessageHTML`
+  // fires before them.
   Hooks.on("dnd5e.renderChatMessage", (_message, html) => {
     const root = html instanceof HTMLElement ? html : html?.[0];
     const button = root?.querySelector("[data-sogrom-levelup-actor]");

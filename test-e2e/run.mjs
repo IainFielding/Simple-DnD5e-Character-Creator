@@ -239,6 +239,16 @@ try {
   } else if ( flag("features") ) {
     // The 3.3.0 creation features, through real clicks and a real chat card. See in-world/features.mjs.
     const r = await harness("checkFeatures");
+    // Card buttons on cards already in chat when the world loads: post, reload the page, check. The
+    // reload is the test — the chat log renders those cards before `ready` — so it is driven from here.
+    const staged = await harness("stageReloadCards");
+    await session.reload();
+    const reloaded = await (await load(session))("checkReloadedCards", staged);
+    r.cases.push(reloaded);
+    if ( !reloaded.ok ) {
+      r.ok = false;
+      r.failures.push(...reloaded.failures.map(f => `${reloaded.label}: ${f}`));
+    }
     for ( const c of r.cases ) {
       console.log(`
 ${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);

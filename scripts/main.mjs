@@ -6,7 +6,7 @@ import { STEPS } from "./steps/registry.mjs";
 import { warmSources } from "./data/source-cache.mjs";
 import { registerLevelUp, triggerLevelUp, canLevelUp } from "./levelup/intercept.mjs";
 import { canRepair, promptRepair } from "./levelup/repair.mjs";
-import { registerXpNotice } from "./levelup/xp-notice.mjs";
+import { registerXpNotice, registerXpNoticeButton } from "./levelup/xp-notice.mjs";
 import { registerMilestoneGrants } from "./levelup/milestone-grant.mjs";
 import { registerCharacterCheck } from "./levelup/character-check.mjs";
 import { registerWelcomeButtons, postWelcomeIfDue } from "./app/welcome.mjs";
@@ -319,10 +319,6 @@ Hooks.once("ready", () => {
   // reason: it self-gates on the `mode` and notice settings, and on being the one active GM.
   registerXpNotice();
 
-  // The creation card's "Add to party" button. Render-time only, and a no-op for anyone who doesn't
-  // own the primary party.
-  registerPartyButton();
-
   // "Build Character" on a blank character the GM prepared — the way in for a player who may not
   // create actors. Self-gates on the module offering creation and on ownership of the sheet.
   registerBlankBuild();
@@ -382,9 +378,12 @@ registerMilestoneGrants();
 // ownership and the level-up flow being on.
 registerCharacterCheck();
 
-// The welcome card's settings buttons. At load, not `ready`: the chat log renders the messages
-// already in it before `ready` fires, so the card from an earlier session must be covered too.
+// The chat cards' buttons: the welcome card's settings buttons, the level-up-ready card's Level Up,
+// and the creation card's "Add to party". At load, not `ready`: the chat log renders the messages
+// already in it before `ready` fires, so a card from an earlier session must be covered too.
 registerWelcomeButtons();
+registerXpNoticeButton();
+registerPartyButton();
 
 // Add a right-click "Level Up" entry to character actors in the sidebar. Foundry passes
 // us the menu's option array and we push our own entry onto it; `visible` decides per-actor

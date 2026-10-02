@@ -25,7 +25,7 @@ const { checkRepair } = await import(`./repair.mjs${BUST}`);
 const { checkQuickBuild } = await import(`./quick-build.mjs${BUST}`);
 const { checkPregens } = await import(`./pregens.mjs${BUST}`);
 const { checkBlankBuild } = await import(`./blank-build.mjs${BUST}`);
-const { checkFeatures } = await import(`./features.mjs${BUST}`);
+const { checkFeatures, stageReloadCards, checkReloadedCards } = await import(`./features.mjs${BUST}`);
 const { checkSpellbook } = await import(`./spellbook.mjs${BUST}`);
 
 // The module under test, imported *without* a buster — the same instance the world already loaded.
@@ -208,6 +208,9 @@ export { checkBlankBuild };
 
 /** The 3.3.0 creation features: party, Suggest, class guide, typed quick name — see `in-world/features.mjs`. */
 export { checkFeatures };
+
+/** Card buttons on cards already in chat at load, around a page reload — see `in-world/features.mjs`. */
+export { stageReloadCards, checkReloadedCards };
 
 /** The Wizard's spellbook, granted cards and Cleric swaps, through the real windows — see `in-world/spellbook.mjs`. */
 export { checkSpellbook };
