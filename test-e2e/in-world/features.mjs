@@ -448,6 +448,61 @@ async function welcomeCard(r) {
   }
 }
 
+/**
+ * 2e. One window per job. Foundry inserts a window by swapping out any element with its id, so a
+ * second creator or a second level-up for the same character used to replace the first on screen
+ * and strand it. Through the real entry points: a second Level Up for the same character brings
+ * the open one forward, another character gets its own window beside it, and a second Create
+ * Character returns the open creator.
+ */
+async function oneWindowEach(r, ctx) {
+  const { launchCreator } = await import(`${MODULE}/api.mjs`);
+  const { clearDraft } = await import(`${MODULE}/state/draft-store.mjs`);
+  const shells = name => [...(foundry.applications.instances?.values() ?? [])]
+    .filter(app => (app.constructor?.name === name) && app.rendered);
+  const fighter = classCard("Fighter");
+  const cls = fighter ? await fromUuid(fighter.uuid) : null;
+  if ( !cls ) return r.failures.push("no Fighter class to level");
+  const make = async name => {
+    const actor = await Actor.implementation.create({ name: `${PREFIX}${name}`, type: "character" }, { renderSheet: false });
+    await actor.createEmbeddedDocuments("Item", [cls.toObject()]);
+    ctx.made.push(actor.id);
+    return actor;
+  };
+  try {
+    const ash = await make("Window Ash");
+    const bo = await make("Window Bo");
+
+    await triggerLevelUp(ash);
+    if ( !(await until(() => shells("LevelUpShell").length === 1, 60_000)) ) return r.failures.push("Level Up opened no window");
+    const first = shells("LevelUpShell")[0];
+    if ( first.id !== `sogrom-levelup-${ash.id}` ) r.failures.push(`the level-up's id is ${first.id}, not per character`);
+    await triggerLevelUp(ash);
+    await pause(1500);
+    if ( shells("LevelUpShell").length !== 1 ) r.failures.push(`a second Level Up for the same character left ${shells("LevelUpShell").length} windows`);
+    if ( !first.rendered ) r.failures.push("a second Level Up closed or replaced the first");
+    if ( document.querySelectorAll(`#sogrom-levelup-${ash.id}`).length !== 1 ) r.failures.push("a second Level Up duplicated the window's element");
+
+    await triggerLevelUp(bo);
+    if ( !(await until(() => shells("LevelUpShell").length === 2, 60_000)) ) r.failures.push("another character's Level Up did not open beside the first");
+    else if ( !first.rendered ) r.failures.push("another character's Level Up replaced the first");
+    else r.notes.push("same character: one window, brought forward; another character: its own window beside it");
+    await closeAll();
+
+    await clearDraft();
+    const creator = await launchCreator();
+    if ( !(await until(() => shells("CreatorShell").length === 1, 60_000)) ) return r.failures.push("Create Character opened no window");
+    const again = await launchCreator();
+    await pause(800);
+    if ( shells("CreatorShell").length !== 1 ) r.failures.push(`a second Create Character left ${shells("CreatorShell").length} creators`);
+    if ( again !== creator ) r.failures.push("a second Create Character did not return the open creator");
+    if ( !creator.rendered ) r.failures.push("a second Create Character closed or replaced the first");
+    else r.notes.push("a second Create Character returned the open creator");
+  } finally {
+    await closeAll();
+  }
+}
+
 /** 3. Suggest for {class}, through real clicks. */
 async function suggest(r) {
   const shell = await openOnClass("Wizard");
@@ -706,6 +761,7 @@ export async function checkFeatures() {
     ["The level-up-ready card's button", levelUpReadyCard],
     ["Milestone grants", milestoneGrants],
     ["The GM's welcome card", welcomeCard],
+    ["One window per job", oneWindowEach],
     ["Suggest for a class", suggest],
     ["Class guide on the drawer and the quick screen", classGuide],
     ["The quick screen keeps a typed name", quickTypedName],

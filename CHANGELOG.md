@@ -2,6 +2,40 @@
 
 All notable changes to the Simple D&D Character Creator.
 
+## 3.4.0
+
+### New
+
+- **Milestone levels.** In a world that levels without XP, a GM can grant a level from a
+  character's right-click menu in the Actors tab, to a group's characters from the group's
+  right-click menu, or to several characters at once with the new **Grant Levels** button at the
+  top of the Actors tab. The character's Level Up button lights up, and their owners get a chat
+  card with a button to take the level. Players can still level up whenever they like; a grant
+  tells them it's time. Granting twice before they level gives them two levels.
+- **Check Character.** A report in the character sheet's ⋯ menu lists anything that looks skipped
+  or wrong: choices never made at a level, hit points never set, cantrips not chosen, more spells
+  prepared than allowed, and the same spell twice from the same source. It also notes spells still
+  to prepare and a level waiting to be taken. Where the module can fix something, the report has a
+  button for it: **Repair** for a skipped level, **Level Up** for a waiting one. The report itself
+  changes nothing.
+- **A welcome card for GMs.** The first time the module runs in a world, the GMs get a whispered
+  card showing where everything is, with buttons that open House Rules, Level-Up Options, the
+  Starting-Gold Store and the Magic Item Shop. After an update that adds features, they get a short
+  note of what's new instead. The **Welcome and what's new cards** setting turns them off.
+
+### Fixed
+
+- **Level-ups are saved in one batch,** the way dnd5e 6.0 saves its own. They were saved in four
+  parts at once, and the parts could interfere with each other, which could leave a granted
+  feature on the sheet twice. Characters on unlinked tokens are now saved correctly too.
+- **Opening a second window.** Clicking Create Character while the creator was open, or Level Up
+  for a character who was already levelling, opened a new window in place of the first and left
+  the first running unseen, without asking whether to discard it. The open window is now brought
+  forward instead. Different characters can still level up side by side.
+- **Chat card buttons after a reload.** The **Add to party** button on the creation card and the
+  **Level Up** button on the level-up-ready card did nothing on a card that was already in chat
+  when the world loaded.
+
 ## 3.3.3
 
 ### Improved

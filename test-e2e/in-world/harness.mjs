@@ -1307,7 +1307,7 @@ export async function probeMagicShopClimb({ match = "fighter/champion", to = 5 }
     errors: errors.length,
     // Everything open, in case the window is there under another name.
     apps: [...(foundry.applications.instances?.values() ?? [])].map(a => `${a.constructor?.name}#${a.id}:${a.rendered ? "open" : "closed"}`),
-    levelupDom: !!document.getElementById("sogrom-levelup"),
+    levelupDom: !!document.querySelector('[id^="sogrom-levelup"]'),
     notifications: (ui.notifications?.queue ?? []).map(n => n.message ?? String(n)).slice(-3)
   });
 

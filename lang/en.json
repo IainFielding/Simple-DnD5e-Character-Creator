@@ -233,7 +233,8 @@
         "magicItemsFailed": "The chosen magic items could not be added. The levels themselves were applied — add the items from the sheet.",
         "spellsFailed": "The chosen spells could not be added. The level-up itself was applied — add them from the sheet.",
         "takeoverFailed": "The level-up could not be prepared. The character was not changed — try again or use the system's own level-up.",
-        "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow."
+        "choicesUnsupported": "This level needs choices the simple level-up doesn't handle yet. Use the system's advancement flow.",
+        "alreadyOpen": "{name}'s level-up is already open."
       },
       "step": {
         "class": {
@@ -443,7 +444,8 @@
       "noPermission": "You do not have permission to create actors.",
       "indexFailed": "Could not read the compendiums. Check that the dnd5e content packs are enabled.",
       "buildFailed": "Character creation failed. See the console for details.",
-      "draftPruned": "Some of your saved choices are no longer available in this world and have been cleared: {steps}."
+      "draftPruned": "Some of your saved choices are no longer available in this world and have been cleared: {steps}.",
+      "alreadyOpen": "The character creator is already open."
     },
     "chat": {
       "creation": {

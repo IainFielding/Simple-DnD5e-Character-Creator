@@ -59,6 +59,15 @@ const DRAFT_CANCELLED = Symbol("draft-cancelled");
 export async function launchCreator(actor) {
   // Level-up-only mode (always the case under Ember) has no creator to open.
   if ( !creationEnabled() ) return null;
+  // One creator at a time. Foundry inserts a window by swapping out any element with its id, so a
+  // second creator would take the first one's place on screen and strand the build in it.
+  const open = foundry.applications.instances?.get(CreatorShell.DEFAULT_OPTIONS.id);
+  if ( open?.rendered ) {
+    if ( open.minimized ) open.maximize?.();
+    open.bringToFront?.();
+    ui.notifications?.info(t("notify.alreadyOpen"));
+    return open;
+  }
   // Give the permission feedback up front rather than after the player has filled everything in.
   if ( !actor && !game.user?.can("ACTOR_CREATE") ) {
     ui.notifications?.warn(t("notify.noPermission"));

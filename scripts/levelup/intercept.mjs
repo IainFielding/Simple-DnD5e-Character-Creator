@@ -4,7 +4,7 @@ import {
 } from "../config.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
-import { LevelUpShell } from "./levelup-shell.mjs";
+import { LevelUpShell, focusOpenLevelUp } from "./levelup-shell.mjs";
 import { multiclassBlockers, formatBlockers } from "./multiclass.mjs";
 import { isEmberCreationManager, foldOriginScreens } from "./ember-creation.mjs";
 import { canRepair, promptRepair } from "./repair.mjs";
@@ -159,6 +159,9 @@ function shouldTakeOver(manager) {
  *   the same payload wherever a build happens to finish.
  */
 async function launchLevelUp(manager, { emberCreation = false, announce = null, creationState = null } = {}) {
+  // One level-up per character. A second (the sheet's own level selector while ours is open) brings
+  // the open one forward; the native manager it came from was already suppressed, and is dropped.
+  if ( focusOpenLevelUp(manager.actor) ) return;
   try {
     const driver = new LevelUpDriver(manager);
     await driver.prepare();
@@ -504,6 +507,8 @@ export function hasLevelUpXp(actor, { usesXp = game.settings.get("dnd5e", "level
  * @param {Actor5e} actor
  */
 export async function triggerLevelUp(actor) {
+  // Already levelling this character: bring that window forward rather than build a second.
+  if ( focusOpenLevelUp(actor) ) return;
   const classes = actor.items.filter(i => i.type === "class");
   const canMulticlass = multiclassMode() !== "off"
     && (actor.system?.details?.level ?? 0) < (CONFIG.DND5E?.maxLevel ?? 20);
