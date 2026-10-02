@@ -1719,9 +1719,10 @@ export class LevelUpDriver {
    *
    * ── This is a copy. Here is the original ──
    * `AdvancementManager##complete` — `dnd5e/module/applications/advancement/advancement-manager.mjs`,
-   * around line 880 in **5.3.3**, the version this was ported from. `module.json` now declares
-   * 6.0.0 as its floor (`minimum: 6.0.0`), so this has to hold for the oldest system it claims as
-   * well as the newest it is verified on.
+   * around line 888 in **6.0.0**. It was first ported from 5.3.3, which fired four writes in one
+   * `Promise.all`; 6.0.0 replaced them with a single `actor.performBulkUpdate`, and this follows.
+   * The parallel writes raced: a stale cached-spell id could reject the whole delete batch and
+   * leave granted features duplicated.
    *
    * Everywhere else the driver merely *drives* the system: if dnd5e changes an advancement's
    * `apply`, we call the changed one. This method is the exception — it reimplements system
@@ -1737,10 +1738,10 @@ export class LevelUpDriver {
    *  2. **Both hooks**: `dnd5e.preAdvancementManagerComplete` (cancellable, and its argument order
    *     `manager, updates, toCreate, toUpdate, toDelete` is part of the contract other modules read)
    *     and `dnd5e.advancementManagerComplete` after the writes.
-   *  3. **The write options** — `isAdvancement: true` on all four, `keepId: true` on the creates,
-   *     `diff: false, recursive: false` on the updates. These are what tell the system, and every
-   *     module listening, that this is advancement rather than an edit.
-   *  4. **The `Promise.all` ordering**, which the note at the end of this comment depends on.
+   *  3. **The write options** — `isAdvancement: true` on every operation, `keepId: true` on the
+   *     creates, `diff: false, recursive: false` on the item updates. These are what tell the system,
+   *     and every module listening, that this is advancement rather than an edit.
+   *  4. **The batch order** (actor first), which the note at the end of this comment depends on.
    *
    * Two deliberate departures from the native code, both for Apply speed — and they are departures
    * to re-justify rather than reapply if the original moves:
@@ -1749,15 +1750,15 @@ export class LevelUpDriver {
    *    the clone and the actor, so they are compared and skipped here — only what the level-up
    *    actually changed is written. {@link #hasStaleRiders} covers the one thing that rewrite did
    *    for free.
-   *  - The four writes suppress their per-operation renders (each would re-render the open
-   *    character sheet behind the wizard); the sheet is re-rendered once at the end instead.
+   *  - The batch suppresses its per-operation renders (each would re-render the open character
+   *    sheet behind the wizard); the sheet is re-rendered once at the end instead.
    *
    * The wholesale `clone.toObject()` actor write looks like it should race the hooks this very
-   * `Promise.all` triggers — `SubclassData._onCreate` sets `attributes.spellcasting` from a
-   * deliberately un-awaited `actor.update` — and an earlier note here proposed writing only changed
-   * keys to avoid it. Measured, it does not: `Promise.all` starts the actor update first, so the
-   * hook's write always lands after and survives. The equivalence harness reported otherwise only
-   * because it read the actor before that un-awaited write arrived. Left as the faithful port.
+   * batch triggers — `SubclassData._onCreate` sets `attributes.spellcasting` from a deliberately
+   * un-awaited `actor.update` — and an earlier note here proposed writing only changed keys to
+   * avoid it. It does not: the actor update is the batch's first operation, so the hook's write
+   * always lands after and survives. The equivalence harness reported otherwise only because it
+   * read the actor before that un-awaited write arrived. Left as the faithful port.
    * @returns {Promise<Actor5e>}  The updated real actor.
    */
   async commit() {
@@ -1782,15 +1783,16 @@ export class LevelUpDriver {
       return this.actor;
     }
 
-    await Promise.all([
-      this.actor.update(updates, { isAdvancement: true, render: false }),
-      this.actor.createEmbeddedDocuments("Item", toCreate, { keepId: true, isAdvancement: true, render: false }),
-      this.actor.updateEmbeddedDocuments("Item", toUpdate, { diff: false, recursive: false, isAdvancement: true, render: false }),
-      this.actor.deleteEmbeddedDocuments("Item", toDelete, { isAdvancement: true, render: false })
-    ]);
+    // One ordered batch, as dnd5e 6.0 writes it: actor, then creates, deletes, item updates.
+    // `performBulkUpdate` adds `keepId: true` to the creates and routes an unlinked token's actor
+    // through its ActorDelta.
+    await this.actor.performBulkUpdate(
+      { actor: updates, create: toCreate, delete: toDelete, item: toUpdate },
+      { isAdvancement: true, render: false, updateOptions: { diff: false, recursive: false } }
+    );
 
     Hooks.callAll("dnd5e.advancementManagerComplete", this.manager);
-    // The one render the four suppressed ops deferred to: surface the new level on the sheet.
+    // The one render the suppressed operations deferred to: surface the new level on the sheet.
     if ( this.actor.sheet?.rendered ) this.actor.sheet.render();
     return this.actor;
   }

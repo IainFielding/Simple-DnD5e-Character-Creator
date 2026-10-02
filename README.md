@@ -3,6 +3,9 @@ A guided character creation and level-up experience for Dungeons & Dragons 5e/5.
 
 Create characters through a step-by-step wizard, generate characters in seconds with Quick Build, import premade characters, and replace the standard D&D 5e level-up workflow with a streamlined, player-focused experience.
 
+> [!NOTE]
+> Current support is focused on Foundry v14 and the dnd5e 6.0+ line. Older compatibility notes and historical migration details are kept in the changelog and project history, not in the active user-facing docs.
+
 > [!TIP]
 > This module works best with the [Official FoundryVTT game expansion modules from Wizards of the Coast](https://www.foundryvtt.store/creators/wizards-of-the-coast) 
 
@@ -88,6 +91,8 @@ This module will automatically detect if you have any of the official modules in
 | Foundry VTT | v14 |
 | D&D 5e System | 6.0+ |
 | Verified On | Foundry 14.368 / D&D 5e 6.0.5 |
+
+> Historical compatibility notes for earlier dnd5e versions are archival and not part of the supported configuration guidance.
 
 ### Reporting Issues
 When reporting an issue, please fill in the issue form [here](https://github.com/IainFielding/Simple-DnD5e-Character-Creator/issues).
