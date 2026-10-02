@@ -258,6 +258,119 @@ async function levelUpReadyCard(r, ctx) {
   }
 }
 
+/**
+ * Right-click a sidebar row through a real `contextmenu` event (see blank-build.mjs `sidebarMenu`,
+ * and why the hook alone proves nothing), and click the entry labelled `label` when asked to.
+ * @returns {Promise<string[]>}  The menu's labels.
+ */
+async function sidebarMenu(actor, label = null) {
+  await ui.sidebar?.changeTab?.("actors", "primary");
+  await ui.actors.render();
+  await pause(300);
+  const li = ui.actors.element?.querySelector(`.directory-item[data-entry-id="${actor.id}"]`);
+  if ( !li ) return [];
+  const box = li.getBoundingClientRect();
+  li.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true, cancelable: true, button: 2, clientX: box.left + 5, clientY: box.top + 5
+  }));
+  await until(() => document.querySelector("#context-menu .context-item"), 5_000);
+  const items = [...document.querySelectorAll("#context-menu .context-item")];
+  const labels = items.map(el => el.textContent.trim());
+  const target = label ? items.find(el => el.textContent.trim() === label) : null;
+  if ( target ) target.click();
+  else await ui.context?.close?.({ animate: false });
+  await pause(300);
+  return labels;
+}
+
+/**
+ * 2c. Milestone grants: in a world that doesn't level by XP, the GM grants a level from a character's
+ * right-click menu and from the sidebar's batch dialog. Each grant lights the sheet's Level Up button
+ * with its own wording and whispers a card whose button opens the wizard. None of it is offered in an
+ * XP world.
+ */
+async function milestoneGrants(r, ctx) {
+  const actor = ctx.joined;
+  if ( !actor ) return r.failures.push("case 1 did not leave a party member to grant a level to");
+  const modeBefore = game.settings.get("dnd5e", "levelingMode");
+  const grantOne = game.i18n.localize(`${MODULE_ID}.milestone.grantOne`);
+  const grantGroup = game.i18n.localize(`${MODULE_ID}.milestone.grantGroup`);
+  const level = actor.system.details.level;
+  const mark = () => actor.getFlag(MODULE_ID, "milestoneLevel") ?? null;
+  const cards = () => game.messages.filter(m =>
+    (m.getFlag(MODULE_ID, "summary") === "levelGranted") && (m.speaker?.actor === actor.id));
+  const trophy = async () => {
+    await actor.sheet.render(true);
+    await until(() => actor.sheet.rendered && actor.sheet.element?.querySelector(".sogrom-levelup-btn"), 20_000);
+    await pause(300);
+    return actor.sheet.element?.querySelector(".sogrom-levelup-btn") ?? null;
+  };
+  try {
+    // An XP world offers none of it.
+    await game.settings.set("dnd5e", "levelingMode", "xp");
+    if ( (await sidebarMenu(actor)).includes(grantOne) ) r.failures.push("Grant a Level is offered in an XP world");
+    await ui.actors.render();
+    await pause(300);
+    if ( ui.actors.element?.querySelector(".sogrom-grant-levels") ) r.failures.push("the Grant Levels header button shows in an XP world");
+
+    await game.settings.set("dnd5e", "levelingMode", "noxp");
+    await actor.unsetFlag(MODULE_ID, "milestoneLevel");
+    const unlit = await trophy();
+    if ( unlit?.classList.contains("is-xp-ready") ) r.failures.push("the Level Up button is lit before any grant");
+    await actor.sheet.close();
+
+    // One character, from the real right-click menu.
+    const labels = await sidebarMenu(actor, grantOne);
+    if ( !labels.includes(grantOne) ) return r.failures.push(`no "${grantOne}" in the character's right-click menu`);
+    if ( !(await until(() => mark() === level + 1)) ) return r.failures.push(`the grant set the mark to ${mark()}, not ${level + 1}`);
+    if ( !(await until(() => cards().length === 1)) ) r.failures.push("no level-granted card was posted");
+    const lit = await trophy();
+    const litLabel = game.i18n.localize(`${MODULE_ID}.levelup.buttonGranted`);
+    if ( !lit?.classList.contains("is-xp-ready") ) r.failures.push("the Level Up button is not lit after a grant");
+    else if ( lit.hasAttribute("aria-label") && (lit.getAttribute("aria-label") !== litLabel) ) {
+      r.failures.push(`the lit button reads "${lit.getAttribute("aria-label")}", not the granted wording`);
+    }
+    await actor.sheet.close();
+    r.notes.push(`right-click granted level ${level + 1}; sheet button lit; card whispered`);
+
+    // The group's own entry.
+    if ( !(await sidebarMenu(ctx.party)).includes(grantGroup) ) r.failures.push(`no "${grantGroup}" on the party's right-click menu`);
+
+    // The batch dialog, from the sidebar header: the party member arrives ticked.
+    await ui.actors.render();
+    await pause(300);
+    const header = ui.actors.element?.querySelector(".sogrom-grant-levels");
+    if ( !header ) return r.failures.push("no Grant Levels button in the Actors sidebar header");
+    header.click();
+    const dialog = await until(() => document.querySelector(".sogrom-grant-dialog"), 10_000)
+      ? document.querySelector(".sogrom-grant-dialog") : null;
+    if ( !dialog ) return r.failures.push("the header button opened no dialog");
+    const box = dialog.querySelector(`input[type=checkbox][name="${actor.id}"]`);
+    if ( !box ) return r.failures.push("the party member is missing from the dialog");
+    if ( !box.checked ) r.failures.push("the party member is not ticked in the dialog");
+    for ( const other of dialog.querySelectorAll("input[type=checkbox]") ) if ( other !== box ) other.checked = false;
+    box.checked = true;
+    dialog.querySelector('button[data-action="grant"]').click();
+    if ( !(await until(() => mark() === level + 2)) ) r.failures.push(`the batch grant left the mark at ${mark()}, not ${level + 2}`);
+    if ( !(await until(() => cards().length === 2)) ) r.failures.push("the batch grant posted no second card");
+    else r.notes.push(`batch dialog ticked the party member and stacked the grant to ${level + 2}`);
+
+    // The card's button opens the wizard.
+    const html = await cards().at(-1).renderHTML();
+    const button = html.querySelector("[data-sogrom-levelup-actor]");
+    if ( !button ) return r.failures.push("the level-granted card has no button");
+    button.click();
+    const opened = await until(() => [...(foundry.applications.instances?.values() ?? [])]
+      .some(app => app.constructor?.name === "LevelUpShell"), 60_000);
+    if ( !opened ) r.failures.push("the level-granted card's button did not open the level-up wizard");
+    else r.notes.push("the card's button opened the level-up wizard");
+  } finally {
+    await closeAll();
+    await actor.unsetFlag(MODULE_ID, "milestoneLevel").catch(() => {});
+    await game.settings.set("dnd5e", "levelingMode", modeBefore);
+  }
+}
+
 /** 3. Suggest for {class}, through real clicks. */
 async function suggest(r) {
   const shell = await openOnClass("Wizard");
@@ -514,6 +627,7 @@ export async function checkFeatures() {
     ["Add to party from the Review page", partyFromReview],
     ["Add to party from the chat card", partyFromCard],
     ["The level-up-ready card's button", levelUpReadyCard],
+    ["Milestone grants", milestoneGrants],
     ["Suggest for a class", suggest],
     ["Class guide on the drawer and the quick screen", classGuide],
     ["The quick screen keeps a typed name", quickTypedName],

@@ -80,8 +80,8 @@ async function postNotice(actor, threshold, mode) {
     actorId: actor.id,
     name: actor.name,
     img: actor.img,
-    value: xp.value ?? 0,
-    max: threshold,
+    eyebrow: t("chat.levelUpReady.eyebrow"),
+    sub: t("chat.levelUpReady.xp", { value: xp.value ?? 0, max: threshold }),
     label: t("chat.levelUpReady.button")
   });
   await ChatMessage.create({

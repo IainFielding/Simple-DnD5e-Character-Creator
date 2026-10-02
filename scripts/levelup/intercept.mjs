@@ -8,6 +8,7 @@ import { LevelUpShell } from "./levelup-shell.mjs";
 import { multiclassBlockers, formatBlockers } from "./multiclass.mjs";
 import { isEmberCreationManager, foldOriginScreens } from "./ember-creation.mjs";
 import { canRepair, promptRepair } from "./repair.mjs";
+import { hasGrantedLevel } from "./milestone.mjs";
 
 /**
  * Wires up the level-up takeover (§4). Two trigger paths:
@@ -342,13 +343,15 @@ function renderLevelUpButton(root, actor) {
       onClick: () => triggerLevelUp(actor)
     });
   }
-  // Lit when the XP is there. Applied to an existing button too, since Tidy's sheets keep theirs
-  // across renders and the XP that lights it arrives in one of those renders.
+  // Lit when the XP is there, or when a GM has granted a milestone level. Applied to an existing
+  // button too, since Tidy's sheets keep theirs across renders and what lights it arrives in one of
+  // those renders.
   const button = root.querySelector(".sogrom-levelup-btn");
   if ( !button ) return;
-  const ready = hasLevelUpXp(actor);
-  button.classList.toggle("is-xp-ready", ready);
-  const label = t(ready ? "levelup.buttonReady" : "levelup.button");
+  const earned = hasLevelUpXp(actor);
+  const granted = !earned && hasGrantedLevel(actor);
+  button.classList.toggle("is-xp-ready", earned || granted);
+  const label = t(earned ? "levelup.buttonReady" : (granted ? "levelup.buttonGranted" : "levelup.button"));
   if ( button.hasAttribute("aria-label") ) button.setAttribute("aria-label", label);
 }
 

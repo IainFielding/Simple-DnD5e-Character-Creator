@@ -213,6 +213,7 @@
       },
       "button": "Level Up",
       "buttonReady": "Level Up — you have enough XP",
+      "buttonGranted": "Level Up — your GM has granted a level",
       "multiclass": {
         "score": "{ability} {score}",
         "requires": "{class} requires {abilities}",
@@ -482,7 +483,23 @@
         "xp": "{value} / {max} XP",
         "button": "Level Up",
         "missing": "That character no longer exists."
+      },
+      "levelGranted": {
+        "eyebrow": "Level granted",
+        "sub": "Your GM has granted level {level}"
       }
+    },
+    "milestone": {
+      "grantOne": "Grant a Level",
+      "grantGroup": "Grant Levels to Members",
+      "headerButton": "Grant Levels",
+      "dialogTitle": "Grant Milestone Levels",
+      "prompt": "Tick the characters who have reached a milestone. Each is granted one more level and whispered a card to take it.",
+      "levelLine": "Level {level} → {target}",
+      "grantButton": "Grant",
+      "cancel": "Cancel",
+      "granted": "Granted a level to {names}.",
+      "none": "No character can be granted a level."
     },
     "step": {
       "class": {

@@ -7,6 +7,7 @@ import { warmSources } from "./data/source-cache.mjs";
 import { registerLevelUp, triggerLevelUp, canLevelUp } from "./levelup/intercept.mjs";
 import { canRepair, promptRepair } from "./levelup/repair.mjs";
 import { registerXpNotice } from "./levelup/xp-notice.mjs";
+import { registerMilestoneGrants } from "./levelup/milestone-grant.mjs";
 import { registerPartyButton } from "./build/chat-summary.mjs";
 import { registerBlankBuild, registerBlankBuildMenu } from "./app/blank-build.mjs";
 import { StoreConfigApp } from "./app/store-config.mjs";
@@ -356,6 +357,10 @@ Hooks.on("renderActorDirectory", (_app, html) => {
 // "Build Character" on a blank character, in the same right-click menu. At load rather than in
 // `ready` for the reason given on registerBlankBuildMenu: the menu is built before `ready` fires.
 registerBlankBuildMenu();
+
+// The GM's milestone grants: right-click entries on characters and groups, and a sidebar header
+// button. At load for the same reason; each gates itself on GM, milestone levelling and level-up.
+registerMilestoneGrants();
 
 // Add a right-click "Level Up" entry to character actors in the sidebar. Foundry passes
 // us the menu's option array and we push our own entry onto it; `visible` decides per-actor

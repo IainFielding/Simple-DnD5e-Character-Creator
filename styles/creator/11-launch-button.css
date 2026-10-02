@@ -18,3 +18,54 @@
   margin-top: 0.4rem;
 }
 
+
+/* ---------------------------------------------- Milestone grants
+
+   The GM's "Grant Levels" header button sits beside the launch button and takes the same
+   full-width row; its dialog is a Foundry DialogV2, styled here because it lives outside the
+   .sogrom-creator window too. */
+
+.header-actions:has(.sogrom-grant-levels),
+.directory-header .action-buttons:has(.sogrom-grant-levels) {
+  flex-wrap: wrap;
+}
+
+.sogrom-grant-levels {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  flex: 0 0 100%;
+  justify-content: center;
+  margin-top: 0.4rem;
+}
+
+.sogrom-grant-dialog .sogrom-grant-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.sogrom-grant-dialog .sogrom-grant-list label {
+  display: grid;
+  grid-template-columns: auto 2rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.sogrom-grant-dialog .sogrom-grant-list img {
+  width: 2rem;
+  height: 2rem;
+  object-fit: cover;
+  border: none;
+  border-radius: 4px;
+}
+
+.sogrom-grant-dialog .sogrom-grant-level {
+  opacity: 0.75;
+  font-size: var(--font-size-12, 0.75rem);
+  white-space: nowrap;
+}
