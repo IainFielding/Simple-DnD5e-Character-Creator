@@ -96,3 +96,11 @@ This module will automatically detect if you have any of the official modules in
 
 ### Reporting Issues
 When reporting an issue, please fill in the issue form [here](https://github.com/IainFielding/Simple-DnD5e-Character-Creator/issues).
+
+### Contributing
+Pull requests and translations are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
+## License
+This module is released under the [MIT License](LICENSE).
+
+Dungeons & Dragons and D&D are trademarks of Wizards of the Coast. This module is an unofficial, fan-made tool and is not affiliated with, endorsed by, or sponsored by Wizards of the Coast. It contains no game content of its own and works only with content you already own and have enabled in Foundry VTT.
