@@ -36,6 +36,12 @@ All notable changes to the Simple D&D Character Creator.
   **Level Up** button on the level-up-ready card did nothing on a card that was already in chat
   when the world loaded.
 
+### Licence
+
+- **The module is now MIT-licensed.** It was previously freeware with all rights reserved. You
+  can now copy, modify, translate and redistribute it, and pull requests and translations are
+  welcome under the same licence.
+
 ## 3.3.3
 
 ### Improved
