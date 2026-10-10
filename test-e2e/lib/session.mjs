@@ -59,7 +59,10 @@ export class Session {
         "--disable-dev-shm-usage"
       ]
     });
-    const context = await browser.newContext({ viewport, deviceScaleFactor });
+    // The same self-signed certificate the server probe accepts (see lib/server.mjs).
+    const context = await browser.newContext({
+      viewport, deviceScaleFactor, ignoreHTTPSErrors: BASE_URL.startsWith("https:")
+    });
     const page = await context.newPage();
     const session = new Session(browser, page);
 
@@ -127,7 +130,8 @@ export class Session {
   async join() {
     await this.page.goto(`${BASE_URL}/join`, { waitUntil: "domcontentloaded" });
 
-    const select = this.page.locator("select[name=userid]");
+    // Build 369 renamed the field from `userid` to `userId`; attribute values are case-sensitive.
+    const select = this.page.locator("select[name=userid], select[name=userId]");
     const username = this.page.locator("input[name=username]");
     await Promise.race([
       select.waitFor({ timeout: 30_000 }),

@@ -258,6 +258,251 @@ async function levelUpReadyCard(r, ctx) {
   }
 }
 
+/**
+ * Right-click a sidebar row through a real `contextmenu` event (see blank-build.mjs `sidebarMenu`,
+ * and why the hook alone proves nothing), and click the entry labelled `label` when asked to.
+ * @returns {Promise<string[]>}  The menu's labels.
+ */
+async function sidebarMenu(actor, label = null) {
+  await ui.sidebar?.changeTab?.("actors", "primary");
+  await ui.actors.render();
+  await pause(300);
+  const li = ui.actors.element?.querySelector(`.directory-item[data-entry-id="${actor.id}"]`);
+  if ( !li ) return [];
+  const box = li.getBoundingClientRect();
+  li.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true, cancelable: true, button: 2, clientX: box.left + 5, clientY: box.top + 5
+  }));
+  await until(() => document.querySelector("#context-menu .context-item"), 5_000);
+  const items = [...document.querySelectorAll("#context-menu .context-item")];
+  const labels = items.map(el => el.textContent.trim());
+  const target = label ? items.find(el => el.textContent.trim() === label) : null;
+  if ( target ) target.click();
+  else await ui.context?.close?.({ animate: false });
+  await pause(300);
+  return labels;
+}
+
+/**
+ * 2c. Milestone grants: in a world that doesn't level by XP, the GM grants a level from a character's
+ * right-click menu and from the sidebar's batch dialog. Each grant lights the sheet's Level Up button
+ * with its own wording and whispers a card whose button opens the wizard. None of it is offered in an
+ * XP world.
+ */
+async function milestoneGrants(r, ctx) {
+  const actor = ctx.joined;
+  if ( !actor ) return r.failures.push("case 1 did not leave a party member to grant a level to");
+  const modeBefore = game.settings.get("dnd5e", "levelingMode");
+  const grantOne = game.i18n.localize(`${MODULE_ID}.milestone.grantOne`);
+  const grantGroup = game.i18n.localize(`${MODULE_ID}.milestone.grantGroup`);
+  const level = actor.system.details.level;
+  const mark = () => actor.getFlag(MODULE_ID, "milestoneLevel") ?? null;
+  const cards = () => game.messages.filter(m =>
+    (m.getFlag(MODULE_ID, "summary") === "levelGranted") && (m.speaker?.actor === actor.id));
+  const trophy = async () => {
+    await actor.sheet.render(true);
+    await until(() => actor.sheet.rendered && actor.sheet.element?.querySelector(".sogrom-levelup-btn"), 20_000);
+    await pause(300);
+    return actor.sheet.element?.querySelector(".sogrom-levelup-btn") ?? null;
+  };
+  try {
+    // An XP world offers none of it.
+    await game.settings.set("dnd5e", "levelingMode", "xp");
+    if ( (await sidebarMenu(actor)).includes(grantOne) ) r.failures.push("Grant a Level is offered in an XP world");
+    await ui.actors.render();
+    await pause(300);
+    if ( ui.actors.element?.querySelector(".sogrom-grant-levels") ) r.failures.push("the Grant Levels header button shows in an XP world");
+
+    await game.settings.set("dnd5e", "levelingMode", "noxp");
+    await actor.unsetFlag(MODULE_ID, "milestoneLevel");
+    const unlit = await trophy();
+    if ( unlit?.classList.contains("is-xp-ready") ) r.failures.push("the Level Up button is lit before any grant");
+    await actor.sheet.close();
+
+    // One character, from the real right-click menu.
+    const labels = await sidebarMenu(actor, grantOne);
+    if ( !labels.includes(grantOne) ) return r.failures.push(`no "${grantOne}" in the character's right-click menu`);
+    if ( !(await until(() => mark() === level + 1)) ) return r.failures.push(`the grant set the mark to ${mark()}, not ${level + 1}`);
+    if ( !(await until(() => cards().length === 1)) ) r.failures.push("no level-granted card was posted");
+    const lit = await trophy();
+    const litLabel = game.i18n.localize(`${MODULE_ID}.levelup.buttonGranted`);
+    if ( !lit?.classList.contains("is-xp-ready") ) r.failures.push("the Level Up button is not lit after a grant");
+    else if ( lit.hasAttribute("aria-label") && (lit.getAttribute("aria-label") !== litLabel) ) {
+      r.failures.push(`the lit button reads "${lit.getAttribute("aria-label")}", not the granted wording`);
+    }
+    await actor.sheet.close();
+    r.notes.push(`right-click granted level ${level + 1}; sheet button lit; card whispered`);
+
+    // The group's own entry opens the dialog on that group's characters, and no one else.
+    if ( !(await sidebarMenu(ctx.party, grantGroup)).includes(grantGroup) ) {
+      r.failures.push(`no "${grantGroup}" on the party's right-click menu`);
+    } else {
+      const groupDialog = await until(() => document.querySelector(".sogrom-grant-dialog"), 10_000)
+        ? document.querySelector(".sogrom-grant-dialog") : null;
+      if ( !groupDialog ) r.failures.push("the party's entry opened no dialog");
+      else {
+        const listed = [...groupDialog.querySelectorAll("input[type=checkbox]")].map(i => i.name).sort();
+        const members = ctx.party.system.playerCharacters.map(a => a.id).sort();
+        if ( listed.join() !== members.join() ) {
+          r.failures.push(`the party's dialog lists ${listed.length} character(s), not its ${members.length} member(s)`);
+        } else r.notes.push(`the party's dialog lists only its ${members.length} member(s)`);
+        groupDialog.querySelector('button[data-action="cancel"]')?.click();
+        await until(() => !document.querySelector(".sogrom-grant-dialog"), 5_000);
+      }
+    }
+
+    // The batch dialog, from the sidebar header: the party member arrives ticked.
+    await ui.actors.render();
+    await pause(300);
+    const header = ui.actors.element?.querySelector(".sogrom-grant-levels");
+    if ( !header ) return r.failures.push("no Grant Levels button in the Actors sidebar header");
+    header.click();
+    const dialog = await until(() => document.querySelector(".sogrom-grant-dialog"), 10_000)
+      ? document.querySelector(".sogrom-grant-dialog") : null;
+    if ( !dialog ) return r.failures.push("the header button opened no dialog");
+    const box = dialog.querySelector(`input[type=checkbox][name="${actor.id}"]`);
+    if ( !box ) return r.failures.push("the party member is missing from the dialog");
+    if ( !box.checked ) r.failures.push("the party member is not ticked in the dialog");
+    for ( const other of dialog.querySelectorAll("input[type=checkbox]") ) if ( other !== box ) other.checked = false;
+    box.checked = true;
+    dialog.querySelector('button[data-action="grant"]').click();
+    if ( !(await until(() => mark() === level + 2)) ) r.failures.push(`the batch grant left the mark at ${mark()}, not ${level + 2}`);
+    if ( !(await until(() => cards().length === 2)) ) r.failures.push("the batch grant posted no second card");
+    else r.notes.push(`batch dialog ticked the party member and stacked the grant to ${level + 2}`);
+
+    // The card's button opens the wizard.
+    const html = await cards().at(-1).renderHTML();
+    const button = html.querySelector("[data-sogrom-levelup-actor]");
+    if ( !button ) return r.failures.push("the level-granted card has no button");
+    button.click();
+    const opened = await until(() => [...(foundry.applications.instances?.values() ?? [])]
+      .some(app => app.constructor?.name === "LevelUpShell"), 60_000);
+    if ( !opened ) r.failures.push("the level-granted card's button did not open the level-up wizard");
+    else r.notes.push("the card's button opened the level-up wizard");
+  } finally {
+    await closeAll();
+    await actor.unsetFlag(MODULE_ID, "milestoneLevel").catch(() => {});
+    await game.settings.set("dnd5e", "levelingMode", modeBefore);
+  }
+}
+
+/**
+ * 2d. The GM's welcome card: posted once to the GMs on a world's first run, a what's-new card for a
+ * world that saw an older release, nothing with the setting off, and its settings buttons open the
+ * window their menu registered. The world's record of what it announced is put back afterwards.
+ */
+async function welcomeCard(r) {
+  const { postWelcomeIfDue, WHATS_NEW } = await import(`${MODULE}/app/welcome.mjs`);
+  const seenBefore = game.settings.get(MODULE_ID, SETTINGS.welcomeVersion);
+  const onBefore = game.settings.get(MODULE_ID, SETTINGS.welcomeCards);
+  const cards = kind => game.messages.filter(m => m.getFlag(MODULE_ID, "summary") === kind);
+  const latest = WHATS_NEW.at(-1).version;
+  try {
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeCards, true);
+
+    // A first run: the welcome, whispered to the GMs, recorded.
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeVersion, "");
+    const welcomesBefore = cards("welcome").length;
+    await postWelcomeIfDue();
+    if ( !(await until(() => cards("welcome").length === welcomesBefore + 1)) ) return r.failures.push("no welcome card on a first run");
+    const card = cards("welcome").at(-1);
+    if ( !card.whisper?.length ) r.failures.push("the welcome card is not whispered");
+    if ( game.settings.get(MODULE_ID, SETTINGS.welcomeVersion) !== latest ) r.failures.push("the welcome did not record the release it announced");
+
+    // Not again.
+    await postWelcomeIfDue();
+    await pause(500);
+    if ( cards("welcome").length !== welcomesBefore + 1 ) r.failures.push("the welcome posted twice");
+
+    // Its settings button opens the window its menu registered, even on a card no render hook ever
+    // touched: the chat log renders the messages already in it before `ready`, so after a reload the
+    // card has no per-render listeners. A deep clone carries none either, which is that state exactly.
+    const html = await card.renderHTML();
+    const bare = html.cloneNode(true);
+    document.body.append(bare);
+    const button = bare.querySelector('[data-sogrom-settings-menu="houseRulesMenu"]');
+    if ( !button ) { bare.remove(); return r.failures.push("the welcome card has no House Rules button"); }
+    button.click();
+    bare.remove();
+    const menuType = game.settings.menus.get(`${MODULE_ID}.houseRulesMenu`)?.type;
+    const opened = await until(() => [...(foundry.applications.instances?.values() ?? [])]
+      .some(app => (app instanceof menuType) && app.rendered), 10_000);
+    if ( !opened ) r.failures.push("the House Rules button opened no window");
+    r.notes.push(`welcome whispered once, recorded ${latest}; its House Rules button opened the window`);
+
+    // An older world gets what's new instead; the setting off posts nothing.
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeVersion, "0.0.1");
+    const newsBefore = cards("whatsNew").length;
+    await postWelcomeIfDue();
+    if ( !(await until(() => cards("whatsNew").length === newsBefore + 1)) ) r.failures.push("no what's-new card for a world that saw an older release");
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeVersion, "");
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeCards, false);
+    await postWelcomeIfDue();
+    await pause(500);
+    if ( cards("welcome").length !== welcomesBefore + 1 ) r.failures.push("a welcome posted with the setting off");
+    else r.notes.push("what's new for an older world; nothing with the setting off");
+  } finally {
+    await closeAll();
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeCards, onBefore);
+    await game.settings.set(MODULE_ID, SETTINGS.welcomeVersion, seenBefore);
+  }
+}
+
+/**
+ * 2e. One window per job. Foundry inserts a window by swapping out any element with its id, so a
+ * second creator or a second level-up for the same character used to replace the first on screen
+ * and strand it. Through the real entry points: a second Level Up for the same character brings
+ * the open one forward, another character gets its own window beside it, and a second Create
+ * Character returns the open creator.
+ */
+async function oneWindowEach(r, ctx) {
+  const { launchCreator } = await import(`${MODULE}/api.mjs`);
+  const { clearDraft } = await import(`${MODULE}/state/draft-store.mjs`);
+  const shells = name => [...(foundry.applications.instances?.values() ?? [])]
+    .filter(app => (app.constructor?.name === name) && app.rendered);
+  const fighter = classCard("Fighter");
+  const cls = fighter ? await fromUuid(fighter.uuid) : null;
+  if ( !cls ) return r.failures.push("no Fighter class to level");
+  const make = async name => {
+    const actor = await Actor.implementation.create({ name: `${PREFIX}${name}`, type: "character" }, { renderSheet: false });
+    await actor.createEmbeddedDocuments("Item", [cls.toObject()]);
+    ctx.made.push(actor.id);
+    return actor;
+  };
+  try {
+    const ash = await make("Window Ash");
+    const bo = await make("Window Bo");
+
+    await triggerLevelUp(ash);
+    if ( !(await until(() => shells("LevelUpShell").length === 1, 60_000)) ) return r.failures.push("Level Up opened no window");
+    const first = shells("LevelUpShell")[0];
+    if ( first.id !== `sogrom-levelup-${ash.id}` ) r.failures.push(`the level-up's id is ${first.id}, not per character`);
+    await triggerLevelUp(ash);
+    await pause(1500);
+    if ( shells("LevelUpShell").length !== 1 ) r.failures.push(`a second Level Up for the same character left ${shells("LevelUpShell").length} windows`);
+    if ( !first.rendered ) r.failures.push("a second Level Up closed or replaced the first");
+    if ( document.querySelectorAll(`#sogrom-levelup-${ash.id}`).length !== 1 ) r.failures.push("a second Level Up duplicated the window's element");
+
+    await triggerLevelUp(bo);
+    if ( !(await until(() => shells("LevelUpShell").length === 2, 60_000)) ) r.failures.push("another character's Level Up did not open beside the first");
+    else if ( !first.rendered ) r.failures.push("another character's Level Up replaced the first");
+    else r.notes.push("same character: one window, brought forward; another character: its own window beside it");
+    await closeAll();
+
+    await clearDraft();
+    const creator = await launchCreator();
+    if ( !(await until(() => shells("CreatorShell").length === 1, 60_000)) ) return r.failures.push("Create Character opened no window");
+    const again = await launchCreator();
+    await pause(800);
+    if ( shells("CreatorShell").length !== 1 ) r.failures.push(`a second Create Character left ${shells("CreatorShell").length} creators`);
+    if ( again !== creator ) r.failures.push("a second Create Character did not return the open creator");
+    if ( !creator.rendered ) r.failures.push("a second Create Character closed or replaced the first");
+    else r.notes.push("a second Create Character returned the open creator");
+  } finally {
+    await closeAll();
+  }
+}
+
 /** 3. Suggest for {class}, through real clicks. */
 async function suggest(r) {
   const shell = await openOnClass("Wizard");
@@ -514,6 +759,9 @@ export async function checkFeatures() {
     ["Add to party from the Review page", partyFromReview],
     ["Add to party from the chat card", partyFromCard],
     ["The level-up-ready card's button", levelUpReadyCard],
+    ["Milestone grants", milestoneGrants],
+    ["The GM's welcome card", welcomeCard],
+    ["One window per job", oneWindowEach],
     ["Suggest for a class", suggest],
     ["Class guide on the drawer and the quick screen", classGuide],
     ["The quick screen keeps a typed name", quickTypedName],
@@ -545,4 +793,100 @@ export async function checkFeatures() {
     if ( posted.length ) await ChatMessage.implementation.deleteDocuments(posted).catch(() => {});
   }
   return { ok: !failures.length, failures, cases: results };
+}
+
+/* -------------------------------------------- */
+/*  Cards already in chat at load               */
+/* -------------------------------------------- */
+
+/**
+ * The first half of the reload check, run before `run.mjs` reloads the page. Posts a creation card
+ * and a level-up-ready card for a fresh level-1 Fighter outside a fresh primary party, through the
+ * module's real paths, and returns what the second half needs to find them and put the world back.
+ *
+ * The point is the reload in between: the chat log renders the messages already in it *before*
+ * `ready`, so this is the only way to test that the cards' buttons are wired for a card from an
+ * earlier session, not just for one posted while the page was open.
+ */
+export async function stageReloadCards() {
+  const { postCreationSummary } = await import(`${MODULE}/build/chat-summary.mjs`);
+  const before = {
+    party: game.actors.party?.id ?? null,
+    summary: game.settings.get(MODULE_ID, SETTINGS.creationSummary),
+    mode: game.settings.get("dnd5e", "levelingMode"),
+    notice: game.settings.get(MODULE_ID, SETTINGS.levelUpReadyNotice)
+  };
+  await game.settings.set(MODULE_ID, SETTINGS.creationSummary, "public");
+  await game.settings.set("dnd5e", "levelingMode", "xp");
+  await game.settings.set(MODULE_ID, SETTINGS.levelUpReadyNotice, "gm");
+
+  const party = await Actor.implementation.create({ name: `${PREFIX}Reload Party`, type: "group" }, { renderSheet: false });
+  await game.settings.set("dnd5e", "primaryParty", { actor: party.id });
+  const actor = await Actor.implementation.create({ name: `${PREFIX}Reload Fighter`, type: "character" }, { renderSheet: false });
+  const fighter = classCard("Fighter");
+  const cls = fighter ? await fromUuid(fighter.uuid) : null;
+  if ( cls ) await actor.createEmbeddedDocuments("Item", [cls.toObject()]);
+
+  await postCreationSummary(actor);
+  await actor.update({ "system.details.xp.value": actor.system.details.xp.max });
+  const posted = await until(() => game.messages.some(m =>
+    (m.getFlag(MODULE_ID, "summary") === "levelUpReady") && (m.speaker?.actor === actor.id)));
+  return {
+    before, partyId: party.id, actorId: actor.id, hasClass: !!cls,
+    creationId: creationCard(actor)?.id ?? null,
+    readyId: posted ? [...game.messages].reverse().find(m =>
+      (m.getFlag(MODULE_ID, "summary") === "levelUpReady") && (m.speaker?.actor === actor.id))?.id : null
+  };
+}
+
+/**
+ * The second half, after the reload: the two cards as the chat log rendered them on load. The party
+ * button must be showing and add the character; the Level Up button must open the wizard. Then the
+ * world is put back as {@link stageReloadCards} found it.
+ * @param {Awaited<ReturnType<typeof stageReloadCards>>} staged
+ */
+export async function checkReloadedCards(staged) {
+  const r = { label: "Card buttons work on cards already in chat when the world loads", failures: [], notes: [] };
+  const actor = game.actors.get(staged.actorId);
+  const party = game.actors.get(staged.partyId);
+  try {
+    if ( !staged.hasClass ) r.failures.push("no Fighter class to give the character");
+    if ( !staged.creationId || !staged.readyId ) r.failures.push("the cards were not posted before the reload");
+    await ui.sidebar?.changeTab?.("chat", "primary");
+    const inLog = id => ui.chat.element?.querySelector(`[data-message-id="${id}"]`) ?? null;
+
+    const partyBtn = inLog(staged.creationId)?.querySelector("[data-sogrom-party-actor]");
+    if ( !partyBtn ) r.failures.push("the creation card in the chat log has no party button after a reload");
+    else if ( partyBtn.hidden ) r.failures.push("the party button stayed hidden on a card rendered at load");
+    else {
+      partyBtn.click();
+      if ( !(await until(() => party?.system.members.ids.has(actor.id))) ) r.failures.push("the party button did nothing after a reload");
+      else r.notes.push("party button shown and working on a card rendered at load");
+    }
+
+    const levelBtn = inLog(staged.readyId)?.querySelector("[data-sogrom-levelup-actor]");
+    if ( !levelBtn ) r.failures.push("the level-up-ready card in the chat log has no button after a reload");
+    else {
+      levelBtn.click();
+      const opened = await until(() => [...(foundry.applications.instances?.values() ?? [])]
+        .some(app => app.constructor?.name === "LevelUpShell"), 60_000);
+      if ( !opened ) r.failures.push("the Level Up button did nothing after a reload");
+      else r.notes.push("Level Up button opened the wizard from a card rendered at load");
+    }
+  } catch ( err ) {
+    r.failures.push(`threw: ${err.message}`);
+  } finally {
+    await closeAll();
+    const { before } = staged;
+    await game.settings.set("dnd5e", "primaryParty", { actor: before.party });
+    await game.settings.set(MODULE_ID, SETTINGS.creationSummary, before.summary);
+    await game.settings.set("dnd5e", "levelingMode", before.mode);
+    await game.settings.set(MODULE_ID, SETTINGS.levelUpReadyNotice, before.notice);
+    const ids = [staged.actorId, staged.partyId].filter(id => game.actors.get(id));
+    if ( ids.length ) await Actor.implementation.deleteDocuments(ids, { render: false }).catch(() => {});
+    const msgs = [staged.creationId, staged.readyId].filter(id => game.messages.get(id));
+    if ( msgs.length ) await ChatMessage.implementation.deleteDocuments(msgs).catch(() => {});
+  }
+  r.ok = !r.failures.length;
+  return r;
 }

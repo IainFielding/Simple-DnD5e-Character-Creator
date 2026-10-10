@@ -4,10 +4,11 @@ import {
 } from "../config.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
-import { LevelUpShell } from "./levelup-shell.mjs";
+import { LevelUpShell, focusOpenLevelUp } from "./levelup-shell.mjs";
 import { multiclassBlockers, formatBlockers } from "./multiclass.mjs";
 import { isEmberCreationManager, foldOriginScreens } from "./ember-creation.mjs";
 import { canRepair, promptRepair } from "./repair.mjs";
+import { hasGrantedLevel } from "./milestone.mjs";
 
 /**
  * Wires up the level-up takeover (§4). Two trigger paths:
@@ -158,6 +159,9 @@ function shouldTakeOver(manager) {
  *   the same payload wherever a build happens to finish.
  */
 async function launchLevelUp(manager, { emberCreation = false, announce = null, creationState = null } = {}) {
+  // One level-up per character. A second (the sheet's own level selector while ours is open) brings
+  // the open one forward; the native manager it came from was already suppressed, and is dropped.
+  if ( focusOpenLevelUp(manager.actor) ) return;
   try {
     const driver = new LevelUpDriver(manager);
     await driver.prepare();
@@ -342,13 +346,15 @@ function renderLevelUpButton(root, actor) {
       onClick: () => triggerLevelUp(actor)
     });
   }
-  // Lit when the XP is there. Applied to an existing button too, since Tidy's sheets keep theirs
-  // across renders and the XP that lights it arrives in one of those renders.
+  // Lit when the XP is there, or when a GM has granted a milestone level. Applied to an existing
+  // button too, since Tidy's sheets keep theirs across renders and what lights it arrives in one of
+  // those renders.
   const button = root.querySelector(".sogrom-levelup-btn");
   if ( !button ) return;
-  const ready = hasLevelUpXp(actor);
-  button.classList.toggle("is-xp-ready", ready);
-  const label = t(ready ? "levelup.buttonReady" : "levelup.button");
+  const earned = hasLevelUpXp(actor);
+  const granted = !earned && hasGrantedLevel(actor);
+  button.classList.toggle("is-xp-ready", earned || granted);
+  const label = t(earned ? "levelup.buttonReady" : (granted ? "levelup.buttonGranted" : "levelup.button"));
   if ( button.hasAttribute("aria-label") ) button.setAttribute("aria-label", label);
 }
 
@@ -501,6 +507,8 @@ export function hasLevelUpXp(actor, { usesXp = game.settings.get("dnd5e", "level
  * @param {Actor5e} actor
  */
 export async function triggerLevelUp(actor) {
+  // Already levelling this character: bring that window forward rather than build a second.
+  if ( focusOpenLevelUp(actor) ) return;
   const classes = actor.items.filter(i => i.type === "class");
   const canMulticlass = multiclassMode() !== "off"
     && (actor.system?.details?.level ?? 0) < (CONFIG.DND5E?.maxLevel ?? 20);

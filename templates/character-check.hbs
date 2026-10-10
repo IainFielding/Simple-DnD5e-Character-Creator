@@ -1,0 +1,31 @@
+{{!--
+  The Check Character report, rendered by levelup/character-check.mjs `CharacterCheckApp`. Read-only:
+  the only buttons hand off to the module's own fixes (Repair for a level, Level Up for a waiting
+  level), identified by the finding's index, and Check Again re-reads the character.
+--}}
+<section class="sogrom-check-body">
+  {{#if clean}}
+  <p class="sogrom-check-clean">
+    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+    {{localize "sogrom-dnd5e-character-creator.check.clean"}}
+  </p>
+  {{else}}
+  <p class="sogrom-check-summary">{{summary}}</p>
+  <ul class="sogrom-check-list">
+    {{#each findings}}
+    <li class="sogrom-check-item {{#if problem}}is-problem{{else}}is-note{{/if}}">
+      <i class="fa-solid {{#if problem}}fa-triangle-exclamation{{else}}fa-circle-info{{/if}}" aria-hidden="true"></i>
+      <span class="sogrom-check-text">{{text}}</span>
+      {{#if action}}
+      <button type="button" data-action="{{action.type}}" data-index="{{index}}">{{actionLabel}}</button>
+      {{/if}}
+    </li>
+    {{/each}}
+  </ul>
+  {{/if}}
+  <footer class="sogrom-check-footer">
+    <button type="button" data-action="recheck">
+      <i class="fa-solid fa-rotate" aria-hidden="true"></i> {{localize "sogrom-dnd5e-character-creator.check.recheck"}}
+    </button>
+  </footer>
+</section>

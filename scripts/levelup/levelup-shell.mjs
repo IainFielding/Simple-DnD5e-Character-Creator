@@ -34,6 +34,34 @@ import { mountNativeFlows, closeNativeFlows } from "./steps/native-flow-step.mjs
  *      decisions live on the driver's clone, the spell picks are staged on the state, and
  *      {@link #applyLevelUp} writes both in one go before closing.
  */
+/**
+ * The level-up window's id for a character: one window per character, so a GM can level two
+ * characters side by side but never open two level-ups for the same one.
+ *
+ * A fixed id was the bug this replaces. Foundry inserts a window by swapping out any element that
+ * already has its id, so a second level-up took the first one's place on screen and left the first
+ * running unseen: no discard prompt, no `levelUpCancelled`, its manager never closed.
+ * @param {Actor5e|null} actor
+ * @returns {string}
+ */
+export function levelUpWindowId(actor) {
+  return actor?.id ? `sogrom-levelup-${actor.id}` : "sogrom-levelup";
+}
+
+/**
+ * Bring a character's open level-up window forward instead of opening a second, and say so.
+ * @param {Actor5e|null} actor
+ * @returns {boolean}  Whether one was open.
+ */
+export function focusOpenLevelUp(actor) {
+  const open = foundry.applications.instances?.get(levelUpWindowId(actor));
+  if ( !open?.rendered ) return false;
+  if ( open.minimized ) open.maximize?.();
+  open.bringToFront?.();
+  ui.notifications?.info(t("levelup.notify.alreadyOpen", { name: actor?.name ?? "" }));
+  return true;
+}
+
 export class LevelUpShell extends CreatorShellBase {
 
   static DEFAULT_OPTIONS = shellOptions("sogrom-levelup");
@@ -89,7 +117,9 @@ export class LevelUpShell extends CreatorShellBase {
   #store;
 
   constructor(state, options = {}) {
-    super(options);
+    // One window per character (see {@link levelUpWindowId}). Given whole: core overwrites any
+    // `uniqueId` passed in with its own counter.
+    super({ ...options, id: levelUpWindowId(state.actor) });
     this.state = state;
     this.#steps = buildSteps(state);
     // Reuse the world's shared, warm-once compendium caches (read-only — no session state): the

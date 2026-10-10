@@ -34,8 +34,7 @@ async function walkModifier({ removeItemBeforeCommit = false } = {}) {
   const cloneItems = makeItems([subclass]);
   const actor = {
     system: { details: { level: 3 } }, items: makeItems(),
-    update: async () => {}, createEmbeddedDocuments: async () => [], updateEmbeddedDocuments: async () => [],
-    deleteEmbeddedDocuments: async () => []
+    performBulkUpdate: async () => []
   };
   const manager = {
     constructor: { flowsForLevel: () => [] },

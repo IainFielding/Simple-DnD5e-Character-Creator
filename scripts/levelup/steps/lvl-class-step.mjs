@@ -1,6 +1,7 @@
 import { t, log, multiclassMode, fireHook, HOOKS } from "../../config.mjs";
 import { LevelUpDriver } from "../manager-driver.mjs";
 import { multiclassBlockers, formatBlockers } from "../multiclass.mjs";
+import { closeNativeFlows } from "./native-flow-step.mjs";
 
 /**
  * The Class step â€” the level-up wizard's first screen when the session opens with the class
@@ -171,6 +172,9 @@ export const lvlClassStep = {
       if ( !proceed ) return false;
     }
 
+    // A third-party flow the old class mounted is registered with Foundry, and only the window's
+    // close would look for it — by which time the state no longer points at this driver.
+    closeNativeFlows(state);
     state.clearDriver();
     if ( same ) {                       // re-clicking the active card backs out of the choice
       state.classSelection = null;

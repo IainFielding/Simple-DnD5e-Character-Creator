@@ -275,7 +275,7 @@ async function fillTrait(flow, adv, answer, moved = () => false) {
       },
       () => {
         const el = flow.form?.querySelector("[name=added]");
-        return `trait key "${key}" is not offered by "${adv.title}" `
+        return `trait key "${key}" is not offered by "${adv.name}" `
           + `(offered: ${[...(el?.options ?? [])].map(o => o.value).filter(Boolean).join(", ") || "nothing"})`;
       }
     );
@@ -317,7 +317,7 @@ async function fillItemChoice(flow, adv, answer, moved = () => false) {
         || flow.form?.querySelector("[data-action=browse]"),
       () => {
         const offered = [...(flow.form?.querySelectorAll("li.item[data-uuid]") ?? [])].map(li => li.dataset.uuid);
-        return `choice "${adv.title}" does not offer ${uuid} `
+        return `choice "${adv.name}" does not offer ${uuid} `
           + `(offered: ${offered.join(", ") || "nothing, and no browse button"})`;
       }
     );
@@ -351,11 +351,11 @@ async function selectViaBrowser(flow, adv, uuid) {
     await flowElement(flow);
     await sleep(400);
     const button = (await flowElement(flow)).querySelector("[data-action=browse]");
-    if ( !button ) throw new Error(`"${adv.title}" has no browse button to pick ${uuid} with`);
+    if ( !button ) throw new Error(`"${adv.name}" has no browse button to pick ${uuid} with`);
     button.click();
     await untilFound(
       () => Object.values(adv.value.added?.[flow.level] ?? {}).includes(uuid),
-      () => `"${adv.title}" did not accept ${uuid} from the browser`,
+      () => `"${adv.name}" did not accept ${uuid} from the browser`,
       10_000
     );
   });
@@ -405,7 +405,7 @@ async function fillSubclass(flow, adv, answer, moved = () => false) {
 
   await untilFound(
     () => moved() || (adv.value?.uuid === uuid),
-    () => `subclass ${uuid} was not accepted by "${adv.title}" `
+    () => `subclass ${uuid} was not accepted by "${adv.name}" `
       + `(the flow still holds ${adv.value?.uuid ?? "nothing"}) — is the uuid a subclass of this class?`,
     10_000
   );
@@ -442,7 +442,7 @@ async function fillAsi(flow, answer) {
     await change(mode);
     await untilFound(
       () => flow.form?.querySelector("input[name^='abilities.']"),
-      () => `"${flow.advancement.title}" rendered no ability inputs after selecting the points mode`
+      () => `"${flow.advancement.name}" rendered no ability inputs after selecting the points mode`
     );
   }
 
@@ -455,7 +455,7 @@ async function fillAsi(flow, answer) {
     // Silence here is how a whole ASI went missing once: the inputs were behind the mode toggle
     // above, every lookup missed, and the build simply came out two points short.
     if ( !input ) {
-      throw new Error(`"${flow.advancement.title}" offers no input for ${key} `
+      throw new Error(`"${flow.advancement.name}" offers no input for ${key} `
         + `(it shows: ${[...root.querySelectorAll("input[name^='abilities.']")].map(i => i.name).join(", ") || "none"})`);
     }
 
@@ -496,13 +496,13 @@ async function takeAsiFeat(flow, uuid) {
     const root = await flowElement(flow);
     const button = root.querySelector("[data-action=browse]");
     if ( !button ) {
-      throw new Error(`the ASI screen for "${adv.title}" offers no feat browser `
+      throw new Error(`the ASI screen for "${adv.name}" offers no feat browser `
         + "(does this advancement allow a feat?)");
     }
     button.click();
     await untilFound(
       () => adv.value?.type === "feat",
-      () => `feat ${uuid} was not taken for "${adv.title}" — it may fail its own prerequisites `
+      () => `feat ${uuid} was not taken for "${adv.name}" — it may fail its own prerequisites `
         + "at this level, which the flow reports by declining silently",
       10_000
     );
@@ -533,7 +533,7 @@ export async function driveManager(manager, book, consumed, { phase = "levelup" 
 
   const trace = [];
   const describe = s => s
-    ? `${s.flow?.advancement?.type ?? s.type}"${s.flow?.advancement?.title ?? ""}"@${manager.steps.indexOf(s)}`
+    ? `${s.flow?.advancement?.type ?? s.type}"${s.flow?.advancement?.name ?? ""}"@${manager.steps.indexOf(s)}`
     : "<none>";
 
   for ( let guard = 0; guard < 200; guard++ ) {
@@ -554,7 +554,7 @@ export async function driveManager(manager, book, consumed, { phase = "levelup" 
     await fillStep(step, book, consumed, manager, phase);
 
     const button = manager.element.querySelector("[data-action=next], [data-action=complete]");
-    if ( !button ) throw new Error(`no next/complete button on step "${step.flow?.advancement?.title}"`);
+    if ( !button ) throw new Error(`no next/complete button on step "${step.flow?.advancement?.name}"`);
     const priorError = step.error;
     button.click();
 
@@ -566,12 +566,12 @@ export async function driveManager(manager, book, consumed, { phase = "levelup" 
     const refused = () => (manager.step === step) && step.error && (step.error !== priorError);
     try {
       await until(() => (manager.step !== step) || !manager.rendered || refused(),
-        `step "${step.flow?.advancement?.title ?? step.type}" to advance`);
+        `step "${step.flow?.advancement?.name ?? step.type}" to advance`);
     } catch ( err ) {
       throw new Error(`${err.message}\n${describeStuckStep(manager, step)}`);
     }
     if ( refused() ) {
-      throw new Error(`step "${step.flow?.advancement?.title ?? step.type}" refused to advance: `
+      throw new Error(`step "${step.flow?.advancement?.name ?? step.type}" refused to advance: `
         + `${step.error.message ?? step.error}\n${describeStuckStep(manager, step)}`);
     }
     if ( !manager.rendered ) break;
@@ -621,7 +621,7 @@ async function ensureFlowRendered(manager, step, trace, describe) {
       } catch { /* reported below if it never recovers */ }
     }
   }
-  throw new Error(`the form of ${flow.advancement?.type} "${flow.advancement?.title}" never rendered\n`
+  throw new Error(`the form of ${flow.advancement?.type} "${flow.advancement?.name}" never rendered\n`
     + `  trace        : ${trace.join(" -> ")}\n`
     + `  all steps    : ${manager.steps.map(describe).join(", ")}\n`
     + `  flow class   : ${flow.constructor.name}, rendered: ${flow.rendered}\n`
@@ -639,7 +639,7 @@ function describeStuckStep(manager, step) {
   const buttons = [...(manager.element?.querySelectorAll("nav [data-action]") ?? [])]
     .map(b => `${b.dataset.action}${b.disabled ? " (disabled)" : ""}`);
   const lines = [
-    `  advancement : ${adv?.type} "${adv?.title}" (${adv?.id}) at level ${step.flow?.level}`,
+    `  advancement : ${adv?.type} "${adv?.name}" (${adv?.id}) at level ${step.flow?.level}`,
     `  step.error  : ${step.error?.message ?? "none"}`,
     `  nav buttons : ${buttons.join(", ") || "none"}`,
     `  steps       : ${manager.steps.length}, still rendered: ${manager.rendered}`

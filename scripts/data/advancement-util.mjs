@@ -21,7 +21,9 @@
  * carries a stack trace, which was enough to exhaust the renderer and crash the browser tab
  * outright — the hooks suite died as `page.evaluate: Target crashed`.
  *
- * `name` first, so 6.0.0 never touches the deprecated path; `title` remains the 5.3.x fallback.
+ * `name` first, so a 6.0 advancement never touches the deprecated getter. `title` stays as the
+ * fallback for plain source data (see {@link advancementArray}): a pack built before 6.0 can still
+ * carry `title` in its raw data, where reading it is a plain property with no warning attached.
  * @param {object} advancement
  * @returns {string}   The name, or "" when the advancement has neither.
  */

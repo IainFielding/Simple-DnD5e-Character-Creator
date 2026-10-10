@@ -362,7 +362,7 @@ async function openLevelUpOnSpells(actor, open = () => triggerLevelUp(actor), { 
       const section = blocks.flatMap(b => b.sections).find(sec => sec.index === driver.choiceSteps.indexOf(rec));
       const offered = (section?.options ?? []).filter(o => !o.owned && !o.disabled).slice(0, st.max - st.current);
       for ( const o of offered ) await driver.toggleChoice(rec, o.uuid);
-      log?.(`${rec.advancement.title ?? "spell choice"} (level ${rec.level}): took ${offered.length} of ${st.max}`);
+      log?.(`${rec.advancement.name ?? "spell choice"} (level ${rec.level}): took ${offered.length} of ${st.max}`);
     }
     await driver.autoResolve(new ScenarioChoiceProvider(book));
     const after = driver.hpSteps.length + driver.subclassSteps.length + driver.asiSteps.length

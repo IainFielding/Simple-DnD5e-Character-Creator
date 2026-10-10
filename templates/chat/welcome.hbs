@@ -1,0 +1,40 @@
+{{!--
+  The GM's welcome card and its "what's new" sibling, rendered by app/welcome.mjs
+  `postWelcomeIfDue()` and whispered to the GMs. The welcome has `places` (where things live); the
+  what's-new card has only `newLines`. Each settings button carries its registered menu key in
+  `data-sogrom-settings-menu`, the selector the click handler binds to.
+--}}
+<div class="sogrom-chat-card sogrom-chat-card--welcome">
+  <header class="sogrom-chat-head">
+    <div class="sogrom-chat-titles">
+      <span class="sogrom-chat-eyebrow">{{eyebrow}}</span>
+      <h3 class="sogrom-chat-name">{{heading}}</h3>
+    </div>
+  </header>
+
+  {{#if intro}}<p class="sogrom-welcome-intro">{{intro}}</p>{{/if}}
+
+  {{#if places.length}}
+  <ul class="sogrom-welcome-list">
+    {{#each places}}<li>{{this}}</li>{{/each}}
+  </ul>
+  {{/if}}
+
+  {{#if newLines.length}}
+  {{#if newTitle}}<div class="sogrom-chat-list-title">{{newTitle}}</div>{{/if}}
+  <ul class="sogrom-welcome-list">
+    {{#each newLines}}<li>{{this}}</li>{{/each}}
+  </ul>
+  {{/if}}
+
+  <div class="sogrom-chat-list-title">{{settingsTitle}}</div>
+  <div class="sogrom-welcome-buttons">
+    {{#each buttons}}
+    <button type="button" data-sogrom-settings-menu="{{menu}}"><i class="{{icon}}" aria-hidden="true"></i> {{label}}</button>
+    {{/each}}
+  </div>
+
+  <p class="sogrom-welcome-foot">
+    {{#if readme}}<a href="{{readme}}" target="_blank" rel="noopener">{{guide}}</a> · {{/if}}{{optOut}}
+  </p>
+</div>

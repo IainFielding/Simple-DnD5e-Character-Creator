@@ -644,7 +644,7 @@ async function checkSpellOffers(driver, unofferable) {
     if ( !refused.length ) continue;
     for ( const uuid of refused ) await driver.toggleChoice(record, uuid);
     unofferable?.push({
-      advId: record.advancement.id, title: record.advancement.title, type: "ItemChoice",
+      advId: record.advancement.id, title: record.advancement.name, type: "ItemChoice",
       source: `level ${record.level}`, picks: refused, offers: [...offered]
     });
   }

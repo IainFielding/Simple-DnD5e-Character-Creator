@@ -225,6 +225,10 @@ function paintPartyButton(button, { state, partyName }) {
  * The template ships the button hidden and empty; this fills it in for anyone who owns the primary
  * party, and removes it for everyone else. Scoped to our own creation cards by the message flag, so no other module's chat
  * markup is touched.
+ *
+ * Registered when the module loads, not at `ready`: the chat log renders the messages already in it
+ * before `ready` fires, and a card from an earlier session that misses this hook keeps its button
+ * hidden for good.
  */
 export function registerPartyButton() {
   // dnd5e's hook rather than core's `renderChatMessageHTML`: core's fires inside

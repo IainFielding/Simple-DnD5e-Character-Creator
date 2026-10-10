@@ -35,7 +35,7 @@ function makeItems(initial = []) {
 
 /**
  * Commit a driver whose clone holds one item identical to the actor's, carrying `riders`, whose
- * enchant activities declare `declared`. Returns the item ids sent to `updateEmbeddedDocuments`.
+ * enchant activities declare `declared`. Returns the item ids sent as the batch's item updates.
  */
 async function commitWith({ riders, declared = { activity: [], effect: [] } }) {
   const data = { _id: "itemElixir000000", name: "Experimental Elixir", flags: { dnd5e: { riders } } };
@@ -49,9 +49,7 @@ async function commitWith({ riders, declared = { activity: [], effect: [] } }) {
   let updated = [];
   const actor = {
     items: makeItems([existing]),
-    update: async () => {}, createEmbeddedDocuments: async () => [],
-    updateEmbeddedDocuments: async (_type, list) => { updated = list.map(i => i._id); },
-    deleteEmbeddedDocuments: async () => []
+    performBulkUpdate: async ({ item }) => { updated = item.map(i => i._id); }
   };
   const manager = {
     actor,
@@ -82,5 +80,43 @@ describe("commit sends an unchanged item through an update when its rider flag i
 
   it("leaves an item with no rider flag at all alone", async () => {
     expect(await commitWith({ riders: undefined })).toEqual([]);
+  });
+});
+
+/**
+ * dnd5e 6.0's `#complete` writes through one `performBulkUpdate` rather than four parallel writes,
+ * which raced: a stale id could reject the whole delete batch. The partition and the options are
+ * what the system and other modules read, so both are pinned here.
+ */
+describe("commit writes the level-up as one bulk update", () => {
+  it("partitions the clone into actor, create, delete and item updates in a single call", async () => {
+    const kept = { _id: "itemKept00000000", name: "Kept" };
+    const changed = { _id: "itemChanged00000", name: "Changed" };
+    const dropped = { _id: "itemDropped00000", name: "Dropped" };
+    const added = { _id: "itemAdded0000000", name: "Added" };
+    const doc = data => ({ id: data._id, toObject: () => structuredClone(data) });
+    const calls = [];
+    const actor = {
+      items: makeItems([doc(kept), doc({ ...changed, name: "Before" }), doc(dropped)]),
+      performBulkUpdate: async (...args) => { calls.push(args); }
+    };
+    const manager = {
+      actor,
+      clone: {
+        items: makeItems([kept, changed, added].map(d => ({ id: d._id }))),
+        reset() {},
+        toObject: () => ({ name: "Hero", items: [kept, changed, added].map(d => structuredClone(d)) })
+      },
+      steps: []
+    };
+    await new LevelUpDriver(manager).commit();
+
+    expect(calls).toHaveLength(1);
+    const [updates, options] = calls[0];
+    expect(updates.actor).toEqual({ name: "Hero" });
+    expect(updates.create.map(i => i._id)).toEqual([added._id]);
+    expect(updates.delete).toEqual([dropped._id]);
+    expect(updates.item.map(i => i._id)).toEqual([changed._id]);
+    expect(options).toEqual({ isAdvancement: true, render: false, updateOptions: { diff: false, recursive: false } });
   });
 });

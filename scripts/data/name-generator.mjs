@@ -1,4 +1,7 @@
 import { NAME_STYLES, SPECIES_STYLE_ALIASES } from "./name-data.mjs";
+// Species are matched on identifier *or* display name, so callers may pass either: "Elf, Drow" and
+// "elf-drow" fold to the same key.
+import { slugify } from "./ids.mjs";
 
 /**
  * Random fantasy name generator for the Details step.
@@ -30,22 +33,6 @@ function styleTables() {
 }
 function styleAliases() {
   return { ...SPECIES_STYLE_ALIASES, ...(globalThis.CONFIG?.SOGROM?.nameAliases ?? {}) };
-}
-
-/**
- * Fold a species identifier *or* display name into a lookup key: lowercase, apostrophes
- * dropped, every other run of non-alphanumerics collapsed to a single hyphen. Species
- * that ship without a `system.identifier` — every Ravenloft lineage does — can then be
- * matched on their name instead ("Elf, Drow" -> "elf-drow", "Kithkin, Shadowmoor" ->
- * "kithkin-shadowmoor"), which is why callers may pass either.
- * @param {string} [value]
- * @returns {string}
- */
-function slugify(value) {
-  return String(value ?? "").trim().toLowerCase()
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 /**

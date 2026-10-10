@@ -96,12 +96,11 @@ describe("autoResolve: an ASI answered with a feat", () => {
 });
 
 /**
- * dnd5e 6.0 renamed the feat prerequisite check to `assertPrerequisites` and kept
- * `validatePrerequisites` only as a deprecated forwarder (it logs a compatibility warning on every
- * feat pick). 5.3.3 — the module's minimum until 3.3.0 — has only the old name. The driver must take the
- * new one when it exists and still work where it does not.
+ * dnd5e 6.0 renamed the feat prerequisite check to `assertPrerequisites` and gave the old name,
+ * `validatePrerequisites`, to a different validator. The module's floor is 6.0, so the driver calls
+ * the new name only — bound to the item's system data — and never falls back to the old one.
  */
-describe("applyAsiFeat: the prerequisite check across dnd5e versions", () => {
+describe("applyAsiFeat: the prerequisite check", () => {
   const record = { level: 4, advancement: { id: "asi" } };
   const clone = { name: "Clone" };
 
@@ -122,9 +121,15 @@ describe("applyAsiFeat: the prerequisite check across dnd5e versions", () => {
     expect(system.validatePrerequisites).not.toHaveBeenCalled();
   });
 
-  it("falls back to validatePrerequisites on 5.3.3, bound to the item's system data", async () => {
-    const system = { validatePrerequisites: vi.fn(function () { return this === system ? ["nope"] : "unbound"; }) };
+  it("binds the check to the item's system data", async () => {
+    const system = { assertPrerequisites: vi.fn(function () { return this === system ? ["nope"] : "unbound"; }) };
     expect(await driverFor(system).applyAsiFeat(record, "u", { showMessage: false })).toBe(false);
-    expect(system.validatePrerequisites).toHaveReturnedWith(["nope"]);
+    expect(system.assertPrerequisites).toHaveReturnedWith(["nope"]);
+  });
+
+  it("rejects an item without the check rather than calling the old name", async () => {
+    const system = { validatePrerequisites: vi.fn(() => true) };
+    expect(await driverFor(system).applyAsiFeat(record, "u", { showMessage: false })).toBe(false);
+    expect(system.validatePrerequisites).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,18 @@
+{{!--
+  The GM's batch dialog for milestone levels, rendered by levelup/milestone-grant.mjs
+  `promptGrantLevels()`. One checkbox per character that can take a level, named by actor id; the
+  dialog's Grant button reads the ticked ones back.
+--}}
+<p>{{intro}}</p>
+<ul class="sogrom-grant-list">
+  {{#each rows}}
+  <li>
+    <label>
+      <input type="checkbox" name="{{id}}" {{checked checked}} />
+      <img src="{{img}}" alt="" />
+      <span class="sogrom-grant-name">{{name}}</span>
+      <span class="sogrom-grant-level">{{levelLine}}</span>
+    </label>
+  </li>
+  {{/each}}
+</ul>

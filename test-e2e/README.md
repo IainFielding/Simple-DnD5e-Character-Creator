@@ -810,13 +810,14 @@ every one of these:
 node run.mjs --hooks                  # the public hook/API surface, through the real wizards
 node run.mjs --granted-spells         # an always-prepared grant is never duplicated
 node run.mjs --sidekicks              # Tasha's sidekicks are not offered as classes
-node run.mjs --repair                 # skipped-choice builds, repaired, against the full build
+node run.mjs --repair                 # skipped-choice builds, repaired, against the full build; Check Character
 node run.mjs --quick-build            # Quick Build for every class, at level 1
 node run.mjs --quick-build --level 5  # ...and climbed headlessly to 3 and 5
 node run.mjs --pregens                # every ready-made character imported whole, not rebuilt
 node run.mjs --blank-build            # Build Character on a blank sheet: gate, real right-click, build, rollback, ready-made
-node run.mjs --features               # party switch + card, level-up-ready card + XP glow, Suggest, class guide,
-                                      # typed quick name, art without file-browse, Maximum only HP
+node run.mjs --features               # party switch + card, level-up-ready card + XP glow, milestone grants, welcome card,
+                                      # Suggest, class guide, typed quick name, art without file-browse,
+                                      # Maximum only HP
 node run.mjs --spellbook              # Wizard spellbook at creation and level-up (both editions), Prepare tab,
                                       # granted spells as locked cards, legacy books, Cleric multi-swaps
 ```
@@ -2662,4 +2663,10 @@ through the real front door. It checks that the sheet's wrench is present, opens
 the character is whole, its level unchanged, the wrench gone, and the hooks heard were
 `levelUpStarted → levelUpApplied` carrying `state.repairLevel`.
 
-**First run, 2026-09-19: 5/5.**
+A final case covers **Check Character** (`scripts/levelup/character-check.mjs`) on the same
+skipped-ASI Champion. It opens the report from the sheet's ⋯ menu (its only entry point; a real
+right-click on the Actors sidebar must not offer it), checks that a second open reuses the one
+per-actor window, and that the report names level 4 as a problem. The level-4 Repair button must open the shell on level 4; after Apply, the check
+must report no problems.
+
+**First run, 2026-09-19: 5/5. With the Check Character case, 2026-10-02: 6/6.**

@@ -105,7 +105,130 @@ export async function checkRepair() {
   const cases = [];
   for ( const spec of CASES ) cases.push(await runCase(spec));
   cases.push(await runUiCase());
+  cases.push(await runCheckCase());
   return { ok: cases.every(c => c.ok), cases };
+}
+
+/** Wait until `test()` holds. */
+async function until(test, timeout = 10_000) {
+  const started = Date.now();
+  while ( (Date.now() - started) < timeout ) {
+    if ( await test() ) return true;
+    await settle(150);
+  }
+  return false;
+}
+
+/**
+ * Check Character on the same skipped-ASI Fighter, through its one front door: the sheet's ⋯ menu,
+ * clicked for real. It must not be in the Actors right-click menu (a real `contextmenu` event, since
+ * the hook alone proves nothing about the built menu). The report must name level 4 as a problem, a
+ * second open must reuse the one window, its Repair button must open the shell on level 4, and once
+ * repaired the report must have no problems left.
+ */
+async function runCheckCase() {
+  const out = { label: "Check Character reports the skipped level and its Repair button repairs it",
+    ok: false, gaps: [], repaired: [], left: [], differences: [], error: null };
+  const failures = [];
+  let actor = null;
+  let shell = null;
+  const { MODULE_ID } = await import(`${MODULE}/config.mjs`);
+  const label = game.i18n.localize(`${MODULE_ID}.check.button`);
+  const openChecks = () => [...(foundry.applications.instances?.values() ?? [])]
+    .filter(app => app.constructor?.name === "CharacterCheckApp");
+  try {
+    const { scenarios } = await sweepScenarios({ level: 4, incremental: true });
+    const scenario = scenarios.find(s => s.id === "sweep:fighter/champion");
+    const origins = [scenario.speciesUuid, scenario.backgroundUuid, scenario.classUuid].filter(Boolean);
+    const skips = await skipOverrides(scenario, [{ type: "AbilityScoreImprovement", level: 4 }]);
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: true, origins });
+    actor = await buildNative({ ...scenario, name: `${PREFIX}check [ui]`, incremental: true },
+      { book: new AnswerBook({ overrides: { ...(scenario.answers ?? {}), ...skips }, generate: true, origins }) });
+
+    // 1. Not in the Actors right-click menu, through a real contextmenu event.
+    await ui.sidebar?.changeTab?.("actors", "primary");
+    await ui.actors.render();
+    await settle(300);
+    const li = ui.actors.element?.querySelector(`.directory-item[data-entry-id="${actor.id}"]`);
+    if ( !li ) throw new Error("the character is not in the Actors sidebar");
+    const box = li.getBoundingClientRect();
+    li.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: box.left + 5, clientY: box.top + 5 }));
+    await until(() => document.querySelector("#context-menu .context-item"));
+    if ( [...document.querySelectorAll("#context-menu .context-item")].some(el => el.textContent.trim() === label) ) {
+      failures.push(`"${label}" is still in the character's right-click menu`);
+    }
+    await ui.context?.close?.({ animate: false });
+    await settle(200);
+
+    // 2. The sheet's ⋯ menu opens it, through real clicks.
+    await actor.sheet.render(true);
+    await settle(1500);
+    // The ⋯ button toggles, and the dropdown can still be open from the last pick, so look before
+    // toggling and toggle at most twice.
+    const findEntry = () => [...document.querySelectorAll("#context-menu .context-item, .controls-dropdown .header-control, menu.controls-dropdown li")]
+      .find(el => (el.textContent.trim() === label) && el.isConnected && (el.offsetParent !== null));
+    const fromMenu = async () => {
+      let entry = findEntry();
+      for ( let i = 0; !entry && (i < 2); i++ ) {
+        actor.sheet.element?.querySelector('[data-action="toggleControls"]')?.click();
+        await settle(400);
+        entry = findEntry();
+      }
+      entry?.click();
+      return !!entry;
+    };
+    if ( !(await fromMenu()) ) throw new Error(`no "${label}" in the sheet's ⋯ menu`);
+    if ( !(await until(() => openChecks()[0]?.rendered)) ) throw new Error("the sheet's ⋯ entry opened no report");
+    const report = openChecks()[0];
+    if ( report.id !== `sogrom-check-${actor.id}` ) failures.push(`the report's id is ${report.id}, not per-actor`);
+
+    // 3. The report: level 4 is a problem with a Repair button.
+    const problems = () => [...report.element.querySelectorAll(".sogrom-check-item.is-problem")];
+    const level4 = problems().find(el => el.textContent.includes("4"));
+    out.gaps = problems().map(el => el.querySelector(".sogrom-check-text")?.textContent.trim());
+    if ( !level4 ) throw new Error(`the report names no level-4 problem: ${out.gaps.join(" | ") || "none"}`);
+    if ( !level4.querySelector('button[data-action="repair"]') ) failures.push("the level-4 problem has no Repair button");
+
+    // A second open from the same menu reuses the one window.
+    if ( !(await fromMenu()) ) failures.push(`the sheet's ⋯ menu lost "${label}" on a second open`);
+    await settle(800);
+    if ( openChecks().length !== 1 ) failures.push(`a second open left ${openChecks().length} report windows`);
+    if ( document.querySelectorAll(`#sogrom-check-${actor.id}`).length !== 1 ) failures.push("a second open duplicated the report's element");
+
+    // 4. Repair from the report opens the shell on level 4; answer and Apply as the wrench case does.
+    // Re-read the row: the second open re-rendered the report, detaching the one found above.
+    const repairButton = problems().find(el => el.textContent.includes("4"))?.querySelector('button[data-action="repair"]');
+    if ( !repairButton ) throw new Error("the re-rendered report lost its level-4 Repair button");
+    repairButton.click();
+    const opened = await until(() => [...(foundry.applications.instances?.values() ?? [])]
+      .some(app => (app.constructor?.name === "LevelUpShell") && app.rendered), 60_000);
+    if ( !opened ) throw new Error("the report's Repair button opened no shell");
+    shell = [...foundry.applications.instances.values()].find(app => app.constructor?.name === "LevelUpShell");
+    if ( shell.state.repairLevel !== 4 ) failures.push(`the shell repairs level ${shell.state.repairLevel}, not 4`);
+    const driver = shell.state.driver;
+    for ( const rec of [...driver.asiSteps, ...driver.choiceSteps, ...driver.traitSteps, ...driver.subclassSteps] ) {
+      await book.answer(rec.advancement, rec.level, { asker: "creator", phase: "levelup" });
+    }
+    await driver.autoResolve(new ScenarioChoiceProvider(book, { phase: "levelup" }));
+    await shell._finish();
+    await settle(2000);
+    out.repaired.push({ level: 4, steps: driver.steps.length });
+
+    // 5. Checked again, nothing is a problem any more.
+    const { checkCharacter } = await import(`${MODULE}/levelup/character-check.mjs`);
+    out.left = checkCharacter(actor).filter(f => f.kind === "problem").map(f => f.text);
+    if ( out.left.length ) failures.push(`problems left after the repair: ${out.left.join(" | ")}`);
+    out.differences = failures.map(f => ({ path: "ui", native: "expected", creator: f }));
+    out.ok = !failures.length;
+  } catch ( err ) {
+    out.error = `${err.message}\n${err.stack ?? ""}`;
+  } finally {
+    for ( const app of openChecks() ) await app.close({ animate: false }).catch(() => {});
+    if ( shell?.rendered ) await shell.close({ animate: false }).catch(() => {});
+    if ( actor?.sheet?.rendered ) await actor.sheet.close().catch(() => {});
+    if ( actor ) await actor.delete().catch(() => {});
+  }
+  return out;
 }
 
 /**

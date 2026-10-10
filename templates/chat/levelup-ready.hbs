@@ -1,9 +1,10 @@
 {{!--
-  The card whispered when a character has earned enough XP to level up, rendered from
-  levelup/xp-notice.mjs `postNotice()`.
+  The card whispered when a character's next level is waiting: rendered by levelup/xp-notice.mjs
+  `postNotice()` when they earn the XP, and by levelup/milestone-grant.mjs when a GM grants a
+  milestone level. The two differ only in their words, so each passes its own `eyebrow` and `sub`.
 
   Reuses the `sogrom-chat-*` header markup the creation and level-up summary cards already share,
-  but it is a prompt rather than a report: no body blocks, just the XP that triggered it and a
+  but it is a prompt rather than a report: no body blocks, just the line that explains it and a
   button into the level-up flow. The button carries the actor's id in `data-sogrom-levelup-actor`,
   which is also the selector the click handler binds to — deliberately specific so it can never
   match another module's chat card.
@@ -12,11 +13,9 @@
   <header class="sogrom-chat-head">
     <img class="sogrom-chat-portrait" src="{{img}}" alt="" />
     <div class="sogrom-chat-titles">
-      <span class="sogrom-chat-eyebrow">{{localize "sogrom-dnd5e-character-creator.chat.levelUpReady.eyebrow"}}</span>
+      <span class="sogrom-chat-eyebrow">{{eyebrow}}</span>
       <h3 class="sogrom-chat-name">{{name}}</h3>
-      <span class="sogrom-chat-sub">
-        {{localize "sogrom-dnd5e-character-creator.chat.levelUpReady.xp" value=value max=max}}
-      </span>
+      <span class="sogrom-chat-sub">{{sub}}</span>
     </div>
   </header>
 

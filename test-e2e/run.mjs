@@ -12,12 +12,12 @@
  *   node run.mjs --sidekicks              # assert Tasha's sidekick classes are not offered
  *   node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
  *   node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
- *   node run.mjs --repair                 # a skipped-choice build, repaired, against the full build
+ *   node run.mjs --repair                 # skipped-choice builds repaired, plus Check Character
  *   node run.mjs --quick-build            # Quick Build every class; assert the finished character
  *   node run.mjs --quick-build --level 5  # ...and again at each higher starting rung (3, 5)
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
  *   node run.mjs --blank-build            # Build Character on a GM-prepared blank sheet, end to end
- *   node run.mjs --features               # party switch + card button, Suggest, class guide, quick name
+ *   node run.mjs --features               # party switch + card, milestone grants, welcome card, Suggest, class guide
  *   node run.mjs --spellbook              # Wizard spellbook, Prepare tab, granted cards, Cleric swaps
  *   node run.mjs playwright-clean --probe-native "<scenario>/<item>" --level 5
  *                                         # native only, per level, in a world without this module
@@ -239,6 +239,16 @@ try {
   } else if ( flag("features") ) {
     // The 3.3.0 creation features, through real clicks and a real chat card. See in-world/features.mjs.
     const r = await harness("checkFeatures");
+    // Card buttons on cards already in chat when the world loads: post, reload the page, check. The
+    // reload is the test — the chat log renders those cards before `ready` — so it is driven from here.
+    const staged = await harness("stageReloadCards");
+    await session.reload();
+    const reloaded = await (await load(session))("checkReloadedCards", staged);
+    r.cases.push(reloaded);
+    if ( !reloaded.ok ) {
+      r.ok = false;
+      r.failures.push(...reloaded.failures.map(f => `${reloaded.label}: ${f}`));
+    }
     for ( const c of r.cases ) {
       console.log(`
 ${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);

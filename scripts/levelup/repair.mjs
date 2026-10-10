@@ -2,7 +2,7 @@ import { t, log, launchWindowOptions, fireHook, HOOKS } from "../config.mjs";
 import { unresolvedByLevel } from "../data/advancement-util.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
-import { LevelUpShell } from "./levelup-shell.mjs";
+import { LevelUpShell, focusOpenLevelUp } from "./levelup-shell.mjs";
 
 /**
  * "Repair this level": finish the decisions a character's level left unanswered.
@@ -169,6 +169,8 @@ export function foldToLevel(driver, level) {
  * @returns {Promise<LevelUpShell|null>}   The opened shell, or null when there was nothing to do.
  */
 export async function launchRepair(actor, classItemId, level) {
+  // A repair is a level-up window too, so the same one-per-character rule applies.
+  if ( focusOpenLevelUp(actor) ) return null;
   try {
     const manager = buildRepairManager(actor, classItemId, level);
     if ( !manager.steps.length ) {

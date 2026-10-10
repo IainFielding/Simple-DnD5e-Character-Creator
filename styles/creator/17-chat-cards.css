@@ -242,3 +242,42 @@
   text-decoration-color: var(--sc-brass);
 }
 
+
+/* ---------------------------------------------- Welcome card
+
+   The GM's welcome and what's-new card (app/welcome.mjs): two short lists and a row of buttons that
+   open the module's settings windows. */
+
+.sogrom-chat-card--welcome .sogrom-welcome-intro,
+.sogrom-chat-card--welcome .sogrom-welcome-foot {
+  margin: 0.4rem 0;
+}
+
+.sogrom-chat-card--welcome .sogrom-welcome-list {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.sogrom-chat-card--welcome .sogrom-welcome-list li {
+  margin: 0.2rem 0;
+}
+
+.sogrom-chat-card--welcome .sogrom-welcome-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.3rem 0;
+}
+
+.sogrom-chat-card--welcome .sogrom-welcome-buttons button {
+  flex: 1 1 45%;
+  height: auto;
+  padding: 0.25rem 0.4rem;
+  font-size: var(--font-size-12, 0.75rem);
+  white-space: nowrap;
+}
+
+.sogrom-chat-card--welcome .sogrom-welcome-foot {
+  font-size: var(--font-size-11, 0.7rem);
+  opacity: 0.8;
+}
