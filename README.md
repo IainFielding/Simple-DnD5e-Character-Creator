@@ -90,7 +90,7 @@ This module will automatically detect if you have any of the official modules in
 |------------|------------|
 | Foundry VTT | v14 |
 | D&D 5e System | 6.0+ |
-| Verified On | Foundry 14.368 / D&D 5e 6.0.5 |
+| Verified On | Foundry 14.369 / D&D 5e 6.0.6 |
 
 > Historical compatibility notes for earlier dnd5e versions are archival and not part of the supported configuration guidance.
 

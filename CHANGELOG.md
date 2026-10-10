@@ -2,7 +2,7 @@
 
 All notable changes to the Simple D&D Character Creator.
 
-## 3.4.0
+## 3.4.0 — Milestone Levels & Check Character
 
 ### New
 
@@ -35,6 +35,9 @@ All notable changes to the Simple D&D Character Creator.
 - **Chat card buttons after a reload.** The **Add to party** button on the creation card and the
   **Level Up** button on the level-up-ready card did nothing on a card that was already in chat
   when the world loaded.
+- **Changing class part-way through a level-up.** With multiclassing on, picking a different
+  class after looking at the first one left the first class's screens from other modules running
+  unseen until the world was reloaded. They are now closed when the class changes.
 
 ### Licence
 
