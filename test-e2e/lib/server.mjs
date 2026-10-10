@@ -11,6 +11,10 @@ import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { BASE_URL, DATA_PATH, FOUNDRY_ROOT, PORT, SERVER_TIMEOUT_MS } from "../config.mjs";
 
+// A Foundry configured with a certificate serves https only, and the certificate is self-signed.
+// This process talks to nothing but that local server, so its readiness probe accepts it.
+if ( BASE_URL.startsWith("https:") ) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 /** Grace period between the port opening and the first client connection. See `startFoundry`. */
 const SETTLE_MS = 3000;
 
