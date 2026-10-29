@@ -15,6 +15,27 @@
  * @returns {Set<string>|null}
  */
 export function getEnabledPacks() {
+  // dnd5e 6.1 also hides, by default, any pack whose `flags.dnd5e.rulesVersion` differs from the
+  // world's rules (every 2014 SRD pack in a 2024 world, and the reverse). Its Compendium Browser,
+  // which the origin grids read through, applies that rule; ask the same function so spells,
+  // equipment and feat scans agree with the grids instead of offering 2014 spells beside no 2014
+  // classes. Older dnd5e has no such function and keeps the explicit-setting rule below.
+  const isSourceEnabled = dnd5e?.applications?.settings?.CompendiumBrowserSettingsConfig?.isSourceEnabled;
+  if ( typeof isSourceEnabled === "function" ) {
+    try {
+      const sources = new Set();
+      let excluded = false;
+      for ( const pack of game.packs ) {
+        if ( pack.documentName !== "Actor" && pack.documentName !== "Item" ) continue;
+        if ( isSourceEnabled.call(dnd5e.applications.settings.CompendiumBrowserSettingsConfig, pack) ) {
+          sources.add(pack.collection);
+        } else excluded = true;
+      }
+      return excluded ? sources : null;
+    } catch {
+      // Fall through to the setting-only rule.
+    }
+  }
   try {
     const setting = game.settings.get("dnd5e", "packSourceConfiguration");
     if ( !setting || typeof setting !== "object" ) return null;
