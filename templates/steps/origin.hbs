@@ -47,9 +47,14 @@
   {{!-- Right column: what this step asks you to set, beside what you read. Absent entirely when
         this origin's edition grants no ability increase, and the page then takes the full width.
         See class.hbs for why it sits outside the body. --}}
-  {{#if abilities}}
+  {{#if hasSide}}
   <aside class="creator-work-side">
+    {{#if lineage}}
+    {{> "modules/sogrom-dnd5e-character-creator/templates/parts/origin-lineage.hbs" lineage}}
+    {{/if}}
+    {{#if abilities}}
     {{> "modules/sogrom-dnd5e-character-creator/templates/parts/origin-abilities.hbs" abilities}}
+    {{/if}}
   </aside>
   {{/if}}
 </section>

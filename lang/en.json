@@ -579,7 +579,12 @@
         "traits": "Traits",
         "features": "Features",
         "spells": "Spells",
-        "instruction": "Your species gives you size, speed and a handful of traits — and, under the 2014 rules, an ability score increase."
+        "instruction": "Your species gives you size, speed and a handful of traits — and, under the 2014 rules, an ability score increase.",
+        "lineage": {
+          "prompt": "Every {species} has one of these. Hover over one to see what it gives you.",
+          "change": "You can change this here or on the Choices step.",
+          "hint": "Pick one under “{title}” to continue."
+        }
       },
       "background": {
         "label": "Background",

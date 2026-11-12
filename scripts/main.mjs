@@ -59,6 +59,7 @@ Hooks.once("init", () => {
     tpl("parts/work-detail.hbs"),
     tpl("parts/abilities-panel.hbs"),
     tpl("parts/origin-abilities.hbs"),
+    tpl("parts/origin-lineage.hbs"),
     tpl("parts/source-details.hbs"),
     // The spell toolbar — search plus the filter dropdowns — is one partial shared by the creation
     // and level-up spell steps, so the two screens can't drift apart.

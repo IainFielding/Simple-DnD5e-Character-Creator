@@ -474,6 +474,14 @@ export class LevelUpDriver {
         // granted spells are configured with before anything is picked.
         await this.#seed(flow);
         this.choiceSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        // A spell choice can also let the player pick the casting ability — Heroes of Faerûn 2.0's
+        // Cold Caster offers a cantrip cast with Intelligence, Wisdom or Charisma. The native screen
+        // asks both on one page; here the ability gets the same picker as an ItemGrant's. Asked once,
+        // where the choice first appears: the ability belongs to the whole advancement, so asking
+        // again at a later level would re-point spells picked earlier.
+        if ( ((adv.configuration?.spell?.ability?.size ?? 0) > 1) && !this.#hasEarlierPicks(adv, flow.level) ) {
+          this.grantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        }
         return;
       case "AbilityScoreImprovement": {
         const cfg = adv.configuration ?? {};
@@ -1061,6 +1069,11 @@ export class LevelUpDriver {
   /*  Spell grants with a choosable ability       */
   /* -------------------------------------------- */
 
+  /** Whether a multi-level ItemChoice already holds picks from a level before `level`. */
+  #hasEarlierPicks(adv, level) {
+    return Object.entries(adv.value?.added ?? {}).some(([l, map]) => (Number(l) < level) && !foundry.utils.isEmpty(map ?? {}));
+  }
+
   /** The source UUIDs an ItemGrant grants. */
   #grantUuids(adv) {
     return Array.from(adv.configuration?.items ?? []).map(i => (typeof i === "string") ? i : i?.uuid).filter(Boolean);
@@ -1107,7 +1120,8 @@ export class LevelUpDriver {
    */
   grantState(record) {
     const adv = record.advancement;
-    const spells = Object.keys(adv.value?.added ?? {}).reduce((arr, id) => {
+    // `addedEntries`, not `value.added`: an ItemChoice keys its picks by level.
+    const spells = Object.keys(addedEntries(adv)).reduce((arr, id) => {
       const item = this.clone.items.get(id);
       if ( item ) arr.push({ name: item.name, img: item.img, uuid: item._stats?.compendiumSource ?? item.uuid });
       return arr;
@@ -1125,6 +1139,18 @@ export class LevelUpDriver {
   async applyGrantAbility(record, ability) {
     const adv = record.advancement;
     if ( !adv.configuration?.spell?.ability?.has?.(ability) ) return;
+    // An ItemChoice re-applies with `skipExisting: false`, so going through `apply` would grant its
+    // picks a second time — and with a swap pending it would also settle the replacement. Make the
+    // same two changes `ItemGrantAdvancement#apply` makes for a new ability, and nothing else.
+    if ( this.constructor.baseType(adv) === "ItemChoice" ) {
+      for ( const id of Object.keys(addedEntries(adv)) ) {
+        const item = this.clone.items.get(id);
+        if ( item?.type === "spell" ) item.updateSource({ "system.ability": ability });
+      }
+      adv.updateSource({ "value.ability": ability });
+      this.clone.reset();
+      return;
+    }
     // `apply` re-points the spells already granted in place, so re-selecting is only a convenience.
     // For a grant with optional items it would be wrong — it would take back an item the player
     // declined — so there the ability is changed alone.
@@ -1843,7 +1869,7 @@ export class LevelUpDriver {
    */
   async autoResolve(provider) {
     const done = new Set();
-    const drain = async (steps, resolve, { byLevel = false } = {}) => {
+    const drain = async (steps, resolve, { byLevel = false, skip = null } = {}) => {
       // Insertion order is the walk order for everything `prepare()` found, but a decision a
       // subclass or feat *synthesised* is appended after the whole main walk — so a level-3 feature's
       // choice lands behind a level-6 one. That only matters where one decision depends on another
@@ -1858,11 +1884,18 @@ export class LevelUpDriver {
         ? [...list].sort((a, b) => ((a.screenLevel ?? a.level ?? 0) - (b.screenLevel ?? b.level ?? 0)))
         : [...list];
       for ( const rec of order ) {
-        if ( done.has(rec) ) continue;
+        if ( done.has(rec) || skip?.(rec) ) continue;
         done.add(rec);
         try { await resolve(rec); } catch ( err ) { log("headless resolve failed", err); }
       }
     };
+
+    // Expertise and upgrades write nothing unless the character is already proficient, and a
+    // proficiency can still arrive from a feat picked in the choice drain below — a Human's Versatile
+    // taking Skilled, then a Rogue's Expertise in one of Skilled's skills. So these wait until every
+    // other decision has settled, and run once the loop below is done.
+    const needsProficiency = rec => ["expertise", "forcedExpertise", "upgrade"].includes(rec.advancement?.configuration?.mode);
+    const traitKeys = rec => { const keys = provider.traitKeys(rec); return keys.length ? this.applyTraitKeys(rec, keys) : null; };
 
     // Loop until a full pass adds nothing new — a synthesised feature/subclass can append decisions
     // to any array after we have already walked it.
@@ -1890,14 +1923,13 @@ export class LevelUpDriver {
         if ( typeof a.feat === "string" ) return this.applyAsiFeat(rec, a.feat, { showMessage: false });
         return this.setAsi(rec, a);
       });
-      await drain(this.traitSteps,
-        rec => { const keys = provider.traitKeys(rec); return keys.length ? this.applyTraitKeys(rec, keys) : null; },
-        { byLevel: true });
+      await drain(this.traitSteps, traitKeys, { byLevel: true, skip: needsProficiency });
       await drain(this.choiceSteps,   async rec => {
         if ( provider.defer(rec) ) return;
         for ( const uuid of provider.choiceUuids(rec) ) await this.toggleChoice(rec, uuid);
       });
     }
+    await drain(this.traitSteps, traitKeys, { byLevel: true });
   }
 
   /**

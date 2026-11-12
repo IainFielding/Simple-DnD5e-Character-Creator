@@ -701,6 +701,7 @@ async function parseItemChoice(adv, ctx) {
   // dropped below so the slot reopens, as a trait pick another source now grants already is.
   const granted = ctx.grantedFeats ?? new Set();
   const dropped = new Set();
+  const poolKeys = new Set();
   for ( const p of Array.from(cfg.pool ?? []) ) {
     const uuid = typeof p === "string" ? p : p?.uuid;
     if ( !uuid || seen.has(uuid) ) continue;
@@ -711,12 +712,19 @@ async function parseItemChoice(adv, ctx) {
     if ( !g ) continue;
     seen.add(uuid);
     seenNames.add(nameKey(doc.name));
+    poolKeys.add(uuid);
     options.push({ key: uuid, uuid, label: doc.name, img: doc.img, recommended: g.recommended });
   }
   if ( cfg.allowDrops && cfg.restriction?.subtype ) {
     for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel, ctx.rules) ) {
       if ( seen.has(opt.key) || seenNames.has(nameKey(opt.label)) ) continue;
       if ( granted.has(nameKey(opt.label)) ) { dropped.add(opt.key); dropped.add(opt.uuid); continue; }
+      // A lineage from the scan must name its species. Every lineage scan sees every species'
+      // lineages (the restriction is "species feature, lineage", nothing narrower), and the species
+      // prerequisite (`race:elf`) is what sorts them — so one that names none would otherwise be
+      // offered to every species with a lineage choice. Content modules ship lineages by the dozen;
+      // one item missing its prerequisite must not turn up under every species.
+      if ( (cfg.restriction?.type === "race") && !evalItemPrereq(opt.prereqItems, owned).hasReq ) continue;
       const g = gate({ items: opt.prereqItems });   // level already filtered by the scan
       if ( !g ) continue;
       seen.add(opt.key);
@@ -729,6 +737,7 @@ async function parseItemChoice(adv, ctx) {
     sel[adv._id] = sel[adv._id].filter(k => !dropped.has(pickKey(k)));
   }
   if ( !options.length ) return;
+  recommendAuthoredPool(cfg, options, o => poolKeys.has(o.key));
   options.sort((a, b) => a.label.localeCompare(b.label, game.i18n.lang));
   const req = buildChoiceReq({
     advId: adv._id, source, ownerUuid, type: "ItemChoice", level: choiceLevel,
@@ -737,6 +746,9 @@ async function parseItemChoice(adv, ctx) {
   // Split into a "Recommended" + "Other" panel when the build unlocked any option (an item
   // prerequisite it satisfies); otherwise leaves the single ungrouped grid untouched.
   req.groups = groupRecommended(req.options) ?? req.groups;
+  // A choice among species features — a lineage (Elf, Gnome), an ancestry (Dragonborn, Goliath),
+  // a legacy (Tiefling). The species step asks it beside the species page; see `lineageContext`.
+  req.lineage = cfg.restriction?.type === "race";
   reqs.push(req);
 }
 
@@ -918,6 +930,25 @@ export function evalContentPrereq(identifier, owned) {
   const test = identifier ? CONTENT_FEAT_PREREQS[identifier] : null;
   if ( !test ) return { hasReq: false, met: true };
   return { hasReq: true, met: !!test(owned) };
+}
+
+/**
+ * Recommend the feats an advancement lists itself, when the player may also pick from the wider
+ * compendium. A choice with `allowDrops` and a feat restriction offers both: the authored pool
+ * (dnd5e 6.1's Human Versatile lists Skilled alone) and every other feat the restriction allows,
+ * which the creator scans for because there is nothing to drag from. The authored pick is what the
+ * content intends, so it leads; the scanned ones stay available under "Other". Nothing changes when
+ * the scan added nothing, and invocations, maneuvers and the like (other restriction types) keep
+ * their existing panel. Marks `opts` in place; {@link groupRecommended} then splits them.
+ * @param {object} cfg                  The ItemChoice configuration.
+ * @param {object[]} opts               The options, as each screen builds them.
+ * @param {(o: object) => boolean} inPool  Whether an option came from the authored pool.
+ */
+export function recommendAuthoredPool(cfg, opts, inPool) {
+  if ( !cfg?.allowDrops || (cfg.restriction?.type !== "feat") ) return;
+  const fresh = opts.filter(o => !o.owned);
+  if ( !fresh.some(o => !inPool(o)) ) return;
+  for ( const o of fresh ) if ( inPool(o) ) o.recommended = true;
 }
 
 /**

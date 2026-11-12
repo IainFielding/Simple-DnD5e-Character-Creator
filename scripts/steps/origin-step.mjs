@@ -30,11 +30,13 @@
  * @param {"species"|"background"} [cfg.asiSource]  Compose in the shared ability-increase panel
  *   under this origin key. Set for the species (a 2014 species grants an increase; a 2024 one does
  *   not, and then no aside renders). Omit and the step behaves as a plain grid.
+ * @param {boolean} [cfg.lineage]  Ask the origin's lineage beside it — see {@link lineageRequirements}.
  * @param {(src: import("../data/source-index.mjs").SourceIndex,
  *           state: import("../state/creator-state.mjs").CreatorState) => object[]} cfg.cards
  * @returns {object} A step module.
  */
 import { resolveChoices } from "../data/choice-resolver.mjs";
+import { choicesStep } from "./choices-step.mjs";
 import { t } from "../config.mjs";
 import { pinContext } from "../app/compare.mjs";
 import { hasRulesPage } from "../data/rules-source.mjs";
@@ -42,7 +44,37 @@ import {
   ASI_ACTIONS, asiComplete, asiContext, asiHandle, asiHint, asiSummary
 } from "./origin-abilities-panel.mjs";
 
-export function originStep({ id, icon, labelKey, instructionKey, field, cards, hintKey, asiSource, rulesTopic }) {
+/**
+ * The lineage-style choices one origin raises: a choice among species features (an Elf's lineage,
+ * a Dragonborn's ancestry, a Tiefling's legacy), flagged `lineage` by the resolver. Only those that
+ * have something to offer — an empty pool must never hold the step shut.
+ *
+ * Nothing here names a species or a lineage. The resolver's pool is the species' own list plus any
+ * lineage another module adds whose prerequisite names this species, so new content shows up here
+ * without any change to this code.
+ * @param {object} state      The creator state.
+ * @param {string} sourceKey  The resolver source key, which is the step id ("species").
+ * @returns {object[]}        The matching requirements.
+ */
+export function lineageRequirements(state, sourceKey) {
+  return (state.choiceCache?.sources ?? [])
+    .filter(s => s.key === sourceKey)
+    .flatMap(s => s.requirements)
+    .filter(r => r.lineage && (r.options?.length ?? 0) > 0);
+}
+
+/** The aside's render data, or null when the origin raises no lineage choice. */
+function lineageContext(state, sourceKey, speciesName) {
+  const blocks = lineageRequirements(state, sourceKey);
+  if ( !blocks.length ) return null;
+  return {
+    blocks,
+    prompt: t("step.species.lineage.prompt", { species: speciesName }),
+    changeHint: t("step.species.lineage.change")
+  };
+}
+
+export function originStep({ id, icon, labelKey, instructionKey, field, cards, hintKey, asiSource, rulesTopic, lineage }) {
   return {
     id,
     icon,
@@ -52,12 +84,15 @@ export function originStep({ id, icon, labelKey, instructionKey, field, cards, h
 
     isComplete(state) {
       if ( !state[field] ) return false;
+      if ( lineage && lineageRequirements(state, id).some(r => !r.complete) ) return false;
       return asiSource ? asiComplete(state, asiSource) : true;
     },
 
     /** Why Next is blocked: nothing picked yet, or increase points still to spend. */
     incompleteHint(state) {
       if ( !state[field] ) return hintKey ? t(hintKey) : null;
+      const open = lineage ? lineageRequirements(state, id).find(r => !r.complete) : null;
+      if ( open ) return t("step.species.lineage.hint", { title: open.title });
       return asiSource ? asiHint(state, asiSource) : null;
     },
 
@@ -69,8 +104,11 @@ export function originStep({ id, icon, labelKey, instructionKey, field, cards, h
       return line ? `${name} · ${line}` : name;
     },
 
-    async handle(action, el, { state, source }) {
+    async handle(action, el, ctx) {
+      const { state, source } = ctx;
       if ( asiSource && ASI_ACTIONS.has(action) ) return asiHandle(action, el, state, asiSource);
+      // A lineage pick is the Choices step's own decision, recorded the same way.
+      if ( lineage && (action === "pick-choice") ) return choicesStep.handle(action, el, ctx);
       if ( action !== "pick-origin" ) return;
       const uuid = el.dataset.uuid;
       // Re-clicking the active card clears it, so a player can back out of a choice.
@@ -104,7 +142,7 @@ export function originStep({ id, icon, labelKey, instructionKey, field, cards, h
       // yet, so this falls through to the 2024 default the resolver applies.
       const edition = source.rulesOf(state.classUuid) ?? null;
 
-      return {
+      const ctx = {
         ...pins,                                  // cards (pin-decorated), compareCategory, compare
         count: list.length,
         hasSelection: !!selected,
@@ -119,8 +157,12 @@ export function originStep({ id, icon, labelKey, instructionKey, field, cards, h
         groups,
         // Null unless this origin both composes the panel and actually grants an increase; the
         // work surface simply renders nothing in that case.
-        abilities: (asiSource && selected) ? asiContext(state, asiSource) : null
+        abilities: (asiSource && selected) ? asiContext(state, asiSource) : null,
+        // The lineage to choose, for a species that has one; null renders nothing.
+        lineage: (lineage && selected) ? lineageContext(state, id, detail?.name ?? "") : null
       };
+      ctx.hasSide = !!(ctx.abilities || ctx.lineage);
+      return ctx;
     }
   };
 }

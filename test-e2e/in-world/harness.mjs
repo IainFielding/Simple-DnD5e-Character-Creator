@@ -14,7 +14,7 @@
 const BUST = new URL(import.meta.url).search;
 
 const { buildNative } = await import(`./native.mjs${BUST}`);
-const { buildCreator } = await import(`./creator.mjs${BUST}`);
+const { buildCreator, resetSourceIndex } = await import(`./creator.mjs${BUST}`);
 const { snapshot, diff } = await import(`./normalize.mjs${BUST}`);
 const { SCENARIOS } = await import(`./scenarios.mjs${BUST}`);
 const { AnswerBook } = await import(`./answers.mjs${BUST}`);
@@ -232,6 +232,36 @@ export async function cleanup() {
  * @param {object} [options]
  * @param {boolean} [options.keep]   Leave the built actors in the world for inspection.
  */
+/**
+ * dnd5e 6.1 hides every pack whose `rulesVersion` differs from the world's unless the GM switches it
+ * on, so in a 2024 world the 2014 SRD packs (`dnd5e.classes`, `dnd5e.subclasses`, …) are invisible to
+ * the Compendium Browser — to the native subclass browser and to the creator alike. A scenario built
+ * on one of those packs is a GM who turned them on: switch on every legacy pack for the run, and hand
+ * back a function that puts the setting back. Returns null when the scenario needs nothing.
+ */
+async function enableScenarioSources(scenario) {
+  const uuids = [
+    ...Object.entries(scenario).filter(([k, v]) => k.endsWith("Uuid") && (typeof v === "string")).map(([, v]) => v),
+    ...Object.values(scenario.answers ?? {}).filter(v => typeof v === "string")
+  ];
+  const packs = uuids.map(u => /^Compendium.([^.]+.[^.]+)./.exec(u)?.[1]).filter(Boolean).map(c => game.packs.get(c));
+  const rules = game.settings.get("dnd5e", "rulesVersion");
+  if ( !packs.some(p => { const rv = p?.metadata.flags?.dnd5e?.rulesVersion; return rv && (rv !== rules); }) ) return null;
+  const before = game.settings.get("dnd5e", "packSourceConfiguration") ?? {};
+  const legacyOn = Object.fromEntries(game.packs
+    .filter(p => { const rv = p.metadata.flags?.dnd5e?.rulesVersion; return rv && (rv !== rules); })
+    .map(p => [p.collection, true]));
+  const { invalidateSources } = await import("/modules/sogrom-dnd5e-character-creator/scripts/data/source-cache.mjs");
+  await game.settings.set("dnd5e", "packSourceConfiguration", { ...before, ...legacyOn });
+  invalidateSources();
+  resetSourceIndex();
+  return async () => {
+    await game.settings.set("dnd5e", "packSourceConfiguration", before);
+    invalidateSources();
+    resetSourceIndex();
+  };
+}
+
 export async function runScenario(scenario, { keep = false, render = false } = {}) {
   const started = performance.now();
   const report = {
@@ -243,8 +273,10 @@ export async function runScenario(scenario, { keep = false, render = false } = {
   };
   let native = null;
   let creator = null;
+  let restoreSources = null;
 
   try {
+    restoreSources = await enableScenarioSources(scenario);
     // One book, both adapters. It answers each decision once and hands the identical answer to
     // whoever asks second, which is what makes a generated scenario comparable at all: the two
     // builds walk in different orders off different clones and still cannot disagree about what was
@@ -336,6 +368,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
       const ids = [native?.id, creator?.id].filter(Boolean);
       if ( ids.length ) await Actor.implementation.deleteDocuments(ids, { render: false }).catch(() => {});
     }
+    await restoreSources?.().catch(() => {});
     report.ms = Math.round(performance.now() - started);
   }
   return report;

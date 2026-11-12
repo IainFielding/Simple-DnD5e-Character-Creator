@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CreationChoiceProvider } from "../scripts/build/creation-advancement.mjs";
+import { CreationChoiceProvider, rootSource } from "../scripts/build/creation-advancement.mjs";
 
 /**
  * `CreationChoiceProvider` answers the driver's decisions from the creator's recorded state. Each
@@ -94,5 +94,49 @@ describe("CreationChoiceProvider", () => {
     expect(provider.choiceUuids(rec("unknown"))).toEqual([]);
     expect(provider.size(rec("unknown"))).toBeNull();
     expect(provider.grantAbility(rec("unknown"))).toBeNull();
+  });
+});
+
+/**
+ * Two origins can each grant a copy of one feat. Under dnd5e 6.1 a Human's Versatile offers Skilled
+ * alone and a Noble's background grants Skilled too, so both copies share Skilled's advancement id.
+ * Each copy has to take only its own origin's picks.
+ */
+describe("CreationChoiceProvider with a feat granted twice", () => {
+  // A minimal clone actor: species and background, each with a granted Skilled under it.
+  const makeActor = () => {
+    const items = new Map();
+    const actor = { items: { get: id => items.get(id) } };
+    const add = (id, type, flags = {}) => items.set(id, { id, type, actor, flags: { dnd5e: flags } });
+    add("SPC", "race");
+    add("VRS", "feat", { advancementOrigin: "SPC.ver", advancementRoot: "SPC.ver" });
+    add("SK1", "feat", { advancementOrigin: "VRS.vc", advancementRoot: "SPC.ver" });
+    add("BG", "background");
+    add("SK2", "feat", { advancementOrigin: "BG.grant", advancementRoot: "BG.grant" });
+    return { actor, get: id => items.get(id) };
+  };
+  const { get } = makeActor();
+  const resolved = { sources: [
+    { key: "species", requirements: [{ type: "Trait", advId: "SKL", selKey: "SKL#0", source: "species" }] },
+    { key: "background", requirements: [{ type: "Trait", advId: "SKL", selKey: "SKL#0", source: "background" }] }
+  ] };
+  const state = { advChoices: {
+    species: { "SKL#0": ["skills:ani", "skills:arc", "skills:ath"] },
+    background: { "SKL#0": ["skills:dec", "skills:ins", "skills:inv"] }
+  } };
+  const provider = new CreationChoiceProvider(resolved, state);
+  const rec = itemId => ({ advancement: { id: "SKL", configuration: {}, item: get(itemId) } });
+
+  it("gives each copy only the picks of the origin that granted it", () => {
+    expect(provider.traitKeys(rec("SK1"))).toEqual(["skills:ani", "skills:arc", "skills:ath"]);
+    expect(provider.traitKeys(rec("SK2"))).toEqual(["skills:dec", "skills:ins", "skills:inv"]);
+  });
+
+  it("names the origin from the root flag, the origin chain, or the item itself", () => {
+    expect(rootSource(get("SK1"))).toBe("species");
+    expect(rootSource(get("BG"))).toBe("background");
+    const chainOnly = { ...get("SK1"), flags: { dnd5e: { advancementOrigin: "VRS.vc" } } };
+    expect(rootSource(chainOnly)).toBe("species");
+    expect(rootSource({ type: "feat" })).toBeNull();
   });
 });

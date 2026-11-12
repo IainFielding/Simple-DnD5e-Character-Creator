@@ -80,7 +80,7 @@ export const backgroundStep = {
       state.originAsi.background = await source.abilityScoreIncrease(selected);
     }
 
-    return {
+    const ctx = {
       // Opts the grid into side-by-side comparison: pin-decorated cards, plus the toolbar's
       // compare control. Inert without a shell, so the step still renders in tests.
       ...pinContext(app?.pins, "background", list),
@@ -99,6 +99,8 @@ export const backgroundStep = {
       // simply renders nothing in that case.
       abilities: selected ? asiContext(state, "background") : null
     };
+    ctx.hasSide = !!ctx.abilities;   // the shared template's aside; species may also carry a lineage
+    return ctx;
   }
 };
 

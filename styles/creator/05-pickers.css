@@ -1011,3 +1011,28 @@
   border-radius: var(--cc-radius);
 }
 
+
+/* The lineage aside on the Species step (parts/origin-lineage.hbs). One column of compact rows
+   rather than the tall level-up cards: a module can add lineages to a species, so the list has to
+   stay readable at any length inside the narrow side column. */
+.creator-lineage-hint { margin: 0 0 0.75rem; color: var(--cc-muted); font-size: 0.85rem; }
+.creator-lineage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.creator-lineage-list .creator-choice-card {
+  min-height: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 0.6rem;
+  padding: 0.45rem 2rem 0.45rem 0.6rem;
+}
+.creator-lineage-list .creator-choice-card-img { width: 36px; height: 36px; flex: 0 0 auto; }
+.creator-lineage-list .creator-choice-card-name { font-size: 0.92rem; text-align: left; }
+.creator-lineage-list .creator-choice-card-check { top: 50%; transform: translateY(-50%); right: 0.7rem; }
+/* Not yet chosen: the block is what holds Next shut, so it says so with the same gold the rail uses. */
+.creator-origin-lineage:not(.is-complete) .creator-work-block-title { color: var(--cc-gold-bright); }

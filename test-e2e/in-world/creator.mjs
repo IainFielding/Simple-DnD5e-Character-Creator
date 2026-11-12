@@ -82,6 +82,11 @@ async function getSourceIndex() {
   return sourceIndex;
 }
 
+/** Drop the cached index — after the world's enabled sources change, it lists the wrong packs. */
+export function resetSourceIndex() {
+  sourceIndex = null;
+}
+
 /* -------------------------------------------- */
 
 /**
@@ -209,14 +214,17 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
     // report a transient as a finding, and the corrected state on the next pass would never be seen.
     const passUnofferable = unofferable ? [] : null;
 
-    // Group requirements by advancement so multi-pool advancements are distributed together.
+    // Group requirements by advancement so multi-pool advancements are distributed together — per
+    // source, because two origins can each grant a copy of one feat (a Noble's Skilled and a Human's
+    // Versatile → Skilled), and those are two decisions sharing an advancement id, not one.
     const byAdv = new Map();
     for ( const src of resolved.sources ?? [] ) {
       for ( const req of src.requirements ?? [] ) {
         if ( !req.advId ) continue;
-        const list = byAdv.get(req.advId) ?? [];
+        const group = `${req.source}|${req.advId}`;
+        const list = byAdv.get(group) ?? [];
         list.push(req);
-        byAdv.set(req.advId, list);
+        byAdv.set(group, list);
       }
     }
 
@@ -225,7 +233,8 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
     // something oscillates; naming the selKeys and the values they alternate between turns a
     // bisecting session into a read.
     const churn = [];
-    for ( const [advId, reqs] of byAdv ) {
+    for ( const reqs of byAdv.values() ) {
+      const advId = reqs[0].advId;
       const adv = await advancementFor(reqs[0], origins);
       // Not "no answer" but "no question" — the book cannot be asked and an answer for this
       // requirement would be silently dropped, which is exactly the failure mode worth shouting at.
@@ -245,6 +254,9 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
       // answer put it straight back.
       const answer = await book.answer(adv, reqs[0].level ?? 0, {
         asker: "creator",
+        // The compendium document carries no grant flags, so the requirement names its origin.
+        // Only the species and background can both grant one feat (see answers.mjs#featOrigin).
+        origin: ((adv.item?.type === "feat") && ["species", "background"].includes(reqs[0].source)) ? reqs[0].source : null,
         offered: () => reqs.flatMap(r => (r.options ?? []).filter(o => !o.disabled).map(o => o.key))
       });
       if ( (answer === undefined) || (answer === null) ) continue;
@@ -278,14 +290,14 @@ async function answerChoices(state, source, book, { consumed = new Set(), diagno
       if ( passUnofferable?.length ) unofferable.push(...passUnofferable);
       if ( diagnostics ) {
         diagnostics.passes = pass + 1;
-        diagnostics.requirements = [...byAdv].flatMap(([advId, reqs]) => reqs.map(req => ({
-          advId,
+        diagnostics.requirements = [...byAdv.values()].flatMap(reqs => reqs.map(req => ({
+          advId: req.advId,
           selKey: req.selKey,
           type: req.type,
           source: req.source,
           count: req.count,
           title: req.title,
-          answered: consumed.has(advId),
+          answered: consumed.has(req.advId),
           chosen: state.advChoices[req.source]?.[req.selKey] ?? [],
           options: (req.options ?? []).map(o => o.key).slice(0, 12),
           moreOptions: Math.max(0, (req.options?.length ?? 0) - 12)

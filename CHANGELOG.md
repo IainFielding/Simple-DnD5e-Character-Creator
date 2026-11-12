@@ -2,6 +2,40 @@
 
 All notable changes to the Simple D&D Character Creator.
 
+## 3.5.0 — dnd5e 6.1
+
+### Changed
+
+- **Ready for dnd5e 6.1.** dnd5e 6.1 shows only the content for a world's own rules edition unless
+  the GM turns the other edition on: a 2024 world hides the 2014 classes, species, backgrounds,
+  spells and items, and a 2014 world hides the 2024 ones. The creator follows the same setting
+  everywhere, so its spell, feat and equipment lists now match its class and species lists. To keep
+  offering 2014 content in a 2024 world after updating dnd5e, turn those sources back on in dnd5e's
+  **Compendium Browser Sources** settings.
+- **A feat choice recommends the feat it names.** Some choices name a feat but let you take any
+  feat of that kind instead. In dnd5e 6.1, the Human's Versatile names Skilled but allows any origin
+  feat. The named feat now sits under **Recommended**, with every other feat you can take listed
+  below it under **Other**. This applies at creation and at level-up.
+- **Choose your lineage on the Species page.** In dnd5e 6.1 an Elf, Gnome or Tiefling is one
+  species with a lineage to choose (Drow, High Elf or Wood Elf, for example), and a Dragonborn or
+  Goliath chooses an ancestry. That choice now sits beside the species you picked, and you choose
+  it before moving on, instead of finding it several pages later. Lineages from other modules show
+  up too, as long as they name the species they belong to.
+
+### Fixed
+
+- **Choosing a spell's casting ability when a feat lets you choose it.** Some feats let you pick a
+  spell and the ability you cast it with, such as Cold Caster in Heroes of Faerûn 2.0. Taken at a
+  level-up, the creator never asked for the ability and always used the first one listed. It now
+  asks, the same way it does for a species' spells.
+- **Expertise in a skill from an origin feat.** A Rogue who took Expertise in a skill that their
+  origin feat gave them, such as a Human whose Versatile pick is Skilled, was left with plain
+  proficiency. Expertise is now applied after every other choice, so the skill is always there first.
+- **Taking the same feat from both your species and your background.** A Human whose Versatile pick
+  is Skilled, with a background that also gives Skilled (Noble, Scribe or Charlatan, for example),
+  ends up with two copies of the feat. The character had the right skills, but each copy recorded
+  all six of them instead of its own three. Each copy now records only the skills chosen for it.
+
 ## 3.4.0 — Milestone Levels & Check Character
 
 ### New

@@ -1,0 +1,36 @@
+{{!--
+  The lineage aside on the Species step, rendered from origin-step.mjs `lineageContext()`. A
+  species whose features include a choice among species features — an Elf's lineage, a Dragonborn's
+  ancestry, a Tiefling's legacy — asks it here, beside the species it belongs to, rather than
+  leaving the player to find it on the Choices step. It is the same decision the Choices step lists
+  (same source, same key, same `pick-choice` action), so a pick made in either place shows in both.
+
+  Options are whatever the resolver offers: the species' own list plus any lineage another module
+  adds for this species (matched on the lineage's species prerequisite), so the list can be long.
+  It renders as a single column of compact rows for that reason, and each row carries the item
+  tooltip so the player can read a lineage before taking it.
+--}}
+{{#each blocks}}
+<section class="creator-work-block creator-origin-lineage {{#if complete}}is-complete{{/if}}">
+  <h3 class="creator-work-block-title">{{title}}</h3>
+  <p class="creator-lineage-hint">
+    {{#if complete}}{{../changeHint}}{{else}}{{../prompt}}{{/if}}
+  </p>
+  <ul class="creator-lineage-list">
+    {{#each options}}
+    <li>
+      <button type="button"
+              class="creator-choice-card {{#if isSelected}}is-selected{{/if}}"
+              data-action="stepAction" data-step-action="pick-choice"
+              data-choice-source="{{source}}" data-sel-key="{{selKey}}" data-key="{{key}}" data-count="{{count}}"
+              aria-pressed="{{#if isSelected}}true{{else}}false{{/if}}"
+              {{#if disabled}}disabled data-tooltip="{{disabledReason}}"{{else}}{{#if uuid}}data-tooltip="<section class='loading' data-uuid='{{uuid}}'><i class='fas fa-spinner fa-spin-pulse'></i></section>" data-tooltip-class="dnd5e2 dnd5e-tooltip item-tooltip themed theme-light"{{/if}}{{/if}}>
+        {{#if img}}<img class="creator-choice-card-img" src="{{img}}" alt="">{{/if}}
+        <span class="creator-choice-card-name">{{label}}</span>
+        {{#if isSelected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+      </button>
+    </li>
+    {{/each}}
+  </ul>
+</section>
+{{/each}}

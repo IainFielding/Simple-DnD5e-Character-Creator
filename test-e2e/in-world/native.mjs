@@ -708,6 +708,19 @@ export async function buildNative(scenario, { book, consumed, onLevel } = {}) {
     const manager = AdvancementManager.forNewItem(actor, data);
     if ( manager.steps.length ) await driveManager(manager, book, consumed, { phase: "creation" });
     else await actor.createEmbeddedDocuments("Item", [data], { render: false });
+
+    // dnd5e links a species or background from its item's `_onCreate` with an actor update it does
+    // not await (`RaceData`/`BackgroundData`). The next origin's manager clones the actor at once, and
+    // its commit writes the whole clone back (`recursive: false`) — so if the clone was taken before
+    // the link landed, the commit erased it. Late in a long sweep that left `details.race: null` on
+    // the native side (Artificer, Eloquence, Fey Wanderer), passing when re-run alone. A player is
+    // never fast enough to hit it; the harness is. Wait for this origin's link before the next.
+    const field = { race: "race", background: "background" }[data.type];
+    const item = field && actor.items.find(i => i.type === data.type);
+    if ( item ) {
+      await until(() => actor._source.system?.details?.[field] === item.id,
+        `the native actor's ${field} link`, 5_000).catch(() => {});
+    }
   }
 
   await onLevel?.(1, actor);

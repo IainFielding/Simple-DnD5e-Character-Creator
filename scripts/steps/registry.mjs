@@ -30,6 +30,9 @@ export const STEPS = [
     // A 2014 species carries the ability-score increase its edition's backgrounds don't; the panel
     // renders only when the chosen species actually grants one, so 2024 species are unaffected.
     asiSource: "species",
+    // A species that makes you choose a lineage, ancestry or legacy asks it here, beside the species,
+    // instead of only on the Choices step several screens later.
+    lineage: true,
     // Scoped to the chosen class's edition — class is the first step, so it is always known by
     // the time this grid renders. See `SourceIndex#matchesRules`.
     cards: (src, state) => src.species({ rules: src.rulesOf(state.classUuid) })
