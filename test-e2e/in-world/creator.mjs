@@ -130,7 +130,11 @@ function distribute(reqs, answer, { unofferable } = {}) {
 
   if ( remaining.length ) {
     const titles = reqs.map(r => `"${r.title}"`).join(", ");
-    if ( !unofferable ) throw new Error(`picks not offered by ${titles}: ${remaining.join(", ")}`);
+    if ( !unofferable ) {
+      const offers = [...new Set(reqs.flatMap(r => (r.options ?? []).map(o => o.key)))];
+      throw new Error(`picks not offered by ${titles}: ${remaining.join(", ")}`
+        + ` — offered (${offers.length}): ${offers.slice(0, 12).join(", ") || "nothing"}`);
+    }
     // `answerChoices` re-resolves to a fixed point, so the same advancement reaches here once per
     // pass; the finding is about the advancement, not about how many passes it took.
     if ( unofferable.some(u => u.advId === reqs[0].advId) ) return out;
