@@ -1225,7 +1225,8 @@
       },
       "matchedBy": {
         "identifier": "matched by identifier",
-        "name": "matched by name"
+        "name": "matched by name",
+        "split": "now {species}, with the {lineage} lineage"
       },
       "reason": {
         "missing": "its source can no longer be found"

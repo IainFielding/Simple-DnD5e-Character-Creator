@@ -262,7 +262,9 @@ export async function rehearse(actor, scan, { keep = new Map() } = {}) {
   // decisions, so warm and resolve until nothing new appears.
   const driver = new LevelUpDriver(manager);
   await driver.prepare();
-  const provider = new UpdateAnswerProvider(harvestDecisions(oldData));
+  const lineages = scan.entries.filter(e => e.lineage)
+    .map(e => ({ ...e.lineage, from: e.item.name }));
+  const provider = new UpdateAnswerProvider(harvestDecisions(oldData), { lineages });
   for ( let pass = 0; pass < 5; pass++ ) {
     const before = UpdateAnswerProvider.records(driver).length;
     await provider.warm(driver);
@@ -326,7 +328,9 @@ function reconcileItem(item, { oldById, entries, keeps, rebuiltIds }) {
   // A rebuilt item: the walk granted it afresh from the new source; it now carries its old id, and
   // takes its state and any kept groups from the old copy.
   if ( rebuiltIds.has(item._id) ) {
-    const keep = kept ? FIELD_GROUPS.filter(g => g !== "advancement") : ALWAYS_KEPT;
+    // A species that split into a species and a lineage takes its successor's name and icon: "Elf, Drow"
+    // is now an Elf, and the Drow lineage says the rest.
+    const keep = kept ? FIELD_GROUPS.filter(g => g !== "advancement") : ((entry?.how === "split") ? [] : ALWAYS_KEPT);
     const merged = refreshedItemData(old, item, { uuid: item._stats?.compendiumSource, keep, rebuilt: true });
     // What the walk recorded wins over the old records: the answers were replayed into the new tree,
     // under (possibly) new advancement ids and new grant links.

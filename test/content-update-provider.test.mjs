@@ -127,6 +127,47 @@ describe("UpdateAnswerProvider", () => {
     expect(provider.choiceUuids(no)).toEqual([]);
   });
 
+  it("answers a split species' lineage choice with the lineage the scan worked out (PHB 3.0 Elf, Drow)", async () => {
+    const tree = newTree();
+    const lineage = record(tree.style, { id: "UXq1v36a9kxrZFZC", type: "ItemChoice", title: "Elven Lineage",
+      configuration: { choices: { 0: { count: 1 } }, allowDrops: true,
+        pool: [{ uuid: "Compendium.phb.origins.Item.phbsptDrowElfLin" }, { uuid: "Compendium.phb.origins.Item.phbsptHighElfLin" }],
+        restriction: { type: "race", subtype: "lineage" } } }, 0);
+    const provider = new UpdateAnswerProvider(harvestDecisions(OLD), {
+      lineages: [{ uuid: "Compendium.phb.origins.Item.phbsptDrowElfLin", name: "Drow", from: "Elf, Drow" }]
+    });
+    await provider.warm(stubDriver(tree, { choice: [lineage] }));
+    expect(provider.choiceUuids(lineage)).toEqual(["Compendium.phb.origins.Item.phbsptDrowElfLin"]);
+    expect(provider.report.find(l => l.kind === "choice")).toMatchObject({ status: "carried", detail: "Drow (Elf, Drow)" });
+
+    // Any other choice is untouched by it.
+    const other = record(tree.style, { id: "otherChoice00000", type: "ItemChoice", title: "Feat",
+      configuration: { choices: { 0: { count: 1 } }, pool: [{ uuid: "Compendium.phb.origins.Item.phbsptDrowElfLin" }],
+        restriction: { type: "feat" } } }, 0);
+    const p2 = new UpdateAnswerProvider([], { lineages: [{ uuid: "Compendium.phb.origins.Item.phbsptDrowElfLin", name: "Drow", from: "Elf, Drow" }] });
+    await p2.warm(stubDriver(tree, { choice: [other] }));
+    expect(p2.choiceUuids(other)).toEqual([]);
+  });
+
+  it("does not carry a pick with no subtype into a choice restricted to one (PHB 3.0 Dragonborn lineage)", async () => {
+    // PHB 2.1.0 picked a damage type ("Acid Breath Weapon": race, no subtype); 3.0.0 asks for a
+    // dragon lineage (race/lineage). The old item must not fill the slot: the choice is left to ask.
+    docs.set("Compendium.phb.origins.Item.brwAcidBreathWea",
+      { _id: "brwAcidBreathWea", uuid: "Compendium.phb.origins.Item.brwAcidBreathWea", type: "feat", name: "Acid Breath Weapon",
+        system: { identifier: "breath-weapon", type: { value: "race", subtype: "" } } });
+    const old = structuredClone(OLD);
+    old.items[0].system.advancement[1].value.added = { 1: { oldDef: "Compendium.phb.origins.Item.brwAcidBreathWea" } };
+    const tree = newTree();
+    const lineage = record(tree.style, { id: "EmTANp6x6GfXFTmU", type: "ItemChoice", title: "Draconic Ancestry",
+      configuration: { choices: { 0: { count: 1 } }, allowDrops: true,
+        pool: [{ uuid: "Compendium.phb.origins.Item.phbsptDrgAncBlac" }, { uuid: "Compendium.phb.origins.Item.phbsptDrgAncCopp" }],
+        restriction: { type: "race", subtype: "lineage" } } }, 0);
+    const provider = new UpdateAnswerProvider(harvestDecisions(old));
+    await provider.warm(stubDriver(tree, { choice: [lineage] }));
+    expect(provider.choiceUuids(lineage)).toEqual([]);
+    expect(provider.report.find(l => l.kind === "choice")?.status).not.toBe("carried");
+  });
+
   it("answers hit points exactly, and takes the average for a level that was never recorded", async () => {
     const tree = newTree();
     const two = record(tree.cls, { id: "hp", type: "HitPoints" }, 2);

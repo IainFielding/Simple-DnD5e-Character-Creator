@@ -405,6 +405,24 @@ describe("trees and identities", () => {
 });
 
 describe("pairItems / remapIds", () => {
+  it("pairs a species with the one it replaces, though they share no id, identifier or name", () => {
+    // PHB 3.0.0: "Gnome, Rock" (gnome-rock) became Gnome (gnome) with a Rock Gnome lineage.
+    const old = [{ _id: "OLDrace00000000", type: "race", name: "Gnome, Rock", system: { identifier: "gnome-rock" },
+      _stats: { compendiumSource: "Compendium.phb.origins.Item.phbspRockGnome00" } }];
+    const fresh = [
+      { _id: "NEWrace00000000", type: "race", name: "Gnome", system: { identifier: "gnome" },
+        _stats: { compendiumSource: "Compendium.phb.origins.Item.phbspGnome000000" } },
+      { _id: "NEWlineage00000", type: "feat", name: "Rock Gnome", system: { identifier: "rock-gnome" } }
+    ];
+    expect([...pairItems(old, fresh)]).toEqual([["NEWrace00000000", "OLDrace00000000"]]);
+  });
+
+  it("does not offer an identifier as a source match when an item has no source", () => {
+    const old = [{ _id: "OLDa000000000000", type: "feat", name: "A", system: { identifier: "x" } }];
+    const fresh = [{ _id: "NEWb000000000000", type: "feat", name: "B", _stats: { compendiumSource: "C.p.c.Item.x" } }];
+    expect(pairItems(old, fresh).size).toBe(0);
+  });
+
   it("pairs by document id first, then identifier, then name, one to one", () => {
     const old = [
       { _id: "OLDsecondwind000", type: "feat", name: "Second Wind", _stats: { compendiumSource: "C.p.c.Item.secondwind" } },

@@ -2,7 +2,7 @@ import { t, log, launchWindowOptions, fireHook, HOOKS } from "../config.mjs";
 import { unresolvedByLevel } from "../data/advancement-util.mjs";
 import { LevelUpDriver } from "./manager-driver.mjs";
 import { LevelUpState } from "./levelup-state.mjs";
-import { LevelUpShell, focusOpenLevelUp } from "./levelup-shell.mjs";
+import { LevelUpShell, focusOpenLevelUp, levelUpWindowId } from "./levelup-shell.mjs";
 
 /**
  * "Repair this level": finish the decisions a character's level left unanswered.
@@ -40,6 +40,36 @@ export function repairItems(actor, classItem) {
 }
 
 /**
+ * The species and background, and every item either of them granted, however deep: the Dragonborn's
+ * Draconic Ancestry (whose lineage choice PHB 3.0.0 added), an origin feat such as Magic Initiate.
+ * None belongs to a class, so {@link repairItems} never reaches them, and a choice left open on one
+ * (by a skipped creation step, or by Update to New Content) had nowhere to be answered.
+ * @param {Actor5e} actor
+ * @returns {Item5e[]}
+ */
+export function originItems(actor) {
+  const roots = actor.items.filter(i => ["race", "background"].includes(i.type));
+  const ids = new Set(roots.map(i => i.id));
+  const out = [...roots];
+  // Down the grant chain: `advancementRoot` where dnd5e set it, else the `advancementOrigin` links.
+  let grew = true;
+  while ( grew ) {
+    grew = false;
+    for ( const item of actor.items ) {
+      if ( ids.has(item.id) ) continue;
+      const root = item.system?.advancementRootItem?.id
+        ?? String(item.flags?.dnd5e?.advancementRoot ?? "").split(".")[0];
+      const origin = String(item.flags?.dnd5e?.advancementOrigin ?? "").split(".")[0];
+      if ( !ids.has(root) && !ids.has(origin) ) continue;
+      ids.add(item.id);
+      out.push(item);
+      grew = true;
+    }
+  }
+  return out;
+}
+
+/**
  * The class level an item was granted at, for a feature whose own advancements sit at level 0 ("when
  * this item arrives"). Read off the granting advancement's record, following one granted feature up
  * to the one that granted it where needed. Null when the item carries no grant record.
@@ -74,13 +104,22 @@ export function grantLevel(actor, item, depth = 0) {
 export function repairTargets(actor) {
   if ( (actor?.type !== "character") || !actor.items ) return [];
   const out = [];
-  for ( const classItem of actor.items.filter(i => i.type === "class") ) {
+  const classes = actor.items.filter(i => i.type === "class");
+  const originalId = actor.system?.details?.originalClass;
+  const first = classes.find(i => i.id === originalId) ?? classes[0] ?? null;
+  for ( const classItem of classes ) {
     const classLevel = classItem.system?.levels ?? 0;
     const byLevel = new Map();
-    for ( const item of repairItems(actor, classItem) ) {
-      for ( const entry of unresolvedByLevel(item, classLevel) ) {
-        // A level-0 decision on a granted feature was owed when the feature arrived.
-        const screen = entry.level || grantLevel(actor, item) || 1;
+    // The species, background and what they granted belong to no class. Their decisions were asked at
+    // creation, on the first class's first level, so that is where they are repaired too.
+    const origins = (classItem === first) ? originItems(actor) : [];
+    const characterLevel = actor.system?.details?.level ?? classLevel;
+    for ( const item of [...repairItems(actor, classItem), ...origins] ) {
+      const cap = origins.includes(item) ? characterLevel : classLevel;
+      for ( const entry of unresolvedByLevel(item, cap) ) {
+        // A level-0 decision on a granted feature was owed when the feature arrived. An origin's is
+        // owed on the first level, whatever level its own advancement names.
+        const screen = origins.includes(item) ? 1 : (entry.level || grantLevel(actor, item) || 1);
         if ( screen > classLevel ) continue;
         const group = byLevel.get(screen) ?? [];
         group.push({ ...entry, itemId: item.id });
@@ -218,6 +257,74 @@ export async function promptRepair(actor) {
   });
   const choice = options[Number(picked)];
   return choice ? launchRepair(actor, choice.classId, choice.level) : null;
+}
+
+/**
+ * Every unanswered decision, as `"<classId>:<level>:<advancementId>"`. Per decision rather than per
+ * level: a level that already had something open can gain another (a Dragonborn's first level kept
+ * its unpicked Magic Initiate spells and gained the lineage choice PHB 3.0.0 added).
+ * @param {Actor5e} actor
+ * @returns {Set<string>}
+ */
+export function repairKeys(actor) {
+  return new Set(repairTargets(actor).flatMap(({ classItem, levels }) => levels.flatMap(g =>
+    g.entries.map(e => `${classItem.id}:${g.level}:${e.id}`))));
+}
+
+/**
+ * The class levels holding a decision that is open now and was not in `before`.
+ * @param {Actor5e} actor
+ * @param {Set<string>} before  {@link repairKeys} taken earlier.
+ * @returns {Set<string>}  `"<classId>:<level>"` keys, for {@link repairInSequence}.
+ */
+export function newlyOpenLevels(actor, before) {
+  return new Set([...repairKeys(actor)].filter(k => !before.has(k)).map(k => k.split(":").slice(0, 2).join(":")));
+}
+
+/**
+ * Repair the given class levels one after another, without asking which: the first opens at once, and
+ * each one applied opens the next still unanswered. Update to New Content ends here, so a player
+ * whose update left choices open goes straight on to make them, as one process. Cancelling a session
+ * ends the run; whatever is left stays on the sheet's wrench as usual.
+ * @param {Actor5e} actor
+ * @param {Set<string>|null} [only]  `"<classId>:<level>"` keys to repair (see {@link newlyOpenLevels});
+ *   null for every unanswered level.
+ * @returns {Promise<void>}
+ */
+export async function repairInSequence(actor, only = null) {
+  const next = () => repairOptions(actor).find(o => !only || only.has(`${o.classId}:${o.level}`)) ?? null;
+  const first = next();
+  if ( !first ) return;
+  const settle = ms => new Promise(r => setTimeout(r, ms));
+  // The previous session announces it applied before its window has finished closing, and only one
+  // level-up window may be open per character.
+  const windowClosed = async () => {
+    for ( let i = 0; i < 50; i++ ) {
+      if ( !foundry.applications.instances?.get(levelUpWindowId(actor))?.rendered ) return true;
+      await settle(100);
+    }
+    return false;
+  };
+  const ours = payload => (payload?.actor === actor) && payload?.state?.repairLevel;
+  let current = first;
+  const onApplied = async payload => {
+    if ( !ours(payload) ) return;
+    const done = current;
+    current = next();
+    // A level that is still open after its own session (the player left something) is not reopened.
+    if ( current && (current.classId === done.classId) && (current.level === done.level) ) current = null;
+    if ( !current ) return stop();
+    if ( !(await windowClosed()) ) return stop();
+    if ( !(await launchRepair(actor, current.classId, current.level)) ) stop();
+  };
+  const onCancelled = payload => { if ( payload?.actor === actor ) stop(); };
+  const applied = Hooks.on(HOOKS.levelUpApplied, onApplied);
+  const cancelled = Hooks.on(HOOKS.levelUpCancelled, onCancelled);
+  function stop() {
+    Hooks.off(HOOKS.levelUpApplied, applied);
+    Hooks.off(HOOKS.levelUpCancelled, cancelled);
+  }
+  if ( !(await launchRepair(actor, first.classId, first.level)) ) stop();
 }
 
 /**

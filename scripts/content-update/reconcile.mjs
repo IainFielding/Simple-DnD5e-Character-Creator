@@ -11,21 +11,32 @@ import { itemIdentity, uuidTail } from "./answers.mjs";
  * so "uses spent" and toggled effects would reset.
  *
  * So once the rebuild has finished on the clone, each new item is paired with the old item it
- * replaces (by compendium document id, then identifier, then name — always within one type) and the
+ * replaces (by compendium document id, then identifier, then name — always within one type; and a
+ * species or background, of which an actor holds one, with the one it replaces whatever it is called) and the
  * new id is swapped for the old one *throughout* the actor data. Item ids are 16 random characters,
  * so a plain textual replacement cannot hit anything else.
  *
  * Pure functions over plain data.
  */
 
-/** The keys an item can be paired on, strongest first. */
+/** Item types an actor holds one of. */
+const SINGLE_TYPES = ["race", "background"];
+
+/**
+ * The keys an item can be paired on, strongest first, one per tier (null where it has none): a tier
+ * must mean the same key for every item, or an item without a source uuid would offer its identifier
+ * as a source match.
+ * The last tier pairs a species or background with its predecessor outright: PHB 3.0.0 folded
+ * "Gnome, Rock" into a Gnome with a lineage, and the two share no id, identifier or name.
+ */
 function pairingKeys(itemData) {
   const id = itemIdentity(itemData);
-  const keys = [];
-  if ( id.uuid ) keys.push(`src:${id.type}:${uuidTail(id.uuid)}`);
-  if ( id.identifier ) keys.push(`ident:${id.type}:${id.identifier}`);
-  if ( id.name ) keys.push(`name:${id.type}:${id.name.toLowerCase()}`);
-  return keys;
+  return [
+    id.uuid ? `src:${id.type}:${uuidTail(id.uuid)}` : null,
+    id.identifier ? `ident:${id.type}:${id.identifier}` : null,
+    id.name ? `name:${id.type}:${id.name.toLowerCase()}` : null,
+    SINGLE_TYPES.includes(id.type) ? `single:${id.type}` : null
+  ];
 }
 
 /**
@@ -39,7 +50,7 @@ export function pairItems(oldItems, newItems) {
   const taken = new Set();
   // Strongest key tier first across *all* items, so a weak name match never steals an item a
   // stronger key would have claimed.
-  for ( let tier = 0; tier < 3; tier++ ) {
+  for ( let tier = 0; tier < 4; tier++ ) {
     const index = new Map();
     for ( const o of oldItems ) {
       if ( taken.has(o._id) ) continue;

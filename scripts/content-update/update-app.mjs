@@ -1,5 +1,5 @@
 import { HOOKS, MODULE_ID, SETTINGS, fireCancellableHook, fireHook, log, t, tpl } from "../config.mjs";
-import { repairTargets, promptRepair } from "../levelup/repair.mjs";
+import { newlyOpenLevels, repairKeys, repairInSequence } from "../levelup/repair.mjs";
 import { cachedScan, hasUpdates, invalidateScan, scanActor } from "./scan.mjs";
 import { commitRehearsal, rehearse } from "./rebuild.mjs";
 import { canCopyActor, copyActor, downloadActor } from "./backup.mjs";
@@ -122,7 +122,9 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
       versions: (e.fromVersion && e.toVersion && (e.fromVersion !== e.toVersion))
         ? t("contentUpdate.versions", { from: e.fromVersion, to: e.toVersion })
         : (e.toVersion ? t("contentUpdate.toVersion", { to: e.toVersion }) : ""),
-      matchedBy: ["identifier", "name"].includes(e.how) ? t(`contentUpdate.matchedBy.${e.how}`) : "",
+      matchedBy: (e.how === "split")
+        ? t("contentUpdate.matchedBy.split", { species: e.source?.name ?? "", lineage: e.lineage?.name ?? "" })
+        : (["identifier", "name"].includes(e.how) ? t(`contentUpdate.matchedBy.${e.how}`) : ""),
       customised: e.customised,
       keep: this.#keep.get(e.item.id) ?? false,
       descriptionChanged,
@@ -211,6 +213,9 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
           return this.render();
         }
       }
+      // What was already unanswered before the update is the player's own business; what the update
+      // opens, it walks them through straight after (below).
+      const openBefore = repairKeys(actor);
       await commitRehearsal(rehearsal);
       invalidateScan(actor);
       const counts = this.#scan.counts;
@@ -218,7 +223,10 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
       await postSummary(actor, { refreshed: counts.refresh, rebuilt: counts.rebuild, asked, backup });
       fireHook(HOOKS.contentUpdated, { actor, backup, rehearsal });
       await this.close();
-      if ( repairTargets(actor).length ) promptRepair(actor);
+      // One process: the choices the update could not carry open at once, a level at a time, in the
+      // level-up window — no prompt, no hunting for the wrench.
+      const opened = newlyOpenLevels(actor, openBefore);
+      if ( opened.size ) await repairInSequence(actor, opened);
     } catch ( err ) {
       log("content update: commit failed", err);
       ui.notifications?.error(t("contentUpdate.failed"));

@@ -62,8 +62,29 @@ export class UpdateAnswerProvider {
   /**
    * @param {import("./answers.mjs").Decision[]} decisions   From {@link harvestDecisions}.
    */
-  constructor(decisions) {
+  /**
+   * @param {object[]} decisions   What the character decided (see `harvestDecisions`).
+   * @param {object} [options]
+   * @param {{uuid: string, name: string, from: string}[]} [options.lineages]  Lineages the scan worked
+   *   out for a species that became a species and a lineage (`scan.mjs#findSplitSpecies`). They answer
+   *   that species' lineage choice, which the character never had a record for.
+   */
+  constructor(decisions, { lineages = [] } = {}) {
     this.#decisions = decisions;
+    this.#lineages = lineages;
+  }
+
+  #lineages;
+
+  /** The pool entry a recorded lineage answers, for a lineage choice; null for anything else. */
+  #lineageFor(adv) {
+    const cfg = adv?.configuration ?? {};
+    if ( (cfg.restriction?.type !== "race") || (cfg.restriction?.subtype !== "lineage") ) return null;
+    for ( const lineage of this.#lineages ) {
+      const entry = Array.from(cfg.pool ?? []).map(p => p?.uuid ?? p).find(u => uuidTail(u) === uuidTail(lineage.uuid));
+      if ( entry ) return { uuid: entry, lineage };
+    }
+    return null;
   }
 
   /** Every decision record the driver currently holds. */
@@ -143,6 +164,14 @@ export class UpdateAnswerProvider {
       // A tier that only offers to swap an earlier pick owes nothing: not a decision to carry.
       if ( (kind === "choice") && !Number(adv.configuration?.choices?.[rec.level]?.count) ) {
         line.status = "none";
+        continue;
+      }
+      // A species that split: its lineage was the species itself, so it wins over any record.
+      const preset = (kind === "choice") ? this.#lineageFor(adv) : null;
+      if ( preset ) {
+        this.#answers.set(rec, [preset.uuid]);
+        line.status = "carried";
+        line.detail = `${preset.lineage.name} (${preset.lineage.from})`;
         continue;
       }
       if ( !decision ) {
@@ -227,10 +256,14 @@ export class UpdateAnswerProvider {
     const pool = Array.from(cfg.pool ?? []);
     const restriction = cfg.restriction ?? {};
     if ( pool.length && !cfg.allowDrops ) return null;
+    // What the restriction names, the pick must have. An empty kind or subtype does not pass: PHB
+    // 2.1.0's "Acid Breath Weapon" (race, no subtype) otherwise filled PHB 3.0.0's Dragonborn lineage
+    // slot (race/lineage), so the character kept the old item, gained no lineage, and the choice
+    // looked answered, so nothing asked it again.
     return ident => {
       if ( cfg.type && ident.type && (ident.type !== cfg.type) ) return false;
-      if ( restriction.type && ident.kind && (ident.kind !== restriction.type) ) return false;
-      if ( restriction.subtype && ident.subtype && (ident.subtype !== restriction.subtype) ) return false;
+      if ( restriction.type && ((ident.kind ?? "") !== restriction.type) ) return false;
+      if ( restriction.subtype && ((ident.subtype ?? "") !== restriction.subtype) ) return false;
       return true;
     };
   }
