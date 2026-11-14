@@ -9,6 +9,8 @@ import { canRepair, promptRepair } from "./levelup/repair.mjs";
 import { registerXpNotice, registerXpNoticeButton } from "./levelup/xp-notice.mjs";
 import { registerMilestoneGrants } from "./levelup/milestone-grant.mjs";
 import { registerCharacterCheck } from "./levelup/character-check.mjs";
+import { registerContentUpdate } from "./content-update/update-app.mjs";
+import { registerSourceStamp } from "./content-update/stamp.mjs";
 import { registerWelcomeButtons, postWelcomeIfDue } from "./app/welcome.mjs";
 import { registerPartyButton } from "./build/chat-summary.mjs";
 import { registerBlankBuild, registerBlankBuildMenu } from "./app/blank-build.mjs";
@@ -237,6 +239,11 @@ function registerSettings() {
   game.settings.register(MODULE_ID, SETTINGS.levelUpReadyNotice, {
     scope: "world", config: false, type: String, default: DEFAULTS.levelUpReadyNotice
   });
+  // Whether players may run Update to New Content on their own characters. Edited in Level-Up
+  // Options beside the other character-maintenance controls, hence `config: false`.
+  game.settings.register(MODULE_ID, SETTINGS.contentUpdatePlayers, {
+    scope: "world", config: false, type: Boolean, default: DEFAULTS.contentUpdatePlayers
+  });
   game.settings.registerMenu(MODULE_ID, "levelUpOptionsMenu", {
     name: t("settings.levelUpOptionsMenu.name"),
     label: t("settings.levelUpOptionsMenu.label"),
@@ -378,6 +385,13 @@ registerMilestoneGrants();
 // "Check Character": a read-only report, in the character sheet's ⋯ menu. It gates itself on
 // ownership and the level-up flow being on.
 registerCharacterCheck();
+
+// "Update to New Content": the sheet's ⋯ menu and the Actors right-click menu, shown only when the
+// character has content with a newer version installed. At load, for the right-click menu's sake.
+// And the source stamp every compendium-made item gets as it lands on a character, which is what
+// lets a later update tell a player's edit from a content change.
+registerContentUpdate();
+registerSourceStamp();
 
 // The chat cards' buttons: the welcome card's settings buttons, the level-up-ready card's Level Up,
 // and the creation card's "Add to party". At load, not `ready`: the chat log renders the messages

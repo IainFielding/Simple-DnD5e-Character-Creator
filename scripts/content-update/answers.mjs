@@ -23,6 +23,22 @@
 export const CARRIED_TYPES = ["HitPoints", "ItemChoice", "ItemGrant", "Trait", "AbilityScoreImprovement",
   "Subclass", "Size"];
 
+/**
+ * The system type an advancement's data stands for. A module can register a type of its own that is
+ * a system type underneath: Tasha's turns a 2014 class's plain grant into a `TCOEReplacementGrant`
+ * (Favored Enemy *or* Favored Foe). Its recorded answer has the grant's shape, so it is read as one.
+ * Mirrors `LevelUpDriver.baseType` for plain data, which has no class to test with `instanceof`.
+ * @param {object} adv
+ * @returns {string}
+ */
+export function baseTypeOf(adv) {
+  const type = String(adv?.type ?? "");
+  if ( CARRIED_TYPES.includes(type) || (type === "ScaleValue") ) return type;
+  if ( /Choice$/.test(type) ) return "ItemChoice";
+  if ( /Grant$/.test(type) ) return "ItemGrant";
+  return type;
+}
+
 /** Types that may stand in for one another when nothing of the same type matches. */
 const COMPATIBLE = {
   ItemChoice: ["ItemGrant"],
@@ -146,7 +162,7 @@ export function signature(adv) {
   const cfg = adv?.configuration ?? {};
   const out = new Set();
   const poolOf = list => Array.from(list ?? []).map(p => (typeof p === "string") ? p : p?.uuid).filter(Boolean);
-  switch ( adv?.type ) {
+  switch ( baseTypeOf(adv) ) {
     case "ItemChoice":
     case "ItemGrant":
       for ( const uuid of [...poolOf(cfg.pool), ...poolOf(cfg.items)] ) out.add(`item:${uuidTail(uuid)}`);
@@ -226,14 +242,14 @@ export function harvestDecisions(actorData) {
     const tree = treeKey(item, getItem);
     const grantLevel = grantedAtLevel(item, getItem);
     const base = adv => ({
-      advId: adv._id, type: adv.type, tree, title: normTitle(adv.title ?? adv.name),
+      advId: adv._id, type: baseTypeOf(adv), tree, title: normTitle(adv.title ?? adv.name),
       hostName: item.name, sig: signature(adv)
     });
     const effLevel = lvl => (Number(lvl) || grantLevel || 0);
 
     for ( const adv of advs ) {
       const value = adv.value ?? {};
-      switch ( adv.type ) {
+      switch ( baseTypeOf(adv) ) {
         case "HitPoints":
           for ( const [lvl, v] of Object.entries(value) ) {
             if ( !/^\d+$/.test(lvl) || (v === undefined) || (v === null) ) continue;
@@ -268,7 +284,9 @@ export function harvestDecisions(actorData) {
           break;
         }
         case "ItemGrant": {
-          const optional = Array.from(adv.configuration?.items ?? []).some(i => i?.optional);
+          const replacements = adv.configuration?.replacements;
+          const optional = Array.from(adv.configuration?.items ?? []).some(i => i?.optional)
+            || !!(replacements && Object.keys(replacements).length);
           const ability = value.ability ?? null;
           const abilityChoice = (Array.from(adv.configuration?.spell?.ability ?? []).length > 1);
           if ( !optional && !abilityChoice ) break;

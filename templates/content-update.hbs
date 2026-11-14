@@ -1,0 +1,159 @@
+{{!--
+  The "Update to new content" review page, rendered by scripts/content-update/update-app.mjs
+  `ContentUpdateApp`. Read-only apart from three controls: a "Keep mine" box per item that looks
+  customised (re-rehearses the update), the backup download / proceed-without-backup pair for a user
+  who cannot create actors, and the Update / Cancel buttons. One root element.
+--}}
+<section class="sogrom-cu-body">
+  {{#if loading}}
+  <p class="sogrom-cu-loading">
+    <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+    {{localize "sogrom-dnd5e-character-creator.contentUpdate.loading"}}
+  </p>
+  {{else if empty}}
+  <p class="sogrom-cu-empty">
+    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+    {{localize "sogrom-dnd5e-character-creator.contentUpdate.empty"}}
+  </p>
+  {{else if error}}
+  <p class="notification error">{{localize "sogrom-dnd5e-character-creator.contentUpdate.failed"}}</p>
+  <p class="sogrom-cu-error">{{error}}</p>
+  {{else}}
+
+  <p class="sogrom-cu-intro">{{localize "sogrom-dnd5e-character-creator.contentUpdate.intro"}}</p>
+
+  {{#if hasRebuilt}}
+  <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.rebuilt"}}</h3>
+  <p class="hint">{{localize "sogrom-dnd5e-character-creator.contentUpdate.rebuiltHint"}}</p>
+  <ul class="sogrom-cu-items">
+    {{#each rebuilt}}
+    <li class="sogrom-cu-item">
+      <img src="{{img}}" alt="" class="sogrom-cu-icon">
+      <div class="sogrom-cu-item-text">
+        <span class="sogrom-cu-item-name">{{name}}</span>
+        <span class="hint">{{groups}}{{#if versions}} · {{versions}}{{/if}}{{#if matchedBy}} · {{matchedBy}}{{/if}}</span>
+        {{#if customised}}
+        <label class="sogrom-cu-keep checkbox" data-tooltip="{{localize "sogrom-dnd5e-character-creator.contentUpdate.keepTip"}}">
+          <input type="checkbox" data-action="keep" data-item-id="{{id}}" {{#if keep}}checked{{/if}}>
+          {{localize "sogrom-dnd5e-character-creator.contentUpdate.keep"}}
+        </label>
+        {{/if}}
+        {{#if descriptionChanged}}
+        <details class="sogrom-cu-desc">
+          <summary>{{localize "sogrom-dnd5e-character-creator.contentUpdate.compareDescription"}}</summary>
+          <div class="sogrom-cu-desc-cols">
+            <div><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>{{{oldDescription}}}</div>
+            <div><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>{{{newDescription}}}</div>
+          </div>
+        </details>
+        {{/if}}
+      </div>
+    </li>
+    {{/each}}
+  </ul>
+  {{/if}}
+
+  {{#if hasRefreshed}}
+  <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.refreshed"}}</h3>
+  <ul class="sogrom-cu-items">
+    {{#each refreshed}}
+    <li class="sogrom-cu-item">
+      <img src="{{img}}" alt="" class="sogrom-cu-icon">
+      <div class="sogrom-cu-item-text">
+        <span class="sogrom-cu-item-name">{{name}}</span>
+        <span class="hint">{{groups}}{{#if versions}} · {{versions}}{{/if}}{{#if matchedBy}} · {{matchedBy}}{{/if}}</span>
+        {{#if customised}}
+        <label class="sogrom-cu-keep checkbox" data-tooltip="{{localize "sogrom-dnd5e-character-creator.contentUpdate.keepTip"}}">
+          <input type="checkbox" data-action="keep" data-item-id="{{id}}" {{#if keep}}checked{{/if}}>
+          {{localize "sogrom-dnd5e-character-creator.contentUpdate.keep"}}
+        </label>
+        {{/if}}
+        {{#if descriptionChanged}}
+        <details class="sogrom-cu-desc">
+          <summary>{{localize "sogrom-dnd5e-character-creator.contentUpdate.compareDescription"}}</summary>
+          <div class="sogrom-cu-desc-cols">
+            <div><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>{{{oldDescription}}}</div>
+            <div><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>{{{newDescription}}}</div>
+          </div>
+        </details>
+        {{/if}}
+      </div>
+    </li>
+    {{/each}}
+  </ul>
+  {{/if}}
+
+  {{#if hasUntouched}}
+  <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.untouched"}}</h3>
+  <ul class="sogrom-cu-untouched">
+    {{#each untouched}}<li>{{name}} <span class="hint">({{reason}})</span></li>{{/each}}
+  </ul>
+  {{/if}}
+
+  {{#if hasDecisions}}
+  <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.choices"}}</h3>
+  {{#if toChooseNote}}<p class="notification warning">{{toChooseNote}}</p>{{/if}}
+  <ul class="sogrom-cu-decisions">
+    {{#each decisions}}
+    <li class="is-{{status}}">
+      <i class="fa-solid {{icon}}" aria-hidden="true"></i>
+      <span class="sogrom-cu-decision-title">{{title}}</span>
+      <span class="hint">{{host}}{{#if level}} · {{level}}{{/if}}</span>
+      <span class="sogrom-cu-decision-status">{{statusLabel}}{{#if detail}}: {{detail}}{{/if}}</span>
+    </li>
+    {{/each}}
+  </ul>
+  {{/if}}
+
+  <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.beforeAfter"}}</h3>
+  {{#if hasRows}}
+  <table class="sogrom-cu-diff">
+    <thead><tr>
+      <th></th>
+      <th>{{localize "sogrom-dnd5e-character-creator.contentUpdate.before"}}</th>
+      <th>{{localize "sogrom-dnd5e-character-creator.contentUpdate.after"}}</th>
+    </tr></thead>
+    <tbody>
+      {{#each summary.rows}}<tr><th>{{label}}</th><td>{{before}}</td><td>{{after}}</td></tr>{{/each}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="hint">{{localize "sogrom-dnd5e-character-creator.contentUpdate.noNumbers"}}</p>
+  {{/if}}
+  {{#if addedList}}<p><strong>{{localize "sogrom-dnd5e-character-creator.contentUpdate.added"}}</strong> {{addedList}}</p>{{/if}}
+  {{#if removedList}}<p><strong>{{localize "sogrom-dnd5e-character-creator.contentUpdate.removed"}}</strong> {{removedList}}</p>{{/if}}
+
+  <div class="sogrom-cu-backup">
+    {{#if canCopy}}
+    <p><i class="fa-solid fa-box-archive" aria-hidden="true"></i>
+      {{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.copy"}}</p>
+    {{else}}
+    <p class="notification warning">{{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.noPermission"}}</p>
+    <div class="sogrom-cu-backup-actions">
+      <button type="button" data-action="download">
+        <i class="fa-solid fa-download" aria-hidden="true"></i>
+        {{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.download"}}
+      </button>
+      {{#if downloaded}}<span class="sogrom-cu-downloaded"><i class="fa-solid fa-check" aria-hidden="true"></i>
+        {{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.downloaded"}}</span>{{/if}}
+      <label class="checkbox">
+        <input type="checkbox" data-action="skipBackup" {{#if skipBackup}}checked{{/if}}>
+        {{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.skip"}}
+      </label>
+    </div>
+    {{/if}}
+  </div>
+  {{/if}}
+
+  <footer class="sogrom-cu-footer">
+    <button type="button" data-action="cancel">
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i> {{localize "sogrom-dnd5e-character-creator.contentUpdate.cancel"}}
+    </button>
+    {{#unless loading}}{{#unless empty}}{{#unless error}}
+    <button type="button" data-action="update" class="sogrom-cu-update" {{#if updateDisabled}}disabled{{/if}}>
+      <i class="fa-solid {{#if working}}fa-spinner fa-spin{{else}}fa-arrows-rotate{{/if}}" aria-hidden="true"></i>
+      {{localize "sogrom-dnd5e-character-creator.contentUpdate.update"}}
+    </button>
+    {{/unless}}{{/unless}}{{/unless}}
+  </footer>
+</section>

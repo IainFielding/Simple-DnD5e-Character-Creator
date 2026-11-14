@@ -188,9 +188,24 @@ function activityDefinition(activities) {
   return out;
 }
 
-/** Effects without on/off state, origin or bookkeeping. */
-function effectDefinition(effects) {
-  return (plain(effects) ?? []).map(e => {
+/**
+ * Whether an effect on an item came from somewhere other than the item's own definition: its origin
+ * names another document (an enchantment applied to it, an effect another item's advancement added).
+ * Such an effect belongs to the character, not to the definition.
+ * @param {object} effect
+ * @param {object} itemData
+ * @returns {boolean}
+ */
+export function isForeignEffect(effect, itemData) {
+  const origin = effect?.origin;
+  if ( !origin ) return false;
+  const own = [itemData?._stats?.compendiumSource, itemData?._id].filter(Boolean);
+  return !own.some(o => String(origin).endsWith(o) || (String(origin) === o));
+}
+
+/** Effects without on/off state, origin or bookkeeping, and without effects applied from elsewhere. */
+function effectDefinition(effects, itemData) {
+  return (plain(effects) ?? []).filter(e => !isForeignEffect(e, itemData)).map(e => {
     const rest = { ...(e ?? {}) };
     for ( const key of ["disabled", "origin", "_stats", "sort", "flags"] ) delete rest[key];
     return rest;
@@ -224,7 +239,7 @@ export function definitionGroups(itemData) {
     activities: activityDefinition(system.activities),
     uses: system.uses ?? null,
     damage: system.damage ?? null,
-    effects: effectDefinition(data.effects),
+    effects: effectDefinition(data.effects, data),
     advancement: advancementDefinition(system.advancement)
   };
   for ( const key of ["description", "activities", "uses", "damage", "advancement"] ) delete system[key];

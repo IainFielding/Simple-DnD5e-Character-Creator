@@ -86,7 +86,12 @@ export const HOOKS = Object.freeze({
   /** `{actor, state}` — the player discarded a level-up; the actor was never touched. */
   levelUpCancelled: `${HOOK_PREFIX}.levelUpCancelled`,
   /** `{manager, actor}` — we claimed Ember's advancement manager to ask its level-1 questions. */
-  emberHandoff: `${HOOK_PREFIX}.emberHandoff`
+  emberHandoff: `${HOOK_PREFIX}.emberHandoff`,
+
+  /** `{actor, scan, rehearsal}` — **cancellable**; return false to veto an Update to New Content before anything is written. */
+  preUpdateContent: `${HOOK_PREFIX}.preUpdateContent`,
+  /** `{actor, backup, rehearsal}` — a character has been updated to the installed content. */
+  contentUpdated: `${HOOK_PREFIX}.contentUpdated`
 });
 
 /**
@@ -194,6 +199,7 @@ export const SETTINGS = {
   magicShopConfig: "magicShopConfig",
   welcomeCards: "showWelcomeCards",
   welcomeVersion: "welcomeVersion",
+  contentUpdatePlayers: "contentUpdatePlayers",
   debug: "debugLogging"
 };
 
@@ -234,6 +240,9 @@ export const DEFAULTS = {
     inventory: [],
     wealthTable: null          // null = the DMG table; see data/magic-shop.mjs
   },
+  // On by default: a player's character is theirs to bring up to date, and the update always backs
+  // up first (or, for a player who cannot create actors, offers a download).
+  contentUpdatePlayers: true,
   debug: false
 };
 

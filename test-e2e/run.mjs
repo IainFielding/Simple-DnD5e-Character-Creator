@@ -13,6 +13,7 @@
  *   node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
  *   node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
  *   node run.mjs --repair                 # skipped-choice builds repaired, plus Check Character
+ *   node run.mjs --content-update         # Update to New Content: no-op rebuilds + refresh in place
  *   node run.mjs --quick-build            # Quick Build every class; assert the finished character
  *   node run.mjs --quick-build --level 5  # ...and again at each higher starting rung (3, 5)
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
@@ -156,6 +157,25 @@ try {
       for ( const f of r.failures ) console.log(`  ${f}`);
       exitCode = 1;
     }
+  } else if ( flag("content-update") ) {
+    // "Update to New Content": rebuild against unchanged content must be a no-op, and a refresh keeps
+    // id and state. See in-world/content-update.mjs.
+    if ( keep ) await session.eval(() => { globalThis.__keepActors = true; });
+    const r = await harness("checkContentUpdate", { only: value("only") || null });
+    for ( const c of r.cases ) {
+      console.log(`\n${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);
+      if ( c.error ) {
+        console.log(`  error: ${c.error.split("\n").slice(0, 6).join("\n         ")}`);
+        continue;
+      }
+      for ( const n of c.notes ?? [] ) console.log(`  note: ${n}`);
+      for ( const d of c.differences.slice(0, 25) ) {
+        console.log(`  ! ${d.path}\n      before: ${d.native}\n      after : ${d.creator}`);
+      }
+      if ( c.differences.length > 25 ) console.log(`  … and ${c.differences.length - 25} more`);
+    }
+    console.log(r.ok ? "\nPASS   every content-update case" : "\nFAIL   a content-update case");
+    if ( !r.ok ) exitCode = 1;
   } else if ( flag("repair") ) {
     // "Repair this level": a native build with decisions skipped, repaired, and compared against
     // the fully answered native build. See in-world/repair.mjs.

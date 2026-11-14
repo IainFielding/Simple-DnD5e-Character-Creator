@@ -1039,6 +1039,10 @@
         "name": "Recommended way to build",
         "hint": "Chooses which character creation method is marked as recommended.",
         "none": "No recommendation"
+      },
+      "contentUpdatePlayers": {
+        "name": "Players can update their own characters",
+        "hint": "Lets players run Update to New Content on characters they own. Off, only the GM can."
       }
     },
     "storeConfig": {
@@ -1137,7 +1141,8 @@
       "hitPoints": "Hit Points",
       "announcements": "Announcements",
       "creationNote": "The character-creation summary card is set separately, in the main settings list.",
-      "save": "Save Changes"
+      "save": "Save Changes",
+      "maintenance": "Content updates"
     },
     "entry": {
       "heading": "Choose a Character Creation Method",
@@ -1178,6 +1183,75 @@
         "levelAria": "Character level"
       },
       "returnToChooser": "Other ways to build"
+    },
+    "contentUpdate": {
+      "button": "Update to New Content",
+      "title": "Update to New Content: {name}",
+      "loading": "Checking this character against the installed content…",
+      "empty": "Everything on this character already matches the installed content.",
+      "intro": "Some of this character's content has a newer version installed. Nothing changes until you choose Update.",
+      "rebuilt": "Rebuilt with your choices",
+      "rebuiltHint": "These changed how they level up. The character's species, background and classes are put back together with the choices already made, level by level.",
+      "refreshed": "Updated in place",
+      "untouched": "Not touched",
+      "choices": "Your choices",
+      "toChoose": "{count} choice(s) could not be carried over. After the update you'll be taken to pick them.",
+      "beforeAfter": "Before and after",
+      "before": "Before",
+      "after": "After",
+      "noNumbers": "No ability score, hit point, armour class or skill changes.",
+      "added": "Added:",
+      "removed": "Removed:",
+      "keep": "Keep mine",
+      "keepTip": "This item differs from the new version in ways the update can't explain, so it may have been edited. Tick to leave your copy as it is.",
+      "compareDescription": "Compare descriptions",
+      "yours": "Yours",
+      "updated": "New version",
+      "versions": "{from} → {to}",
+      "toVersion": "now {to}",
+      "update": "Update",
+      "cancel": "Cancel",
+      "failed": "The update could not be completed. The character has not been changed.",
+      "group": {
+        "name": "name",
+        "img": "icon",
+        "description": "description",
+        "activities": "activities",
+        "uses": "uses",
+        "damage": "damage",
+        "effects": "effects",
+        "advancement": "levelling",
+        "other": "details"
+      },
+      "matchedBy": {
+        "identifier": "matched by identifier",
+        "name": "matched by name"
+      },
+      "reason": {
+        "missing": "its source can no longer be found"
+      },
+      "status": {
+        "carried": "Carried over",
+        "partial": "Partly carried over",
+        "ask": "To choose",
+        "default": "Average taken"
+      },
+      "backup": {
+        "folder": "Content update backups",
+        "name": "{name} (before update {date})",
+        "copy": "A copy of this character will be saved in the \"Content update backups\" folder first.",
+        "noPermission": "You don't have permission to create a backup copy. Download one before updating?",
+        "download": "Download backup",
+        "downloaded": "Downloaded",
+        "skip": "Proceed without backup",
+        "failed": "The backup copy could not be made, so nothing was changed."
+      },
+      "chat": {
+        "title": "{name} updated to new content",
+        "body": "{refreshed} item(s) updated in place, {rebuilt} rebuilt with the choices already made.",
+        "asked": "{count} choice(s) still to make.",
+        "backup": "Backup: {name}."
+      }
     }
   }
 }

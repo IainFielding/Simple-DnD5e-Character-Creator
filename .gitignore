@@ -28,6 +28,8 @@ test-e2e/config.mjs
 test-e2e/*.log
 test-e2e/*.jsonl
 test-e2e/*.html
+# Old content-package copies converted for the content-update suite (legacy-fixture.mjs): pack content.
+test-e2e/fixtures/
 # The generated manifest of the above: `node baselines.mjs --write` says what each results
 # file on this machine is, and which one a fresh run should be diffed against. It describes
 # one working directory, and a fresh clone has nothing for it to describe.

@@ -1,0 +1,141 @@
+/* ---------------------------------------------- Update to New Content
+
+   The review window (content-update/update-app.mjs). A plain Foundry window, styled on its own like
+   Check Character: lists of items, the carried decisions, a before/after table and the backup block. */
+
+.sogrom-content-update .sogrom-cu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sogrom-content-update h3 {
+  margin: 0.6rem 0 0;
+  border-bottom: 1px solid var(--color-border-light-tertiary, #8884);
+}
+
+.sogrom-content-update p { margin: 0; }
+
+.sogrom-content-update .sogrom-cu-loading,
+.sogrom-content-update .sogrom-cu-empty { padding: 1rem 0; }
+
+.sogrom-content-update .sogrom-cu-empty i { color: var(--color-level-success, #3b8d3b); }
+
+.sogrom-content-update .sogrom-cu-error {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-12, 12px);
+  white-space: pre-wrap;
+}
+
+.sogrom-content-update .sogrom-cu-items,
+.sogrom-content-update .sogrom-cu-decisions,
+.sogrom-content-update .sogrom-cu-untouched {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.sogrom-content-update .sogrom-cu-item {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.sogrom-content-update .sogrom-cu-icon {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+}
+
+.sogrom-content-update .sogrom-cu-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sogrom-content-update .sogrom-cu-item-name { font-weight: bold; }
+
+.sogrom-content-update .sogrom-cu-keep {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.sogrom-content-update .sogrom-cu-desc summary { cursor: pointer; }
+
+.sogrom-content-update .sogrom-cu-desc-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  font-size: var(--font-size-12, 12px);
+}
+
+.sogrom-content-update .sogrom-cu-desc-cols h4 { margin: 0.25rem 0; }
+
+.sogrom-content-update .sogrom-cu-decisions li {
+  display: grid;
+  grid-template-columns: 1.2rem auto 1fr auto;
+  gap: 0.4rem;
+  align-items: baseline;
+  padding: 0.2rem 0.4rem;
+  border-left: 3px solid transparent;
+}
+
+.sogrom-content-update .sogrom-cu-decisions .is-carried i { color: var(--color-level-success, #3b8d3b); }
+.sogrom-content-update .sogrom-cu-decisions .is-partial { border-left-color: var(--color-level-warning, #c98a1b); }
+.sogrom-content-update .sogrom-cu-decisions .is-partial i { color: var(--color-level-warning, #c98a1b); }
+.sogrom-content-update .sogrom-cu-decisions .is-ask { border-left-color: var(--color-level-error, #b33a3a); }
+.sogrom-content-update .sogrom-cu-decisions .is-ask i { color: var(--color-level-error, #b33a3a); }
+.sogrom-content-update .sogrom-cu-decisions .is-default i { color: var(--color-level-info, #4a7bb3); }
+
+.sogrom-content-update .sogrom-cu-decision-title { font-weight: bold; }
+.sogrom-content-update .sogrom-cu-decision-status { text-align: right; }
+
+.sogrom-content-update .sogrom-cu-diff {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+}
+
+.sogrom-content-update .sogrom-cu-diff th,
+.sogrom-content-update .sogrom-cu-diff td {
+  padding: 0.15rem 0.4rem;
+  text-align: left;
+}
+
+.sogrom-content-update .sogrom-cu-backup {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sogrom-content-update .sogrom-cu-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sogrom-content-update .sogrom-cu-downloaded i { color: var(--color-level-success, #3b8d3b); }
+
+/* A button styled by us must reset the height Foundry's blanket button rule sets. */
+.sogrom-content-update button {
+  height: auto;
+  width: auto;
+  padding: 0.25rem 0.8rem;
+}
+
+.sogrom-content-update .sogrom-cu-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}

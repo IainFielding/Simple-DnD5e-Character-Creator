@@ -1,4 +1,4 @@
-import { getPath, setPath, statePaths } from "./fingerprint.mjs";
+import { getPath, isForeignEffect, setPath, statePaths } from "./fingerprint.mjs";
 
 /**
  * Build the refreshed copy of one item: the **definition** from the new source, the **state** from
@@ -132,19 +132,6 @@ export function refreshedItemData(oldData, sourceData, { uuid = null, keep = [] 
   return out;
 }
 
-/**
- * Whether an effect on the character's copy came from somewhere other than the item's own
- * definition, so a refresh must keep it: its origin names another document.
- * @param {object} effect
- * @param {object} itemData
- * @returns {boolean}
- */
-export function isForeignEffect(effect, itemData) {
-  const origin = effect?.origin;
-  if ( !origin ) return false;
-  const own = [itemData?._stats?.compendiumSource, itemData?._id].filter(Boolean);
-  return !own.some(o => String(origin).endsWith(o) || String(origin) === o);
-}
 
 /** A small recursive merge (b over a), standing in for `foundry.utils.mergeObject` in pure code. */
 function mergeFlags(a, b) {

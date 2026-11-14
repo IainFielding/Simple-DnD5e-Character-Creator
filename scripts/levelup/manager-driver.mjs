@@ -1784,11 +1784,20 @@ export class LevelUpDriver {
    * avoid it. It does not: the actor update is the batch's first operation, so the hook's write
    * always lands after and survives. The equivalence harness reported otherwise only because it
    * read the actor before that un-awaited write arrived. Left as the faithful port.
+   *
+   * `transform` lets a caller reshape the clone's data just before it is diffed and written. Only
+   * Update to New Content uses it: its rebuild re-grants a character's features under fresh ids, and
+   * the transform gives them back their old ids, state and kept groups (see
+   * `content-update/rebuild.mjs`). Everything after it — the partition, both hooks, the write — is
+   * the same as for a level-up.
+   * @param {object} [options]
+   * @param {(data: object) => object} [options.transform]   Takes and returns `clone.toObject()` data.
    * @returns {Promise<Actor5e>}  The updated real actor.
    */
-  async commit() {
+  async commit({ transform = null } = {}) {
     await this.#settleModifiers();
-    const updates = this.clone.toObject();
+    let updates = this.clone.toObject();
+    if ( transform ) updates = transform(updates);
     const items = updates.items;
     delete updates.items;
 

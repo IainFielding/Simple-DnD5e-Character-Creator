@@ -105,4 +105,16 @@
   <p class="hint">{{localize "sogrom-dnd5e-character-creator.levelUpOptions.creationNote"}}</p>
 </fieldset>
 
+<fieldset>
+  <legend>{{localize "sogrom-dnd5e-character-creator.levelUpOptions.maintenance"}}</legend>
+
+  <div class="form-group">
+    <label for="sogrom-lu-content">{{localize "sogrom-dnd5e-character-creator.settings.contentUpdatePlayers.name"}}</label>
+    <div class="form-fields">
+      <input id="sogrom-lu-content" type="checkbox" name="contentUpdatePlayers" {{#if contentUpdatePlayers}}checked{{/if}}>
+    </div>
+    <p class="hint">{{localize "sogrom-dnd5e-character-creator.settings.contentUpdatePlayers.hint"}}</p>
+  </div>
+</fieldset>
+
 </div>

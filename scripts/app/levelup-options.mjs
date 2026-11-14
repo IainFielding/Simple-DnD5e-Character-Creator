@@ -78,12 +78,13 @@ export class LevelUpOptionsApp extends HandlebarsApplicationMixin(ApplicationV2)
         v => t(`settings.levelUpSummary.${v}`)),
       readyModes: this.#options(SUMMARY_MODES, SETTINGS.levelUpReadyNotice,
         v => t(`settings.levelUpReadyNotice.${v}`)),
+      contentUpdatePlayers: get(SETTINGS.contentUpdatePlayers),
       buttons: [{ type: "submit", icon: "fa-solid fa-floppy-disk", label: t("levelUpOptions.save") }]
     };
   }
 
   /**
-   * Write the seven settings.
+   * Write the eight settings.
    *
    * The two select values are guarded against anything outside their known set — a hand-edited or
    * stale stored value reaching `levelUpHpMode()` or `levelUpSummaryMode()` would otherwise fall
@@ -105,5 +106,6 @@ export class LevelUpOptionsApp extends HandlebarsApplicationMixin(ApplicationV2)
       oneOf(SUMMARY_MODES, data.levelUpSummary, DEFAULTS.levelUpSummary));
     await set(SETTINGS.levelUpReadyNotice,
       oneOf(SUMMARY_MODES, data.levelUpReadyNotice, DEFAULTS.levelUpReadyNotice));
+    await set(SETTINGS.contentUpdatePlayers, !!data.contentUpdatePlayers);
   }
 }

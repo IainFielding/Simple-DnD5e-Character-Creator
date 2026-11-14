@@ -3,7 +3,8 @@ import {
   stableStringify, hashString, definitionGroups, groupHashes, changedGroups, advancementChanged,
   sourceStamp, readStamp, editedGroups, packageOfUuid, FIELD_GROUPS
 } from "../scripts/content-update/fingerprint.mjs";
-import { refreshedItemData, isForeignEffect } from "../scripts/content-update/merge.mjs";
+import { refreshedItemData } from "../scripts/content-update/merge.mjs";
+import { isForeignEffect } from "../scripts/content-update/fingerprint.mjs";
 import {
   harvestDecisions, matchDecision, matchScore, treeKey, grantedAtLevel, signature, sameIdentity, uuidTail
 } from "../scripts/content-update/answers.mjs";
@@ -268,6 +269,21 @@ describe("matchDecision", () => {
     const hit = matchDecision({ advId: "newChoice0000000", type: "ItemChoice", tree: "item:cold caster", level: 0,
       title: "", sig: new Set(["item:rayoffrost"]) }, harvestDecisions(actor), new Set());
     expect(hit?.answer.taken[0].name).toBe("Ray of Frost");
+  });
+
+  it("reads Tasha's replacement grant as a grant, so a chosen replacement carries", () => {
+    const actor = { items: [
+      { _id: "rng", type: "class", name: "Ranger", system: { identifier: "ranger", advancement: [
+        { _id: "rep", type: "TCOEReplacementGrant", level: 1,
+          configuration: { items: [{ uuid: "C.s.c.Item.naturalexplorer", optional: true }, { uuid: "C.t.o.Item.deftexplorer", optional: true }],
+            replacements: { "C.s.c.naturalexplorer": "C.t.o.Item.deftexplorer" } },
+          value: { added: { deft: "C.t.o.Item.deftexplorer" } } }
+      ] } },
+      { _id: "deft", type: "feat", name: "Deft Explorer", flags: { dnd5e: { advancementOrigin: "rng.rep" } } }
+    ] };
+    const d = harvestDecisions(actor).find(x => x.advId === "rep");
+    expect(d?.type).toBe("ItemGrant");
+    expect(d?.answer.taken.map(t => t.name)).toEqual(["Deft Explorer"]);
   });
 
   it("never matches the same recorded decision twice", () => {

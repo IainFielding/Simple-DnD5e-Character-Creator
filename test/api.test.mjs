@@ -49,7 +49,9 @@ describe("public hook registry", () => {
       preLevelUpApply: "simpleCharacterCreator.preLevelUpApply",
       levelUpApplied: "simpleCharacterCreator.levelUpApplied",
       levelUpCancelled: "simpleCharacterCreator.levelUpCancelled",
-      emberHandoff: "simpleCharacterCreator.emberHandoff"
+      emberHandoff: "simpleCharacterCreator.emberHandoff",
+      preUpdateContent: "simpleCharacterCreator.preUpdateContent",
+      contentUpdated: "simpleCharacterCreator.contentUpdated"
     });
   });
 
@@ -60,7 +62,8 @@ describe("public hook registry", () => {
   it("names every cancellable hook with a pre- prefix and nothing else", () => {
     // The prefix is how a consumer knows a return value is read, so it has to mean exactly that.
     const cancellable = [
-      HOOKS.preOpenCreator, HOOKS.preCreateCharacter, HOOKS.preLevelUpTakeover, HOOKS.preLevelUpApply
+      HOOKS.preOpenCreator, HOOKS.preCreateCharacter, HOOKS.preLevelUpTakeover, HOOKS.preLevelUpApply,
+      HOOKS.preUpdateContent
     ];
     const prefixed = Object.values(HOOKS).filter(h => /\.pre[A-Z]/.test(h));
     expect(prefixed.sort()).toEqual(cancellable.sort());

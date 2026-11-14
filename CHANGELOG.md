@@ -4,6 +4,25 @@ All notable changes to the Simple D&D Character Creator.
 
 ## 3.5.0 — dnd5e 6.1
 
+### Added
+
+- **Update to New Content.** When a content module or dnd5e itself updates, the classes, species,
+  backgrounds, spells and gear on existing characters stay on the old version until you delete them
+  and add them again, which re-asks every choice. A character with outdated content now has
+  **Update to New Content** in its sheet's ⋯ menu and in its right-click menu. It shows what will
+  change and which of your choices carry over, then updates everything at once:
+  - Items whose rules changed are updated in place. Uses spent, quantity, what's equipped and
+    prepared, and a changed name or icon stay as they were.
+  - When a class, species or background changed how it levels up (as many did in dnd5e 6.1 and the
+    Player's Handbook 3.0), the character is rebuilt with the choices you already made: hit points,
+    skills, ability increases, feats, subclass, fighting styles, invocations and so on. A choice
+    that no longer fits is left for you to make, and the repair wrench opens straight after.
+  - An item that looks edited can be kept as it is. Its description can be compared with the new
+    one first.
+  - A copy of the character is saved first. A player who can't create actors is offered a download
+    instead, and must download it or tick **Proceed without backup**.
+  The GM can stop players updating their own characters in **Level-Up Options**.
+
 ### Changed
 
 - **Ready for dnd5e 6.1.** dnd5e 6.1 shows only the content for a world's own rules edition unless

@@ -22,6 +22,7 @@ const { sweepScenarios } = await import(`./sweep.mjs${BUST}`);
 const { checkHooks } = await import(`./hooks.mjs${BUST}`);
 const deleteErrors = await import(`./delete-errors.mjs${BUST}`);
 const { checkRepair } = await import(`./repair.mjs${BUST}`);
+const { checkContentUpdate } = await import(`./content-update.mjs${BUST}`);
 const { checkQuickBuild } = await import(`./quick-build.mjs${BUST}`);
 const { checkPregens } = await import(`./pregens.mjs${BUST}`);
 const { checkBlankBuild } = await import(`./blank-build.mjs${BUST}`);
@@ -196,6 +197,7 @@ export { checkHooks };
 
 /** "Repair this level" end to end — see `in-world/repair.mjs`. */
 export { checkRepair };
+export { checkContentUpdate };
 
 /** Quick Build across every class in the world — see `in-world/quick-build.mjs`. */
 export { checkQuickBuild };
