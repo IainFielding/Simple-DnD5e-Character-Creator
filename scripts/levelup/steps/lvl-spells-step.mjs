@@ -77,6 +77,41 @@ function spellcastingItem(actorLike, classItem) {
 }
 
 /**
+ * Whether the casting item asks for its cantrips itself: a spell `ItemChoice` restricted to
+ * cantrips, on the casting item or on any feature it granted, however deep.
+ *
+ * PHB 3.0.0's Arcane Trickster is why: its Spellcasting feature carries "Choose Cantrips" (2 Wizard
+ * cantrips at 3rd, 1 more at 10th), where the earlier data had no way to pick them and we kept a
+ * fallback table instead. dnd5e tags those picks with the *feature's* identifier
+ * (`SpellConfigurationData#applySpellChanges`), not the subclass's, so the tally below never sees
+ * them and the fallback would offer the same cantrips a second time.
+ * @param {Actor5e} actorLike
+ * @param {Item5e} castItem
+ * @returns {boolean}
+ */
+function hasOwnCantripChoice(actorLike, castItem) {
+  const asksCantrips = it => Object.values(it?.advancement?.byId ?? {}).some(a => (a.type === "ItemChoice")
+    && (a.configuration?.type === "spell") && (String(a.configuration?.restriction?.level ?? "") === "0"));
+  if ( asksCantrips(castItem) ) return true;
+  // Everything the casting item granted, followed down the `advancementOrigin` chain
+  // ("<grantingItemId>.<advancementId>"): the Spellcasting feature is granted by the subclass.
+  const owners = new Set([castItem.id]);
+  let grew = true;
+  while ( grew ) {
+    grew = false;
+    for ( const it of actorLike.items ) {
+      if ( owners.has(it.id) ) continue;
+      const origin = String(it.flags?.dnd5e?.advancementOrigin ?? "").split(".")[0];
+      if ( !owners.has(origin) ) continue;
+      if ( asksCantrips(it) ) return true;
+      owners.add(it.id);
+      grew = true;
+    }
+  }
+  return false;
+}
+
+/**
  * Compute the spell capacity a level-up opens up, from an actor-like's derived data (the driver's
  * clone before commit, or the real actor after). "Add-only" this phase: the player fills up to the
  * new totals, never swaps out an existing pick.
@@ -111,7 +146,8 @@ export function computeSpellPlan(actorLike, classItem, { fromClassLevel } = {}) 
   const classLevel = classItem.system?.levels ?? actorLike.system?.details?.level ?? 1;
 
   // Capacity targets from the caster's derived data.
-  const cantripTarget = cantripsKnownAtLevel(castItem, classLevel);
+  const cantripTarget = cantripsKnownAtLevel(castItem, classLevel,
+    { ownChoice: hasOwnCantripChoice(actorLike, castItem) });
   // A known caster (the 2014 Bard, Sorcerer, Warlock, Ranger) declares no preparation formula, so
   // dnd5e derives its `preparation.max` as 0. Its count lives on its "Spells Known" scale instead,
   // and reading only the derived field left these classes gaining no spells on any level-up.

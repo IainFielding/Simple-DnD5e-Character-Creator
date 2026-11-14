@@ -179,6 +179,26 @@ function scenarioOrigins(scenario) {
 }
 
 /** advId -> advancement type across the scenario's origin documents. */
+/**
+ * Fail when a build does not hold an item the scenario exists to test — the species axis's chosen
+ * lineage. Two builds that both silently skipped the choice come out identical, so the diff alone
+ * cannot catch it. Matched by compendium source, the link a granted copy keeps to its original.
+ * @param {{uuid: string, name: string}[]|undefined} expected
+ * @param {Object<string, Actor>} actors
+ */
+function assertExpectedItems(expected, actors) {
+  if ( !expected?.length ) return;
+  const missing = [];
+  for ( const [side, actor] of Object.entries(actors) ) {
+    for ( const want of expected ) {
+      const held = actor.items.some(i => (i._stats?.compendiumSource === want.uuid)
+        || (i.flags?.core?.sourceId === want.uuid));
+      if ( !held ) missing.push(`    ${side}: ${want.name} (${want.uuid})`);
+    }
+  }
+  if ( missing.length ) throw new Error(`the build does not hold what the scenario picked:\n${missing.join("\n")}`);
+}
+
 function advancementTypes(docs) {
   const map = new Map();
   for ( const doc of docs ) {
@@ -326,6 +346,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
       .map(key => (scenario[key] ? fromUuid(scenario[key]) : null)));
     assertAnswersConsumed(scenario.answers ?? {}, consumed, advancementTypes(originDocs), report.diagnostics);
     assertBookComplete(book);
+    assertExpectedItems(scenario.expectItems, { native, creator });
     report.decisions = book.entries.map(({ askedBy, ...rest }) => ({ ...rest, askedBy: [...askedBy] }));
 
     // `render` opens each sheet in turn, for problems that only exist once something prepares an
@@ -432,8 +453,8 @@ async function getSweep(level, incremental = false, axis = "subclass") {
  * @param {string} [options.axis]   Which axis to sweep: "subclass" (default) or "species".
  */
 export async function sweepList({ level = 20, incremental = false, axis = "subclass" } = {}) {
-  const { scenarios, skipped } = await getSweep(level, incremental, axis);
-  return { level, incremental, axis, skipped, scenarios: scenarios.map(s => ({ id: s.id, name: s.name })) };
+  const { scenarios, skipped, uncovered = [] } = await getSweep(level, incremental, axis);
+  return { level, incremental, axis, skipped, uncovered, scenarios: scenarios.map(s => ({ id: s.id, name: s.name })) };
 }
 
 /**
@@ -1222,6 +1243,78 @@ export async function probeSpellChoice({ match = "conjur", to = 5, jump = false 
  * @param {object} [options]
  * @param {number} [options.level]   The level the character was created at.
  */
+/**
+ * Import an actor export into a fresh actor exactly as "Import Data" does (`importFromJSON`), and
+ * report what fails: the import's own error, then each embedded item and effect validated alone so
+ * the culprit is named. The actor is deleted afterwards.
+ * @param {{json: string}} options
+ */
+export async function probeImportActor({ json }) {
+  const data = JSON.parse(json);
+  const out = { name: data.name, import: null, items: [], effects: [], warnings: [] };
+  const origWarn = ui.notifications.warn.bind(ui.notifications);
+  const origErr = ui.notifications.error.bind(ui.notifications);
+  ui.notifications.warn = (m, o) => { out.warnings.push(`warn: ${m}`); return origWarn(m, o); };
+  ui.notifications.error = (m, o) => { out.warnings.push(`error: ${m}`); return origErr(m, o); };
+  let actor = null;
+  try {
+    actor = await Actor.implementation.create({ name: `${PREFIX}import probe`, type: data.type ?? "character" });
+    try {
+      await actor.importFromJSON(json);
+      out.import = { ok: true, name: actor.name, items: actor.items.size,
+        classes: Object.values(actor.classes ?? {}).map(c => `${c.name} ${c.system.levels}`) };
+    } catch ( err ) {
+      out.import = { ok: false, error: String(err?.message ?? err).slice(0, 3000) };
+    }
+    // Each embedded document on its own, so a failure names the item.
+    for ( const item of data.items ?? [] ) {
+      try { new Item.implementation(item, { strict: true }); } catch ( err ) {
+        out.items.push({ name: item.name, type: item.type, _id: item._id, error: String(err?.message ?? err).slice(0, 1500) });
+      }
+      for ( const eff of item.effects ?? [] ) {
+        try { new CONFIG.ActiveEffect.documentClass(eff, { strict: true }); } catch ( err ) {
+          out.effects.push({ on: item.name, name: eff.name, _id: eff._id, error: String(err?.message ?? err).slice(0, 800) });
+        }
+      }
+    }
+    for ( const eff of data.effects ?? [] ) {
+      try { new CONFIG.ActiveEffect.documentClass(eff, { strict: true }); } catch ( err ) {
+        out.effects.push({ on: "(actor)", name: eff.name, _id: eff._id, error: String(err?.message ?? err).slice(0, 800) });
+      }
+    }
+  } finally {
+    ui.notifications.warn = origWarn;
+    ui.notifications.error = origErr;
+    await actor?.delete().catch(() => {});
+  }
+  return out;
+}
+
+/**
+ * The level-up Spells step's cantrip plan for every kept actor whose name matches — read-only.
+ * Written for PHB 3.0.0's Arcane Trickster, whose cantrips moved onto a "Choose Cantrips" choice
+ * on its Spellcasting feature: `addCantrips` should be 0 once that choice is honoured, where the
+ * fallback table alone would offer the same cantrips again. Build the actor first with
+ * `--sweep --only arcane-trickster --keep`.
+ */
+export async function probeCantripPlan({ match = "Arcane Trickster" } = {}) {
+  const MODULE = "/modules/sogrom-dnd5e-character-creator/scripts";
+  const { computeSpellPlan } = await import(`${MODULE}/levelup/steps/lvl-spells-step.mjs${BUST}`);
+  const out = [];
+  for ( const actor of game.actors.filter(a => a.name.includes(match)) ) {
+    for ( const cls of actor.items.filter(i => i.type === "class") ) {
+      const plan = computeSpellPlan(actor, cls);
+      out.push({
+        actor: actor.name, class: cls.name, level: cls.system.levels,
+        sourceTag: plan.sourceTag, addCantrips: plan.addCantrips, cantripTarget: plan.cantripTarget,
+        cantrips: actor.items.filter(i => (i.type === "spell") && !i.system.level)
+          .map(i => `${i.name} [${i.system.sourceItem || "untagged"}]`)
+      });
+    }
+  }
+  return out;
+}
+
 export async function probeMagicShopStep({ level = 5 } = {}) {
   const MODULE = "/modules/sogrom-dnd5e-character-creator/scripts";
   const { lvlMagicShopStep } = await import(`${MODULE}/levelup/steps/lvl-magic-shop-step.mjs`);

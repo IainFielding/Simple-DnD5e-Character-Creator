@@ -556,6 +556,10 @@ export const DEFAULT_LEVEL1_SPELLS = {
  * Mage Hand, which the subclass grants itself with no spell configuration, so dnd5e leaves it
  * without a `subclass:trickster` tag and it never counts as one of this caster's cantrips. These
  * are the ones the player picks beside it.
+ *
+ * PHB 3.0.0 (Nov 2026) gave the Arcane Trickster a "Choose Cantrips" ItemChoice of its own, and the
+ * table is skipped for any caster whose content asks its cantrips itself (`hasOwnCantripChoice` in
+ * `lvl-spells-step.mjs`) — kept for worlds still on the earlier PHB data.
  */
 export const FALLBACK_CANTRIP_SCALES = {
   trickster: { 3: 2, 10: 3 },

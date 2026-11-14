@@ -113,6 +113,13 @@ try {
     console.log(JSON.stringify(await harness("probeMagicShopClimb", {
       match: value("probe-magic-climb") || undefined, to: Number(value("level") ?? 5)
     }), null, 2));
+  } else if ( flag("probe-import") ) {
+    // Import an actor export the way the sidebar's "Import Data" does, and report what fails.
+    const { readFileSync } = await import("node:fs");
+    const json = readFileSync(value("probe-import"), "utf8");
+    console.log(JSON.stringify(await harness("probeImportActor", { json }), null, 2));
+  } else if ( flag("probe-cantrip-plan") ) {
+    console.log(JSON.stringify(await harness("probeCantripPlan", { match: value("probe-cantrip-plan") || undefined }), null, 2));
   } else if ( flag("probe-magic-shop") ) {
     console.log(JSON.stringify(await harness("probeMagicShopStep", { level: Number(value("level") ?? 5) }), null, 2));
   } else if ( flag("probe-bookorder") ) {
@@ -444,6 +451,13 @@ async function runSweep(harness, session) {
     console.log(`skipping ${plan.skipped.length} subclass(es):`);
     for ( const s of plan.skipped ) console.log(`  ${s.subclass.padEnd(30)} ${s.reason}`);
   }
+  // A lineage no scenario picks is a coverage hole, not a skip: the run exits non-zero for it even
+  // when every scenario passes. See `sweep.mjs#speciesScenarios`.
+  const uncovered = plan.uncovered ?? [];
+  if ( uncovered.length ) {
+    console.log(`\nUNCOVERED: ${uncovered.length} lineage(s) no scenario picks — the run will fail:`);
+    for ( const l of uncovered ) console.log(`  ${`${l.name} (${l.pack})`.padEnd(50)} ${l.reason}`);
+  }
 
   let ids = plan.scenarios.map(s => s.id);
 
@@ -488,8 +502,9 @@ async function runSweep(harness, session) {
       const markers = (names.get(id)?.match(/\[[^\]]+\]/g) ?? []).join(" ");
       console.log(`${id}${markers ? `  ${markers}` : ""}`);
     }
-    console.log(`\n${ids.length} scenario(s) at level ${level}`);
-    return 0;
+    console.log(`\n${ids.length} scenario(s) at level ${level}`
+      + `${uncovered.length ? `; ${uncovered.length} lineage(s) UNCOVERED` : ""}`);
+    return uncovered.length ? 1 : 0;
   }
 
   // Without this a second unflagged run appends straight onto the first: `--resume` is the only
@@ -561,9 +576,10 @@ async function runSweep(harness, session) {
     }
   }
 
-  console.log(`\n${passed} identical, ${failed} differing, ${errored} errored (of ${ids.length})`);
+  console.log(`\n${passed} identical, ${failed} differing, ${errored} errored (of ${ids.length})`
+    + `${uncovered.length ? `, ${uncovered.length} lineage(s) UNCOVERED` : ""}`);
   console.log("group sweep-results.jsonl by difference path to triage — one cause spans many subclasses");
-  return (failed || errored) ? 1 : 0;
+  return (failed || errored || uncovered.length) ? 1 : 0;
 }
 
 /* -------------------------------------------- */

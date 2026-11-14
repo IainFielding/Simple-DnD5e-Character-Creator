@@ -10,7 +10,7 @@
  * | Axis | Varies | Holds fixed |
  * | --- | --- | --- |
  * | `subclass` (default) | every subclass installed | Human/Sage origins, points at every ASI |
- * | `species` | every 2024 species | Wizard/Evoker, Sage |
+ * | `species` | every 2024 species, and every lineage of each | Wizard/Evoker, Sage |
  * | `background` | every 2024 background | Fighter/Champion, Human — **a feat at every ASI** |
  *
  * The second and third exist because the first holds three things still that turned out to matter:
@@ -276,18 +276,38 @@ async function speciesScenarios({ level, incremental }) {
   }
 
   // The Player's Handbook module and the system's own `origins24` ship the *same* 2024 species, so
-  // an undeduped axis builds every one of them twice — 38 scenarios to test 19 species. Deduped by
-  // name, preferring `dnd5e.origins24` because that is where the subclass sweep's characterised
-  // Human comes from, so the two axes agree about what "Human" means.
-  const byName = new Map();
+  // an undeduped axis builds every one of them twice. Deduped by name, preferring `dnd5e.origins24`
+  // because that is where the subclass sweep's characterised Human comes from, so the two axes agree
+  // about what "Human" means — and the preferred copy goes first, so it claims its lineages first.
+  //
+  // Dedupe is by *species* only. A lineage is its own document per publisher (the PHB's Drow is not
+  // the SRD's Drow), so a duplicate copy still runs for any lineage its pool brings that no earlier
+  // copy covered — see `lineageScenarios`. Since PHB 3.0.0 (Nov 2026) that is how the PHB's Elves,
+  // Gnomes and Tieflings are tested at all: they stopped being separate species.
+  const preferred = new Map();
   for ( const sp of species ) {
-    const seen = byName.get(sp.name);
-    if ( !seen || ((seen.pack !== "dnd5e.origins24") && (sp.pack === "dnd5e.origins24")) ) byName.set(sp.name, sp);
+    const seen = preferred.get(sp.name);
+    if ( !seen || ((seen.pack !== "dnd5e.origins24") && (sp.pack === "dnd5e.origins24")) ) preferred.set(sp.name, sp);
   }
+  const ordered = [...preferred.values(), ...species.filter(sp => preferred.get(sp.name) !== sp)];
 
   const scenarios = [];
   const skipped = [];
-  for ( const sp of byName.values() ) {
+  const covered = new Set();   // lineage uuids some scenario picks
+  const base = (sp, extra = {}) => ({
+    generate: true,
+    incremental,
+    speciesUuid: sp.uuid,
+    backgroundUuid: ORIGINS[2024].background,
+    classUuid: axis.cls.uuid,
+    targetLevel: level,
+    abilities: { ...ABILITIES },
+    ...extra,
+    answers: { ...((axis.advId && axis.subclassUuid) ? { [axis.advId]: axis.subclassUuid } : {}), ...extra.answers }
+  });
+
+  for ( const sp of ordered ) {
+    const isPreferred = preferred.get(sp.name) === sp;
     // A 2014 species on the 2024 Wizard would reintroduce exactly the mixed-edition pairing the
     // origins split above exists to avoid, and the 2014 species are already covered as the origins
     // of every 2014-class scenario in the subclass sweep.
@@ -295,21 +315,109 @@ async function speciesScenarios({ level, incremental }) {
       skipped.push({ subclass: sp.name, uuid: sp.uuid, reason: "2014 species; the axis class is 2024" });
       continue;
     }
-    const id = `species:${slug(sp.name)}`;
-    scenarios.push({
-      id,
-      name: `Species: ${sp.name} ${level} — ${axis.cls.name}/${SPECIES_AXIS.subclass} (${sp.pack})`,
-      generate: true,
-      incremental,
-      speciesUuid: sp.uuid,
-      backgroundUuid: ORIGINS[2024].background,
-      classUuid: axis.cls.uuid,
-      targetLevel: level,
-      abilities: { ...ABILITIES },
-      answers: (axis.advId && axis.subclassUuid) ? { [axis.advId]: axis.subclassUuid } : {}
-    });
+
+    const doc = await fromUuid(sp.uuid).catch(() => null);
+    const choices = doc ? await lineageChoices(doc) : [];
+    const tag = isPreferred ? "" : `@${packageOf(sp.pack)}`;
+
+    // A same-name copy runs too: it can be different content under the same name (Heroes of the
+    // Borderlands' "Elf" is a fixed Wood Elf), and in a world that has it, it is the card the creator
+    // shows — the name dedupe there keeps the book over the SRD.
+    if ( !choices.length ) {
+      scenarios.push(base(sp, {
+        id: `species:${slug(sp.name)}${tag}`,
+        name: `Species: ${sp.name} ${level} — ${axis.cls.name}/${SPECIES_AXIS.subclass} (${sp.pack})`
+      }));
+      continue;
+    }
+
+    // One scenario per lineage option, that option picked and everything else generated. A species
+    // with two lineage-style choices gets each option of each; the other choice falls to the book.
+    let ran = 0;
+    for ( const choice of choices ) {
+      if ( !choice.options.length ) {
+        skipped.push({ subclass: `${sp.name}: ${choice.title}`, uuid: sp.uuid,
+          reason: "lineage choice has no authored pool (drop-only); the native flow cannot pick from it" });
+        continue;
+      }
+      for ( const opt of choice.options ) {
+        if ( covered.has(opt.uuid) ) continue;
+        covered.add(opt.uuid);
+        ran++;
+        scenarios.push(base(sp, {
+          id: `species:${slug(sp.name)}/${slug(opt.name)}${tag}`,
+          name: `Species: ${sp.name} (${opt.name}) ${level} — ${axis.cls.name}/${SPECIES_AXIS.subclass} (${sp.pack})`,
+          answers: { [choice.advId]: { uuids: [opt.uuid] } },
+          // Both builds must end up holding the lineage — an identical pair that both skipped the
+          // nested choice would otherwise pass. See `harness.mjs#assertExpectedItems`.
+          expectItems: [{ uuid: opt.uuid, name: opt.name }]
+        }));
+      }
+    }
+    if ( !ran && !isPreferred ) {
+      skipped.push({ subclass: `${sp.name} (${sp.pack})`, uuid: sp.uuid,
+        reason: "every lineage it offers is already covered by an earlier copy" });
+    }
   }
-  return { scenarios, skipped };
+
+  // Coverage: every 2024 lineage in the world must be picked by some scenario. One that is not —
+  // a module's lineage no species lists in its pool (the creator scans those in; the native flow
+  // only offers its pool), or one whose species is missing — fails the run rather than vanishing.
+  const uncovered = (await allLineages())
+    .filter(l => (String(l.rules) !== "2014") && !covered.has(l.uuid))
+    .map(l => ({ ...l, reason: l.prereq.length
+      ? `no installed species' lineage pool lists it (prerequisite ${l.prereq.join(", ")})`
+      : "names no species and no species' lineage pool lists it" }));
+  return { scenarios, skipped, uncovered };
+}
+
+/**
+ * The lineage-style choices a species raises, however deep: on the species itself or on a feature
+ * it grants (2024 content puts the Elf's on "Elven Lineage", the Dragonborn's on "Draconic
+ * Ancestry"). Same rule as the creator's resolver — an `ItemChoice` restricted to species features
+ * (`restriction.type === "race"`) — so the axis and the panel agree about what a lineage is.
+ * @param {Item} doc
+ * @returns {Promise<{advId: string, title: string, item: string, options: {uuid: string, name: string}[]}[]>}
+ */
+async function lineageChoices(doc, depth = 0, seen = new Set()) {
+  if ( !doc || seen.has(doc.uuid) || (depth > 3) ) return [];
+  seen.add(doc.uuid);
+  const out = [];
+  for ( const adv of Object.values(doc.advancement?.byId ?? {}) ) {
+    const cfg = adv.configuration ?? {};
+    if ( (adv.type === "ItemChoice") && (cfg.restriction?.type === "race") ) {
+      const options = [];
+      for ( const entry of Array.from(cfg.pool ?? []) ) {
+        const opt = await fromUuid(entry?.uuid ?? entry).catch(() => null);
+        if ( opt ) options.push({ uuid: opt.uuid, name: opt.name });
+      }
+      out.push({ advId: adv.id, title: adv.title || doc.name, item: doc.name, options });
+    } else if ( adv.type === "ItemGrant" ) {
+      for ( const entry of Array.from(cfg.items ?? []) ) {
+        const granted = await fromUuid(entry?.uuid ?? entry).catch(() => null);
+        out.push(...await lineageChoices(granted, depth + 1, seen));
+      }
+    }
+  }
+  return out;
+}
+
+/** Every lineage item in the world (a species feature of subtype "lineage"), sorted by uuid. */
+async function allLineages() {
+  const out = [];
+  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+    const index = await pack.getIndex({ fields: ["system.type", "system.source", "system.prerequisites"] });
+    for ( const entry of index ) {
+      if ( (entry.type !== "feat") || (entry.system?.type?.value !== "race")
+        || (entry.system?.type?.subtype !== "lineage") ) continue;
+      out.push({
+        name: entry.name, uuid: entry.uuid, pack: pack.collection,
+        rules: entry.system?.source?.rules ?? null,
+        prereq: Array.from(entry.system?.prerequisites?.items ?? [])
+      });
+    }
+  }
+  return out.sort((a, b) => a.uuid.localeCompare(b.uuid));
 }
 
 /* -------------------------------------------- */
