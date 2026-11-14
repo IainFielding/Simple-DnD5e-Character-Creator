@@ -14,6 +14,7 @@
  *   node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
  *   node run.mjs --repair                 # skipped-choice builds repaired, plus Check Character
  *   node run.mjs --content-update         # Update to New Content: no-op rebuilds + refresh in place
+ *   node run.mjs --content-update --srd   # the 3.5.0 gate: every SRD subclass, 6.0.0 fixture → installed
  *   node run.mjs --quick-build            # Quick Build every class; assert the finished character
  *   node run.mjs --quick-build --level 5  # ...and again at each higher starting rung (3, 5)
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
@@ -161,7 +162,11 @@ try {
     // "Update to New Content": rebuild against unchanged content must be a no-op, and a refresh keeps
     // id and state. See in-world/content-update.mjs.
     if ( keep ) await session.eval(() => { globalThis.__keepActors = true; });
-    const r = await harness("checkContentUpdate", { only: value("only") || null });
+    // --srd: the 3.5.0 gate instead, every SRD subclass built on the dnd5e 6.0.0 fixture and updated
+    // (at --level, default 20).
+    const r = await harness("checkContentUpdate", {
+      only: value("only") || null, srd: flag("srd"), level: Number(value("level") ?? 20)
+    });
     for ( const c of r.cases ) {
       console.log(`\n${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);
       if ( c.error ) {

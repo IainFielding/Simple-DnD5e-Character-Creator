@@ -14,8 +14,9 @@
  * for an older version) is refreshed back to its source, keeping its id, quantity and equipped state;
  * with *Keep mine* it is left alone.
  *
- * **Real old content** (PHB 2.1 → 3.0, dnd5e 6.0 → 6.1) is a separate suite: it needs the old packs
- * loaded as world compendia.
+ * **Real old content.** A character built on an old copy of a package (loaded as world compendia from a
+ * fixture, see `legacy-fixture.mjs`) is updated to the installed version. Six PHB 2.1 → 3.0 cases run
+ * with the suite; the SRD gate (`srd: true`, dnd5e 6.0 → 6.1 across every SRD subclass) runs alone.
  */
 
 const BUST = new URL(import.meta.url).search;
@@ -50,31 +51,56 @@ const settle = ms => new Promise(r => setTimeout(r, ms));
  * Run the suite.
  * @param {object} [options]
  * @param {string} [options.only]   Run only cases whose label contains this text.
+ * @param {boolean} [options.srd]   Run the SRD gate instead: every subclass the sweep builds from the
+ *                                  dnd5e system's own packs, built on the 6.0.0 fixture and updated.
+ * @param {number} [options.level]  The SRD gate's level (default 20: 6.1.0 recreated the level-19 Epic
+ *                                  Boon on new items, so a lower level misses that change).
  */
-export async function checkContentUpdate({ only = null } = {}) {
+export async function checkContentUpdate({ only = null, srd = false, level = 20 } = {}) {
   const cases = [];
   const want = label => !only || label.toLowerCase().includes(String(only).toLowerCase());
   const byLevel = new Map();
+  const scenariosAt = async lvl => {
+    if ( !byLevel.has(lvl) ) byLevel.set(lvl, (await sweepScenarios({ level: lvl, incremental: true })).scenarios);
+    return byLevel.get(lvl);
+  };
+  const fromSource = (source, s) => s.classUuid?.startsWith(`Compendium.${source.pkg}.`);
+  const legacyLabel = (source, id, lvl) => `${source.label} ${id.replace("sweep:", "")} at ${lvl}: built on the legacy package, updated to the installed one`;
+
+  if ( srd ) {
+    // The subclass decides it, not the class: a 2014 SRD class also carries every Tasha's and module
+    // subclass the sweep pairs with it, and those are other packages' updates.
+    const source = LEGACY_SOURCES.srd;
+    const subclassOf = s => Object.values(s.answers ?? {}).find(v => (typeof v === "string") && v.startsWith("Compendium."));
+    const all = (await scenariosAt(level)).filter(s => fromSource(source, s)
+      && subclassOf(s)?.startsWith(`Compendium.${source.pkg}.`));
+    if ( !all.length ) return { ok: false, cases: [{ label: "SRD gate", ok: false, error: `no ${source.pkg} scenario at level ${level}`, differences: [] }] };
+    for ( const scenario of all ) {
+      const label = legacyLabel(source, scenario.id, level);
+      if ( !want(label) || source.missing ) continue;
+      cases.push(await runLegacy(source, scenario, label));
+    }
+    return { ok: (cases.length > 0) && cases.every(c => c.ok), cases };
+  }
+
   for ( const spec of NOOP_CASES ) {
-    if ( !byLevel.has(spec.level) ) byLevel.set(spec.level, (await sweepScenarios({ level: spec.level, incremental: true })).scenarios);
-    const scenario = byLevel.get(spec.level).find(s => spec.exact ? (s.id === spec.find) : s.id.startsWith(spec.find));
+    const scenario = (await scenariosAt(spec.level)).find(s => spec.exact ? (s.id === spec.find) : s.id.startsWith(spec.find));
     const label = `rebuild is a no-op: ${spec.find.replace("sweep:", "")} at ${spec.level}`;
     if ( !want(label) ) continue;
     cases.push(scenario ? await runNoop(scenario, label) : { label, ok: false, error: `no scenario ${spec.find}`, differences: [] });
   }
   if ( want("refresh") ) cases.push(await runRefresh());
-  for ( const spec of LEGACY_CASES ) {
-    const label = `PHB ${spec.find.replace("sweep:", "")} at ${spec.level}: built on the legacy package, updated to the installed one`;
-    if ( !want(label) || legacyMissing ) continue;
-    if ( !byLevel.has(spec.level) ) byLevel.set(spec.level, (await sweepScenarios({ level: spec.level, incremental: true })).scenarios);
-    const scenario = byLevel.get(spec.level).find(s => (s.id === spec.find) && s.classUuid?.startsWith(`Compendium.${LEGACY_PKG}.`));
-    cases.push(scenario ? await runLegacy(scenario, label)
-      : { label, ok: false, error: `no ${LEGACY_PKG} scenario ${spec.find}`, differences: [] });
+  const phb = LEGACY_SOURCES.phb;
+  for ( const spec of PHB_CASES ) {
+    const label = legacyLabel(phb, spec.find, spec.level);
+    if ( !want(label) || phb.missing ) continue;
+    const scenario = (await scenariosAt(spec.level)).find(s => (s.id === spec.find) && fromSource(phb, s));
+    cases.push(scenario ? await runLegacy(phb, scenario, label)
+      : { label, ok: false, error: `no ${phb.pkg} scenario ${spec.find}`, differences: [] });
   }
-  if ( want("review window") && !legacyMissing ) {
-    if ( !byLevel.has(5) ) byLevel.set(5, (await sweepScenarios({ level: 5, incremental: true })).scenarios);
-    const scenario = byLevel.get(5).find(s => (s.id === "sweep:fighter/champion") && s.classUuid?.startsWith(`Compendium.${LEGACY_PKG}.`));
-    if ( scenario ) cases.push(await runUi(scenario));
+  if ( want("review window") && !phb.missing ) {
+    const scenario = (await scenariosAt(5)).find(s => (s.id === "sweep:fighter/champion") && fromSource(phb, s));
+    if ( scenario ) cases.push(await runUi(phb, scenario));
   }
   return { ok: cases.every(c => c.ok), cases };
 }
@@ -217,11 +243,24 @@ async function runRefresh() {
 /*  Real old content                             */
 /* -------------------------------------------- */
 
-/** The package whose legacy copy the fixture holds (see legacy-fixture.mjs). */
-const LEGACY_PKG = "dnd-players-handbook";
+/**
+ * The packages with a legacy fixture (see legacy-fixture.mjs). `make` is the command that writes it;
+ * `missing` is set by a run that found no fixture, so the rest of that source's cases are skipped.
+ */
+const LEGACY_SOURCES = {
+  phb: {
+    pkg: "dnd-players-handbook", label: "PHB",
+    make: "node legacy-fixture.mjs H:/Code/DO-NOT-USE/dnd-players-handbook classes feats origins spells equipment"
+  },
+  srd: {
+    pkg: "dnd5e", label: "SRD",
+    make: "node legacy-fixture.mjs H:/Code/dnd5e-release-6.0.0 classes24 origins24 feats24 spells24 equipment24 "
+      + "classes subclasses classfeatures races backgrounds spells items"
+  }
+};
 
 /** PHB classes built on the legacy package and updated to the installed version. */
-const LEGACY_CASES = [
+const PHB_CASES = [
   { find: "sweep:fighter/champion", level: 5 },
   { find: "sweep:wizard/conjurer", level: 6 },
   { find: "sweep:rogue/arcane-trickster", level: 10 },
@@ -230,18 +269,14 @@ const LEGACY_CASES = [
   { find: "sweep:ranger/hunter", level: 6 }
 ];
 
-/** Set by a run that found no fixture, so the remaining legacy cases are skipped. */
-let legacyMissing = false;
-
-/** World pack name for a legacy pack. */
-const legacyPack = pack => `legacy-${LEGACY_PKG}-${pack}`;
-
 /**
- * Import the fixture into world compendia once. Returns the package version it holds, or null when
- * there is no fixture (run `node legacy-fixture.mjs` first).
+ * Import a source's fixture into world compendia once. Returns the fixture's package version and pack
+ * names, or null when there is no fixture (run the source's `make` command first).
+ * @returns {Promise<{version: string, packs: string[]}|null>}
  */
-async function ensureLegacyPacks() {
-  const url = `/modules/sogrom-dnd5e-character-creator/test-e2e/fixtures/legacy-${LEGACY_PKG}.json`;
+async function ensureLegacyPacks(source) {
+  if ( source.loaded ) return source.loaded;
+  const url = `/modules/sogrom-dnd5e-character-creator/test-e2e/fixtures/legacy-${source.pkg}.json`;
   const res = await fetch(url);
   if ( !res.ok ) return null;
   const fixture = await res.json();
@@ -249,7 +284,10 @@ async function ensureLegacyPacks() {
   for ( const def of Object.values(fixture.packs) ) {
     const items = def.documents.filter(d => !String(d._key ?? "").startsWith("!folders"));
     let pack = game.packs.get(`world.${def.name}`);
-    if ( !pack ) pack = await CompendiumCollection.createCompendium({ type: "Item", label: def.label, name: def.name, package: "world" });
+    // The pack flags carry dnd5e's `sourceBook`, which fills in each item's `source.book`.
+    if ( !pack ) pack = await CompendiumCollection.createCompendium({
+      type: "Item", label: def.label, name: def.name, package: "world", flags: def.flags ?? {}
+    });
     const index = await pack.getIndex();
     if ( index.size >= items.length ) continue;
     const have = new Set(index.map(e => e._id));
@@ -263,15 +301,19 @@ async function ensureLegacyPacks() {
       await Item.implementation.createDocuments(todo.slice(i, i + 100), { pack: pack.collection, keepId: true });
     }
   }
-  return fixture.version;
+  source.loaded = { version: fixture.version, packs: Object.keys(fixture.packs) };
+  return source.loaded;
 }
 
-/** Rewrite every uuid between the installed package and its legacy world copies. */
-function swapPackage(value, toLegacy) {
+/**
+ * Rewrite every uuid between the installed package and its legacy world copies, for the packs the
+ * fixture holds. The trailing dot keeps `classes` from matching `classes24`.
+ */
+function swapPackage(source, value, toLegacy) {
   let text = JSON.stringify(value);
-  for ( const pack of ["classes", "feats", "origins", "spells", "equipment"] ) {
-    const installed = `Compendium.${LEGACY_PKG}.${pack}.`;
-    const legacy = `Compendium.world.${legacyPack(pack)}.`;
+  for ( const pack of source.loaded.packs ) {
+    const installed = `Compendium.${source.pkg}.${pack}.`;
+    const legacy = `Compendium.world.legacy-${source.pkg}-${pack}.`;
     text = toLegacy ? text.split(installed).join(legacy) : text.split(legacy).join(installed);
   }
   return JSON.parse(text);
@@ -297,17 +339,21 @@ function vitals(actor) {
  * maximum, proficient skills, level and subclass. Every decision the review could not carry is
  * printed, so a choice new in this version (expected) can be told from a lost one.
  */
-async function runLegacy(scenario, label) {
+async function runLegacy(source, scenario, label) {
   const out = { label, ok: false, error: null, differences: [], notes: [] };
   let legacyActor = null;
   let actor = null;
   const fail = (path, before, after) => out.differences.push({ path, native: before, creator: after });
   try {
-    const built = await buildLegacyCharacter(scenario, label);
+    const built = await buildLegacyCharacter(source, scenario, label);
     ({ legacyActor, actor } = built);
-    out.notes.push(`legacy ${LEGACY_PKG} ${built.version}`);
+    out.notes.push(`legacy ${source.pkg} ${built.version}`);
     const before = vitals(actor);
     const idsBefore = new Set(actor.items.map(i => i.id));
+    // What the old build itself left unanswered. The update must not be blamed for these, and must not
+    // add to them beyond what its review flags.
+    const gapsBefore = new Set(unansweredOf(actor));
+    for ( const g of gapsBefore ) out.notes.push(`unanswered before the update: ${g}`);
 
     const scan = await scanActor(actor);
     out.notes.push(`scan: ${JSON.stringify(scan.counts)}`);
@@ -344,9 +390,9 @@ async function runLegacy(scenario, label) {
     }
     const kept = [...idsBefore].filter(id => actor.items.has(id)).length;
     out.notes.push(`item ids kept: ${kept} of ${idsBefore.size}`);
-    const gaps = repairTargets(actor).flatMap(t => t.levels.map(g => `${t.classItem.name} ${g.level}: ${g.titles.join(", ")}`));
-    if ( gaps.length > asked.length ) for ( const g of gaps ) fail("unanswered", "flagged on the review", g);
-    else for ( const g of gaps ) out.notes.push(`left for the wrench: ${g}`);
+    const fresh = unansweredOf(actor).filter(g => !gapsBefore.has(g));
+    if ( fresh.length > asked.length ) for ( const g of fresh ) fail("unanswered", "flagged on the review", g);
+    else for ( const g of fresh ) out.notes.push(`left for the wrench: ${g}`);
     out.ok = !out.differences.length;
   } catch ( err ) {
     out.error = `${err.message}\n${err.stack ?? ""}`;
@@ -355,6 +401,11 @@ async function runLegacy(scenario, label) {
     if ( actor && !globalThis.__keepActors ) await actor.delete().catch(() => {});
   }
   return out;
+}
+
+/** Every class level the repair wrench would offer, as "Class level: titles". */
+function unansweredOf(actor) {
+  return repairTargets(actor).flatMap(t => t.levels.map(g => `${t.classItem.name} ${g.level}: ${g.titles.join(", ")}`));
 }
 
 /** The first path at which two values differ, with both sides, for a diagnostic note. */
@@ -387,15 +438,16 @@ function dupIdsOf(items) {
  * same items, its uuids naming the installed package, no source stamps.
  * @returns {Promise<{legacyActor: Actor5e, actor: Actor5e, version: string}>}   Both must be deleted.
  */
-async function buildLegacyCharacter(scenario, label) {
-  const version = await ensureLegacyPacks();
-  if ( !version ) {
-    legacyMissing = true;
-    throw new Error(`no fixture: run "node legacy-fixture.mjs H:/Code/DO-NOT-USE/${LEGACY_PKG} classes feats origins spells equipment"`);
+async function buildLegacyCharacter(source, scenario, label) {
+  const loaded = await ensureLegacyPacks(source);
+  if ( !loaded ) {
+    source.missing = true;
+    throw new Error(`no ${source.pkg} fixture: run "${source.make}" in test-e2e`);
   }
+  const { version } = loaded;
   // The scenario on the legacy copies. The subclass decision is keyed by the legacy class's own
   // Subclass advancement id, in case it differs from the installed class's.
-  const legacy = swapPackage(scenario, true);
+  const legacy = swapPackage(source, scenario, true);
   const legacyClass = await fromUuid(legacy.classUuid);
   if ( !legacyClass ) throw new Error(`the legacy package has no ${legacy.classUuid}`);
   const subAdv = Object.values(legacyClass.advancement?.byId ?? {}).find(a => a.type === "Subclass")?.id;
@@ -407,7 +459,7 @@ async function buildLegacyCharacter(scenario, label) {
   await settle(800);
 
   // As if built before the update: the same character, its uuids naming the installed package.
-  const data = swapPackage(legacyActor.toObject(), false);
+  const data = swapPackage(source, legacyActor.toObject(), false);
   delete data._id;
   // A character from before this feature carries no source stamps. (Left on, they would also be
   // wrong here: the uuid rewrite above changes the very definitions they hashed.)
@@ -428,7 +480,7 @@ async function buildLegacyCharacter(scenario, label) {
  * Update button is locked until "Proceed without backup" is ticked; with it, Update makes the backup
  * copy, writes the character, posts the chat note and closes, and nothing is left out of date.
  */
-async function runUi(scenario) {
+async function runUi(source, scenario) {
   const out = { label: "the review window: entry point, lists, backup gate, Update", ok: false, error: null,
     differences: [], notes: [] };
   const fail = (path, expected, got) => out.differences.push({ path, native: expected, creator: got });
@@ -438,7 +490,7 @@ async function runUi(scenario) {
   const realCan = game.user.can.bind(game.user);
   try {
     const { openContentUpdate, updateAvailable } = await import(`${MODULE}/content-update/update-app.mjs`);
-    ({ legacyActor, actor } = await buildLegacyCharacter(scenario, "ui"));
+    ({ legacyActor, actor } = await buildLegacyCharacter(source, scenario, "ui"));
 
     // The entry point: the first ask starts the scan and says no; once it lands, yes.
     let ready = false;
