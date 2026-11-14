@@ -73,7 +73,10 @@ export function itemIdentity(itemData) {
     uuid: itemData._stats?.compendiumSource ?? itemData.flags?.dnd5e?.sourceId ?? null,
     type: itemData.type ?? null,
     identifier: itemData.system?.identifier ?? null,
-    name: itemData.name ?? null
+    name: itemData.name ?? null,
+    kind: itemData.system?.type?.value ?? null,
+    subtype: itemData.system?.type?.subtype ?? null,
+    rules: itemData.system?.source?.rules ?? null
   };
 }
 
@@ -281,11 +284,20 @@ export function harvestDecisions(actorData) {
             out.push({ ...base(adv), key: `${item._id}.${adv._id}.${l}`, level: effLevel(l),
               answer: { picks: perLevel.get(l), ability: value.ability ?? null } });
           }
+          // A spell choice whose casting ability was chosen though no spell was: the ability still carries.
+          if ( !levels.some(l => perLevel.get(l).length) && value.ability
+            && (Array.from(adv.configuration?.spell?.ability ?? []).length > 1) ) {
+            const first = Object.keys(adv.configuration?.choices ?? {}).map(Number).sort((a, b) => a - b)[0] ?? 0;
+            out.push({ ...base(adv), key: `${item._id}.${adv._id}.ability`, level: effLevel(first),
+              answer: { picks: [], ability: value.ability } });
+          }
           break;
         }
         case "ItemGrant": {
           const replacements = adv.configuration?.replacements;
-          const optional = Array.from(adv.configuration?.items ?? []).some(i => i?.optional)
+          // Tasha's optional class features mark the whole grant optional; its replacements mark items.
+          const optional = !!adv.configuration?.optional
+            || Array.from(adv.configuration?.items ?? []).some(i => i?.optional)
             || !!(replacements && Object.keys(replacements).length);
           const ability = value.ability ?? null;
           const abilityChoice = (Array.from(adv.configuration?.spell?.ability ?? []).length > 1);

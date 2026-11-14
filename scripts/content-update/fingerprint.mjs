@@ -178,14 +178,34 @@ export function statePaths(itemData) {
 /* -------------------------------------------- */
 
 /** Activities without their per-character usage. */
-function activityDefinition(activities) {
+function activityDefinition(activities, itemData) {
+  const granted = isGrantedSpell(itemData);
   const out = {};
   for ( const [id, act] of Object.entries(plain(activities) ?? {}) ) {
+    if ( granted && (act?.type === "forward") ) continue;
     const a = { ...act };
     if ( a.uses ) { a.uses = { ...a.uses }; delete a.uses.spent; }
+    if ( granted && a.consumption?.targets ) {
+      a.consumption = { ...a.consumption, targets: a.consumption.targets.filter(t => !isGrantUsesTarget(t)) };
+    }
     out[id] = a;
   }
   return out;
+}
+
+/**
+ * A spell an advancement granted. dnd5e's spell configuration writes onto such a copy (`applySpellChanges`):
+ * a limited-use grant adds a "free casting" forward activity, or an item-uses consumption target on the
+ * spell's own activity. Those are the grant's, not the spell's definition.
+ * @param {object} itemData
+ */
+export function isGrantedSpell(itemData) {
+  return (itemData?.type === "spell") && !!itemData?.flags?.dnd5e?.advancementOrigin;
+}
+
+/** The consumption target a limited-use spell grant adds: the spell's own uses, one at a time. */
+export function isGrantUsesTarget(target) {
+  return (target?.type === "itemUses") && !target?.target;
 }
 
 /**
@@ -197,6 +217,8 @@ function activityDefinition(activities) {
  * @returns {boolean}
  */
 export function isForeignEffect(effect, itemData) {
+  // Added by another item's advancement (dnd5e's ModifyItem marks its copies both ways).
+  if ( effect?.flags?.dnd5e?.advancementOrigin || effect?.system?.origin?.item ) return true;
   const origin = effect?.origin;
   if ( !origin ) return false;
   const own = [itemData?._stats?.compendiumSource, itemData?._id].filter(Boolean);
@@ -236,7 +258,7 @@ export function definitionGroups(itemData) {
     name: data.name ?? "",
     img: data.img ?? "",
     description: system.description ?? null,
-    activities: activityDefinition(system.activities),
+    activities: activityDefinition(system.activities, data),
     uses: system.uses ?? null,
     damage: system.damage ?? null,
     effects: effectDefinition(data.effects, data),
@@ -267,6 +289,12 @@ export function groupHashes(itemData) {
  * @returns {string[]}
  */
 export function changedGroups(a, b) {
+  // dnd5e fills an empty identifier from the name when an item is created, so a compendium entry with
+  // none and its copy with one are the same definition.
+  if ( !a?.system?.identifier !== !b?.system?.identifier ) {
+    a = { ...a, system: { ...a?.system, identifier: "" } };
+    b = { ...b, system: { ...b?.system, identifier: "" } };
+  }
   const ga = definitionGroups(a);
   const gb = definitionGroups(b);
   return FIELD_GROUPS.filter(k => ga[k] !== gb[k]);

@@ -124,7 +124,7 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
 
     const statusIcon = { carried: "fa-circle-check", partial: "fa-circle-half-stroke", ask: "fa-circle-question",
       default: "fa-circle-info" };
-    const decisions = (this.#rehearsal?.decisions ?? []).map(d => ({
+    const decisions = (this.#rehearsal?.decisions ?? []).filter(d => d.status !== "none").map(d => ({
       ...d,
       icon: statusIcon[d.status] ?? "fa-circle",
       statusLabel: t(`contentUpdate.status.${d.status}`),

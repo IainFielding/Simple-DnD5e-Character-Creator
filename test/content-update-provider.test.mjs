@@ -101,6 +101,32 @@ describe("UpdateAnswerProvider", () => {
     expect(provider.choiceUuids(rec)).toEqual(["Compendium.phb.feats.Item.newDefense00000"]);
   });
 
+  it("takes a pick outside a short pool when the choice lets the player browse for anything it allows", async () => {
+    // PHB 3.0's Ranger Fighting Style: one style in the pool, drops allowed, restricted to fighting styles.
+    docs.set("Compendium.phb.feats.Item.archery000000000",
+      { _id: "archery000000000", uuid: "Compendium.phb.feats.Item.archery000000000", type: "feat", name: "Archery",
+        system: { identifier: "archery", type: { value: "feat", subtype: "fightingStyle" } } });
+    docs.set("Compendium.phb.feats.Item.alert00000000000",
+      { _id: "alert00000000000", uuid: "Compendium.phb.feats.Item.alert00000000000", type: "feat", name: "Alert",
+        system: { identifier: "alert", type: { value: "feat", subtype: "origin" } } });
+    const old = structuredClone(OLD);
+    old.items[0].system.advancement[1].value.added = { 1: { oldDef: "Compendium.phb.feats.Item.archery000000000" } };
+    const tree = newTree();
+    const config = subtype => ({ id: "EmTANp6x6GfXFTmU", type: "ItemChoice", title: "Fighting Style",
+      configuration: { choices: { 0: { count: 1 } }, allowDrops: true, pool: [{ uuid: "Compendium.phb.feats.Item.druidic000000000" }],
+        restriction: { type: "feat", subtype } } });
+    const ok = record(tree.style, config("fightingStyle"), 0);
+    let provider = new UpdateAnswerProvider(harvestDecisions(old));
+    await provider.warm(stubDriver(tree, { choice: [ok] }));
+    expect(provider.choiceUuids(ok)).toEqual(["Compendium.phb.feats.Item.archery000000000"]);
+
+    // A restriction the pick does not meet keeps it out.
+    const no = record(tree.style, config("origin"), 0);
+    provider = new UpdateAnswerProvider(harvestDecisions(old));
+    await provider.warm(stubDriver(tree, { choice: [no] }));
+    expect(provider.choiceUuids(no)).toEqual([]);
+  });
+
   it("answers hit points exactly, and takes the average for a level that was never recorded", async () => {
     const tree = newTree();
     const two = record(tree.cls, { id: "hp", type: "HitPoints" }, 2);

@@ -99,7 +99,7 @@ export async function resolveSource(itemData, { cache = new Map() } = {}) {
  * @param {string|null} homePack
  * @returns {Promise<{doc: Item5e, uuid: string, how: string}|null>}
  */
-async function findByIdentity(itemData, homePack) {
+export async function findByIdentity(itemData, homePack) {
   const enabled = getEnabledPacks();
   const packs = [];
   const home = homePack ? game.packs.get(homePack) : null;
@@ -163,6 +163,12 @@ export async function scanActor(actor) {
   const entries = [];
   for ( const item of actor.items ) {
     const data = item.toObject();
+    // A spell dnd5e keeps as a cache of another item's Cast activity is dnd5e's to maintain.
+    if ( data.flags?.dnd5e?.cachedFor ) {
+      entries.push({ item, how: "cached", source: null, sourceUuid: null, changed: [], edited: null,
+        customised: false, keepDefault: false, fromVersion: null, toVersion: null, tier: "same" });
+      continue;
+    }
     const { doc, uuid, how } = await resolveSource(data, { cache });
     const stamp = readStamp(data, MODULE_ID);
     const base = {

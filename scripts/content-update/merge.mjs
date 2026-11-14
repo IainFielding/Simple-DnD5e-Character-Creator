@@ -1,4 +1,4 @@
-import { getPath, isForeignEffect, setPath, statePaths } from "./fingerprint.mjs";
+import { getPath, isForeignEffect, isGrantUsesTarget, isGrantedSpell, setPath, statePaths } from "./fingerprint.mjs";
 
 /**
  * Build the refreshed copy of one item: the **definition** from the new source, the **state** from
@@ -49,9 +49,11 @@ const GROUP_PATHS = {
  * @param {object} [options]
  * @param {string} [options.uuid]       The new source's uuid, recorded as `_stats.compendiumSource`.
  * @param {string[]} [options.keep]     Field groups to keep from the old copy ("Keep mine").
+ * @param {boolean} [options.rebuilt]   `sourceData` is the copy a rebuild's walk granted, whose
+ *   advancements have already re-applied what they add to other items.
  * @returns {object}   Item data ready for `updateSource`/`update`, with the old `_id`.
  */
-export function refreshedItemData(oldData, sourceData, { uuid = null, keep = [] } = {}) {
+export function refreshedItemData(oldData, sourceData, { uuid = null, keep = [], rebuilt = false } = {}) {
   const out = copy(sourceData) ?? {};
 
   // Document identity and bookkeeping are the character's.
@@ -73,6 +75,24 @@ export function refreshedItemData(oldData, sourceData, { uuid = null, keep = [] 
   for ( const path of statePaths(oldData) ) {
     const value = getPath(oldData, path);
     if ( value !== undefined ) setPath(out, path, copy(value));
+  }
+
+  // An identifier dnd5e filled in when the copy was created (the source has none) stays.
+  if ( !out.system.identifier && oldData.system?.identifier ) out.system.identifier = oldData.system.identifier;
+
+  // A granted spell keeps what its grant wrote onto its activities: a "free casting" forward activity,
+  // and the spell's own uses as a consumption target.
+  if ( isGrantedSpell(oldData) ) {
+    out.system.activities ??= {};
+    for ( const [id, act] of Object.entries(oldData.system?.activities ?? {}) ) {
+      if ( (act?.type === "forward") && !out.system.activities[id] ) out.system.activities[id] = copy(act);
+      const now = out.system.activities[id];
+      const extra = (act?.consumption?.targets ?? []).filter(isGrantUsesTarget);
+      if ( now && extra.length && !(now.consumption?.targets ?? []).some(isGrantUsesTarget) ) {
+        now.consumption ??= {};
+        now.consumption.targets = [...(now.consumption.targets ?? []), ...copy(extra)];
+      }
+    }
   }
 
   // Per-activity usage, matched by activity id.
@@ -107,7 +127,11 @@ export function refreshedItemData(oldData, sourceData, { uuid = null, keep = [] 
   const newIds = new Set(out.effects.map(e => e._id));
   for ( const e of oldData.effects ?? [] ) {
     if ( newIds.has(e._id) ) continue;
-    if ( isForeignEffect(e, oldData) ) out.effects.push(copy(e));
+    if ( !isForeignEffect(e, oldData) ) continue;
+    // An effect another advancement added is added again by a rebuild's walk; carrying it as well
+    // would leave two.
+    if ( rebuilt && e.flags?.dnd5e?.advancementOrigin ) continue;
+    out.effects.push(copy(e));
   }
 
   // Groups the player chose to keep.

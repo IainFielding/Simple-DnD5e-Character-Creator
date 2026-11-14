@@ -174,9 +174,12 @@ export async function rehearse(actor, scan, { keep = new Map() } = {}) {
     data._id = foundry.utils.randomID();
     data._stats = { ...(data._stats ?? {}), compendiumSource: entry?.sourceUuid ?? old._stats?.compendiumSource ?? null };
     // A kept item still carries what its advancements recorded the first time round; the walk records
-    // them afresh, so they start empty.
-    const advs = data.system?.advancement;
-    for ( const a of (Array.isArray(advs) ? advs : Object.values(advs ?? {})) ) delete a.value;
+    // them afresh, so they start empty. A source copy arrives with the pack's own defaults (an ASI's
+    // `value.type`), exactly as the native manager stages it, and keeps them.
+    if ( !useSource ) {
+      const advs = data.system?.advancement;
+      for ( const a of (Array.isArray(advs) ? advs : Object.values(advs ?? {})) ) delete a.value;
+    }
     if ( data.type === "class" ) data.system.levels = 0;
     delete data.flags?.dnd5e?.advancementOrigin;
     newIds.set(old._id, data._id);
@@ -277,12 +280,15 @@ function reconcileItem(item, { oldById, entries, keeps, rebuiltIds }) {
   // takes its state and any kept groups from the old copy.
   if ( rebuiltIds.has(item._id) ) {
     const keep = kept ? FIELD_GROUPS.filter(g => g !== "advancement") : ALWAYS_KEPT;
-    const merged = refreshedItemData(old, item, { uuid: item._stats?.compendiumSource, keep });
+    const merged = refreshedItemData(old, item, { uuid: item._stats?.compendiumSource, keep, rebuilt: true });
     // What the walk recorded wins over the old records: the answers were replayed into the new tree,
     // under (possibly) new advancement ids and new grant links.
     merged.system.advancement = copy(item.system?.advancement);
-    merged.flags = { ...(merged.flags ?? {}), dnd5e: { ...(old.flags?.dnd5e ?? {}), ...(item.flags?.dnd5e ?? {}) } };
-    if ( !item.flags?.dnd5e?.advancementOrigin ) delete merged.flags.dnd5e.advancementOrigin;
+    const dnd5eFlags = { ...(old.flags?.dnd5e ?? {}), ...(item.flags?.dnd5e ?? {}) };
+    if ( !item.flags?.dnd5e?.advancementOrigin ) delete dnd5eFlags.advancementOrigin;
+    merged.flags = { ...(merged.flags ?? {}) };
+    if ( Object.keys(dnd5eFlags).length || ("dnd5e" in (old.flags ?? {})) ) merged.flags.dnd5e = dnd5eFlags;
+    else delete merged.flags.dnd5e;
     if ( item.type === "class" ) merged.system.levels = item.system?.levels;
     stamp(merged, item);
     return merged;

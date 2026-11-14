@@ -1,4 +1,5 @@
 import { log } from "../config.mjs";
+import { findByIdentity } from "./scan.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { withItemSegment } from "../data/advancement-util.mjs";
 import {
@@ -31,6 +32,9 @@ export class UpdateAnswerProvider {
 
   /** record → report line. */
   #report = new Map();
+
+  /** `tree|advId|level` → the decision matched to it, so a record made afresh for it reuses it. */
+  #slots = new Map();
 
   /** uuid → identity of the document behind it (or null), shared across warm passes. */
   #docs = new Map();
@@ -75,6 +79,7 @@ export class UpdateAnswerProvider {
     this.#driver = driver;
     const clone = driver.clone;
     const getItem = id => clone.items.get(id)?.toObject();
+    const fresh = [];
     for ( const [kind, rec] of UpdateAnswerProvider.records(driver) ) {
       if ( this.#report.has(rec) ) continue;
       const adv = rec.advancement;
@@ -87,14 +92,49 @@ export class UpdateAnswerProvider {
         advId: adv.id, type, tree: treeKey(itemData, getItem), level,
         title: normTitle(adv.title ?? adv.name), sig: signature({ type, configuration: adv.configuration })
       };
-      // A grant's ability picker and an optional grant are two records for one advancement; both
-      // read the same recorded answer, so only the first may consume it.
-      const shared = this.#sharedDecision(rec);
-      const decision = shared ?? matchDecision(wanted, this.#decisions, this.#used);
+      fresh.push({ kind, rec, adv, item, type, level, wanted, slot: `${wanted.tree}|${adv.id}|${level}` });
+    }
+
+    // Exact advancement ids first, across every new record, then everything else. Matching in record
+    // order let a same-titled decision at the same level take an answer that belonged, by id, to a
+    // record further down the list.
+    const byId = d => fresh.find(f => !f.decision && (f.wanted.advId === d.advId) && (f.wanted.tree === d.tree)
+      && ((f.wanted.level === d.level) || (f.type === "HitPoints")));
+    for ( const f of fresh ) f.decision = this.#slots.get(f.slot) ?? null;
+    for ( const d of this.#decisions ) {
+      if ( this.#used.has(d.key) ) continue;
+      const f = byId(d);
+      if ( f && (f.type !== "HitPoints") ) { f.decision = d; this.#used.add(d.key); }
+    }
+    // Two records on one advancement and level (a spell choice and its casting-ability picker) share it.
+    const share = () => {
+      for ( const f of fresh ) f.decision ??= fresh.find(o => (o !== f) && (o.slot === f.slot) && o.decision)?.decision ?? null;
+    };
+    share();
+    for ( const f of fresh ) f.decision ??= matchDecision(f.wanted, this.#decisions, this.#used);
+    share();
+
+    for ( const { kind, rec, adv, item, type, level, wanted, slot, decision } of fresh ) {
       const line = { kind, title: adv.title || adv.name || type, level, host: item.name, status: "ask", detail: "" };
+      // A record the driver made afresh for a decision already seen (a feature re-granted between
+      // passes, or a grant's ability picker beside its own choice) replaces the earlier line.
+      for ( const [other, l] of this.#report ) {
+        if ( (other !== rec) && (other._contentUpdateSlot === slot) && (l.kind === kind) ) this.#report.delete(other);
+      }
+      rec._contentUpdateSlot = slot;
       this.#report.set(rec, line);
-      if ( !decision ) continue;
-      rec._contentUpdateDecision = decision;
+      // A tier that only offers to swap an earlier pick owes nothing: not a decision to carry.
+      if ( (kind === "choice") && !Number(adv.configuration?.choices?.[rec.level]?.count) ) {
+        line.status = "none";
+        continue;
+      }
+      if ( !decision ) {
+        line.candidates = this.#decisions.filter(d => (d.type === type) && !this.#used.has(d.key))
+          .map(d => `${d.hostName}/${d.title || d.advId}@${d.level} [${d.tree}]`).slice(0, 6);
+        line.wanted = `${wanted.tree} @${wanted.level} id ${wanted.advId}`;
+        continue;
+      }
+      this.#slots.set(slot, decision);
       try {
         await this.#resolve(kind, rec, decision, line);
       } catch ( err ) {
@@ -102,15 +142,6 @@ export class UpdateAnswerProvider {
         line.status = "ask";
       }
     }
-  }
-
-  /** The decision already matched for another record on the same advancement and level. */
-  #sharedDecision(rec) {
-    for ( const [other] of this.#report ) {
-      if ( (other !== rec) && (other.advancement === rec.advancement) && (other.level === rec.level)
-        && other._contentUpdateDecision ) return other._contentUpdateDecision;
-    }
-    return null;
   }
 
   /** The identity behind a uuid, cached. */
@@ -135,12 +166,13 @@ export class UpdateAnswerProvider {
    * @param {string[]} pool        The new advancement's pool (may be empty: a browse-only choice).
    * @returns {Promise<string|null>}
    */
-  async #resolvePick(pick, pool) {
+  async #resolvePick(pick, pool, adv = null) {
     const poolSet = new Set(pool.map(withItemSegment));
+    const inPool = ident => poolSet.has(withItemSegment(ident.uuid)) || pool.some(p => uuidTail(p) === uuidTail(ident.uuid));
+    const browsable = UpdateAnswerProvider.#browsable(adv);
     if ( pick.uuid ) {
       const direct = await this.#identityOf(pick.uuid);
-      if ( direct && (!pool.length || poolSet.has(withItemSegment(direct.uuid))
-        || pool.some(p => uuidTail(p) === uuidTail(direct.uuid))) ) {
+      if ( direct && (!pool.length || inPool(direct) || browsable?.(direct)) ) {
         // Prefer the pool's own spelling of the uuid when it lists the same document.
         return pool.find(p => uuidTail(p) === uuidTail(direct.uuid)) ?? direct.uuid;
       }
@@ -149,7 +181,36 @@ export class UpdateAnswerProvider {
       const ident = await this.#identityOf(uuid);
       if ( ident && sameIdentity(pick, ident) ) return uuid;
     }
+    // A choice that also lets the player browse for anything its restriction allows (PHB 3.0's
+    // Fighting Style lists one style and allows the rest): find the pick again by identity — it may
+    // have moved to another pack under another id — and take it if the restriction admits it.
+    if ( browsable && pick.name ) {
+      const found = await findByIdentity({ type: pick.type ?? "feat", name: pick.name,
+        system: { identifier: pick.identifier, source: { rules: pick.rules } } }, null);
+      const ident = found?.doc ? { ...itemIdentity(found.doc.toObject()), uuid: found.doc.uuid } : null;
+      if ( ident && browsable(ident) ) return ident.uuid;
+    }
     return null;
+  }
+
+  /**
+   * For a choice that accepts anything its restriction allows (`allowDrops` with a restriction, or an
+   * empty pool), a test of whether a document qualifies; null for a fixed list.
+   * @param {Advancement|null} adv
+   * @returns {((ident: object) => boolean)|null}
+   */
+  static #browsable(adv) {
+    const cfg = adv?.configuration;
+    if ( !cfg ) return null;
+    const pool = Array.from(cfg.pool ?? []);
+    const restriction = cfg.restriction ?? {};
+    if ( pool.length && !cfg.allowDrops ) return null;
+    return ident => {
+      if ( cfg.type && ident.type && (ident.type !== cfg.type) ) return false;
+      if ( restriction.type && ident.kind && (ident.kind !== restriction.type) ) return false;
+      if ( restriction.subtype && ident.subtype && (ident.subtype !== restriction.subtype) ) return false;
+      return true;
+    };
   }
 
   /** Resolve one matched decision into the answer the accessor will return. */
@@ -234,7 +295,7 @@ export class UpdateAnswerProvider {
         const uuids = [];
         for ( const pick of picks ) {
           if ( uuids.length >= count ) break;
-          const uuid = await this.#resolvePick(pick, pool);
+          const uuid = await this.#resolvePick(pick, pool, adv);
           if ( uuid && !uuids.includes(uuid) ) uuids.push(uuid);
         }
         this.#answers.set(rec, uuids);

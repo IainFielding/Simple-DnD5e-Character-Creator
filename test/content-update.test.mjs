@@ -87,6 +87,34 @@ describe("fingerprint", () => {
     expect(advancementChanged(cls({}), moved)).toBe(true);
   });
 
+  it("ignores what a limited-use spell grant writes onto the spell's activities", () => {
+    const spell = { _id: "s", name: "Contact Other Plane", type: "spell", system: { activities: {
+      cast0000000000000: { type: "cast", consumption: { spellSlot: true, targets: [] } } } } };
+    const granted = structuredClone(spell);
+    granted.flags = { dnd5e: { advancementOrigin: "feat.grant" } };
+    granted.system.activities.free000000000000 = { type: "forward", activity: { id: "cast0000000000000" },
+      consumption: { targets: [{ type: "itemUses", target: "", value: "1" }] } };
+    expect(changedGroups(spell, granted)).toEqual([]);
+    const kept = refreshedItemData(granted, spell);
+    expect(kept.system.activities.free000000000000?.type).toBe("forward");
+  });
+
+  it("treats an effect another item's advancement added as the character's", () => {
+    const old = sword();
+    old.effects = [{ _id: "mod", name: "Legerdemain", flags: { dnd5e: { advancementOrigin: "rogue.modify" } } }];
+    expect(changedGroups(sword(), old)).toEqual([]);
+    expect(refreshedItemData(old, sword()).effects.some(e => e._id === "mod")).toBe(true);
+  });
+
+  it("treats an identifier dnd5e filled in on creation as the source's own", () => {
+    const src = sword();
+    src.system.identifier = "";
+    const mine = sword();
+    mine.system.identifier = "longsword";
+    expect(changedGroups(mine, src)).toEqual([]);
+    expect(refreshedItemData(mine, src).system.identifier).toBe("longsword");
+  });
+
   it("has one hash per group", () => {
     expect(Object.keys(groupHashes(sword()))).toEqual(FIELD_GROUPS);
     expect(Object.keys(definitionGroups(sword()))).toEqual(FIELD_GROUPS);
@@ -284,6 +312,19 @@ describe("matchDecision", () => {
     const d = harvestDecisions(actor).find(x => x.advId === "rep");
     expect(d?.type).toBe("ItemGrant");
     expect(d?.answer.taken.map(t => t.name)).toEqual(["Deft Explorer"]);
+  });
+
+  it("records Tasha's optional class features, which mark the whole grant optional", () => {
+    const actor = { items: [
+      { _id: "ftr", type: "class", name: "Fighter", system: { identifier: "fighter", advancement: [
+        { _id: "tcoe1Opt00000000", type: "ItemGrant", level: 1,
+          configuration: { optional: true, items: [{ uuid: "C.t.o.Item.fightingstyleopt" }] },
+          value: { added: { opt: "C.t.o.Item.fightingstyleopt" } } }
+      ] } },
+      { _id: "opt", type: "feat", name: "Fighting Style Options", flags: { dnd5e: { advancementOrigin: "ftr.tcoe1Opt00000000" } } }
+    ] };
+    const d = harvestDecisions(actor).find(x => x.advId === "tcoe1Opt00000000");
+    expect(d?.answer.taken.map(t => t.name)).toEqual(["Fighting Style Options"]);
   });
 
   it("never matches the same recorded decision twice", () => {
