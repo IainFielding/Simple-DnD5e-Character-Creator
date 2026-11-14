@@ -82,7 +82,8 @@ export function refreshedItemData(oldData, sourceData, { uuid = null, keep = [],
 
   // A granted spell keeps what its grant wrote onto its activities: a "free casting" forward activity,
   // and the spell's own uses as a consumption target.
-  if ( isGrantedSpell(oldData) ) {
+  // (A rebuilt copy was just granted afresh, and its grant wrote them again.)
+  if ( isGrantedSpell(oldData) && !rebuilt ) {
     out.system.activities ??= {};
     for ( const [id, act] of Object.entries(oldData.system?.activities ?? {}) ) {
       if ( (act?.type === "forward") && !out.system.activities[id] ) out.system.activities[id] = copy(act);

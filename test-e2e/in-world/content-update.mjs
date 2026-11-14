@@ -113,6 +113,7 @@ async function runNoop(scenario, label) {
 
     const scan = await scanActor(actor);
     const rehearsal = await rehearse(actor, { ...scan, needsRebuild: true });
+    for ( const d of rehearsal.decisions.filter(x => ["optional", "choice"].includes(x.kind)) ) out.notes.push(`decision ${d.kind} ${d.title} (${d.host}) @${d.level}: ${d.status} ${d.detail}`);
     const asked = rehearsal.decisions.filter(d => d.status === "ask");
     for ( const d of asked ) out.notes.push(`not carried: ${d.title} (${d.host}, level ${d.level}) wanted ${d.wanted}; candidates: ${(d.candidates ?? []).join(" | ") || "none"}`);
     await commitRehearsal(rehearsal);
@@ -445,9 +446,29 @@ async function runUi(scenario) {
     for ( let i = 0; (i < 100) && !ready; i++ ) await settle(100);
     if ( !updateAvailable(actor) ) fail("entry point", "offered", "not offered");
 
-    // Without Create Actor: locked until the box is ticked.
+    // Without Create Actor: locked until the box is ticked. Opened the way a player does, from the
+    // sheet's ⋯ menu.
     game.user.can = perm => ((perm === "ACTOR_CREATE") ? false : realCan(perm));
-    const app = openContentUpdate(actor);
+    const label = game.i18n.localize("sogrom-dnd5e-character-creator.contentUpdate.button");
+    await actor.sheet.render(true);
+    await settle(1500);
+    const findEntry = () => [...document.querySelectorAll("#context-menu .context-item, .controls-dropdown .header-control, menu.controls-dropdown li")]
+      .find(el => (el.textContent.trim() === label) && el.isConnected && (el.offsetParent !== null));
+    let entry = findEntry();
+    for ( let i = 0; !entry && (i < 2); i++ ) {
+      actor.sheet.element?.querySelector('[data-action="toggleControls"]')?.click();
+      await settle(400);
+      entry = findEntry();
+    }
+    if ( entry ) entry.click();
+    else {
+      fail("entry point", `"${label}" in the sheet's ⋯ menu`, "missing");
+      openContentUpdate(actor);
+    }
+    await settle(500);
+    const app = foundry.applications.instances?.get(`sogrom-content-update-${actor.id}`);
+    if ( !app ) throw new Error("the sheet's entry opened no window");
+    await actor.sheet.close().catch(() => {});
     const button = () => app.element?.querySelector('button[data-action="update"]');
     for ( let i = 0; (i < 300) && !button(); i++ ) await settle(200);
     if ( !button() ) throw new Error(`the window never finished: ${app.element?.textContent?.trim().slice(0, 200)}`);

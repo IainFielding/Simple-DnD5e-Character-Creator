@@ -2,7 +2,7 @@ import { MODULE_ID, log } from "../config.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { FIELD_GROUPS, STAMP_FLAG, sourceStamp } from "./fingerprint.mjs";
 import { refreshedItemData } from "./merge.mjs";
-import { harvestDecisions } from "./answers.mjs";
+import { advancementList, baseTypeOf, harvestDecisions, treeKey } from "./answers.mjs";
 import { pairItems, remapIds } from "./reconcile.mjs";
 import { UpdateAnswerProvider } from "./provider.mjs";
 import { ALWAYS_KEPT, packageVersion } from "./scan.mjs";
@@ -126,6 +126,52 @@ function pushClassLevels(manager, classItem, count, baseLevel, { raceItem, skip 
 }
 
 /**
+ * Take back a grant the walk applied that the character's own build never did.
+ *
+ * Content modules prune steps from a manager in `dnd5e.preAdvancementManagerRender` when a character
+ * does not qualify — Tasha's drops a 2014 Ranger's level-6 and level-10 Roving grants unless Deft
+ * Explorer was taken. Tasha's decides by looking at the manager's *first* step, which in a rebuild is a
+ * reversal on some granted feature rather than the class, so it stands down and the grant applies.
+ *
+ * The character itself says what happened: the same advancement, in the same tree, at a level the
+ * class has reached, with nothing ever recorded. Something pruned it then, and the rebuild should not
+ * add it now. A grant that is new in this version has a new id and is not affected.
+ * @param {LevelUpDriver} driver
+ * @param {object} oldData   `actor.toObject()` from before the rebuild.
+ */
+async function undoNeverApplied(driver, oldData) {
+  const oldById = new Map(oldData.items.map(i => [i._id, i]));
+  const oldTree = id => treeKey(oldById.get(id), x => oldById.get(x));
+  const levels = new Map(oldData.items.filter(i => i.type === "class")
+    .map(i => [`class:${i.system?.identifier}`, i.system?.levels ?? 0]));
+  const blank = new Set();
+  for ( const item of oldData.items ) {
+    const tree = oldTree(item._id);
+    for ( const adv of advancementList(item) ) {
+      if ( (baseTypeOf(adv) !== "ItemGrant") || !(adv.level <= (levels.get(tree) ?? 0)) ) continue;
+      if ( !Object.keys(adv.value?.added ?? {}).length ) blank.add(`${tree}|${adv._id}`);
+    }
+  }
+  if ( !blank.size ) return;
+  const clone = driver.clone;
+  const getItem = id => clone.items.get(id)?.toObject();
+  let changed = false;
+  for ( const item of clone.items.contents ) {
+    const tree = treeKey(item.toObject(), getItem);
+    for ( const adv of Object.values(item.advancement?.byId ?? {}) ) {
+      if ( !blank.has(`${tree}|${adv.id}`) || !Object.keys(adv.value?.added ?? {}).length ) continue;
+      try {
+        await adv.reverse(adv.level);
+        changed = true;
+      } catch ( err ) {
+        log("content update: could not take back a never-applied grant", adv.id, err);
+      }
+    }
+  }
+  if ( changed ) clone.reset();
+}
+
+/**
  * @typedef {object} Rehearsal
  * @property {Actor5e} actor
  * @property {boolean} rebuild           Whether the skeleton is rebuilt.
@@ -224,6 +270,7 @@ export async function rehearse(actor, scan, { keep = new Map() } = {}) {
     if ( (pass > 0) && (UpdateAnswerProvider.records(driver).length === before) ) break;
   }
   await provider.warm(driver);
+  await undoNeverApplied(driver, oldData);
 
   const t = makeTransform({ actor, oldData, entries, keeps, rebuilt: true });
   const preview = t(driver.clone.toObject());

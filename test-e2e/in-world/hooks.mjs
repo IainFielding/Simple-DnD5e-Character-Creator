@@ -342,8 +342,8 @@ async function checkApiShape(result) {
   }
   if ( !api.version ) result.failures.push("api.version is empty");
   if ( !Object.isFrozen(api.HOOKS) ) result.failures.push("api.HOOKS is not frozen");
-  if ( Object.keys(api.HOOKS ?? {}).length !== 13 ) {
-    result.failures.push(`api.HOOKS has ${Object.keys(api.HOOKS ?? {}).length} entries, expected 13`);
+  if ( Object.keys(api.HOOKS ?? {}).length !== 15 ) {
+    result.failures.push(`api.HOOKS has ${Object.keys(api.HOOKS ?? {}).length} entries, expected 15`);
   }
   // The settings readers must actually run — a getter that throws would be worse than a missing one.
   result.notes.push(`mode=${api.settings.mode()} creation=${api.settings.creationEnabled()} levelUp=${api.settings.levelUpEnabled()}`);

@@ -297,8 +297,11 @@ const CONTROL = "sogromContentUpdate";
 export function registerContentUpdate() {
   Hooks.on("getHeaderControlsApplicationV2", (application, controls) => {
     try {
-      const actor = application?.actor;
-      if ( !actor || (application instanceof ContentUpdateApp) ) return;
+      // The actor's own sheet only. This hook fires for every window, and several carry an `actor`
+      // without being its sheet — dnd5e's AdvancementManager among them. Scanning from there, and
+      // re-rendering it when the scan landed, broke a native level-up mid-walk.
+      const actor = application?.document;
+      if ( (actor?.documentName !== "Actor") || (application.actor && (application.actor !== actor)) ) return;
       // Re-render the sheet once a first scan lands, so the entry appears without a second click.
       if ( !updateAvailable(actor, () => application.rendered && application.render()) ) return;
       if ( controls.some(c => c.action === CONTROL) ) return;
