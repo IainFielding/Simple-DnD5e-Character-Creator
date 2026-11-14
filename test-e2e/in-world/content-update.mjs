@@ -30,6 +30,7 @@ const { scanActor } = await import(`${MODULE}/content-update/scan.mjs`);
 const { definitionGroups } = await import(`${MODULE}/content-update/fingerprint.mjs`);
 const { rehearse, commitRehearsal } = await import(`${MODULE}/content-update/rebuild.mjs`);
 const { repairTargets } = await import(`${MODULE}/levelup/repair.mjs`);
+const { repairLevel } = await import(`./repair.mjs${BUST}`);
 
 const PREFIX = "[e2e] ";
 
@@ -78,7 +79,7 @@ export async function checkContentUpdate({ only = null, srd = false, level = 20 
     for ( const scenario of all ) {
       const label = legacyLabel(source, scenario.id, level);
       if ( !want(label) || source.missing ) continue;
-      cases.push(await runLegacy(source, scenario, label));
+      cases.push(await runLegacy(source, scenario, label, { equivalent: true }));
     }
     return { ok: (cases.length > 0) && cases.every(c => c.ok), cases };
   }
@@ -338,11 +339,22 @@ function vitals(actor) {
  * unanswered decision the review did not flag; and the character keeps its ability scores, hit point
  * maximum, proficient skills, level and subclass. Every decision the review could not carry is
  * printed, so a choice new in this version (expected) can be told from a lost one.
+ *
+ * With `equivalent` (the SRD gate), also: the same scenario built natively on the installed content,
+ * given the old build's answers, is the reference (§8.3: "a native build given the same answers").
+ * A decision new in this version is generated as usual. Each level the updated character has
+ * unanswered and the reference does not is repaired with the wrench from that same book, and the
+ * result must then equal the reference — source and derived data, as the sweep compares them.
+ * A fresh book would not do: it picks from the new version's options, and the update rightly keeps
+ * the old picks (an origin feat, an invocation), so the two differ by design, not by a bug.
+ * @param {object} [options]
+ * @param {boolean} [options.equivalent]
  */
-async function runLegacy(source, scenario, label) {
+async function runLegacy(source, scenario, label, { equivalent = false } = {}) {
   const out = { label, ok: false, error: null, differences: [], notes: [] };
   let legacyActor = null;
   let actor = null;
+  let reference = null;
   const fail = (path, before, after) => out.differences.push({ path, native: before, creator: after });
   try {
     const built = await buildLegacyCharacter(source, scenario, label);
@@ -393,12 +405,70 @@ async function runLegacy(source, scenario, label) {
     const fresh = unansweredOf(actor).filter(g => !gapsBefore.has(g));
     if ( fresh.length > asked.length ) for ( const g of fresh ) fail("unanswered", "flagged on the review", g);
     else for ( const g of fresh ) out.notes.push(`left for the wrench: ${g}`);
+
+    if ( equivalent ) {
+      const origins = [scenario.speciesUuid, scenario.backgroundUuid, scenario.classUuid].filter(Boolean);
+      const book = new AnswerBook({ overrides: { ...oldAnswers(source, built.book), ...(scenario.answers ?? {}) }, generate: true, origins });
+      reference = await buildNative({ ...scenario, name: `${PREFIX}content-update [reference]`, incremental: true }, { book });
+      await settle(800);
+      const refGaps = new Set(unansweredOf(reference));
+      for ( const g of refGaps ) out.notes.push(`unanswered in the reference too: ${g}`);
+      for ( const target of repairTargets(actor) ) {
+        for ( const group of target.levels ) {
+          const gap = `${target.classItem.name} ${group.level}: ${group.titles.join(", ")}`;
+          if ( refGaps.has(gap) ) continue;
+          const r = await repairLevel(actor, target.classItem.id, group.level, book);
+          out.notes.push(`repaired ${gap} (${r.steps} step(s))`);
+        }
+      }
+      for ( const g of unansweredOf(actor).filter(x => !refGaps.has(x)) ) fail("unanswered after the repair", "answered", g);
+      const a = snapshot(reference);
+      const b = snapshot(actor);
+      // Three differences the update makes by design, reported as notes: the player's icon is always
+      // kept (an art module re-skins the pack's at runtime); a used-up feature stays used; and a
+      // feature the native level-by-level build granted twice comes back once (the same allowance as
+      // the no-op cases; dnd5e 6.1.0's Ranger holds Hunter's Mark twice natively).
+      const counts = new Map();
+      for ( const i of reference.items ) {
+        const src = i._stats?.compendiumSource;
+        if ( src ) counts.set(src, (counts.get(src) ?? 0) + 1);
+      }
+      const doubled = [...counts].filter(([, n]) => n > 1).map(([src]) => src);
+      const byDesign = d => d.path.endsWith(".img") || d.path.endsWith(".system.uses.spent")
+        || doubled.some(src => d.path.includes(src) || String(d.native).includes(src))
+        || (d.path.startsWith("derived.itemsByType") && String(d.native).includes("×"));
+      for ( const d of [...diff(a.source, b.source, "source"), ...diff(a.derived, b.derived, "derived")] ) {
+        if ( byDesign(d) ) out.notes.push(`by design: ${d.path}: ${String(d.native).slice(0, 80)} → ${String(d.creator).slice(0, 80)}`);
+        else out.differences.push({ path: `≠ native: ${d.path}`, native: d.native, creator: d.creator });
+      }
+    }
     out.ok = !out.differences.length;
   } catch ( err ) {
     out.error = `${err.message}\n${err.stack ?? ""}`;
   } finally {
     if ( legacyActor ) await legacyActor.delete().catch(() => {});
+    if ( reference && !globalThis.__keepActors ) await reference.delete().catch(() => {});
     if ( actor && !globalThis.__keepActors ) await actor.delete().catch(() => {});
+  }
+  return out;
+}
+
+/**
+ * The answers an old build was given, as an override table for a new book: keyed by advancement id,
+ * per level where one advancement answered at several, with the legacy uuids pointing back at the
+ * installed package. An answer of `null` (a decision deliberately left open) is kept.
+ */
+function oldAnswers(source, book) {
+  const byAdv = new Map();
+  for ( const e of book.entries ) {
+    if ( e.answer === undefined ) continue;
+    if ( !byAdv.has(e.advId) ) byAdv.set(e.advId, {});
+    byAdv.get(e.advId)[e.level] = (e.answer === null) ? null : swapPackage(source, e.answer, false);
+  }
+  const out = {};
+  for ( const [advId, levels] of byAdv ) {
+    const values = Object.values(levels);
+    out[advId] = (values.length === 1) ? values[0] : levels;
   }
   return out;
 }
@@ -436,7 +506,8 @@ function dupIdsOf(items) {
 /**
  * Build a scenario on the legacy package and turn it into a character "from before the update": the
  * same items, its uuids naming the installed package, no source stamps.
- * @returns {Promise<{legacyActor: Actor5e, actor: Actor5e, version: string}>}   Both must be deleted.
+ * @returns {Promise<{legacyActor: Actor5e, actor: Actor5e, version: string, book: AnswerBook}>}   Both
+ *   actors must be deleted; `book` holds every answer the old build was given.
  */
 async function buildLegacyCharacter(source, scenario, label) {
   const loaded = await ensureLegacyPacks(source);
@@ -467,7 +538,7 @@ async function buildLegacyCharacter(source, scenario, label) {
   data.name = `${PREFIX}content-update [${label}]`;
   const actor = await Actor.implementation.create(data, { keepEmbeddedIds: true });
   await settle(800);
-  return { legacyActor, actor, version };
+  return { legacyActor, actor, version, book };
 }
 
 /* -------------------------------------------- */

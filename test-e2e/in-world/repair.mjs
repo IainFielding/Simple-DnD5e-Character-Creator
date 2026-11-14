@@ -82,8 +82,8 @@ async function skipOverrides(scenario, rules) {
 /** Wait for the writes dnd5e makes off a commit to land before anything reads the actor. */
 const settle = ms => new Promise(r => setTimeout(r, ms));
 
-/** Repair one class level headlessly, answered from `book`. */
-async function repairLevel(actor, classId, level, book) {
+/** Repair one class level headlessly, answered from `book`. Also used by content-update.mjs. */
+export async function repairLevel(actor, classId, level, book) {
   const manager = buildRepairManager(actor, classId, level);
   if ( !manager.steps.length ) return { level, steps: 0 };
   const driver = new LevelUpDriver(manager);

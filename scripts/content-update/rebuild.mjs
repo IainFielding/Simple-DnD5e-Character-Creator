@@ -1,6 +1,6 @@
 import { MODULE_ID, log } from "../config.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
-import { FIELD_GROUPS, STAMP_FLAG, sourceStamp } from "./fingerprint.mjs";
+import { FIELD_GROUPS, STAMP_FLAG, isGrantedSpell, sourceStamp } from "./fingerprint.mjs";
 import { refreshedItemData } from "./merge.mjs";
 import { advancementList, baseTypeOf, harvestDecisions, treeKey } from "./answers.mjs";
 import { pairItems, remapIds } from "./reconcile.mjs";
@@ -337,6 +337,18 @@ function reconcileItem(item, { oldById, entries, keeps, rebuiltIds }) {
     if ( Object.keys(dnd5eFlags).length || ("dnd5e" in (old.flags ?? {})) ) merged.flags.dnd5e = dnd5eFlags;
     else delete merged.flags.dnd5e;
     if ( item.type === "class" ) merged.system.levels = item.system?.levels;
+    // A spell the walk granted is tagged with the item that grants it now. dnd5e 6.1.0 moved the
+    // always-prepared lists (Life Domain Spells, Druidic's Speak with Animals) from the subclass or
+    // class onto a feature, so the old tag (`subclass:life`) would no longer match a native build's
+    // (`feat:life-domain-spells`).
+    if ( isGrantedSpell(item) && item.system?.sourceItem ) merged.system.sourceItem = item.system.sourceItem;
+    // Likewise "always prepared" belongs to the grant, not the player: 6.1.0 makes a Warlock's Mystic
+    // Arcanum spell always prepared. Between the other states (a player's own toggle) the old copy wins.
+    const ALWAYS = CONFIG.DND5E?.spellPreparationStates?.always?.value ?? 2;
+    if ( isGrantedSpell(item) && ((item.system?.prepared === ALWAYS) || (old.system?.prepared === ALWAYS)) ) {
+      merged.system.prepared = item.system?.prepared;
+      if ( item.system?.method ) merged.system.method = item.system.method;
+    }
     stamp(merged, item);
     return merged;
   }
