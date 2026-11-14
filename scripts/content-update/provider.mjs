@@ -1,4 +1,5 @@
 import { log } from "../config.mjs";
+import { packIndex } from "../data/compendium-util.mjs";
 import { findByIdentity } from "./scan.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { withItemSegment } from "../data/advancement-util.mjs";
@@ -347,7 +348,7 @@ export class UpdateAnswerProvider {
       if ( pack.documentName !== "Item" ) continue;
       let index;
       try {
-        index = await pack.getIndex({ fields: ["system.classIdentifier"] });
+        index = await packIndex(pack, { fields: ["system.classIdentifier"] });
       } catch {
         continue;
       }

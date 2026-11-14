@@ -2,9 +2,11 @@
   The "Update to new content" review page, rendered by scripts/content-update/update-app.mjs
   `ContentUpdateApp`. Read-only apart from three controls: a "Keep mine" box per item that looks
   customised (re-rehearses the update), the backup download / proceed-without-backup pair for a user
-  who cannot create actors, and the Update / Cancel buttons. One root element.
+  who cannot create actors, and the Update / Cancel buttons. One root element: a scrolling body and
+  the footer pinned below it, so the buttons stay in reach however long the review gets.
 --}}
 <section class="sogrom-cu-body">
+  <div class="sogrom-cu-scroll">
   {{#if loading}}
   <p class="sogrom-cu-loading">
     <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
@@ -16,7 +18,7 @@
     {{localize "sogrom-dnd5e-character-creator.contentUpdate.empty"}}
   </p>
   {{else if error}}
-  <p class="notification error">{{localize "sogrom-dnd5e-character-creator.contentUpdate.failed"}}</p>
+  <p class="sogrom-cu-callout is-error">{{localize "sogrom-dnd5e-character-creator.contentUpdate.failed"}}</p>
   <p class="sogrom-cu-error">{{error}}</p>
   {{else}}
 
@@ -42,8 +44,10 @@
         <details class="sogrom-cu-desc">
           <summary>{{localize "sogrom-dnd5e-character-creator.contentUpdate.compareDescription"}}</summary>
           <div class="sogrom-cu-desc-cols">
-            <div><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>{{{oldDescription}}}</div>
-            <div><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>{{{newDescription}}}</div>
+            <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>
+              <div class="sogrom-cu-desc-text">{{{oldDescription}}}</div></div>
+            <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>
+              <div class="sogrom-cu-desc-text">{{{newDescription}}}</div></div>
           </div>
         </details>
         {{/if}}
@@ -72,8 +76,10 @@
         <details class="sogrom-cu-desc">
           <summary>{{localize "sogrom-dnd5e-character-creator.contentUpdate.compareDescription"}}</summary>
           <div class="sogrom-cu-desc-cols">
-            <div><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>{{{oldDescription}}}</div>
-            <div><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>{{{newDescription}}}</div>
+            <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>
+              <div class="sogrom-cu-desc-text">{{{oldDescription}}}</div></div>
+            <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>
+              <div class="sogrom-cu-desc-text">{{{newDescription}}}</div></div>
           </div>
         </details>
         {{/if}}
@@ -92,7 +98,7 @@
 
   {{#if hasDecisions}}
   <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.choices"}}</h3>
-  {{#if toChooseNote}}<p class="notification warning">{{toChooseNote}}</p>{{/if}}
+  {{#if toChooseNote}}<p class="sogrom-cu-callout">{{toChooseNote}}</p>{{/if}}
   <ul class="sogrom-cu-decisions">
     {{#each decisions}}
     <li class="is-{{status}}">
@@ -128,9 +134,9 @@
     <p><i class="fa-solid fa-box-archive" aria-hidden="true"></i>
       {{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.copy"}}</p>
     {{else}}
-    <p class="notification warning">{{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.noPermission"}}</p>
+    <p class="sogrom-cu-callout">{{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.noPermission"}}</p>
     <div class="sogrom-cu-backup-actions">
-      <button type="button" data-action="download">
+      <button type="button" data-action="download" class="creator-btn">
         <i class="fa-solid fa-download" aria-hidden="true"></i>
         {{localize "sogrom-dnd5e-character-creator.contentUpdate.backup.download"}}
       </button>
@@ -144,13 +150,14 @@
     {{/if}}
   </div>
   {{/if}}
+  </div>
 
   <footer class="sogrom-cu-footer">
-    <button type="button" data-action="cancel">
+    <button type="button" data-action="cancel" class="creator-btn creator-btn-ghost">
       <i class="fa-solid fa-xmark" aria-hidden="true"></i> {{localize "sogrom-dnd5e-character-creator.contentUpdate.cancel"}}
     </button>
     {{#unless loading}}{{#unless empty}}{{#unless error}}
-    <button type="button" data-action="update" class="sogrom-cu-update" {{#if updateDisabled}}disabled{{/if}}>
+    <button type="button" data-action="update" class="creator-btn creator-btn-finish sogrom-cu-update" {{#if updateDisabled}}disabled{{/if}}>
       <i class="fa-solid {{#if working}}fa-spinner fa-spin{{else}}fa-arrows-rotate{{/if}}" aria-hidden="true"></i>
       {{localize "sogrom-dnd5e-character-creator.contentUpdate.update"}}
     </button>

@@ -1,5 +1,5 @@
 import { MODULE_ID, log } from "../config.mjs";
-import { getEnabledPacks } from "../data/compendium-util.mjs";
+import { getEnabledPacks, packIndex } from "../data/compendium-util.mjs";
 import { advancementChanged, changedGroups, editedGroups, packageOfUuid, readStamp } from "./fingerprint.mjs";
 import { uuidTail } from "./answers.mjs";
 
@@ -117,7 +117,11 @@ export async function findByIdentity(itemData, homePack) {
     for ( const pack of packs ) {
       let index;
       try {
-        index = await pack.getIndex({ fields: ["system.identifier", "system.source.rules"] });
+        // Through the shared index, never `getIndex` directly: Foundry merges a pack's earlier index
+        // fields into a new request, the module's shared set already holds `system.source`, and the
+        // server throws on a field asked for beside its parent ("Cannot use 'in' operator to search
+        // for 'rules'") — once per pack, as red notifications, every time the scan looked by identity.
+        index = await packIndex(pack, { fields: ["system.identifier", "system.source.rules"] });
       } catch {
         continue;
       }

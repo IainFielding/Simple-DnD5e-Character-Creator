@@ -26,9 +26,14 @@ const groupLabel = g => t(`contentUpdate.group.${g}`);
 export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: "sogrom-content-update",
-    classes: ["sogrom-content-update"],
+    // The creator's own window chrome and theme (styles/creator/01-foundation.css, 02-window.css),
+    // so the review reads as part of the module rather than a stock Foundry dialog.
+    classes: ["sogrom-creator", "sogrom-creator-windowed", "sogrom-content-update"],
     window: { icon: "fa-solid fa-arrows-rotate", resizable: true },
-    position: { width: 620, height: "auto" },
+    // A fixed height (see the constructor): a long review scrolls inside the window, with the
+    // Update / Cancel footer pinned below it, instead of growing past the bottom of the screen.
+    // The width of dnd5e's character sheet (CharacterActorSheet: 800), the window it opens from.
+    position: { width: 800 },
     actions: {
       update: ContentUpdateApp.#onUpdate,
       cancel: ContentUpdateApp.#onCancel,
@@ -57,7 +62,8 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
   #skipBackup = false;
 
   constructor(actor, options = {}) {
-    super({ ...options, id: windowId(actor) });
+    const height = Math.min(820, Math.round((globalThis.innerHeight || 900) * 0.85));
+    super({ ...options, id: windowId(actor), position: { height, ...(options.position ?? {}) } });
     this.actor = actor;
   }
 
@@ -102,7 +108,13 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
     if ( (phase !== "ready") && (phase !== "working") ) return base;
 
     const entries = this.#scan.entries;
-    const describe = e => ({
+    // Descriptions are shown as a sheet shows them: embeds, links and rolls enriched, each relative to
+    // its own copy. Only for the items that offer the comparison; it is the slow part of a render.
+    const enrich = (html, doc) => foundry.applications.ux.TextEditor.implementation.enrichHTML(html ?? "",
+      { relativeTo: doc, secrets: false }).catch(() => html ?? "");
+    const describe = async e => {
+      const descriptionChanged = e.customised && e.changed.includes("description");
+      return {
       id: e.item.id,
       name: e.item.name,
       img: e.item.img,
@@ -113,12 +125,13 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
       matchedBy: ["identifier", "name"].includes(e.how) ? t(`contentUpdate.matchedBy.${e.how}`) : "",
       customised: e.customised,
       keep: this.#keep.get(e.item.id) ?? false,
-      descriptionChanged: e.customised && e.changed.includes("description"),
-      oldDescription: e.item.system?.description?.value ?? "",
-      newDescription: e.source?.system?.description?.value ?? ""
-    });
-    const refreshed = entries.filter(e => e.tier === "refresh").map(describe);
-    const rebuilt = entries.filter(e => e.tier === "rebuild").map(describe);
+      descriptionChanged,
+      oldDescription: descriptionChanged ? await enrich(e.item.system?.description?.value, e.item) : "",
+      newDescription: descriptionChanged ? await enrich(e.source?.system?.description?.value, e.source) : ""
+      };
+    };
+    const refreshed = await Promise.all(entries.filter(e => e.tier === "refresh").map(describe));
+    const rebuilt = await Promise.all(entries.filter(e => e.tier === "rebuild").map(describe));
     const untouched = entries.filter(e => (e.tier === "report") && !["noSource"].includes(e.how))
       .map(e => ({ name: e.item.name, reason: t(`contentUpdate.reason.${e.how}`) }));
 
