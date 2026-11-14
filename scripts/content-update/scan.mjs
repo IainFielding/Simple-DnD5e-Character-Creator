@@ -179,7 +179,9 @@ export async function scanActor(actor) {
 
     const sourceData = doc.toObject();
     const changed = changedGroups(data, sourceData);
-    if ( !changed.length ) { entries.push({ ...base, tier: "same" }); continue; }
+    // Nothing to update if the only differences are ones a refresh keeps anyway. Otherwise an icon
+    // swapped at runtime (an art module re-skinning the pack) is offered as an update forever.
+    if ( !changed.some(g => !ALWAYS_KEPT.includes(g)) ) { entries.push({ ...base, changed, tier: "same" }); continue; }
 
     const edited = editedGroups(data, stamp);
     // What the update would overwrite beyond the name and icon, which are always kept. With a stamp,

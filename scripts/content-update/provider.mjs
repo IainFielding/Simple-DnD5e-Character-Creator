@@ -6,6 +6,22 @@ import {
   grantedAtLevel, itemIdentity, matchDecision, normTitle, sameIdentity, signature, treeKey, uuidTail
 } from "./answers.mjs";
 
+/** Trait modes whose options depend on proficiencies the character already has (see the driver). */
+const PROFICIENCY_MODES = ["expertise", "forcedExpertise", "upgrade"];
+
+/**
+ * Whether a trait key falls inside one configured pool entry: the key itself, a wildcard over its
+ * category (`skills:*`, `tool:art:*`), or a category the key sits under (`weapon:mar`).
+ * @param {string} key
+ * @param {string} entry
+ * @returns {boolean}
+ */
+export function keyInPool(key, entry) {
+  if ( key === entry ) return true;
+  if ( entry.endsWith(":*") ) return key.startsWith(entry.slice(0, -1));
+  return key.startsWith(`${entry}:`);
+}
+
 /**
  * Answers a rebuild's decisions from the decisions the character already made.
  *
@@ -199,6 +215,11 @@ export class UpdateAnswerProvider {
    * @param {Advancement|null} adv
    * @returns {((ident: object) => boolean)|null}
    */
+  static #poolOf(adv) {
+    const cfg = adv?.configuration ?? {};
+    return [...Array.from(cfg.grants ?? []), ...Array.from(cfg.choices ?? []).flatMap(c => Array.from(c?.pool ?? []))];
+  }
+
   static #browsable(adv) {
     const cfg = adv?.configuration;
     if ( !cfg ) return null;
@@ -282,7 +303,16 @@ export class UpdateAnswerProvider {
         }
         const grants = new Set(Array.from(adv.configuration?.grants ?? []));
         const current = new Set(Array.from(adv.value?.chosen ?? []));
-        const keys = chosen.filter(k => !offered || offered.has(k) || grants.has(k) || current.has(k));
+        // Expertise (and its kin) offers only skills the character is already proficient in, and the
+        // provider warms before the walk has applied the earlier levels' proficiency picks. Asking
+        // the clone now would drop every expertise built on a class skill (dnd5e 6.1.0's Bard, Rogue
+        // and Ranger lost theirs). Those keys are checked against the configured pool instead; the
+        // driver applies them in its last trait pass, once the proficiencies are in.
+        const pool = UpdateAnswerProvider.#poolOf(adv);
+        const allowed = PROFICIENCY_MODES.includes(adv.configuration?.mode)
+          ? k => pool.some(p => keyInPool(k, p))
+          : k => !offered || offered.has(k);
+        const keys = chosen.filter(k => allowed(k) || grants.has(k) || current.has(k));
         this.#answers.set(rec, keys);
         if ( keys.length === chosen.length ) carried(keys.join(", "));
         else partial(keys.join(", "));

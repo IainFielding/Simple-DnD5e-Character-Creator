@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import { harvestDecisions } from "../scripts/content-update/answers.mjs";
-import { UpdateAnswerProvider } from "../scripts/content-update/provider.mjs";
+import { UpdateAnswerProvider, keyInPool } from "../scripts/content-update/provider.mjs";
 
 /**
  * `UpdateAnswerProvider` against a stub driver: the decisions a rebuild asks are matched to the ones
@@ -147,6 +147,31 @@ describe("UpdateAnswerProvider", () => {
     expect(provider.asi(asi)).toEqual({ str: 2 });
     expect(provider.traitKeys(trait)).toEqual(["skills:ath"]);
     expect(provider.report.find(l => l.kind === "trait").status).toBe("partial");
+  });
+
+  it("carries expertise on skills the clone is not yet proficient in (dnd5e 6.1.0 Bard)", async () => {
+    // The provider warms before the walk applies level 1's skill picks, so the clone offers only the
+    // background's skills. Expertise is checked against its configured pool instead.
+    const old = structuredClone(OLD);
+    old.items[0].system.advancement.push({ _id: "zHtnbRgLICltyy8V", type: "Trait", level: 2, title: "Expertise",
+      configuration: { mode: "expertise", choices: [{ count: 2, pool: ["skills:*"] }] },
+      value: { chosen: ["skills:acr", "skills:ath"] } });
+    const tree = newTree();
+    const exp = record(tree.style, { id: "zHtnbRgLICltyy8V", type: "Trait", title: "Expertise",
+      configuration: { mode: "expertise", choices: [{ count: 2, pool: ["skills:*"] }] } }, 2);
+    const provider = new UpdateAnswerProvider(harvestDecisions(old));
+    await provider.warm(stubDriver(tree, { trait: [exp] }, { offered: ["skills:arc"] }));
+    expect(provider.traitKeys(exp)).toEqual(["skills:acr", "skills:ath"]);
+    expect(provider.report.find(l => l.kind === "trait").status).toBe("carried");
+  });
+
+  it("keyInPool: exact keys, wildcards and categories", () => {
+    expect(keyInPool("skills:acr", "skills:*")).toBe(true);
+    expect(keyInPool("tool:art:alchemist", "tool:art:*")).toBe(true);
+    expect(keyInPool("weapon:mar:longsword", "weapon:mar")).toBe(true);
+    expect(keyInPool("skills:acr", "skills:acr")).toBe(true);
+    expect(keyInPool("skills:acr", "tool:*")).toBe(false);
+    expect(keyInPool("skills:acrx", "skills:acr")).toBe(false);
   });
 
   it("answers the subclass once, and not again when it is already applied (selectSubclass toggles)", async () => {
