@@ -9,8 +9,13 @@ All notable changes to the Simple D&D Character Creator.
 - **Update to New Content.** When a content module or dnd5e itself updates, the classes, species,
   backgrounds, spells and gear on existing characters stay on the old version until you delete them
   and add them again, which re-asks every choice. A character with outdated content now has
-  **Update to New Content** in its sheet's ⋯ menu and in its right-click menu. It shows what will
-  change and which of your choices carry over, then updates everything at once:
+  **Update to New Content** in its sheet's ⋯ menu. It shows what will change and which of your
+  choices carry over, then updates everything at once:
+  - Changes are listed under each class, then species, background, feats, spells and equipment,
+    each heading folded until you open it. Every item names the module it comes from and its old
+    and new version. Items added before this release show "earlier version", because their old
+    version was never recorded.
+  - Toggles at the top choose which of those to update. Anything switched off stays as it is.
   - Items whose rules changed are updated in place. Uses spent, quantity, what's equipped and
     prepared, and a changed name or icon stay as they were.
   - When a class, species or background changed how it levels up (as many did in dnd5e 6.1 and the
@@ -22,6 +27,9 @@ All notable changes to the Simple D&D Character Creator.
   - A copy of the character is saved first. A player who can't create actors is offered a download
     instead, and must download it or tick **Proceed without backup**.
   The GM can stop players updating their own characters in **Level-Up Options**.
+- **Humans start with Heroic Inspiration.** Under the 2024 rules a Human's Resourceful trait gives
+  Heroic Inspiration after every Long Rest, but dnd5e never switches it on. A new Human now starts
+  with it, and the creation chat card says so.
 
 ### Changed
 

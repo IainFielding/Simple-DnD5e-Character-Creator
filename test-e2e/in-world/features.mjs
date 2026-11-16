@@ -12,6 +12,8 @@
  *      table, and the guide line on the quick screen's class card.
  *   5. **The quick screen keeps a typed name.** A name typed into the box (an `input` event, as a
  *      keyboard produces) is the name the character is created with.
+ *   6. **Heroic Inspiration.** A 2024 Human (Resourceful) is created with it and its card says so; a
+ *      Dwarf is created without it and its card has no such row.
  *
  * The world's primary party and the creation-card setting are changed for the run and put back.
  */
@@ -85,10 +87,17 @@ async function openOnClass(className) {
   return shell;
 }
 
+/** A species card by name, preferring the PHB's copy. */
+function speciesCard(name) {
+  const species = getSources().source.species?.() ?? [];
+  return species.find(c => (c.name === name) && c.uuid.includes("dnd-players-handbook"))
+    ?? species.find(c => c.name === name) ?? null;
+}
+
 /** Fill the rest with the real Quick Build and walk to Review, as hooks.mjs does. */
-async function fillToReview(shell, name) {
+async function fillToReview(shell, name, { speciesUuid = null } = {}) {
   const { source, spells, equipment } = getSources();
-  const result = await applyQuickBuild({ state: shell.state, source, spells, equipment }, { rng: () => 0.42 });
+  const result = await applyQuickBuild({ state: shell.state, source, spells, equipment }, { rng: () => 0.42, speciesUuid });
   if ( !result?.ok ) throw new Error(`quick build did not fill: ${result?.warnings?.join(", ") || "no reason"}`);
   shell.state.details.name = name;
   shell.state.targetLevel = 1;
@@ -742,6 +751,41 @@ async function maxHitPoints(r, ctx) {
   }
 }
 
+/**
+ * 6. Heroic Inspiration at creation. dnd5e applies nothing for the 2024 Human's Resourceful trait, so
+ * the creator switches the sheet's toggle on for a new Human, and the creation card names it. A Dwarf
+ * is the control: no toggle, no row.
+ */
+async function heroicInspiration(r, ctx) {
+  const label = game.i18n.localize("sogrom-dnd5e-character-creator.chat.creation.inspiration");
+  for ( const [speciesName, expected] of [["Human", true], ["Dwarf", false]] ) {
+    const card = speciesCard(speciesName);
+    if ( !card ) { r.failures.push(`no ${speciesName} species in the world`); continue; }
+    const name = `${PREFIX}Inspiration ${speciesName}`;
+    const shell = await openOnClass("Fighter");
+    await fillToReview(shell, name, { speciesUuid: card.uuid });
+    if ( shell.state.speciesUuid !== card.uuid ) { r.failures.push(`quick build did not keep the ${speciesName}`); await closeAll(); continue; }
+    const before = new Set(game.actors.map(a => a.id));
+    await shell._finish(null);
+    await pause(2500);
+    await closeAll();
+    const actor = newActor(before, name);
+    if ( !actor ) { r.failures.push(`the ${speciesName} build produced no actor`); continue; }
+    ctx.made.push(actor.id);
+
+    const inspired = !!actor.system.attributes?.inspiration;
+    if ( inspired !== expected ) r.failures.push(`${speciesName}: inspiration is ${inspired}, expected ${expected}`);
+    const message = creationCard(actor);
+    if ( !message ) { r.failures.push(`${speciesName}: no creation card`); continue; }
+    const html = await message.renderHTML();
+    const row = [...(html?.querySelectorAll?.(".sogrom-chat-row dt") ?? [])].some(dt => dt.textContent.trim() === label);
+    if ( row !== expected ) r.failures.push(`${speciesName}: the card ${row ? "has" : "lacks"} the Heroic Inspiration row`);
+    if ( (inspired === expected) && (row === expected) ) {
+      r.notes.push(`${speciesName} (${card.uuid.split(".")[1]}): inspiration ${inspired}, card row ${row}`);
+    }
+  }
+}
+
 /* -------------------------------------------- */
 
 export async function checkFeatures() {
@@ -766,7 +810,8 @@ export async function checkFeatures() {
     ["Class guide on the drawer and the quick screen", classGuide],
     ["The quick screen keeps a typed name", quickTypedName],
     ["Origin art for a player who can't browse files", artWithoutBrowse],
-    ["Maximum only level-up hit points", maxHitPoints]
+    ["Maximum only level-up hit points", maxHitPoints],
+    ["Heroic Inspiration at creation", heroicInspiration]
   ];
   const results = [];
   const failures = [];

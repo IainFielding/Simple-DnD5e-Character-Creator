@@ -102,6 +102,101 @@
   background: rgba(236, 112, 130, 0.10);
 }
 
+/* ---------------------------------------------- Update which things */
+
+.sogrom-content-update .sogrom-cu-which {
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.6rem;
+  border: 1px solid var(--cc-line);
+  background: var(--cc-panel-grad);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.sogrom-content-update .sogrom-cu-which-title {
+  margin: 0;
+  font-family: var(--cc-font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+.sogrom-content-update .sogrom-cu-which-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+.sogrom-content-update .sogrom-cu-which-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-sm);
+  background: var(--cc-sunk);
+  color: var(--cc-bright);
+  cursor: pointer;
+}
+.sogrom-content-update .sogrom-cu-which-toggle.is-off { color: var(--cc-muted); }
+
+.sogrom-content-update .sogrom-cu-group-count {
+  font-size: 0.75rem;
+  color: var(--cc-muted);
+  font-weight: normal;
+}
+
+/* Each heading folds: closed by default, its title the click target. */
+.sogrom-content-update .sogrom-cu-group > summary {
+  list-style: none;
+  cursor: pointer;
+  margin-bottom: 0.35rem;
+}
+.sogrom-content-update .sogrom-cu-group > summary::-webkit-details-marker { display: none; }
+.sogrom-content-update .sogrom-cu-group > summary h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+.sogrom-content-update .sogrom-cu-group > summary:hover h3 { color: var(--cc-bright); }
+.sogrom-content-update .sogrom-cu-chevron {
+  font-size: 0.7rem;
+  color: var(--cc-muted);
+  transition: transform 0.15s ease;
+}
+.sogrom-content-update .sogrom-cu-group[open] .sogrom-cu-chevron { transform: rotate(90deg); }
+
+/* A heading switched off: still listed, so the player sees what they are leaving behind. */
+.sogrom-content-update .sogrom-cu-group.is-off .sogrom-cu-items { opacity: 0.5; }
+
+.sogrom-content-update .sogrom-cu-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--cc-text);
+}
+.sogrom-content-update .sogrom-cu-sources i { color: var(--cc-muted); margin-right: 0.3rem; }
+
+.sogrom-content-update .sogrom-cu-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.sogrom-content-update .sogrom-cu-version { color: var(--cc-text); font-size: 0.85rem; }
+
+.sogrom-content-update .sogrom-cu-tier {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-sm);
+  color: var(--cc-muted);
+  font-weight: normal;
+}
+.sogrom-content-update .sogrom-cu-tier.is-rebuild { border-color: var(--cc-open); color: var(--cc-open-bright); }
+.sogrom-content-update .sogrom-cu-tier.is-refresh { border-color: var(--cc-settled); color: var(--cc-settled); }
+
 /* ---------------------------------------------- Item lists */
 
 .sogrom-content-update .sogrom-cu-items,

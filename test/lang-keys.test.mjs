@@ -175,5 +175,9 @@ const RUNTIME = [
   { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.reason.${e.how}",
     keys: each("contentUpdate.reason", ["missing"]) },
   { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.status.${d.status}",
-    keys: each("contentUpdate.status", ["carried", "partial", "ask", "default"]) }
+    keys: each("contentUpdate.status", ["carried", "partial", "ask", "default"]) },
+  { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.tier.${e.tier}",
+    keys: each("contentUpdate.tier", ["rebuild", "refresh"]) },
+  { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.category.${g.kind}",
+    keys: each("contentUpdate.category", ["species", "background", "feats", "spells", "equipment", "other"]) }
 ];

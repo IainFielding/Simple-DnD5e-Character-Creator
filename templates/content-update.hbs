@@ -1,6 +1,7 @@
 {{!--
   The "Update to new content" review page, rendered by scripts/content-update/update-app.mjs
-  `ContentUpdateApp`. Read-only apart from three controls: a "Keep mine" box per item that looks
+  `ContentUpdateApp`. Items are grouped by what granted them (each class, species, background) or by
+  kind (feats, spells, equipment). Read-only apart from three controls: a "Keep mine" box per item that looks
   customised (re-rehearses the update), the backup download / proceed-without-backup pair for a user
   who cannot create actors, and the Update / Cancel buttons. One root element: a scrolling body and
   the footer pinned below it, so the buttons stay in reach however long the review gets.
@@ -24,70 +25,67 @@
 
   <p class="sogrom-cu-intro">{{localize "sogrom-dnd5e-character-creator.contentUpdate.intro"}}</p>
 
-  {{#if hasRebuilt}}
-  <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.rebuilt"}}</h3>
-  <p class="hint">{{localize "sogrom-dnd5e-character-creator.contentUpdate.rebuiltHint"}}</p>
-  <ul class="sogrom-cu-items">
-    {{#each rebuilt}}
-    <li class="sogrom-cu-item">
-      <img src="{{img}}" alt="" class="sogrom-cu-icon">
-      <div class="sogrom-cu-item-text">
-        <span class="sogrom-cu-item-name">{{name}}</span>
-        <span class="hint">{{groups}}{{#if versions}} · {{versions}}{{/if}}{{#if matchedBy}} · {{matchedBy}}{{/if}}</span>
-        {{#if customised}}
-        <label class="sogrom-cu-keep checkbox" data-tooltip="{{localize "sogrom-dnd5e-character-creator.contentUpdate.keepTip"}}">
-          <input type="checkbox" data-action="keep" data-item-id="{{id}}" {{#if keep}}checked{{/if}}>
-          {{localize "sogrom-dnd5e-character-creator.contentUpdate.keep"}}
-        </label>
-        {{/if}}
-        {{#if descriptionChanged}}
-        <details class="sogrom-cu-desc">
-          <summary>{{localize "sogrom-dnd5e-character-creator.contentUpdate.compareDescription"}}</summary>
-          <div class="sogrom-cu-desc-cols">
-            <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>
-              <div class="sogrom-cu-desc-text">{{{oldDescription}}}</div></div>
-            <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>
-              <div class="sogrom-cu-desc-text">{{{newDescription}}}</div></div>
-          </div>
-        </details>
-        {{/if}}
-      </div>
-    </li>
-    {{/each}}
+  {{#if hasRebuilt}}<p class="hint">{{localize "sogrom-dnd5e-character-creator.contentUpdate.rebuiltHint"}}</p>{{/if}}
+
+  {{#if hasSources}}
+  <ul class="sogrom-cu-sources">
+    {{#each sources}}<li><i class="fa-solid fa-book" aria-hidden="true"></i> {{text}} <span class="hint">· {{count}}</span></li>{{/each}}
   </ul>
   {{/if}}
 
-  {{#if hasRefreshed}}
-  <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.refreshed"}}</h3>
-  <ul class="sogrom-cu-items">
-    {{#each refreshed}}
-    <li class="sogrom-cu-item">
-      <img src="{{img}}" alt="" class="sogrom-cu-icon">
-      <div class="sogrom-cu-item-text">
-        <span class="sogrom-cu-item-name">{{name}}</span>
-        <span class="hint">{{groups}}{{#if versions}} · {{versions}}{{/if}}{{#if matchedBy}} · {{matchedBy}}{{/if}}</span>
-        {{#if customised}}
-        <label class="sogrom-cu-keep checkbox" data-tooltip="{{localize "sogrom-dnd5e-character-creator.contentUpdate.keepTip"}}">
-          <input type="checkbox" data-action="keep" data-item-id="{{id}}" {{#if keep}}checked{{/if}}>
-          {{localize "sogrom-dnd5e-character-creator.contentUpdate.keep"}}
-        </label>
-        {{/if}}
-        {{#if descriptionChanged}}
-        <details class="sogrom-cu-desc">
-          <summary>{{localize "sogrom-dnd5e-character-creator.contentUpdate.compareDescription"}}</summary>
-          <div class="sogrom-cu-desc-cols">
-            <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>
-              <div class="sogrom-cu-desc-text">{{{oldDescription}}}</div></div>
-            <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>
-              <div class="sogrom-cu-desc-text">{{{newDescription}}}</div></div>
-          </div>
-        </details>
-        {{/if}}
-      </div>
-    </li>
-    {{/each}}
-  </ul>
-  {{/if}}
+  <div class="sogrom-cu-which" role="group" aria-labelledby="sogrom-cu-which-title">
+    <p class="sogrom-cu-which-title" id="sogrom-cu-which-title">{{localize "sogrom-dnd5e-character-creator.contentUpdate.which"}}</p>
+    <div class="sogrom-cu-which-toggles">
+      {{#each groups}}
+      <label class="sogrom-cu-which-toggle checkbox{{#unless on}} is-off{{/unless}}">
+        <input type="checkbox" data-action="category" data-category="{{key}}" {{#if on}}checked{{/if}} {{#if @root.recalculating}}disabled{{/if}}>
+        {{label}} <span class="sogrom-cu-group-count">{{count}}</span>
+      </label>
+      {{/each}}
+    </div>
+    {{#if nothingToDo}}<p class="hint">{{localize "sogrom-dnd5e-character-creator.contentUpdate.nothingSelected"}}</p>{{/if}}
+  </div>
+
+  {{#each groups}}
+  {{!-- Collapsed by default: the toggles above say what will change; open a heading for the detail. --}}
+  <details class="sogrom-cu-group{{#unless on}} is-off{{/unless}}" data-group="{{key}}">
+    <summary><h3><i class="fa-solid fa-chevron-right sogrom-cu-chevron" aria-hidden="true"></i>
+      {{label}} <span class="sogrom-cu-group-count">{{count}}</span>
+      {{#unless on}}<span class="sogrom-cu-tier is-skipped">{{localize "sogrom-dnd5e-character-creator.contentUpdate.notUpdating"}}</span>{{/unless}}</h3></summary>
+    <ul class="sogrom-cu-items">
+      {{#each items}}
+      <li class="sogrom-cu-item">
+        <img src="{{img}}" alt="" class="sogrom-cu-icon">
+        <div class="sogrom-cu-item-text">
+          <span class="sogrom-cu-item-head">
+            <span class="sogrom-cu-item-name">{{name}}</span>
+            {{#unless skipped}}<span class="sogrom-cu-tier is-{{tier}}">{{tierLabel}}</span>{{/unless}}
+          </span>
+          {{#if version}}<span class="sogrom-cu-version"{{#if versionTip}} data-tooltip="{{versionTip}}"{{/if}}>{{version}}</span>{{/if}}
+          <span class="hint">{{groups}}{{#if matchedBy}} · {{matchedBy}}{{/if}}</span>
+          {{#if customised}}
+          <label class="sogrom-cu-keep checkbox" data-tooltip="{{localize "sogrom-dnd5e-character-creator.contentUpdate.keepTip"}}">
+            <input type="checkbox" data-action="keep" data-item-id="{{id}}" {{#if keep}}checked{{/if}} {{#if skipped}}disabled{{/if}} {{#if @root.recalculating}}disabled{{/if}}>
+            {{localize "sogrom-dnd5e-character-creator.contentUpdate.keep"}}
+          </label>
+          {{/if}}
+          {{#if descriptionChanged}}
+          <details class="sogrom-cu-desc" data-item-id="{{id}}">
+            <summary>{{localize "sogrom-dnd5e-character-creator.contentUpdate.compareDescription"}}</summary>
+            <div class="sogrom-cu-desc-cols">
+              <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.yours"}}</h4>
+                <div class="sogrom-cu-desc-text">{{{oldDescription}}}</div></div>
+              <div class="sogrom-cu-desc-col"><h4>{{localize "sogrom-dnd5e-character-creator.contentUpdate.updated"}}</h4>
+                <div class="sogrom-cu-desc-text">{{{newDescription}}}</div></div>
+            </div>
+          </details>
+          {{/if}}
+        </div>
+      </li>
+      {{/each}}
+    </ul>
+  </details>
+  {{/each}}
 
   {{#if hasUntouched}}
   <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.untouched"}}</h3>
@@ -112,6 +110,10 @@
   {{/if}}
 
   <h3>{{localize "sogrom-dnd5e-character-creator.contentUpdate.beforeAfter"}}</h3>
+  {{#if recalculating}}
+  <p class="sogrom-cu-loading"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+    {{localize "sogrom-dnd5e-character-creator.contentUpdate.recalculating"}}</p>
+  {{/if}}
   {{#if hasRows}}
   <table class="sogrom-cu-diff">
     <thead><tr>

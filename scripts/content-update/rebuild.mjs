@@ -180,6 +180,8 @@ async function undoNeverApplied(driver, oldData) {
  * @property {object} preview            The final actor data the commit will write.
  * @property {object} summary            Before/after, for the review page.
  * @property {(data: object) => object} transform
+ * @property {() => object} base         Fresh copy of the data the transform is applied to.
+ * @property {Set<string>} walked        Item ids whose "Keep mine" answer the walk itself read.
  */
 
 /**
@@ -199,7 +201,7 @@ export async function rehearse(actor, scan, { keep = new Map() } = {}) {
     const t = makeTransform({ actor, oldData, entries, keeps, rebuilt: false });
     const preview = t(copy(oldData));
     return { actor, rebuild: false, driver: null, decisions: [], preview, transform: t,
-      summary: summarise(actor, preview, null) };
+      base: () => copy(oldData), walked: new Set(), summary: summarise(actor, preview, null) };
   }
 
   const AM = dnd5e.applications.advancement.AdvancementManager;
@@ -276,8 +278,23 @@ export async function rehearse(actor, scan, { keep = new Map() } = {}) {
 
   const t = makeTransform({ actor, oldData, entries, keeps, rebuilt: true });
   const preview = t(driver.clone.toObject());
+  // The items whose "Keep mine" answer was read while staging the walk (above): changing one of those
+  // means walking again. Every other answer is read only by the transform, so the walk can be reused.
+  const walked = new Set(roots.filter(old => entries.get(old._id)?.source).map(old => old._id));
   return { actor, rebuild: true, driver, decisions: provider.report, preview, transform: t,
-    summary: summarise(actor, preview, driver.clone) };
+    base: () => driver.clone.toObject(), walked, summary: summarise(actor, preview, driver.clone) };
+}
+
+/**
+ * Re-apply a rehearsal's transform after a "Keep mine" answer changed, without walking again. The
+ * transform reads the answers live, so this is all an answer outside `rehearsal.walked` needs.
+ * @param {Rehearsal} rehearsal
+ * @returns {Rehearsal}
+ */
+export function refreshPreview(rehearsal) {
+  rehearsal.preview = rehearsal.transform(rehearsal.base());
+  rehearsal.summary = summarise(rehearsal.actor, rehearsal.preview, rehearsal.driver?.clone ?? null);
+  return rehearsal;
 }
 
 /**

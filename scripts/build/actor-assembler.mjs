@@ -12,6 +12,24 @@ import { buildCreationManager, CreationChoiceProvider } from "./creation-advance
 import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
 
 /**
+ * Whether a new character starts with Heroic Inspiration. The 2024 Human's Resourceful trait
+ * (identifier `resourceful`, in dnd5e's own species and the Player's Handbook module alike) gives it
+ * whenever they finish a Long Rest, and a character at the start of their first adventure is rested.
+ * Nothing in dnd5e applies it: the trait carries no effect, and inspiration is a plain sheet toggle.
+ * Under the 2014 rules inspiration is the DM's to award, and the 2014 Human has no such trait; a
+ * 2014-tagged item is skipped all the same.
+ * @param {Iterable<{type: string, system?: object}>} items
+ * @returns {boolean}
+ */
+export function startsWithHeroicInspiration(items) {
+  for ( const item of items ?? [] ) {
+    if ( (item.type === "feat") && (item.system?.identifier === "resourceful")
+      && (String(item.system?.source?.rules ?? "") !== "2014") ) return true;
+  }
+  return false;
+}
+
+/**
  * Turns a finished {@link CreatorState} into a real character.
  *
  * Everything the player chose is baked in directly, so they're never asked to confirm
@@ -35,8 +53,9 @@ import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
  * @returns {Promise<{actor: Actor, magicShop: object|null}>} The built actor, and what the 1st-level
  *   magic shop granted (null when it granted nothing) for the creation card to report.
  */
-// `addSpells`, `buildFeatSpell` and `detailsUpdate` are exported for their unit tests: they decide
-// the data written to the actor, which the e2e runs check only as a whole character.
+// `addSpells`, `buildFeatSpell`, `detailsUpdate` and `startsWithHeroicInspiration` are exported for
+// their unit tests: they decide the data written to the actor, which the e2e runs check only as a
+// whole character.
 export async function assembleActor(state, source, equipment) {
   const actor = state.actor;
 
@@ -103,6 +122,11 @@ export async function assembleActor(state, source, equipment) {
     // round trip is a no-op — and a freshly created character is at full health by definition.
     const hp = actor.system.attributes?.hp;
     if ( hp?.max ) await actor.update({ "system.attributes.hp.value": hp.max }, { render: false });
+
+    // Likewise rested: a 2024 Human's Resourceful gives Heroic Inspiration on every Long Rest.
+    if ( startsWithHeroicInspiration(actor.items) && !actor.system.attributes?.inspiration ) {
+      await actor.update({ "system.attributes.inspiration": true }, { render: false });
+    }
   }
 
   // Add the spells chosen on the Spells step, as prepared class spells.

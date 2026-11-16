@@ -1,7 +1,8 @@
 import { HOOKS, MODULE_ID, SETTINGS, fireCancellableHook, fireHook, log, t, tpl } from "../config.mjs";
 import { newlyOpenLevels, repairKeys, repairInSequence } from "../levelup/repair.mjs";
-import { cachedScan, hasUpdates, invalidateScan, scanActor } from "./scan.mjs";
-import { commitRehearsal, rehearse } from "./rebuild.mjs";
+import { cachedScan, hasUpdates, invalidateScan, scanActor, sourceUuidOf } from "./scan.mjs";
+import { commitRehearsal, refreshPreview, rehearse } from "./rebuild.mjs";
+import { packageOfUuid, readStamp } from "./fingerprint.mjs";
 import { canCopyActor, copyActor, downloadActor } from "./backup.mjs";
 
 /**
@@ -23,6 +24,100 @@ function windowId(actor) {
 /** Localised label for a field group. */
 const groupLabel = g => t(`contentUpdate.group.${g}`);
 
+/* -------------------------------------------- */
+/*  Grouping                                    */
+/* -------------------------------------------- */
+
+/** Where each heading sits on the page: classes first, then origins, then everything else. */
+const CATEGORY_ORDER = ["class", "species", "background", "feats", "spells", "equipment", "other"];
+
+const EQUIPMENT_TYPES = new Set(["weapon", "equipment", "consumable", "tool", "loot", "container"]);
+
+/** The item at the top of an item's grant chain (itself when nothing granted it). */
+function rootOf(item) {
+  const items = item.parent?.items;
+  let cur = item;
+  for ( let i = 0; i < 10; i++ ) {
+    const origin = cur.flags?.dnd5e?.advancementOrigin;
+    const next = origin ? items?.get(String(origin).split(".")[0]) : null;
+    if ( !next || (next === cur) ) break;
+    cur = next;
+  }
+  return cur;
+}
+
+/** The class a subclass belongs to, on the same character. */
+function classOfSubclass(subclass) {
+  const id = subclass.system?.classIdentifier;
+  return subclass.parent?.items?.find(i => (i.type === "class") && (i.system?.identifier === id)) ?? null;
+}
+
+/**
+ * Which heading an item belongs under: the class, species or background that granted it, else what it
+ * is. Spells always go under Spells, whatever granted them: that is where a player looks for them.
+ * @param {Item5e} item
+ * @returns {{key: string, kind: string, classItem?: Item5e}}
+ */
+export function categoryOf(item) {
+  if ( item.type === "spell" ) return { key: "spells", kind: "spells" };
+  const root = rootOf(item);
+  if ( root.type === "class" ) return { key: `class:${root.id}`, kind: "class", classItem: root };
+  if ( root.type === "subclass" ) {
+    const cls = classOfSubclass(root) ?? root;
+    return { key: `class:${cls.id}`, kind: "class", classItem: cls };
+  }
+  if ( root.type === "race" ) return { key: "species", kind: "species" };
+  if ( root.type === "background" ) return { key: "background", kind: "background" };
+  if ( item.type === "feat" ) return { key: "feats", kind: "feats" };
+  if ( EQUIPMENT_TYPES.has(item.type) ) return { key: "equipment", kind: "equipment" };
+  return { key: "other", kind: "other" };
+}
+
+/** Order inside a heading: the class, subclass, species or background itself first; spells by level. */
+function itemRank(item) {
+  return { class: 0, race: 0, background: 0, subclass: 1 }[item.type] ?? 2;
+}
+
+/* -------------------------------------------- */
+/*  Versions                                    */
+/* -------------------------------------------- */
+
+/** A package's display title: the system, a module, or this world (a world compendium). */
+function packageTitle(pkg) {
+  if ( !pkg ) return "";
+  if ( pkg === game.system?.id ) return game.system.title ?? pkg;
+  if ( pkg === "world" ) return game.world?.title ?? pkg;
+  return game.modules?.get(pkg)?.title ?? pkg;
+}
+
+/**
+ * Where an item came from and where it goes: "Player's Handbook 2.1.0 → 3.0.0". The old version is
+ * known only from the stamp the creator records on the items it adds (since 3.5.0); an older item
+ * says "earlier version".
+ * @param {import("./scan.mjs").ScanEntry} e
+ * @returns {{text: string, tip: string}}
+ */
+export function versionLine(e) {
+  const toPkg = packageOfUuid(e.sourceUuid);
+  if ( !toPkg ) return { text: "", tip: "" };
+  const stamp = readStamp(e.item, MODULE_ID);
+  const fromPkg = stamp?.package ?? packageOfUuid(sourceUuidOf(e.item)) ?? toPkg;
+  const to = e.toVersion ?? "";
+  const from = e.fromVersion ?? "";
+  const pkg = packageTitle(toPkg);
+  const fromPackage = packageTitle(fromPkg);
+  const moved = fromPkg !== toPkg;
+  if ( !from ) {
+    const text = moved
+      ? t("contentUpdate.version.movedUnknown", { fromPackage, package: pkg, to })
+      : t("contentUpdate.version.unknownFrom", { package: pkg, to });
+    return { text: text.trim(), tip: t("contentUpdate.version.unknownTip") };
+  }
+  if ( moved ) return { text: t("contentUpdate.version.moved", { fromPackage, from, package: pkg, to }).trim(), tip: "" };
+  if ( from === to ) return { text: t("contentUpdate.version.same", { package: pkg, to }).trim(), tip: "" };
+  return { text: t("contentUpdate.version.changed", { package: pkg, from, to }).trim(), tip: "" };
+}
+
 export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: "sogrom-content-update",
@@ -39,11 +134,13 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
       cancel: ContentUpdateApp.#onCancel,
       download: ContentUpdateApp.#onDownload,
       keep: ContentUpdateApp.#onKeep,
+      category: ContentUpdateApp.#onCategory,
       skipBackup: ContentUpdateApp.#onSkipBackup
     }
   };
 
-  static PARTS = { body: { template: tpl("content-update.hbs") } };
+  // `scrollable`: a re-render (a "Keep mine" tick) leaves the reader where they were.
+  static PARTS = { body: { template: tpl("content-update.hbs"), scrollable: [".sogrom-cu-scroll"] } };
 
   /** @type {"loading"|"ready"|"error"|"working"|"empty"} */
   #phase = "loading";
@@ -54,10 +151,28 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
 
   #error = "";
 
-  /** item id → true to keep the player's copy. Starts from each item's pre-ticked answer. */
+  /** item id → true to keep the player's copy: the per-item "Keep mine" boxes. Starts pre-ticked. */
   #keep = new Map();
 
+  /** Headings switched off in "Update which things": every item under one is kept as it is. */
+  #off = new Set();
+
+  /** item id → heading key, worked out once per scan. */
+  #category = new Map();
+
+  /**
+   * The answers the rehearsal reads: a heading switched off, else the item's own box. One Map for the
+   * window's life, refilled in place, because the rehearsal's transform holds it and reads it live.
+   */
+  #answers = new Map();
+
   #downloaded = false;
+
+  /** A "Keep mine" answer is walking the rebuild again. */
+  #recalculating = false;
+
+  /** Enriched descriptions, by item id and side: enrichment is the slow part of a render. */
+  #enriched = new Map();
 
   #skipBackup = false;
 
@@ -89,8 +204,10 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
       }
       for ( const e of this.#scan.entries ) {
         if ( e.customised && !this.#keep.has(e.item.id) ) this.#keep.set(e.item.id, e.keepDefault);
+        if ( !this.#category.has(e.item.id) ) this.#category.set(e.item.id, categoryOf(e.item).key);
       }
-      this.#rehearsal = await rehearse(this.actor, this.#scan, { keep: this.#keep });
+      this.#syncAnswers();
+      this.#rehearsal = await rehearse(this.actor, this.#scan, { keep: this.#answers });
       this.#phase = "ready";
     } catch ( err ) {
       log("content update: rehearsal failed", err);
@@ -98,6 +215,23 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
       this.#phase = "error";
     }
     return this.render();
+  }
+
+  /** Refill {@link #answers}; returns the ids whose answer changed. */
+  #syncAnswers() {
+    const changed = [];
+    for ( const e of this.#scan?.entries ?? [] ) {
+      const id = e.item.id;
+      const value = this.#off.has(this.#category.get(id)) || (this.#keep.get(id) ?? e.keepDefault ?? false);
+      if ( this.#answers.get(id) !== value ) changed.push(id);
+      this.#answers.set(id, value);
+    }
+    return changed;
+  }
+
+  /** Whether an item will be left as it is, by its own box or its heading's toggle. */
+  #kept(id) {
+    return this.#answers.get(id) ?? false;
   }
 
   /** @override */
@@ -109,31 +243,73 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
 
     const entries = this.#scan.entries;
     // Descriptions are shown as a sheet shows them: embeds, links and rolls enriched, each relative to
-    // its own copy. Only for the items that offer the comparison; it is the slow part of a render.
-    const enrich = (html, doc) => foundry.applications.ux.TextEditor.implementation.enrichHTML(html ?? "",
-      { relativeTo: doc, secrets: false }).catch(() => html ?? "");
+    // its own copy. Only for the items that offer the comparison, and once per window.
+    const enrich = async (key, html, doc) => {
+      if ( !this.#enriched.has(key) ) {
+        this.#enriched.set(key, await foundry.applications.ux.TextEditor.implementation.enrichHTML(html ?? "",
+          { relativeTo: doc, secrets: false }).catch(() => html ?? ""));
+      }
+      return this.#enriched.get(key);
+    };
     const describe = async e => {
       const descriptionChanged = e.customised && e.changed.includes("description");
+      const version = versionLine(e);
       return {
-      id: e.item.id,
-      name: e.item.name,
-      img: e.item.img,
-      groups: e.changed.filter(g => g !== "img").map(groupLabel).join(", "),
-      versions: (e.fromVersion && e.toVersion && (e.fromVersion !== e.toVersion))
-        ? t("contentUpdate.versions", { from: e.fromVersion, to: e.toVersion })
-        : (e.toVersion ? t("contentUpdate.toVersion", { to: e.toVersion }) : ""),
-      matchedBy: (e.how === "split")
-        ? t("contentUpdate.matchedBy.split", { species: e.source?.name ?? "", lineage: e.lineage?.name ?? "" })
-        : (["identifier", "name"].includes(e.how) ? t(`contentUpdate.matchedBy.${e.how}`) : ""),
-      customised: e.customised,
-      keep: this.#keep.get(e.item.id) ?? false,
-      descriptionChanged,
-      oldDescription: descriptionChanged ? await enrich(e.item.system?.description?.value, e.item) : "",
-      newDescription: descriptionChanged ? await enrich(e.source?.system?.description?.value, e.source) : ""
+        id: e.item.id,
+        name: e.item.name,
+        img: e.item.img,
+        tier: e.tier,
+        tierLabel: t(`contentUpdate.tier.${e.tier}`),
+        groups: e.changed.filter(g => g !== "img").map(groupLabel).join(", "),
+        version: version.text,
+        versionTip: version.tip,
+        matchedBy: (e.how === "split")
+          ? t("contentUpdate.matchedBy.split", { species: e.source?.name ?? "", lineage: e.lineage?.name ?? "" })
+          : (["identifier", "name"].includes(e.how) ? t(`contentUpdate.matchedBy.${e.how}`) : ""),
+        customised: e.customised,
+        keep: this.#keep.get(e.item.id) ?? false,
+        skipped: this.#off.has(this.#category.get(e.item.id)),
+        descriptionChanged,
+        oldDescription: descriptionChanged ? await enrich(`${e.item.id}|old`, e.item.system?.description?.value, e.item) : "",
+        newDescription: descriptionChanged ? await enrich(`${e.item.id}|new`, e.source?.system?.description?.value, e.source) : ""
       };
     };
-    const refreshed = await Promise.all(entries.filter(e => e.tier === "refresh").map(describe));
-    const rebuilt = await Promise.all(entries.filter(e => e.tier === "rebuild").map(describe));
+
+    // One heading per class (a multiclass character gets one each), then species, background, feats,
+    // spells, equipment: what granted or holds the item, rather than how the update treats it.
+    const changing = entries.filter(e => ["refresh", "rebuild"].includes(e.tier));
+    const byKey = new Map();
+    for ( const e of changing ) {
+      const cat = categoryOf(e.item);
+      if ( !byKey.has(cat.key) ) byKey.set(cat.key, { ...cat, entries: [] });
+      byKey.get(cat.key).entries.push(e);
+    }
+    const originalClass = this.actor.system?.details?.originalClass;
+    const sortedGroups = [...byKey.values()].sort((a, b) => {
+      const kind = CATEGORY_ORDER.indexOf(a.kind) - CATEGORY_ORDER.indexOf(b.kind);
+      if ( kind || (a.kind !== "class") ) return kind;
+      if ( a.classItem?.id === originalClass ) return -1;
+      if ( b.classItem?.id === originalClass ) return 1;
+      return (b.classItem?.system?.levels ?? 0) - (a.classItem?.system?.levels ?? 0);
+    });
+    const groups = await Promise.all(sortedGroups.map(async g => {
+      g.entries.sort((a, b) => (itemRank(a.item) - itemRank(b.item))
+        || ((a.item.system?.level ?? 0) - (b.item.system?.level ?? 0))
+        || a.item.name.localeCompare(b.item.name, game.i18n?.lang));
+      const label = (g.kind === "class")
+        ? t("contentUpdate.category.class", { name: g.classItem?.name ?? "" })
+        : t(`contentUpdate.category.${g.kind}`);
+      return { key: g.key, label, count: g.entries.length, on: !this.#off.has(g.key),
+        items: await Promise.all(g.entries.map(describe)) };
+    }));
+
+    // The packages behind the update, once each: "Player's Handbook 2.1.0 → 3.0.0 · 12 items".
+    const sourceCounts = new Map();
+    for ( const e of changing ) {
+      const line = versionLine(e).text;
+      if ( line ) sourceCounts.set(line, (sourceCounts.get(line) ?? 0) + 1);
+    }
+    const sources = [...sourceCounts].map(([text, count]) => ({ text, count: t("contentUpdate.version.count", { count }) }));
     const untouched = entries.filter(e => (e.tier === "report") && !["noSource"].includes(e.how))
       .map(e => ({ name: e.item.name, reason: t(`contentUpdate.reason.${e.how}`) }));
 
@@ -151,10 +327,11 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
     const backupReady = canCopy || this.#downloaded || this.#skipBackup;
     return {
       ...base,
-      refreshed, rebuilt, untouched,
-      hasRefreshed: refreshed.length > 0,
-      hasRebuilt: rebuilt.length > 0,
+      groups, sources, untouched,
+      hasSources: sources.length > 0,
+      hasRebuilt: changing.some(e => e.tier === "rebuild"),
       hasUntouched: untouched.length > 0,
+      recalculating: this.#recalculating,
       decisions,
       hasDecisions: decisions.length > 0,
       toChoose,
@@ -166,16 +343,68 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
       canCopy,
       downloaded: this.#downloaded,
       skipBackup: this.#skipBackup,
-      updateDisabled: !backupReady || (phase === "working")
+      nothingToDo: changing.every(e => this.#kept(e.item.id)),
+      updateDisabled: !backupReady || (phase === "working") || this.#recalculating
+        || changing.every(e => this.#kept(e.item.id))
     };
   }
 
-  /** Toggle "Keep mine" on an item, and rehearse again with the new answer. */
+  /** Toggle "Keep mine" on one item. */
   static async #onKeep(_event, target) {
     const id = target.dataset.itemId;
-    if ( !id ) return;
+    if ( !id || (this.#phase !== "ready") || this.#recalculating ) return;
     this.#keep.set(id, !!target.checked);
-    await this.#prepare();
+    return this.#reanswer();
+  }
+
+  /** Toggle a heading in "Update which things": off keeps every item under it as it is. */
+  static async #onCategory(_event, target) {
+    const key = target.dataset.category;
+    if ( !key || (this.#phase !== "ready") || this.#recalculating ) return;
+    if ( target.checked ) this.#off.delete(key);
+    else this.#off.add(key);
+    return this.#reanswer();
+  }
+
+  /**
+   * Bring the preview up to date with changed answers. Most answers are read only when the rehearsed
+   * character is reconciled with the old one, so the preview is re-derived at once; only a class,
+   * species or background the rebuild staged needs the walk run again.
+   */
+  async #reanswer() {
+    const changed = this.#syncAnswers();
+    if ( !changed.length ) return this.render();
+    if ( !changed.some(id => this.#rehearsal?.walked?.has(id)) ) {
+      try {
+        refreshPreview(this.#rehearsal);
+      } catch ( err ) {
+        log("content update: preview refresh failed", err);
+        return this.#prepare();
+      }
+      return this.render();
+    }
+    this.#recalculating = true;
+    await this.render();
+    try {
+      this.#rehearsal = await rehearse(this.actor, this.#scan, { keep: this.#answers });
+    } catch ( err ) {
+      log("content update: rehearsal failed", err);
+      this.#error = err?.message ?? String(err);
+      this.#phase = "error";
+    }
+    this.#recalculating = false;
+    return this.render();
+  }
+
+  /** Keep each opened heading and description comparison open across a re-render. */
+  _syncPartState(partId, newElement, priorElement, state) {
+    super._syncPartState(partId, newElement, priorElement, state);
+    for ( const open of priorElement.querySelectorAll("details[data-item-id][open]") ) {
+      newElement.querySelector(`details[data-item-id="${CSS.escape(open.dataset.itemId)}"]`)?.setAttribute("open", "");
+    }
+    for ( const open of priorElement.querySelectorAll("details[data-group][open]") ) {
+      newElement.querySelector(`details[data-group="${CSS.escape(open.dataset.group)}"]`)?.setAttribute("open", "");
+    }
   }
 
   static #onDownload() {
@@ -218,9 +447,12 @@ export class ContentUpdateApp extends HandlebarsApplicationMixin(ApplicationV2) 
       const openBefore = repairKeys(actor);
       await commitRehearsal(rehearsal);
       invalidateScan(actor);
-      const counts = this.#scan.counts;
+      // What actually changed: an item kept by its box or its heading is not counted.
+      const done = this.#scan.entries.filter(e => !this.#kept(e.item.id));
+      const refreshed = done.filter(e => e.tier === "refresh").length;
+      const rebuilt = done.filter(e => e.tier === "rebuild").length;
       const asked = (rehearsal.decisions ?? []).filter(d => d.status === "ask").length;
-      await postSummary(actor, { refreshed: counts.refresh, rebuilt: counts.rebuild, asked, backup });
+      await postSummary(actor, { refreshed, rebuilt, asked, backup });
       fireHook(HOOKS.contentUpdated, { actor, backup, rehearsal });
       await this.close();
       // One process: the choices the update could not carry open at once, a level at a time, in the
@@ -311,9 +543,9 @@ export function updateAvailable(actor, onReady) {
 const CONTROL = "sogromContentUpdate";
 
 /**
- * Register the entry points: the character sheet's ⋯ menu, the Actors right-click menu, and the
- * invalidation that keeps cached scans honest. Called at load: the sidebar's context menu is built
- * before `ready`.
+ * Register the one entry point, the character sheet's ⋯ menu, and the invalidation that keeps cached
+ * scans honest. (There is deliberately no Actors right-click entry: the update is offered from the
+ * character's own sheet only.)
  */
 export function registerContentUpdate() {
   Hooks.on("getHeaderControlsApplicationV2", (application, controls) => {
@@ -333,20 +565,6 @@ export function registerContentUpdate() {
     } catch ( err ) {
       log("could not add the content update header control", err);
     }
-  });
-
-  Hooks.on("getActorContextOptions", (_directory, options) => {
-    if ( game.system?.id !== "dnd5e" ) return;
-    const actorOf = li => game.actors?.get(li.dataset?.entryId ?? li.dataset?.documentId);
-    options.push({
-      label: t("contentUpdate.button"),
-      icon: "fa-solid fa-arrows-rotate",
-      visible: li => updateAvailable(actorOf(li)),
-      onClick: (_event, li) => {
-        const actor = actorOf(li);
-        if ( actor ) openContentUpdate(actor);
-      }
-    });
   });
 
   const forget = doc => invalidateScan(doc?.actor ?? doc);
