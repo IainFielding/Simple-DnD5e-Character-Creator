@@ -9,9 +9,10 @@ import { hasRulesPage } from "../data/rules-source.mjs";
 import { applyQuickBuild, abilityPriorities } from "../data/quick-build.mjs";
 import { QUICK_BUILD } from "../data/quick-build-data.mjs";
 import { classGuide } from "../data/class-guide.mjs";
-import { t, log, levelUpEnabled, systemRulesEdition } from "../config.mjs";
+import { t, log, levelUpEnabled, systemRulesEdition, MODULE_ID, SETTINGS } from "../config.mjs";
 import { pinContext } from "../app/compare.mjs";
 import { matchesRules } from "../data/source-index.mjs";
+import { heroClassesFor, readableDoc, chosenHeroClass as heroOf } from "../data/warcraft.mjs";
 
 /**
  * The Class step. Class selection and ability scores share one step: the chosen class's page and
@@ -60,7 +61,7 @@ export const classStep = {
    * once: the plates are where scores live, this line is where the class lives.
    */
   summary(state, source) {
-    return source.card(state.classUuid)?.name ?? "";
+    return heroOf(state, source)?.name ?? source.card(state.classUuid)?.name ?? "";
   },
 
   async handle(action, el, { state, source, spells, equipment, app }) {
@@ -132,10 +133,23 @@ export const classStep = {
       state.targetLevel = clampLevel(el.value);
       return;
     }
+    if ( action === "pick-hero-class" ) {
+      // "Play as" on the class page. The hero swaps class features, so the class's own answers go.
+      const hero = el.dataset.hero || null;
+      if ( !state.classUuid || (hero === (state.heroClass ?? null)) ) return false;
+      state.heroClass = hero;
+      state.advChoices.class = {};
+      state.choiceCache = await resolveChoices(state, source);
+      return;
+    }
     if ( action === "pick-class" ) {
       const uuid = el.dataset.uuid;
+      // A hero-class card (when the GM shows them as cards) picks the class *and* the hero.
+      const hero = el.dataset.heroClass || null;
       // Re-clicking the active card clears it, so a player can back out of a choice.
-      state.classUuid = state.classUuid === uuid ? null : uuid;
+      const same = (state.classUuid === uuid) && ((state.heroClass ?? null) === hero);
+      state.classUuid = same ? null : uuid;
+      state.heroClass = same ? null : hero;
       // Spells, class advancement picks, and class equipment are all class-specific.
       state.resetClassDependent();
       // Changing to a class of a different edition invalidates origins the new class would never
@@ -162,11 +176,28 @@ export const classStep = {
 
   async context({ state, source, app }) {
     const selected = state.classUuid;
-    const detail = selected ? await source.detail(selected) : null;
-    const groups = selected ? await source.advancementGroups(selected) : null;
+    const hero = heroOf(state, source);
+    let detail = selected ? await source.detail(selected) : null;
+    // A hero class reads as itself: its name and badge, and the features it swaps in.
+    let groups = null;
+    if ( selected && hero ) {
+      detail = detail ? { ...detail, name: hero.name, img: hero.img } : detail;
+      const doc = await readableDoc(await fromUuid(selected).catch(() => null), { heroClass: hero.identifier });
+      groups = doc ? await source.advancementGroupsOf(doc) : null;
+    } else if ( selected ) groups = await source.advancementGroups(selected);
+    const asCards = heroClassDisplay() === "cards";
     // `guide` is the complexity rating and one-line role under each class's name; null for a class
     // the table doesn't know, which leaves the card as it always was.
-    const cards = source.classes().map(c => ({ ...c, selected: c.uuid === selected, guide: classGuide(c.identifier) }));
+    const cards = source.classes().flatMap(c => {
+      const guide = classGuide(c.identifier);
+      const own = { ...c, selected: (c.uuid === selected) && !state.heroClass, guide };
+      if ( !asCards ) return [own];
+      // Hero classes as cards of their own, after the class they are built on.
+      return [own, ...heroClassesFor(c.identifier).map(h => ({
+        ...c, name: h.name, img: h.img, heroClass: h.identifier, guide,
+        selected: (c.uuid === selected) && (state.heroClass === h.identifier)
+      }))];
+    });
     const selectedCard = selected ? source.card(selected) : null;
     // Marks the off-edition cards hidden in place, so the first paint is already filtered.
     const rulesFilter = editionFilterContext(state, cards);
@@ -198,10 +229,37 @@ export const classStep = {
           ? { className: selectedCard.name, order: QUICK_BUILD[selectedCard.identifier]?.abilities ?? null }
           : null
       }),
-      targetLevel: targetLevelContext(state)
+      targetLevel: targetLevelContext(state),
+      heroPick: asCards ? null : heroPickContext(state, selectedCard)
     };
   }
 };
+
+/* -------------------------------------------- */
+/*  Hero classes                                */
+/* -------------------------------------------- */
+
+/** How hero classes are offered: "detail" ("Play as" on the class page) or "cards". */
+function heroClassDisplay() {
+  try { return game.settings.get(MODULE_ID, SETTINGS.heroClassDisplay); } catch { return "detail"; }
+}
+
+/**
+ * The "Play as" block: the class itself, then each hero class built on it. Null when the class has
+ * none (or World of Warcraft isn't active), so nothing renders.
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ * @param {object|null} card   The chosen class's card.
+ */
+function heroPickContext(state, card) {
+  const heroes = card ? heroClassesFor(card.identifier) : [];
+  if ( !heroes.length ) return null;
+  return {
+    options: [
+      { identifier: "", name: card.name, img: card.img, selected: !state.heroClass },
+      ...heroes.map(h => ({ identifier: h.identifier, name: h.name, img: h.img, selected: state.heroClass === h.identifier }))
+    ]
+  };
+}
 
 /* -------------------------------------------- */
 /*  Edition filter                              */

@@ -414,6 +414,17 @@ export class SourceIndex {
     return this.#groups.get(uuid);
   }
 
+  /**
+   * {@link advancementGroups} for a document that is not a compendium entry as it stands — a World
+   * of Warcraft hero class, whose swapped features the class page should list. Not memoised: the
+   * document is already a cached transform (see `data/warcraft.mjs#readableDoc`).
+   * @param {Item5e} doc
+   * @returns {Promise<object[]>}
+   */
+  async advancementGroupsOf(doc) {
+    return doc ? this.#buildGroups(doc) : null;
+  }
+
   /** Walk an item's level-1 traits and every granted feature/spell into display blocks. */
   async #buildGroups(doc) {
     // Headings read from the step namespace matching the document type, so a class shows

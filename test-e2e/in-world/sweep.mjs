@@ -80,6 +80,16 @@ function packageOf(packCollection) {
 }
 
 /**
+ * The Item compendia a sweep draws from. The `world.legacy-*` packs are left out: they are the
+ * `--content-update` suite's fixtures (old PHB 2.1.0 / dnd5e 6.0 content re-homed as world compendia
+ * by `legacy-fixture.mjs`), not installed content, and counting them adds a stale second copy of
+ * every PHB and SRD subclass, species and background — and renames the contested ids.
+ */
+function itemPacks() {
+  return game.packs.filter(p => (p.documentName === "Item") && !p.collection.startsWith("world.legacy-"));
+}
+
+/**
  * Every class item in the world, keyed by its identifier — **all** candidates per identifier,
  * sorted by uuid.
  *
@@ -96,7 +106,7 @@ function packageOf(packCollection) {
 async function classesByIdentifier() {
   const out = new Map();
   const found = [];
-  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+  for ( const pack of itemPacks() ) {
     const index = await pack.getIndex({ fields: ["system.identifier", "system.source"] });
     for ( const entry of index ) {
       if ( entry.type !== "class" ) continue;
@@ -172,7 +182,7 @@ function classFor(candidates, subclassPack) {
 /** Every subclass in the world, sorted by uuid so the sweep runs in the same order every time. */
 async function allSubclasses() {
   const out = [];
-  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+  for ( const pack of itemPacks() ) {
     const index = await pack.getIndex({ fields: ["system.classIdentifier"] });
     for ( const entry of index ) {
       if ( entry.type !== "subclass" ) continue;
@@ -242,7 +252,7 @@ async function resolveAxisClass(spec) {
 /** Every species in the world, sorted by uuid so the axis runs in the same order every time. */
 async function allSpecies() {
   const out = [];
-  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+  for ( const pack of itemPacks() ) {
     const index = await pack.getIndex({ fields: ["system.source"] });
     for ( const entry of index ) {
       // dnd5e's item type for a species is historically "race".
@@ -335,6 +345,19 @@ async function speciesScenarios({ level, incremental }) {
     // with two lineage-style choices gets each option of each; the other choice falls to the book.
     let ran = 0;
     for ( const choice of choices ) {
+      // Scanned lineages: another module's lineage that no pool lists but whose prerequisite names
+      // this species (WoW's Blood Elf, Night Elf, Void Elf and Nightborne all say `race:elf`). The
+      // creator offers them through its scan and a player can drop them natively, so they get a
+      // scenario like any pool option — on the first copy of the species whose choice scans.
+      if ( choice.scans && doc?.system?.identifier ) {
+        const want = `race:${doc.system.identifier}`;
+        const poolNames = new Set(choice.options.map(o => o.name.toLowerCase()));
+        for ( const l of await allLineages() ) {
+          if ( (String(l.rules) === "2014") || !l.prereq.includes(want) ) continue;
+          if ( poolNames.has(l.name.toLowerCase()) || choice.options.some(o => o.uuid === l.uuid) ) continue;
+          choice.options.push({ uuid: l.uuid, name: l.name, scanned: true });
+        }
+      }
       if ( !choice.options.length ) {
         skipped.push({ subclass: `${sp.name}: ${choice.title}`, uuid: sp.uuid,
           reason: "lineage choice has no authored pool (drop-only); the native flow cannot pick from it" });
@@ -391,7 +414,11 @@ async function lineageChoices(doc, depth = 0, seen = new Set()) {
         const opt = await fromUuid(entry?.uuid ?? entry).catch(() => null);
         if ( opt ) options.push({ uuid: opt.uuid, name: opt.name });
       }
-      out.push({ advId: adv.id, title: adv.title || doc.name, item: doc.name, options });
+      out.push({ advId: adv.id, title: adv.title || doc.name, item: doc.name, options,
+        // The creator also scans for lineages when the choice takes drops and is narrowed to a
+        // subtype (choice-resolver.mjs). The native flow reaches the same items through its browse
+        // button, which `allowDrops` puts there.
+        scans: Boolean(cfg.allowDrops && cfg.restriction?.subtype) });
     } else if ( adv.type === "ItemGrant" ) {
       for ( const entry of Array.from(cfg.items ?? []) ) {
         const granted = await fromUuid(entry?.uuid ?? entry).catch(() => null);
@@ -405,7 +432,7 @@ async function lineageChoices(doc, depth = 0, seen = new Set()) {
 /** Every lineage item in the world (a species feature of subtype "lineage"), sorted by uuid. */
 async function allLineages() {
   const out = [];
-  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+  for ( const pack of itemPacks() ) {
     const index = await pack.getIndex({ fields: ["system.type", "system.source", "system.prerequisites"] });
     for ( const entry of index ) {
       if ( (entry.type !== "feat") || (entry.system?.type?.value !== "race")
@@ -436,7 +463,7 @@ const FEAT_AXIS = { classIdentifier: "fighter", subclass: "Champion" };
 /** Every background in the world, sorted by uuid so the axis runs in the same order every time. */
 async function allBackgrounds() {
   const out = [];
-  for ( const pack of game.packs.filter(p => p.documentName === "Item") ) {
+  for ( const pack of itemPacks() ) {
     const index = await pack.getIndex({ fields: ["system.source"] });
     for ( const entry of index ) {
       if ( entry.type !== "background" ) continue;
@@ -514,9 +541,96 @@ async function backgroundScenarios({ level, incremental }) {
  * @param {string} [options.axis]     "subclass" (the default), "species" or "background".
  * @returns {Promise<{scenarios: object[], skipped: object[]}>}
  */
+/* -------------------------------------------- */
+/*  World of Warcraft: hero classes and Renown   */
+/* -------------------------------------------- */
+
+const WOW = "dnd-world-warcraft";
+
+/**
+ * The hero-class axis: every hero class World of Warcraft publishes (its own table, on its package),
+ * built on the class it is written for. The native side gets the module's *own* transform — its drop
+ * handler and dialog, run by `native.mjs#asDropped` — and the creator its "Play as" pick, so this
+ * measures our hero class against theirs as well as the build that follows.
+ *
+ * The subclass is the hero's locked one where it has one (Death Knight, Demon Hunter, Evoker), else
+ * one from the module's own pack for that class, else the class pack's first — which gives Hunter a
+ * Beast Master, the subclass the module's level-6 Pet Specialization hook is written for.
+ */
+async function heroScenarios({ level, incremental, renown = false }) {
+  const table = game.modules.get(WOW)?.active ? game.modules.get(WOW).config?.heroClasses : null;
+  if ( !table ) return { scenarios: [], skipped: [{ subclass: "hero axis", reason: `${WOW} is not active` }] };
+  const classes = await classesByIdentifier();
+  const subs = await allSubclasses();
+  const fixed = new Set(Object.values(table).flat().map(h => h.subclass).filter(Boolean));
+  const scenarios = [];
+  const skipped = [];
+  for ( const [identifier, heroes] of Object.entries(table) ) {
+    const candidates = classes.get(identifier) ?? [];
+    // The 2024 class the module builds on: the Player's Handbook's, else any 2024 copy.
+    const cls = candidates.find(c => c.pack === "dnd-players-handbook.classes")
+      ?? candidates.find(c => String(c.rules) !== "2014");
+    if ( !cls ) { skipped.push({ subclass: identifier, reason: "no 2024 class installed" }); continue; }
+    const doc = await fromUuid(cls.uuid).catch(() => null);
+    const advId = doc ? subclassAdvancementId(doc) : null;
+    const own = subs.filter(s => s.classIdentifier === identifier).sort((a, b) => a.name.localeCompare(b.name));
+    for ( const hero of heroes ) {
+      const sub = hero.subclass ? (own.find(s => s.uuid === hero.subclass) ?? { uuid: hero.subclass, name: hero.subclass })
+        : (own.find(s => (packageOf(s.pack) === WOW) && !fixed.has(s.uuid))
+          ?? own.find(s => (s.pack === cls.pack) && !fixed.has(s.uuid)) ?? own[0]);
+      scenarios.push({
+        id: `hero:${identifier}/${hero.identifier}${renown ? "+renown" : ""}`,
+        name: `Hero: ${game.i18n.localize(hero.name)} ${level} — ${cls.name}/${sub?.name ?? "?"}${renown ? " (Renown on)" : ""}`,
+        generate: true,
+        incremental,
+        heroClass: hero.identifier,
+        renown,
+        speciesUuid: ORIGINS[2024].species,
+        backgroundUuid: ORIGINS[2024].background,
+        classUuid: cls.uuid,
+        targetLevel: level,
+        abilities: { ...ABILITIES },
+        answers: (advId && sub?.uuid) ? { [advId]: sub.uuid } : {}
+      });
+    }
+  }
+  return { scenarios, skipped };
+}
+
+/**
+ * The Renown axis: the species axis's World of Warcraft scenarios, and the hero axis's Shaman, with
+ * dnd5e's Renown variant rule switched on for each (`scenario.renown`, see harness.mjs). With it on,
+ * the module adds a Renown choice to a dropped species, to its lineage feats as they are granted, and
+ * to a Druid, Wizard or Shaman — the species axis's Wizard carries Kirin Tor itself, so every scenario
+ * here asks at least one.
+ */
+async function renownScenarios({ level, incremental }) {
+  const cfg = game.modules.get(WOW)?.active ? game.modules.get(WOW).config?.renownAdvancement : null;
+  if ( !cfg ) return { scenarios: [], skipped: [{ subclass: "renown axis", reason: `${WOW} is not active` }] };
+  const species = await speciesScenarios({ level, incremental });
+  // By identifier, as the module's own table is keyed: it gives Renown to the Player's Handbook's
+  // Dwarf, Gnome, Human and Orc as well as its own species, and to lineage feats by theirs.
+  const identifierOf = async uuid => (await fromUuid(uuid).catch(() => null))?.system?.identifier ?? null;
+  const wowSpecies = [];
+  for ( const s of species.scenarios ) {
+    const takes = cfg.race?.[await identifierOf(s.speciesUuid)]
+      || (await Promise.all((s.expectItems ?? []).map(e => identifierOf(e.uuid)))).some(id => cfg.feat?.[id])
+      || s.speciesUuid?.includes(`${WOW}.`);
+    if ( takes ) wowSpecies.push(s);
+  }
+  const heroes = (await heroScenarios({ level, incremental, renown: true })).scenarios
+    .filter(s => cfg.class?.[s.id.split(":")[1].split("/")[0]]);
+  return {
+    scenarios: [...wowSpecies.map(s => ({ ...s, id: `${s.id}+renown`, name: `${s.name} (Renown on)`, renown: true })), ...heroes],
+    skipped: species.skipped
+  };
+}
+
 export async function sweepScenarios({ level = 20, incremental = false, axis = "subclass" } = {}) {
   if ( axis === "species" ) return speciesScenarios({ level, incremental });
   if ( axis === "background" ) return backgroundScenarios({ level, incremental });
+  if ( axis === "hero" ) return heroScenarios({ level, incremental });
+  if ( axis === "renown" ) return renownScenarios({ level, incremental });
   const classes = await classesByIdentifier();
   const subclasses = await allSubclasses();
 

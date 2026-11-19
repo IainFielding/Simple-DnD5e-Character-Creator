@@ -111,6 +111,26 @@ function assertBookComplete(book) {
 }
 
 /**
+ * Snapshot the native build as the creator is *meant* to leave it at the start of play.
+ *
+ * The 2024 Human's Resourceful trait gives Heroic Inspiration after every Long Rest, and a new
+ * character is rested — but dnd5e applies nothing for it, so a native build has the sheet toggle
+ * off. Since 2abb787 (2026-11-16) the creator switches it on for a new character holding a non-2014
+ * `resourceful` feat. That is a deliberate improvement on the native result, so the oracle carries
+ * it: only the native side is adjusted, and the rule is restated here rather than imported, so a
+ * creator that stops setting it still shows up as a difference.
+ * @param {Actor} actor
+ */
+function nativeSnapshot(actor) {
+  const snap = snapshot(actor);
+  const resourceful = actor.items.some(i => (i.type === "feat") && (i.system?.identifier === "resourceful")
+    && (String(i.system?.source?.rules ?? "") !== "2014"));
+  const attributes = snap.source?.actor?.system?.attributes;
+  if ( resourceful && attributes ) attributes.inspiration = true;
+  return snap;
+}
+
+/**
  * Decisions only one adapter ever raised, as difference records.
  *
  * The character diff shows the *consequences* of a divergence; this shows the divergence. A choice
@@ -273,8 +293,16 @@ async function enableScenarioSources(scenario) {
   const legacyOn = Object.fromEntries(game.packs
     .filter(p => { const rv = p.metadata.flags?.dnd5e?.rulesVersion; return rv && (rv !== rules); })
     .map(p => [p.collection, true]));
+  // `world.legacy-*` are the `--content-update` fixtures: world-compendium copies of old dnd5e and PHB
+  // packs (see legacy-fixture.mjs). They carry no rulesVersion flag, so dnd5e treats them as enabled in
+  // any rules, and once the system's own 2014 packs are switched on beside them the creator offered
+  // the fixture's same-id copy of a 2014 SRD subclass instead of the system's (Draconic Bloodline,
+  // Life Domain, The Fiend — 2026-11-17). Switched off for the scenario; restored with the rest.
+  const fixturesOff = Object.fromEntries(game.packs
+    .filter(p => p.collection.startsWith("world.legacy-"))
+    .map(p => [p.collection, false]));
   const { invalidateSources } = await import("/modules/sogrom-dnd5e-character-creator/scripts/data/source-cache.mjs");
-  await game.settings.set("dnd5e", "packSourceConfiguration", { ...before, ...legacyOn });
+  await game.settings.set("dnd5e", "packSourceConfiguration", { ...before, ...legacyOn, ...fixturesOff });
   invalidateSources();
   resetSourceIndex();
   return async () => {
@@ -297,7 +325,11 @@ export async function runScenario(scenario, { keep = false, render = false } = {
   let creator = null;
   let restoreSources = null;
 
+  // dnd5e's Renown variant rule, for a scenario that asks for it (the sweep's `renown` axis): with it
+  // on, World of Warcraft adds Renown choices to classes, species and lineage feats. Restored below.
+  const renownBefore = dnd5e.settings?.renownScore;
   try {
+    if ( scenario.renown && !renownBefore ) await game.settings.set("dnd5e", "renownScore", true);
     restoreSources = await enableScenarioSources(scenario);
     // One book, both adapters. It answers each decision once and hands the identical answer to
     // whoever asks second, which is what makes a generated scenario comparable at all: the two
@@ -321,7 +353,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
     // collected below are bucketed on these marks, and they are worth attributing in either mode.
     const record = side => (level, actor) => {
       deleteErrors.mark(side, level);
-      if ( perLevel ) perLevel[side].set(level, snapshot(actor));
+      if ( perLevel ) perLevel[side].set(level, (side === "native") ? nativeSnapshot(actor) : snapshot(actor));
     };
 
     deleteErrors.install();
@@ -360,7 +392,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
       }
     }
 
-    const a = snapshot(native);
+    const a = nativeSnapshot(native);
     const b = snapshot(creator);
     report.differences = [
       ...decisionDifferences(book),
@@ -392,6 +424,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
       if ( ids.length ) await Actor.implementation.deleteDocuments(ids, { render: false }).catch(() => {});
     }
     await restoreSources?.().catch(() => {});
+    if ( scenario.renown && !renownBefore ) await game.settings.set("dnd5e", "renownScore", false).catch(() => {});
     report.ms = Math.round(performance.now() - started);
   }
   return report;

@@ -556,6 +556,10 @@
         "features": "Class Features",
         "spells": "Spells",
         "levelTag": "Lvl {level}",
+        "hero": {
+          "title": "Play As",
+          "hint": "A hero class is built on this class, with some of its features swapped for the hero's own."
+        },
         "targetLevel": {
           "label": "Starting Level",
           "custom": "Other",
@@ -585,7 +589,8 @@
         "lineage": {
           "prompt": "Every {species} has one of these. Hover over one to see what it gives you.",
           "change": "You can change this here or on the Choices step.",
-          "hint": "Pick one under “{title}” to continue."
+          "hint": "Pick one under “{title}” to continue.",
+          "card": "{species} ({lineage})"
         }
       },
       "background": {
@@ -937,6 +942,12 @@
       "rollFormula": {
         "name": "Ability roll formula",
         "hint": "Dice formula rolled for each ability when using the Roll method (standard rules use 4d6kh3)."
+      },
+      "heroClassDisplay": {
+        "name": "Hero classes",
+        "hint": "How World of Warcraft's hero classes (Death Knight, Demon Hunter, Evoker…) are offered: as a “Play as” choice on the class they are built on, or as cards of their own in the class list.",
+        "detail": "“Play as” on the class page",
+        "cards": "Their own cards in the class list"
       },
       "displayMode": {
         "name": "Display mode",

@@ -266,7 +266,16 @@ async function fillTrait(flow, adv, answer, moved = () => false) {
   for ( const key of wanted ) {
     if ( adv.value.chosen?.has?.(key) || moved() ) break;
     const root = await flowElement(flow);
-    if ( !root.querySelector("[name=added]") ) break;        // pool exhausted / quota already full
+    // No select means the pool is exhausted or the quota already full — but the select can also
+    // simply not have painted yet. Breaking on the first look dropped Thieves' Cant's language on
+    // long runs (SRD Rogue Thief, 2026-11-12/14/17; native missing the pick, creator holding it).
+    // Give it up to ~3s before concluding there is nothing to fill.
+    let present = !!root.querySelector("[name=added]");
+    for ( let i = 0; !present && (i < 15) && !moved() && !adv.value.chosen?.has?.(key); i++ ) {
+      await sleep(200);
+      present = !!flow.form?.querySelector("[name=added]");
+    }
+    if ( !present ) break;                                   // pool exhausted / quota already full
     const select = await untilFound(
       () => {
         if ( moved() ) return true;
@@ -705,9 +714,10 @@ export async function buildNative(scenario, { book, consumed, onLevel } = {}) {
     if ( data._stats ) data._stats.compendiumSource = doc.uuid;
     if ( data.type === "class" ) data.system.levels = 1;
 
-    const manager = AdvancementManager.forNewItem(actor, data);
+    const dropped = await asDropped(actor, data, scenario);
+    const manager = AdvancementManager.forNewItem(actor, dropped);
     if ( manager.steps.length ) await driveManager(manager, book, consumed, { phase: "creation" });
-    else await actor.createEmbeddedDocuments("Item", [data], { render: false });
+    else await actor.createEmbeddedDocuments("Item", [dropped], { render: false });
 
     // dnd5e links a species or background from its item's `_onCreate` with an actor update it does
     // not await (`RaceData`/`BackgroundData`). The next origin's manager clones the actor at once, and
@@ -759,12 +769,50 @@ export async function buildNative(scenario, { book, consumed, onLevel } = {}) {
     if ( data._stats ) data._stats.compendiumSource = doc.uuid;
     data.system.levels = mc.levels ?? 1;
 
-    const manager = AdvancementManager.forNewItem(actor, data);
+    const dropped = await asDropped(actor, data, { heroClass: mc.heroClass ?? null });
+    const manager = AdvancementManager.forNewItem(actor, dropped);
     if ( manager.steps.length ) await driveManager(manager, book, consumed);
-    else await actor.createEmbeddedDocuments("Item", [data], { render: false });
+    else await actor.createEmbeddedDocuments("Item", [dropped], { render: false });
   }
 
   return actor;
+}
+
+/**
+ * An origin item's data as it reaches the advancement manager when a player *drops* it on the sheet.
+ *
+ * The harness stages through `forNewItem`, which skips the sheet's `dnd5e.dropCreateItems` hook — and
+ * World of Warcraft does its work there: a class's hero-class dialog (and the features it swaps), the
+ * class badge art, and the Renown choice on a class or species. To measure the creator against what a
+ * real drop gives, the module's *own* handlers are run on the item: the hook is called with a stand-in
+ * sheet, the dialog's answer is the scenario's `heroClass` ("standard" when it names none), and the
+ * module's follow-up `_onDropCreateItems` is caught and fed back through the hook with the dialog
+ * marked done, exactly as dnd5e's sheet does. Nothing changes without the module.
+ * @param {Actor} actor
+ * @param {object} data       Item source data.
+ * @param {{heroClass?: string|null}} scenario
+ * @returns {Promise<object>}
+ */
+async function asDropped(actor, data, scenario) {
+  if ( !game.modules.get("dnd-world-warcraft")?.active ) return data;
+  const { DialogV2 } = foundry.applications.api;
+  let items = [new Item.implementation(foundry.utils.deepClone(data))];
+  let handedBack = null;
+  const sheet = { actor, _onDropCreateItems: async (event, list) => { handedBack = list; } };
+  const wait = DialogV2.wait;
+  DialogV2.wait = async () => scenario?.heroClass ?? "standard";
+  try {
+    if ( Hooks.call("dnd5e.dropCreateItems", sheet, items, {}) === false ) {
+      await until(() => handedBack, "World of Warcraft's hero-class dialog to hand the class back", 5_000);
+      items = handedBack;
+      Hooks.call("dnd5e.dropCreateItems", sheet, items, { "dnd-world-warcraft": { dialogSkipped: true } });
+    }
+  } finally {
+    DialogV2.wait = wait;
+  }
+  const out = items[0].toObject();
+  if ( data._stats ) out._stats = { ...(out._stats ?? {}), compendiumSource: data._stats.compendiumSource };
+  return out;
 }
 
 /** `{str: 15, …}` → the nested shape `Actor.create` wants. */

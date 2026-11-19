@@ -200,6 +200,7 @@ export const SETTINGS = {
   welcomeCards: "showWelcomeCards",
   welcomeVersion: "welcomeVersion",
   contentUpdatePlayers: "contentUpdatePlayers",
+  heroClassDisplay: "heroClassDisplay",
   debug: "debugLogging"
 };
 
@@ -236,6 +237,9 @@ export const DEFAULTS = {
   // badge is for is the one who does not yet know which they want — and that is the path that
   // asks least of them. A table that would rather everyone built by hand says so here.
   recommendedPath: "quick",
+  // World of Warcraft hero classes: a "Play as" pick on the class page (one Paladin card), or a card
+  // of their own in the class grid beside the class they are built on.
+  heroClassDisplay: "detail",
   magicShopConfig: {
     inventory: [],
     wealthTable: null          // null = the DMG table; see data/magic-shop.mjs

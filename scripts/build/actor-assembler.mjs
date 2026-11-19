@@ -10,6 +10,7 @@ import { bookFreeUpdate } from "../data/spellbook.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { buildCreationManager, CreationChoiceProvider } from "./creation-advancement.mjs";
 import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
+import { transformItemData } from "../data/warcraft.mjs";
 
 /**
  * Whether a new character starts with Heroic Inspiration. The 2024 Human's Resourceful trait
@@ -89,6 +90,12 @@ export async function assembleActor(state, source, equipment) {
   stage("species", "system.details.race");
   stage("background", "system.details.background");
   stage("class", "system.details.originalClass", data => { data.system.levels = 0; });
+  // World of Warcraft: the hero class the player chose (its name, badge, locked subclass and swapped
+  // features) and the Renown choices its module adds to a dropped class or species — the creator
+  // stages rather than drops, so the module's own drop handlers never see these items.
+  for ( const data of items ) {
+    await transformItemData(data, { heroClass: (data.type === "class") ? (state.heroClass ?? null) : null });
+  }
 
   // Write the actor-level update: identity/visuals, the base ability scores, and the detail→item
   // links. An origin's ability increase is NOT layered in here — its ASI advancement applies it in

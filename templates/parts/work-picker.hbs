@@ -97,6 +97,11 @@
       <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}}"
               data-action="stepAction" data-step-action="{{../pickAction}}"
               data-uuid="{{uuid}}" data-name="{{name}}"
+              {{!-- A species card that also picks its lineage ("Elf (Drow)") — see origin-step.mjs
+                    lineageCards(). --}}
+              {{#if lineageKey}}data-lineage-key="{{lineageKey}}" data-lineage-sel="{{lineageSel}}"{{/if}}
+              {{!-- A World of Warcraft hero-class card ("Death Knight") — see class-step.mjs. --}}
+              {{#if heroClass}}data-hero-class="{{heroClass}}"{{/if}}
               {{#if abilities}}data-abilities="{{abilities}}"{{/if}}
               {{#if filterRules}}data-rules="{{filterRules}}"{{/if}}>
         <img class="creator-pickrow-img" src="{{img}}" alt="">
