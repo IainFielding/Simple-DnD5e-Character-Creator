@@ -125,7 +125,7 @@ async function lineageCards(source, cards) {
     for ( const opt of options ) {
       out.push({
         ...card,
-        name: t("step.species.lineage.card", { species: card.name, lineage: opt.label }),
+        name: lineageCardName(card.name, opt.label),
         lineageKey: opt.key,
         lineageUuid: opt.uuid,
         lineageSel: lineage.selKey
@@ -133,6 +133,16 @@ async function lineageCards(source, cards) {
     }
   }
   return out;
+}
+
+/**
+ * A lineage card's name: "Elf (Drow)". A lineage whose own name already ends in brackets — the
+ * Goliath's "Cloud's Jaunt (Cloud Giant)" — reads "Goliath: Cloud's Jaunt (Cloud Giant)" instead of
+ * nesting them.
+ */
+function lineageCardName(species, lineage) {
+  const key = String(lineage).includes("(") ? "step.species.lineage.cardColon" : "step.species.lineage.card";
+  return t(key, { species, lineage });
 }
 
 /** The lineage the player holds for a species-step decision, or null. */
@@ -182,7 +192,7 @@ export function originStep({ id, icon, labelKey, instructionKey, field, cards, h
       let name = source.card(state[field])?.name ?? "";
       if ( lineage && name ) {
         const picked = lineageRequirements(state, id).flatMap(r => r.options).find(o => o.isSelected);
-        if ( picked ) name = t("step.species.lineage.card", { species: name, lineage: picked.label });
+        if ( picked ) name = lineageCardName(name, picked.label);
       }
       if ( !name || !asiSource ) return name;
       const line = asiSummary(state, asiSource);
