@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import { MODULE_ID } from "../scripts/config.mjs";
-import { addSpells, buildFeatSpell, detailsUpdate } from "../scripts/build/actor-assembler.mjs";
+import { addSpells, buildFeatSpell, detailsUpdate, startsWithHeroicInspiration } from "../scripts/build/actor-assembler.mjs";
 
 /**
  * The parts of building a character that decide the data written to it, outside the advancement
@@ -151,5 +151,28 @@ describe("detailsUpdate", () => {
 
   it("keeps the actor's own name when none was typed", () => {
     expect(detailsUpdate({ ...state, details: { name: "  " } }).name).toBe("Old Name");
+  });
+});
+
+describe("startsWithHeroicInspiration", () => {
+  const resourceful = (rules = "2024") => ({ type: "feat", system: { identifier: "resourceful", source: { rules } } });
+
+  it("is true for a 2024 Human's Resourceful trait", () => {
+    expect(startsWithHeroicInspiration([{ type: "race", system: {} }, resourceful()])).toBe(true);
+  });
+
+  it("is true when the trait does not say its edition", () => {
+    expect(startsWithHeroicInspiration([{ type: "feat", system: { identifier: "resourceful" } }])).toBe(true);
+  });
+
+  it("is false under the 2014 rules, where inspiration is the DM's to award", () => {
+    expect(startsWithHeroicInspiration([resourceful("2014")])).toBe(false);
+  });
+
+  it("is false without the trait, or for a non-feat that shares the identifier", () => {
+    expect(startsWithHeroicInspiration([{ type: "feat", system: { identifier: "skillful" } }])).toBe(false);
+    expect(startsWithHeroicInspiration([{ type: "loot", system: { identifier: "resourceful" } }])).toBe(false);
+    expect(startsWithHeroicInspiration([])).toBe(false);
+    expect(startsWithHeroicInspiration(null)).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
-import { t, log, multiclassMode, fireHook, HOOKS } from "../../config.mjs";
+import { t, log, multiclassMode, fireHook, HOOKS, MODULE_ID, SETTINGS } from "../../config.mjs";
+import { heroClassesFor, readableDoc, transformItemData } from "../../data/warcraft.mjs";
 import { LevelUpDriver } from "../manager-driver.mjs";
 import { multiclassBlockers, formatBlockers } from "../multiclass.mjs";
 import { closeNativeFlows } from "./native-flow-step.mjs";
@@ -83,16 +84,28 @@ export const lvlClassStep = {
           const blockers = doc ? multiclassBlockers(actor, doc) : [];
           if ( blockers.length ) reason = formatBlockers(blockers);
         }
+        const isPicked = (selection?.kind === "new") && (selection.uuid === card.uuid);
         addable.push({
           kind: "new",
           uuid: card.uuid,
           name: card.name,
           img: card.img,
           tag: t("levelup.step.class.newTag"),
-          selected: selection?.kind === "new" && selection.uuid === card.uuid,
+          selected: isPicked && !selection.hero,
           disabled: !!reason,
           reason
         });
+        // World of Warcraft hero classes as cards of their own, when the GM shows them that way.
+        if ( heroesAsCards() ) {
+          for ( const h of heroClassesFor(card.identifier) ) {
+            addable.push({
+              kind: "new", uuid: card.uuid, hero: h.identifier, name: h.name, img: h.img,
+              tag: t("levelup.step.class.newTag"),
+              selected: isPicked && (selection.hero === h.identifier),
+              disabled: !!reason, reason
+            });
+          }
+        }
       }
     }
 
@@ -101,7 +114,8 @@ export const lvlClassStep = {
     let pending = null;
     if ( selection?.kind === "new" ) {
       const card = candidates.find(c => c.uuid === selection.uuid);
-      if ( card ) pending = { kind: "new", uuid: card.uuid, name: card.name, img: card.img,
+      const hero = selection.hero ? heroClassesFor(card?.identifier).find(h => h.identifier === selection.hero) : null;
+      if ( card ) pending = { kind: "new", uuid: card.uuid, name: hero?.name ?? card.name, img: hero?.img ?? card.img,
         tag: t("levelup.step.class.newTag"), selected: true, disabled: false, reason: "" };
     }
 
@@ -120,11 +134,26 @@ export const lvlClassStep = {
     const sel = addable.find(c => c.selected);
     let detail = null;
     let groups = null;
+    let heroPick = null;
     if ( sel ) {
-      [detail, groups] = await Promise.all([
-        source.detail(sel.uuid).catch(() => null),
-        source.advancementGroups(sel.uuid).catch(() => null)
-      ]);
+      const card = candidates.find(c => c.uuid === sel.uuid) ?? null;
+      const heroes = heroClassesFor(card?.identifier);
+      const hero = selection?.hero ? heroes.find(h => h.identifier === selection.hero) : null;
+      detail = await source.detail(sel.uuid).catch(() => null);
+      if ( hero ) {
+        // The hero class reads as itself: its name, badge and swapped features.
+        detail = detail ? { ...detail, name: hero.name, img: hero.img } : detail;
+        const doc = await readableDoc(await fromUuid(sel.uuid).catch(() => null), { heroClass: hero.identifier });
+        groups = doc ? await source.advancementGroupsOf(doc).catch(() => null) : null;
+      } else {
+        groups = await source.advancementGroups(sel.uuid).catch(() => null);
+      }
+      if ( heroes.length && card && !heroesAsCards() ) {
+        heroPick = { options: [
+          { identifier: "", name: card.name, img: card.img, selected: !selection.hero },
+          ...heroes.map(h => ({ identifier: h.identifier, name: h.name, img: h.img, selected: selection.hero === h.identifier }))
+        ] };
+      }
     }
 
     return {
@@ -135,7 +164,8 @@ export const lvlClassStep = {
       newCard,
       hasSelection: !!sel,
       detail,
-      groups
+      groups,
+      heroPick
     };
   },
 
@@ -151,26 +181,32 @@ export const lvlClassStep = {
       state.classBrowse = false;
       return;
     }
+    if ( action === "pick-levelup-hero" ) {
+      // "Play as" for the new class: a different hero swaps class features, so the driver is rebuilt.
+      const sel = state.classSelection;
+      const hero = el.dataset.hero || null;
+      if ( (sel?.kind !== "new") || ((sel.hero ?? null) === hero) ) return false;
+      if ( state.driver && state.hasPlayerInput() && !(await confirmSwitch()) ) return false;
+      closeNativeFlows(state);
+      state.clearDriver();
+      state.classSelection = { ...sel, hero };
+      await buildDriver(ctx);
+      return;
+    }
     if ( action !== "pick-levelup-class" ) return;
     // A locked card (multiclass prerequisites unmet) only shows its tooltip.
     if ( el.getAttribute("aria-disabled") === "true" ) return false;
     const { kind, id, uuid } = el.dataset;
+    const hero = el.dataset.hero || null;
 
     const same = state.classSelection
       && state.classSelection.kind === kind
-      && (kind === "existing" ? state.classSelection.id === id : state.classSelection.uuid === uuid);
+      && (kind === "existing" ? state.classSelection.id === id
+        : ((state.classSelection.uuid === uuid) && ((state.classSelection.hero ?? null) === hero)));
 
     // Changing (or clearing) the pick throws away the driver and every decision on it — rolled
     // hit points included — so confirm when the player has actually made one.
-    if ( state.driver && state.hasPlayerInput() ) {
-      const proceed = await foundry.applications.api.DialogV2.confirm({
-        window: { title: t("levelup.step.class.switchTitle"), icon: "fa-solid fa-triangle-exclamation" },
-        content: `<p>${t("levelup.step.class.switchBody")}</p>`,
-        modal: true,
-        rejectClose: false
-      });
-      if ( !proceed ) return false;
-    }
+    if ( state.driver && state.hasPlayerInput() && !(await confirmSwitch()) ) return false;
 
     // A third-party flow the old class mounted is registered with Foundry, and only the window's
     // close would look for it � by which time the state no longer points at this driver.
@@ -180,10 +216,25 @@ export const lvlClassStep = {
       state.classSelection = null;
       return;
     }
-    state.classSelection = kind === "existing" ? { kind, id } : { kind, uuid };
+    state.classSelection = kind === "existing" ? { kind, id } : { kind, uuid, hero };
     await buildDriver(ctx);
   }
 };
+
+/** Ask before a change of class throws the decisions already made away. */
+async function confirmSwitch() {
+  return foundry.applications.api.DialogV2.confirm({
+    window: { title: t("levelup.step.class.switchTitle"), icon: "fa-solid fa-triangle-exclamation" },
+    content: `<p>${t("levelup.step.class.switchBody")}</p>`,
+    modal: true,
+    rejectClose: false
+  });
+}
+
+/** Whether World of Warcraft hero classes show as cards of their own (else "Play as" in the detail). */
+function heroesAsCards() {
+  try { return game.settings.get(MODULE_ID, SETTINGS.heroClassDisplay) === "cards"; } catch { return false; }
+}
 
 /**
  * Build and adopt the driver for the state's current class selection: construct the system's
@@ -207,6 +258,9 @@ async function buildDriver(ctx) {
       // resolve back to the pack entry.
       const itemData = game.items.fromCompendium(doc);
       foundry.utils.setProperty(itemData, "system.levels", 1);
+      // World of Warcraft: the hero class picked, and the Renown its module adds to a dropped class
+      // ("either at character creation or through multiclassing").
+      await transformItemData(itemData, { heroClass: selection.hero ?? null });
       manager = AdvancementManager.forNewItem(actor, itemData);
     }
     // The manager is driven directly and never rendered, but flag it anyway so the takeover hook

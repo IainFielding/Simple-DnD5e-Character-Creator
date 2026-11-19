@@ -44,6 +44,15 @@
   </header>
   <div class="creator-detail-body">{{{detail.enriched}}}</div>
 
+  {{!-- The lineage a species card picked ("Elf (Blood Elf)"): its own page under the species', since
+        it is what tells this card from its neighbours. Species step only. --}}
+  {{#if lineageDetail}}
+  <section class="creator-adv-block creator-lineage-detail">
+    <h3 class="creator-adv-heading">{{lineageDetail.name}}</h3>
+    <div class="creator-detail-body">{{{lineageDetail.enriched}}}</div>
+  </section>
+  {{/if}}
+
   {{#each groups}}
   <section class="creator-adv-block">
     <h3 class="creator-adv-heading">{{heading}}</h3>

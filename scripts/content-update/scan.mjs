@@ -1,5 +1,5 @@
 import { MODULE_ID, log } from "../config.mjs";
-import { getEnabledPacks } from "../data/compendium-util.mjs";
+import { getEnabledPacks, packIndex } from "../data/compendium-util.mjs";
 import { advancementChanged, changedGroups, editedGroups, packageOfUuid, readStamp } from "./fingerprint.mjs";
 import { uuidTail } from "./answers.mjs";
 
@@ -66,7 +66,8 @@ function compatible(itemData, doc) {
  * @param {object} [options]
  * @param {Map<string, object>} [options.cache]   Shared across one scan.
  * @returns {Promise<{doc: Item5e|null, uuid: string|null, how: string}>}
- *   `how` is "direct", "redirect", "identifier", "name", "noSource" or "missing".
+ *   `how` is "direct", "redirect", "identifier", "name", "split", "noSource" or "missing". A "split"
+ *   result also carries `lineage`: see {@link findSplitSpecies}.
  */
 export async function resolveSource(itemData, { cache = new Map() } = {}) {
   const uuid = sourceUuidOf(itemData);
@@ -84,12 +85,125 @@ export async function resolveSource(itemData, { cache = new Map() } = {}) {
     log("content update: source lookup failed", uuid, err);
   }
 
+  // Gone: look for it again, nearest first. Its own package (a renamed or moved entry); then, for a
+  // species, the species and lineage its package folded it into; only then any other source. A copy of
+  // the old content kept elsewhere (a world compendium of last version's packs) shares its identifier
+  // and name exactly, and would otherwise win over the real successor.
+  const home = packOfUuid(uuid);
   if ( !result.doc ) {
-    const found = await findByIdentity(itemData, packOfUuid(uuid));
+    const found = await findByIdentity(itemData, home, { packageOf: packageOfUuid(uuid) });
+    if ( found ) result = found;
+  }
+  if ( !result.doc && (itemData.type === "race") ) {
+    const split = await findSplitSpecies(itemData).catch(err => { log("content update: species split lookup failed", err); return null; });
+    if ( split ) result = split;
+  }
+  if ( !result.doc ) {
+    const found = await findByIdentity(itemData, home);
     if ( found ) result = found;
   }
   cache.set(key, result);
   return result;
+}
+
+/** The ids of an item's advancements. */
+function advancementIds(data) {
+  const raw = data?.system?.advancement ?? {};
+  return new Set((Array.isArray(raw) ? raw : Object.values(raw)).map(a => a?._id ?? a?.id).filter(Boolean));
+}
+
+/**
+ * The lineages a species offers: the pools of its lineage choices (an `ItemChoice` restricted to
+ * `race`/`lineage`), on the species itself or on a feature it grants.
+ * @param {Item5e} species
+ * @returns {Promise<Item5e[]>}
+ */
+async function lineagesOf(species) {
+  const out = [];
+  const seen = new Set();
+  const walk = async (doc, depth) => {
+    if ( !doc || seen.has(doc.uuid) || (depth > 2) ) return;
+    seen.add(doc.uuid);
+    for ( const adv of Object.values(doc.advancement?.byId ?? {}) ) {
+      const cfg = adv.configuration ?? {};
+      if ( (adv.type === "ItemChoice") && (cfg.restriction?.type === "race") && (cfg.restriction?.subtype === "lineage") ) {
+        for ( const entry of Array.from(cfg.pool ?? []) ) {
+          const lineage = await fromUuid(entry?.uuid ?? entry).catch(() => null);
+          if ( lineage && !out.some(l => l.uuid === lineage.uuid) ) out.push(lineage);
+        }
+      } else if ( adv.type === "ItemGrant" ) {
+        for ( const entry of Array.from(cfg.items ?? []) ) await walk(await fromUuid(entry?.uuid ?? entry).catch(() => null), depth + 1);
+      }
+    }
+  };
+  await walk(species, 0);
+  return out;
+}
+
+/**
+ * A species that no longer exists because its content folded it into another species and a lineage:
+ * PHB 3.0.0 turned "Elf, Drow", "Elf, High" and "Elf, Wood" into one Elf with a Drow, High Elf or Wood
+ * Elf lineage, and likewise the Gnome and Tiefling. Nothing names the successor (no redirect, a new
+ * identifier and name), but the publisher kept the advancement ids: the old species' size and shared
+ * traits went to the new species, its own spells to the lineage. So the successor is the installed
+ * species of the same edition sharing the most advancement ids with the old one, and the lineage is
+ * the one that species offers which takes the most of the rest — or, where no lineage carries
+ * advancements of its own, the one whose name the old species' name ends with ("Elf, Drow").
+ * Its own package is searched first, then every enabled source. A candidate counts only if it offers a
+ * lineage matching the rest: a kept copy of the old species shares every id but offers none.
+ * @param {object} itemData   The character's species (plain).
+ * @returns {Promise<{doc: Item5e, uuid: string, how: "split", lineage: {uuid: string, name: string}}|null>}
+ */
+export async function findSplitSpecies(itemData) {
+  const old = advancementIds(itemData);
+  if ( !old.size ) return null;
+  const pkg = packageOfUuid(sourceUuidOf(itemData));
+  const enabled = getEnabledPacks();
+  const oldName = String(itemData.name ?? "").toLowerCase();
+
+  /** The species in some packs sharing advancement ids with the old one, most shared first. */
+  const candidates = async packs => {
+    const out = [];
+    for ( const pack of packs ) {
+      let index;
+      try {
+        index = await packIndex(pack, { fields: ["system.source.rules"] });
+      } catch {
+        continue;
+      }
+      for ( const entry of index ) {
+        if ( (entry.type !== "race") || !compatible(itemData, entry) ) continue;
+        const doc = await pack.getDocument(entry._id).catch(() => null);
+        const shared = doc ? [...advancementIds(doc.toObject())].filter(id => old.has(id)).length : 0;
+        if ( shared ) out.push({ doc, shared });
+      }
+    }
+    return out.sort((a, b) => b.shared - a.shared);
+  };
+
+  /** The lineage a candidate offers that takes the rest of the old species, or null. */
+  const lineageFor = async species => {
+    const speciesIds = advancementIds(species.toObject());
+    const rest = new Set([...old].filter(id => !speciesIds.has(id)));
+    let best = null;
+    for ( const candidate of await lineagesOf(species) ) {
+      const overlap = [...advancementIds(candidate.toObject())].filter(id => rest.has(id)).length;
+      const named = oldName.endsWith(String(candidate.name ?? "").toLowerCase());
+      const score = (overlap * 2) + (named ? 1 : 0);
+      if ( score && (!best || (score > best.score)) ) best = { doc: candidate, score };
+    }
+    return best?.doc ?? null;
+  };
+
+  const itemPacks = [...game.packs].filter(p => (p.documentName === "Item") && (!enabled || enabled.has(p.collection)));
+  const own = itemPacks.filter(p => p.metadata?.packageName === pkg);
+  for ( const packs of [own, itemPacks.filter(p => !own.includes(p))] ) {
+    for ( const { doc } of await candidates(packs) ) {
+      const lineage = await lineageFor(doc);
+      if ( lineage ) return { doc, uuid: doc.uuid, how: "split", lineage: { uuid: lineage.uuid, name: lineage.name } };
+    }
+  }
+  return null;
 }
 
 /**
@@ -97,15 +211,18 @@ export async function resolveSource(itemData, { cache = new Map() } = {}) {
  * Item pack the GM's source settings enable.
  * @param {object} itemData
  * @param {string|null} homePack
+ * @param {object} [options]
+ * @param {string|null} [options.packageOf]  Search only that package's packs (the home pack included).
  * @returns {Promise<{doc: Item5e, uuid: string, how: string}|null>}
  */
-export async function findByIdentity(itemData, homePack) {
+export async function findByIdentity(itemData, homePack, { packageOf = null } = {}) {
   const enabled = getEnabledPacks();
   const packs = [];
   const home = homePack ? game.packs.get(homePack) : null;
   if ( home ) packs.push(home);
   for ( const pack of game.packs ) {
     if ( (pack === home) || (pack.documentName !== "Item") ) continue;
+    if ( packageOf && (pack.metadata?.packageName !== packageOf) ) continue;
     if ( enabled && !enabled.has(pack.collection) ) continue;
     packs.push(pack);
   }
@@ -117,7 +234,11 @@ export async function findByIdentity(itemData, homePack) {
     for ( const pack of packs ) {
       let index;
       try {
-        index = await pack.getIndex({ fields: ["system.identifier", "system.source.rules"] });
+        // Through the shared index, never `getIndex` directly: Foundry merges a pack's earlier index
+        // fields into a new request, the module's shared set already holds `system.source`, and the
+        // server throws on a field asked for beside its parent ("Cannot use 'in' operator to search
+        // for 'rules'") — once per pack, as red notifications, every time the scan looked by identity.
+        index = await packIndex(pack, { fields: ["system.identifier", "system.source.rules"] });
       } catch {
         continue;
       }
@@ -169,18 +290,26 @@ export async function scanActor(actor) {
         customised: false, keepDefault: false, fromVersion: null, toVersion: null, tier: "same" });
       continue;
     }
-    const { doc, uuid, how } = await resolveSource(data, { cache });
+    const { doc, uuid, how, lineage = null } = await resolveSource(data, { cache });
     const stamp = readStamp(data, MODULE_ID);
     const base = {
-      item, how, source: doc, sourceUuid: uuid, changed: [], edited: null, customised: false, keepDefault: false,
+      item, how, lineage, source: doc, sourceUuid: uuid, changed: [], edited: null, customised: false, keepDefault: false,
       fromVersion: stamp?.version ?? null, toVersion: uuid ? packageVersion(uuid) : null
     };
     if ( !doc ) { entries.push({ ...base, tier: "report" }); continue; }
 
     const sourceData = doc.toObject();
     const changed = changedGroups(data, sourceData);
-    if ( !changed.length ) { entries.push({ ...base, tier: "same" }); continue; }
+    // Nothing to update if the only differences are ones a refresh keeps anyway. Otherwise an icon
+    // swapped at runtime (an art module re-skinning the pack) is offered as an update forever.
+    if ( !changed.some(g => !ALWAYS_KEPT.includes(g)) ) { entries.push({ ...base, changed, tier: "same" }); continue; }
 
+    // A species that became another species and a lineage is not the player's edit of anything: it
+    // is rebuilt onto its successor, name and icon included.
+    if ( how === "split" ) {
+      entries.push({ ...base, changed, tier: "rebuild" });
+      continue;
+    }
     const edited = editedGroups(data, stamp);
     // What the update would overwrite beyond the name and icon, which are always kept. With a stamp,
     // only a group the player provably edited counts; without one, any difference might be an edit.

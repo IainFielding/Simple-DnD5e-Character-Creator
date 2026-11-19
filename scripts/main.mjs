@@ -141,6 +141,18 @@ function registerSettings() {
       windowed: t("settings.displayMode.windowed")
     }
   });
+  // Only offered in a world with the World of Warcraft module, the one that ships hero classes; read
+  // anywhere, so it is registered regardless.
+  game.settings.register(MODULE_ID, SETTINGS.heroClassDisplay, {
+    name: t("settings.heroClassDisplay.name"),
+    hint: t("settings.heroClassDisplay.hint"),
+    scope: "world", config: !!game.modules.get("dnd-world-warcraft")?.active, type: String,
+    default: DEFAULTS.heroClassDisplay,
+    choices: {
+      detail: t("settings.heroClassDisplay.detail"),
+      cards: t("settings.heroClassDisplay.cards")
+    }
+  });
   // Dead under Ember: the button is gated on creationEnabled(), false there. Still read on every
   // Actors-sidebar render, which is why it must stay registered rather than be skipped.
   game.settings.register(MODULE_ID, SETTINGS.launchButton, {

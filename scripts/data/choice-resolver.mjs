@@ -11,6 +11,7 @@ import { toolCategoryKey, toolChoices } from "./tool-source.mjs";
 import { phbWeaponIcon } from "./weapon-source.mjs";
 import { bg3TraitIcon } from "./bg3-icons.mjs";
 import { forEachLimit, WARM_CONCURRENCY } from "./concurrency.mjs";
+import { readableDoc } from "./warcraft.mjs";
 
 /**
  * Resolves the player-facing advancement *choices* a set of origin items presents at
@@ -82,7 +83,11 @@ export async function resolveChoices(state, source) {
   const defs = [];
   for ( const [key, field] of Object.entries(ORIGIN_FIELDS) ) {
     const uuid = state[field];
-    defs.push({ key, uuid, doc: uuid ? await fromUuid(uuid).catch(() => null) : null });
+    // Read through the World of Warcraft transforms: a hero class swaps class features and both it
+    // and Renown add choices the built character will raise. Untouched without the module.
+    const raw = uuid ? await fromUuid(uuid).catch(() => null) : null;
+    const doc = await readableDoc(raw, { heroClass: (key === "class") ? (state.heroClass ?? null) : null });
+    defs.push({ key, uuid, doc });
   }
 
   // Walk each origin's level-≤1 owner tree ONCE and hang it off the def. Three consumers below need
@@ -241,7 +246,9 @@ async function levelOneOwners(item, sel = {}, seen = new Set(), ownerUuid = null
     for ( const uuid of refs ) {
       if ( !uuid || seen.has(uuid) ) continue;
       seen.add(uuid);
-      const doc = await fromUuid(uuid).catch(() => null);
+      // A granted lineage feat can carry a World of Warcraft Renown choice, added when the item is
+      // created — read it the way it will be created, so the choice is asked here.
+      const doc = await readableDoc(await fromUuid(uuid).catch(() => null));
       if ( !doc ) continue;
       // Recurse into a feature that brings advancements of its own; record one that doesn't as a
       // leaf. A leaf contributes no requirements (there is nothing to walk) but does contribute

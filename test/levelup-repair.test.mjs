@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { unresolvedByLevel, unresolvedAdvancements } from "../scripts/data/advancement-util.mjs";
 import {
   repairItems, grantLevel, repairTargets, canRepair, buildRepairManager, foldToLevel, repairOptions,
-  launchRepair, promptRepair
+  launchRepair, promptRepair, repairKeys, newlyOpenLevels
 } from "../scripts/levelup/repair.mjs";
 import { LevelUpState } from "../scripts/levelup/levelup-state.mjs";
 import { onGetHeaderControls } from "../scripts/levelup/intercept.mjs";
@@ -190,6 +190,39 @@ describe("repairTargets", () => {
     expect(target.levels).toHaveLength(1);
     expect(target.levels[0].level).toBe(3);
     expect(target.levels[0].entries[0]).toMatchObject({ itemId: "featSavant000000", id: "advPick", level: 0 });
+  });
+
+  it("files a species' or background's open choice, however deep, under the first class's level 1", () => {
+    // PHB 3.0.0's Dragonborn: the lineage choice sits on Draconic Ancestry, which the species grants.
+    // An update from 2.1.0 cannot carry the old damage-type pick into a dragon, so it is left open.
+    const cls = fighter();
+    const wizard = { ...fighter({ level: 2 }), id: "clsWizard0000000", name: "Wizard",
+      system: { levels: 2, identifier: "wizard" } };
+    const species = { id: "raceDragonborn00", type: "race", name: "Dragonborn", system: {},
+      advancement: { byId: { grant: { type: "ItemGrant", _id: "grant", level: 0, value: { added: { featAncestry0000: "x" } } } } } };
+    const lineage = new ItemChoiceStub({ _id: "XFXxfGcc0Z3nB070", title: "Draconic Ancestry",
+      configuration: { choices: { 0: { count: 1 } } }, value: { added: {} } });
+    const ancestry = { id: "featAncestry0000", type: "feat", name: "Draconic Ancestry", system: {},
+      flags: { dnd5e: { advancementOrigin: "raceDragonborn00.grant" } },
+      advancement: { byId: { [lineage._id]: lineage } } };
+    const actor = character([wizard, cls, species, ancestry]);
+    actor.system.details.originalClass = cls.id;
+    const targets = repairTargets(actor);
+    expect(targets.map(tg => tg.classItem.id)).toEqual([cls.id]);
+    expect(targets[0].levels).toEqual([expect.objectContaining({ level: 1, titles: ["Draconic Ancestry"] })]);
+    expect(targets[0].levels[0].entries[0]).toMatchObject({ itemId: "featAncestry0000", id: "XFXxfGcc0Z3nB070" });
+    expect(canRepair(actor)).toBe(true);
+  });
+
+  it("tells a decision an update opened from one that was open before, even on the same level", () => {
+    const before = character([fighter({ skills: false })]);
+    const was = repairKeys(before);
+    expect([...was]).toEqual(["clsFighter000000:1:advSkills"]);
+    // The same level gains a second open decision: that level is new work, the first is not.
+    const after = character([fighter({ skills: false, style: false, asi: false })]);
+    expect([...newlyOpenLevels(after, was)].sort()).toEqual(["clsFighter000000:1", "clsFighter000000:4"]);
+    // Nothing new: nothing to walk through.
+    expect(newlyOpenLevels(before, was).size).toBe(0);
   });
 
   it("labels one option per class level for the prompt", () => {

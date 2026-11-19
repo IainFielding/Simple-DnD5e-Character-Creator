@@ -28,6 +28,7 @@
                 class="creator-pickrow {{#if selected}}is-selected{{/if}} {{#if disabled}}is-disabled{{/if}}"
                 data-action="stepAction" data-step-action="pick-levelup-class"
                 data-kind="new" data-uuid="{{uuid}}" data-name="{{name}}"
+                {{#if hero}}data-hero="{{hero}}"{{/if}}
                 {{#if disabled}}aria-disabled="true" data-tooltip="{{reason}}"{{/if}}>
           <img class="creator-pickrow-img" src="{{img}}" alt="">
           <span class="creator-pickrow-text">
@@ -50,6 +51,27 @@
         <img class="creator-detail-img" src="{{detail.img}}" alt="">
         <h2>{{detail.name}}</h2>
       </header>
+      {{!-- "Play as": a World of Warcraft hero class built on this class — the same pick the
+            creator's Class step offers. See lvl-class-step.mjs. --}}
+      {{#with heroPick}}
+      <section class="creator-work-block creator-hero-class">
+        <h3 class="creator-work-block-title">{{localize "sogrom-dnd5e-character-creator.step.class.hero.title"}}</h3>
+        <p class="creator-lineage-hint">{{localize "sogrom-dnd5e-character-creator.step.class.hero.hint"}}</p>
+        <ul class="creator-lineage-list">
+          {{#each options}}
+          <li>
+            <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}}"
+                    data-action="stepAction" data-step-action="pick-levelup-hero" data-hero="{{identifier}}"
+                    aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+              <img class="creator-choice-card-img" src="{{img}}" alt="">
+              <span class="creator-choice-card-name">{{name}}</span>
+              {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+            </button>
+          </li>
+          {{/each}}
+        </ul>
+      </section>
+      {{/with}}
       <div class="creator-detail-body">{{{detail.enriched}}}</div>
 
       {{#each groups}}

@@ -1,10 +1,27 @@
 import { log } from "../config.mjs";
+import { packIndex } from "../data/compendium-util.mjs";
 import { findByIdentity } from "./scan.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { withItemSegment } from "../data/advancement-util.mjs";
 import {
   grantedAtLevel, itemIdentity, matchDecision, normTitle, sameIdentity, signature, treeKey, uuidTail
 } from "./answers.mjs";
+
+/** Trait modes whose options depend on proficiencies the character already has (see the driver). */
+const PROFICIENCY_MODES = ["expertise", "forcedExpertise", "upgrade"];
+
+/**
+ * Whether a trait key falls inside one configured pool entry: the key itself, a wildcard over its
+ * category (`skills:*`, `tool:art:*`), or a category the key sits under (`weapon:mar`).
+ * @param {string} key
+ * @param {string} entry
+ * @returns {boolean}
+ */
+export function keyInPool(key, entry) {
+  if ( key === entry ) return true;
+  if ( entry.endsWith(":*") ) return key.startsWith(entry.slice(0, -1));
+  return key.startsWith(`${entry}:`);
+}
 
 /**
  * Answers a rebuild's decisions from the decisions the character already made.
@@ -45,8 +62,29 @@ export class UpdateAnswerProvider {
   /**
    * @param {import("./answers.mjs").Decision[]} decisions   From {@link harvestDecisions}.
    */
-  constructor(decisions) {
+  /**
+   * @param {object[]} decisions   What the character decided (see `harvestDecisions`).
+   * @param {object} [options]
+   * @param {{uuid: string, name: string, from: string}[]} [options.lineages]  Lineages the scan worked
+   *   out for a species that became a species and a lineage (`scan.mjs#findSplitSpecies`). They answer
+   *   that species' lineage choice, which the character never had a record for.
+   */
+  constructor(decisions, { lineages = [] } = {}) {
     this.#decisions = decisions;
+    this.#lineages = lineages;
+  }
+
+  #lineages;
+
+  /** The pool entry a recorded lineage answers, for a lineage choice; null for anything else. */
+  #lineageFor(adv) {
+    const cfg = adv?.configuration ?? {};
+    if ( (cfg.restriction?.type !== "race") || (cfg.restriction?.subtype !== "lineage") ) return null;
+    for ( const lineage of this.#lineages ) {
+      const entry = Array.from(cfg.pool ?? []).map(p => p?.uuid ?? p).find(u => uuidTail(u) === uuidTail(lineage.uuid));
+      if ( entry ) return { uuid: entry, lineage };
+    }
+    return null;
   }
 
   /** Every decision record the driver currently holds. */
@@ -128,6 +166,14 @@ export class UpdateAnswerProvider {
         line.status = "none";
         continue;
       }
+      // A species that split: its lineage was the species itself, so it wins over any record.
+      const preset = (kind === "choice") ? this.#lineageFor(adv) : null;
+      if ( preset ) {
+        this.#answers.set(rec, [preset.uuid]);
+        line.status = "carried";
+        line.detail = `${preset.lineage.name} (${preset.lineage.from})`;
+        continue;
+      }
       if ( !decision ) {
         line.candidates = this.#decisions.filter(d => (d.type === type) && !this.#used.has(d.key))
           .map(d => `${d.hostName}/${d.title || d.advId}@${d.level} [${d.tree}]`).slice(0, 6);
@@ -199,16 +245,25 @@ export class UpdateAnswerProvider {
    * @param {Advancement|null} adv
    * @returns {((ident: object) => boolean)|null}
    */
+  static #poolOf(adv) {
+    const cfg = adv?.configuration ?? {};
+    return [...Array.from(cfg.grants ?? []), ...Array.from(cfg.choices ?? []).flatMap(c => Array.from(c?.pool ?? []))];
+  }
+
   static #browsable(adv) {
     const cfg = adv?.configuration;
     if ( !cfg ) return null;
     const pool = Array.from(cfg.pool ?? []);
     const restriction = cfg.restriction ?? {};
     if ( pool.length && !cfg.allowDrops ) return null;
+    // What the restriction names, the pick must have. An empty kind or subtype does not pass: PHB
+    // 2.1.0's "Acid Breath Weapon" (race, no subtype) otherwise filled PHB 3.0.0's Dragonborn lineage
+    // slot (race/lineage), so the character kept the old item, gained no lineage, and the choice
+    // looked answered, so nothing asked it again.
     return ident => {
       if ( cfg.type && ident.type && (ident.type !== cfg.type) ) return false;
-      if ( restriction.type && ident.kind && (ident.kind !== restriction.type) ) return false;
-      if ( restriction.subtype && ident.subtype && (ident.subtype !== restriction.subtype) ) return false;
+      if ( restriction.type && ((ident.kind ?? "") !== restriction.type) ) return false;
+      if ( restriction.subtype && ((ident.subtype ?? "") !== restriction.subtype) ) return false;
       return true;
     };
   }
@@ -282,7 +337,16 @@ export class UpdateAnswerProvider {
         }
         const grants = new Set(Array.from(adv.configuration?.grants ?? []));
         const current = new Set(Array.from(adv.value?.chosen ?? []));
-        const keys = chosen.filter(k => !offered || offered.has(k) || grants.has(k) || current.has(k));
+        // Expertise (and its kin) offers only skills the character is already proficient in, and the
+        // provider warms before the walk has applied the earlier levels' proficiency picks. Asking
+        // the clone now would drop every expertise built on a class skill (dnd5e 6.1.0's Bard, Rogue
+        // and Ranger lost theirs). Those keys are checked against the configured pool instead; the
+        // driver applies them in its last trait pass, once the proficiencies are in.
+        const pool = UpdateAnswerProvider.#poolOf(adv);
+        const allowed = PROFICIENCY_MODES.includes(adv.configuration?.mode)
+          ? k => pool.some(p => keyInPool(k, p))
+          : k => !offered || offered.has(k);
+        const keys = chosen.filter(k => allowed(k) || grants.has(k) || current.has(k));
         this.#answers.set(rec, keys);
         if ( keys.length === chosen.length ) carried(keys.join(", "));
         else partial(keys.join(", "));
@@ -317,7 +381,7 @@ export class UpdateAnswerProvider {
       if ( pack.documentName !== "Item" ) continue;
       let index;
       try {
-        index = await pack.getIndex({ fields: ["system.classIdentifier"] });
+        index = await packIndex(pack, { fields: ["system.classIdentifier"] });
       } catch {
         continue;
       }

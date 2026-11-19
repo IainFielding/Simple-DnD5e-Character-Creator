@@ -1,6 +1,6 @@
 import { MODULE_ID, log } from "../config.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
-import { FIELD_GROUPS, STAMP_FLAG, sourceStamp } from "./fingerprint.mjs";
+import { FIELD_GROUPS, STAMP_FLAG, isGrantedSpell, sourceStamp } from "./fingerprint.mjs";
 import { refreshedItemData } from "./merge.mjs";
 import { advancementList, baseTypeOf, harvestDecisions, treeKey } from "./answers.mjs";
 import { pairItems, remapIds } from "./reconcile.mjs";
@@ -180,6 +180,8 @@ async function undoNeverApplied(driver, oldData) {
  * @property {object} preview            The final actor data the commit will write.
  * @property {object} summary            Before/after, for the review page.
  * @property {(data: object) => object} transform
+ * @property {() => object} base         Fresh copy of the data the transform is applied to.
+ * @property {Set<string>} walked        Item ids whose "Keep mine" answer the walk itself read.
  */
 
 /**
@@ -199,7 +201,7 @@ export async function rehearse(actor, scan, { keep = new Map() } = {}) {
     const t = makeTransform({ actor, oldData, entries, keeps, rebuilt: false });
     const preview = t(copy(oldData));
     return { actor, rebuild: false, driver: null, decisions: [], preview, transform: t,
-      summary: summarise(actor, preview, null) };
+      base: () => copy(oldData), walked: new Set(), summary: summarise(actor, preview, null) };
   }
 
   const AM = dnd5e.applications.advancement.AdvancementManager;
@@ -262,7 +264,9 @@ export async function rehearse(actor, scan, { keep = new Map() } = {}) {
   // decisions, so warm and resolve until nothing new appears.
   const driver = new LevelUpDriver(manager);
   await driver.prepare();
-  const provider = new UpdateAnswerProvider(harvestDecisions(oldData));
+  const lineages = scan.entries.filter(e => e.lineage)
+    .map(e => ({ ...e.lineage, from: e.item.name }));
+  const provider = new UpdateAnswerProvider(harvestDecisions(oldData), { lineages });
   for ( let pass = 0; pass < 5; pass++ ) {
     const before = UpdateAnswerProvider.records(driver).length;
     await provider.warm(driver);
@@ -274,8 +278,23 @@ export async function rehearse(actor, scan, { keep = new Map() } = {}) {
 
   const t = makeTransform({ actor, oldData, entries, keeps, rebuilt: true });
   const preview = t(driver.clone.toObject());
+  // The items whose "Keep mine" answer was read while staging the walk (above): changing one of those
+  // means walking again. Every other answer is read only by the transform, so the walk can be reused.
+  const walked = new Set(roots.filter(old => entries.get(old._id)?.source).map(old => old._id));
   return { actor, rebuild: true, driver, decisions: provider.report, preview, transform: t,
-    summary: summarise(actor, preview, driver.clone) };
+    base: () => driver.clone.toObject(), walked, summary: summarise(actor, preview, driver.clone) };
+}
+
+/**
+ * Re-apply a rehearsal's transform after a "Keep mine" answer changed, without walking again. The
+ * transform reads the answers live, so this is all an answer outside `rehearsal.walked` needs.
+ * @param {Rehearsal} rehearsal
+ * @returns {Rehearsal}
+ */
+export function refreshPreview(rehearsal) {
+  rehearsal.preview = rehearsal.transform(rehearsal.base());
+  rehearsal.summary = summarise(rehearsal.actor, rehearsal.preview, rehearsal.driver?.clone ?? null);
+  return rehearsal;
 }
 
 /**
@@ -326,7 +345,9 @@ function reconcileItem(item, { oldById, entries, keeps, rebuiltIds }) {
   // A rebuilt item: the walk granted it afresh from the new source; it now carries its old id, and
   // takes its state and any kept groups from the old copy.
   if ( rebuiltIds.has(item._id) ) {
-    const keep = kept ? FIELD_GROUPS.filter(g => g !== "advancement") : ALWAYS_KEPT;
+    // A species that split into a species and a lineage takes its successor's name and icon: "Elf, Drow"
+    // is now an Elf, and the Drow lineage says the rest.
+    const keep = kept ? FIELD_GROUPS.filter(g => g !== "advancement") : ((entry?.how === "split") ? [] : ALWAYS_KEPT);
     const merged = refreshedItemData(old, item, { uuid: item._stats?.compendiumSource, keep, rebuilt: true });
     // What the walk recorded wins over the old records: the answers were replayed into the new tree,
     // under (possibly) new advancement ids and new grant links.
@@ -337,6 +358,18 @@ function reconcileItem(item, { oldById, entries, keeps, rebuiltIds }) {
     if ( Object.keys(dnd5eFlags).length || ("dnd5e" in (old.flags ?? {})) ) merged.flags.dnd5e = dnd5eFlags;
     else delete merged.flags.dnd5e;
     if ( item.type === "class" ) merged.system.levels = item.system?.levels;
+    // A spell the walk granted is tagged with the item that grants it now. dnd5e 6.1.0 moved the
+    // always-prepared lists (Life Domain Spells, Druidic's Speak with Animals) from the subclass or
+    // class onto a feature, so the old tag (`subclass:life`) would no longer match a native build's
+    // (`feat:life-domain-spells`).
+    if ( isGrantedSpell(item) && item.system?.sourceItem ) merged.system.sourceItem = item.system.sourceItem;
+    // Likewise "always prepared" belongs to the grant, not the player: 6.1.0 makes a Warlock's Mystic
+    // Arcanum spell always prepared. Between the other states (a player's own toggle) the old copy wins.
+    const ALWAYS = CONFIG.DND5E?.spellPreparationStates?.always?.value ?? 2;
+    if ( isGrantedSpell(item) && ((item.system?.prepared === ALWAYS) || (old.system?.prepared === ALWAYS)) ) {
+      merged.system.prepared = item.system?.prepared;
+      if ( item.system?.method ) merged.system.method = item.system.method;
+    }
     stamp(merged, item);
     return merged;
   }

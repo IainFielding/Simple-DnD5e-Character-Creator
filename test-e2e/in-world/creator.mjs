@@ -29,6 +29,7 @@ const { resolveFeatSpells } = await import(`${MODULE}/steps/feat-spells-step.mjs
 const { isEmberCreationManager, foldOriginScreens } = await import(`${MODULE}/levelup/ember-creation.mjs`);
 const { choicesStep } = await import(`${MODULE}/levelup/steps/choices-step.mjs`);
 const { SpellSource } = await import(`${MODULE}/data/spell-source.mjs`);
+const { transformItemData, readableDoc } = await import(`${MODULE}/data/warcraft.mjs`);
 const BUST = new URL(import.meta.url).search;
 const { ScenarioChoiceProvider } = await import(`./provider.mjs${BUST}`);
 const { stageEmberManager } = await import(`./ember.mjs${BUST}`);
@@ -181,7 +182,10 @@ function normalisePicks(answer) {
 async function advancementFor(req, origins) {
   const uuid = req?.ownerUuid ?? origins[req?.source];
   if ( !uuid || !req.advId ) return null;
-  const doc = await fromUuid(uuid).catch(() => null);
+  // Read the way the resolver reads it: a World of Warcraft hero class or Renown choice exists only
+  // on the transformed document (see data/warcraft.mjs#readableDoc).
+  const heroClass = (!req.ownerUuid && (req.source === "class")) ? (origins.heroClass ?? null) : null;
+  const doc = await readableDoc(await fromUuid(uuid).catch(() => null), { heroClass });
   return doc?.advancement?.byId?.[req.advId] ?? null;
 }
 
@@ -204,7 +208,8 @@ async function advancementFor(req, origins) {
  */
 async function answerChoices(state, source, book, { consumed = new Set(), diagnostics, unofferable } = {}) {
   const origins = {
-    class: state.classUuid, species: state.speciesUuid, background: state.backgroundUuid
+    class: state.classUuid, species: state.speciesUuid, background: state.backgroundUuid,
+    heroClass: state.heroClass ?? null
   };
   /** Per-pass record of what changed, so a failure to settle can say *what* is oscillating. */
   const passChurn = [];
@@ -446,6 +451,8 @@ export async function buildCreator(
 
   const state = new CreatorState(actor);
   state.classUuid = scenario.classUuid ?? null;
+  // A World of Warcraft hero class, as the Class step's "Play as" records it.
+  state.heroClass = scenario.heroClass ?? null;
   state.speciesUuid = scenario.speciesUuid ?? null;
   state.backgroundUuid = scenario.backgroundUuid ?? null;
   state.details.name = scenario.name;
@@ -564,6 +571,8 @@ async function multiclass(actor, scenario, book, consumed, unofferable) {
   const data = doc.toObject();
   if ( data._stats ) data._stats.compendiumSource = doc.uuid;
   data.system.levels = mc.levels ?? 1;
+  // What the level-up Class step does to a class it adds (lvl-class-step.mjs buildDriver).
+  await transformItemData(data, { heroClass: mc.heroClass ?? null });
 
   const manager = dnd5e.applications.advancement.AdvancementManager.forNewItem(actor, data);
   manager._sogromLevelUp = true;

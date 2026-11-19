@@ -11,6 +11,7 @@ import { invalidateJournalIndex, warmSourcePages } from "./journal-source.mjs";
 import { invalidateRulesPages, warmRulesPages } from "./rules-source.mjs";
 import { invalidateArtCache } from "./art-cache.mjs";
 import { foundryPregens, invalidatePregenCache } from "./premades.mjs";
+import { resetWarcraftDocs } from "./warcraft.mjs";
 
 /**
  * Shared, warm-once compendium data for the builder.
@@ -206,6 +207,8 @@ export function invalidateSources() {
   resetRestrictedCache();
   resetToolCache();
   resetWeaponIcons();
+  // The hero-class / Renown copies of compendium items are built from the packs too.
+  resetWarcraftDocs();
   // Which package owns a pack decides which copy of duplicated content the grids keep, and that
   // map is read straight off the enabled packs — so enabling a book has to re-rank, not just re-list.
   resetPackageTypes();

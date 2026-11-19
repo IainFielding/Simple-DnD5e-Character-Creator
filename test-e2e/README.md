@@ -850,6 +850,21 @@ node run.mjs --sweep --fresh          # start a new results file over an unarchi
 node run.mjs --sweep --plan           # list what it would run, and what it skips
 ```
 
+**The species axis runs one scenario per lineage** (since PHB 3.0.0, Nov 2026, folded "Elf, Drow" and
+the rest into lineages). For each 2024 species it walks the species and the features it grants for
+lineage choices (`ItemChoice` restricted to `race`, the creator's own rule), and builds one scenario
+per option with that option answered: `species:elf/drow`. A same-name copy from another pack runs as
+well, tagged `@<module>`. A lineage copy runs its lineages when no earlier copy covered them (the PHB's
+Drow is not the SRD's), and a non-lineage copy runs as its own species (Borderlands' "Elf" is a fixed
+Wood Elf). Two guards keep a lineage from slipping through:
+
+- **Coverage.** Every 2024 lineage item in the world (`feat`, type `race/lineage`) must be picked by
+  some scenario. The plan lists any that are not under `UNCOVERED`, and the run exits non-zero even
+  when every scenario passes. A lineage that no species' pool lists ends up here, since the native
+  flow only offers its pool.
+- **Presence.** A lineage scenario errors unless *both* actors hold the picked lineage (matched by
+  compendium source). Two builds that both skipped the nested choice would otherwise diff identical.
+
 **Lookups and probes** (for writing scenarios and chasing a difference):
 
 ```bash

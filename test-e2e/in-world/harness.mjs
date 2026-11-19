@@ -111,6 +111,26 @@ function assertBookComplete(book) {
 }
 
 /**
+ * Snapshot the native build as the creator is *meant* to leave it at the start of play.
+ *
+ * The 2024 Human's Resourceful trait gives Heroic Inspiration after every Long Rest, and a new
+ * character is rested — but dnd5e applies nothing for it, so a native build has the sheet toggle
+ * off. Since 2abb787 (2026-11-16) the creator switches it on for a new character holding a non-2014
+ * `resourceful` feat. That is a deliberate improvement on the native result, so the oracle carries
+ * it: only the native side is adjusted, and the rule is restated here rather than imported, so a
+ * creator that stops setting it still shows up as a difference.
+ * @param {Actor} actor
+ */
+function nativeSnapshot(actor) {
+  const snap = snapshot(actor);
+  const resourceful = actor.items.some(i => (i.type === "feat") && (i.system?.identifier === "resourceful")
+    && (String(i.system?.source?.rules ?? "") !== "2014"));
+  const attributes = snap.source?.actor?.system?.attributes;
+  if ( resourceful && attributes ) attributes.inspiration = true;
+  return snap;
+}
+
+/**
  * Decisions only one adapter ever raised, as difference records.
  *
  * The character diff shows the *consequences* of a divergence; this shows the divergence. A choice
@@ -179,6 +199,26 @@ function scenarioOrigins(scenario) {
 }
 
 /** advId -> advancement type across the scenario's origin documents. */
+/**
+ * Fail when a build does not hold an item the scenario exists to test — the species axis's chosen
+ * lineage. Two builds that both silently skipped the choice come out identical, so the diff alone
+ * cannot catch it. Matched by compendium source, the link a granted copy keeps to its original.
+ * @param {{uuid: string, name: string}[]|undefined} expected
+ * @param {Object<string, Actor>} actors
+ */
+function assertExpectedItems(expected, actors) {
+  if ( !expected?.length ) return;
+  const missing = [];
+  for ( const [side, actor] of Object.entries(actors) ) {
+    for ( const want of expected ) {
+      const held = actor.items.some(i => (i._stats?.compendiumSource === want.uuid)
+        || (i.flags?.core?.sourceId === want.uuid));
+      if ( !held ) missing.push(`    ${side}: ${want.name} (${want.uuid})`);
+    }
+  }
+  if ( missing.length ) throw new Error(`the build does not hold what the scenario picked:\n${missing.join("\n")}`);
+}
+
 function advancementTypes(docs) {
   const map = new Map();
   for ( const doc of docs ) {
@@ -253,8 +293,16 @@ async function enableScenarioSources(scenario) {
   const legacyOn = Object.fromEntries(game.packs
     .filter(p => { const rv = p.metadata.flags?.dnd5e?.rulesVersion; return rv && (rv !== rules); })
     .map(p => [p.collection, true]));
+  // `world.legacy-*` are the `--content-update` fixtures: world-compendium copies of old dnd5e and PHB
+  // packs (see legacy-fixture.mjs). They carry no rulesVersion flag, so dnd5e treats them as enabled in
+  // any rules, and once the system's own 2014 packs are switched on beside them the creator offered
+  // the fixture's same-id copy of a 2014 SRD subclass instead of the system's (Draconic Bloodline,
+  // Life Domain, The Fiend — 2026-11-17). Switched off for the scenario; restored with the rest.
+  const fixturesOff = Object.fromEntries(game.packs
+    .filter(p => p.collection.startsWith("world.legacy-"))
+    .map(p => [p.collection, false]));
   const { invalidateSources } = await import("/modules/sogrom-dnd5e-character-creator/scripts/data/source-cache.mjs");
-  await game.settings.set("dnd5e", "packSourceConfiguration", { ...before, ...legacyOn });
+  await game.settings.set("dnd5e", "packSourceConfiguration", { ...before, ...legacyOn, ...fixturesOff });
   invalidateSources();
   resetSourceIndex();
   return async () => {
@@ -277,7 +325,11 @@ export async function runScenario(scenario, { keep = false, render = false } = {
   let creator = null;
   let restoreSources = null;
 
+  // dnd5e's Renown variant rule, for a scenario that asks for it (the sweep's `renown` axis): with it
+  // on, World of Warcraft adds Renown choices to classes, species and lineage feats. Restored below.
+  const renownBefore = dnd5e.settings?.renownScore;
   try {
+    if ( scenario.renown && !renownBefore ) await game.settings.set("dnd5e", "renownScore", true);
     restoreSources = await enableScenarioSources(scenario);
     // One book, both adapters. It answers each decision once and hands the identical answer to
     // whoever asks second, which is what makes a generated scenario comparable at all: the two
@@ -301,7 +353,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
     // collected below are bucketed on these marks, and they are worth attributing in either mode.
     const record = side => (level, actor) => {
       deleteErrors.mark(side, level);
-      if ( perLevel ) perLevel[side].set(level, snapshot(actor));
+      if ( perLevel ) perLevel[side].set(level, (side === "native") ? nativeSnapshot(actor) : snapshot(actor));
     };
 
     deleteErrors.install();
@@ -326,6 +378,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
       .map(key => (scenario[key] ? fromUuid(scenario[key]) : null)));
     assertAnswersConsumed(scenario.answers ?? {}, consumed, advancementTypes(originDocs), report.diagnostics);
     assertBookComplete(book);
+    assertExpectedItems(scenario.expectItems, { native, creator });
     report.decisions = book.entries.map(({ askedBy, ...rest }) => ({ ...rest, askedBy: [...askedBy] }));
 
     // `render` opens each sheet in turn, for problems that only exist once something prepares an
@@ -339,7 +392,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
       }
     }
 
-    const a = snapshot(native);
+    const a = nativeSnapshot(native);
     const b = snapshot(creator);
     report.differences = [
       ...decisionDifferences(book),
@@ -371,6 +424,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
       if ( ids.length ) await Actor.implementation.deleteDocuments(ids, { render: false }).catch(() => {});
     }
     await restoreSources?.().catch(() => {});
+    if ( scenario.renown && !renownBefore ) await game.settings.set("dnd5e", "renownScore", false).catch(() => {});
     report.ms = Math.round(performance.now() - started);
   }
   return report;
@@ -432,8 +486,8 @@ async function getSweep(level, incremental = false, axis = "subclass") {
  * @param {string} [options.axis]   Which axis to sweep: "subclass" (default) or "species".
  */
 export async function sweepList({ level = 20, incremental = false, axis = "subclass" } = {}) {
-  const { scenarios, skipped } = await getSweep(level, incremental, axis);
-  return { level, incremental, axis, skipped, scenarios: scenarios.map(s => ({ id: s.id, name: s.name })) };
+  const { scenarios, skipped, uncovered = [] } = await getSweep(level, incremental, axis);
+  return { level, incremental, axis, skipped, uncovered, scenarios: scenarios.map(s => ({ id: s.id, name: s.name })) };
 }
 
 /**
@@ -1222,6 +1276,78 @@ export async function probeSpellChoice({ match = "conjur", to = 5, jump = false 
  * @param {object} [options]
  * @param {number} [options.level]   The level the character was created at.
  */
+/**
+ * Import an actor export into a fresh actor exactly as "Import Data" does (`importFromJSON`), and
+ * report what fails: the import's own error, then each embedded item and effect validated alone so
+ * the culprit is named. The actor is deleted afterwards.
+ * @param {{json: string}} options
+ */
+export async function probeImportActor({ json }) {
+  const data = JSON.parse(json);
+  const out = { name: data.name, import: null, items: [], effects: [], warnings: [] };
+  const origWarn = ui.notifications.warn.bind(ui.notifications);
+  const origErr = ui.notifications.error.bind(ui.notifications);
+  ui.notifications.warn = (m, o) => { out.warnings.push(`warn: ${m}`); return origWarn(m, o); };
+  ui.notifications.error = (m, o) => { out.warnings.push(`error: ${m}`); return origErr(m, o); };
+  let actor = null;
+  try {
+    actor = await Actor.implementation.create({ name: `${PREFIX}import probe`, type: data.type ?? "character" });
+    try {
+      await actor.importFromJSON(json);
+      out.import = { ok: true, name: actor.name, items: actor.items.size,
+        classes: Object.values(actor.classes ?? {}).map(c => `${c.name} ${c.system.levels}`) };
+    } catch ( err ) {
+      out.import = { ok: false, error: String(err?.message ?? err).slice(0, 3000) };
+    }
+    // Each embedded document on its own, so a failure names the item.
+    for ( const item of data.items ?? [] ) {
+      try { new Item.implementation(item, { strict: true }); } catch ( err ) {
+        out.items.push({ name: item.name, type: item.type, _id: item._id, error: String(err?.message ?? err).slice(0, 1500) });
+      }
+      for ( const eff of item.effects ?? [] ) {
+        try { new CONFIG.ActiveEffect.documentClass(eff, { strict: true }); } catch ( err ) {
+          out.effects.push({ on: item.name, name: eff.name, _id: eff._id, error: String(err?.message ?? err).slice(0, 800) });
+        }
+      }
+    }
+    for ( const eff of data.effects ?? [] ) {
+      try { new CONFIG.ActiveEffect.documentClass(eff, { strict: true }); } catch ( err ) {
+        out.effects.push({ on: "(actor)", name: eff.name, _id: eff._id, error: String(err?.message ?? err).slice(0, 800) });
+      }
+    }
+  } finally {
+    ui.notifications.warn = origWarn;
+    ui.notifications.error = origErr;
+    await actor?.delete().catch(() => {});
+  }
+  return out;
+}
+
+/**
+ * The level-up Spells step's cantrip plan for every kept actor whose name matches — read-only.
+ * Written for PHB 3.0.0's Arcane Trickster, whose cantrips moved onto a "Choose Cantrips" choice
+ * on its Spellcasting feature: `addCantrips` should be 0 once that choice is honoured, where the
+ * fallback table alone would offer the same cantrips again. Build the actor first with
+ * `--sweep --only arcane-trickster --keep`.
+ */
+export async function probeCantripPlan({ match = "Arcane Trickster" } = {}) {
+  const MODULE = "/modules/sogrom-dnd5e-character-creator/scripts";
+  const { computeSpellPlan } = await import(`${MODULE}/levelup/steps/lvl-spells-step.mjs${BUST}`);
+  const out = [];
+  for ( const actor of game.actors.filter(a => a.name.includes(match)) ) {
+    for ( const cls of actor.items.filter(i => i.type === "class") ) {
+      const plan = computeSpellPlan(actor, cls);
+      out.push({
+        actor: actor.name, class: cls.name, level: cls.system.levels,
+        sourceTag: plan.sourceTag, addCantrips: plan.addCantrips, cantripTarget: plan.cantripTarget,
+        cantrips: actor.items.filter(i => (i.type === "spell") && !i.system.level)
+          .map(i => `${i.name} [${i.system.sourceItem || "untagged"}]`)
+      });
+    }
+  }
+  return out;
+}
+
 export async function probeMagicShopStep({ level = 5 } = {}) {
   const MODULE = "/modules/sogrom-dnd5e-character-creator/scripts";
   const { lvlMagicShopStep } = await import(`${MODULE}/levelup/steps/lvl-magic-shop-step.mjs`);

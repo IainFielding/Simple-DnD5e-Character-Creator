@@ -53,6 +53,13 @@ const STATE_PATHS = [
   "system.cover"
 ];
 
+/**
+ * What dnd5e's `SourceField.prepareData` writes onto `system.source`. Prepared values, never
+ * authored, but dnd5e also runs it on raw source data (the compendium browser's cached entries), so
+ * a pack document's `toObject()` can carry them while a stored copy never does.
+ */
+const DERIVED_SOURCE_KEYS = ["bookPlaceholder", "label", "value", "slug"];
+
 /** Extra state paths on spells (see {@link STATE_PATHS}). */
 const SPELL_STATE_PATHS = ["system.ability", "system.uses", "system.preparation", "system.linkedActivity"];
 
@@ -98,7 +105,40 @@ export function stableStringify(value) {
   return JSON.stringify(canonical(value)) ?? "null";
 }
 
+/** Void elements, whose self-closing slash (`<br />`) an HTML serialiser drops. */
+const VOID_TAG = /<(area|base|br|col|embed|hr|img|input|link|meta|source|track|wbr)(\s[^<>]*?)?\s*\/>/gi;
+
+/** Memo for {@link normalizeHtml}: descriptions repeat across a scan, and parsing is the slow part. */
+const htmlMemo = new Map();
+
+/**
+ * HTML as Foundry stores it. A pack compiled from source keeps the author's markup (`<br />`,
+ * `<hr />`), but every document written through Foundry has its HTML re-serialised by the browser's
+ * parser (`<br>`, `<hr>`). Comparing raw strings would make every such item look changed, forever:
+ * a refresh writes the pack's markup and Foundry turns it back. So both sides go through the same round
+ * trip. Measured on dnd5e 6.1.0: the stored text equals `DOMParser` → `body.innerHTML` of the pack's
+ * exactly. The same goes for a bare `&` (stored as `&amp;`), even in a string with no markup, such
+ * as an advancement hint. Outside a browser (unit tests) only those two rewrites are made.
+ * @param {string} text
+ * @returns {string}
+ */
+export function normalizeHtml(text) {
+  if ( !/[<&]/.test(text) ) return text;
+  let out = htmlMemo.get(text);
+  if ( out !== undefined ) return out;
+  if ( typeof DOMParser === "function" ) {
+    out = new DOMParser().parseFromString(text, "text/html").body.innerHTML;
+  } else {
+    out = text.replace(VOID_TAG, (_, tag, attrs = "") => `<${tag}${attrs.trimEnd()}>`)
+      .replace(/&(?![a-z][a-z0-9]*;|#\d+;|#x[0-9a-f]+;)/gi, "&amp;");
+  }
+  if ( htmlMemo.size > 5000 ) htmlMemo.clear();
+  htmlMemo.set(text, out);
+  return out;
+}
+
 function canonical(value) {
+  if ( typeof value === "string" ) return normalizeHtml(value);
   if ( value instanceof Set || value instanceof Map ) return canonical(plain(value));
   if ( Array.isArray(value) ) return value.map(canonical);
   if ( value && (typeof value === "object") ) {
@@ -221,8 +261,12 @@ export function isForeignEffect(effect, itemData) {
   if ( effect?.flags?.dnd5e?.advancementOrigin || effect?.system?.origin?.item ) return true;
   const origin = effect?.origin;
   if ( !origin ) return false;
-  const own = [itemData?._stats?.compendiumSource, itemData?._id].filter(Boolean);
-  return !own.some(o => String(origin).endsWith(o) || (String(origin) === o));
+  // Compared by the last uuid segment: dnd5e's 2014 packs write a relative origin
+  // (`Item.<pack id>`), which names the pack entry's own id but neither the copy's id nor, as a
+  // string, its full compendium source.
+  const tail = s => String(s).split(".").pop();
+  const own = [itemData?._stats?.compendiumSource, itemData?._id].filter(Boolean).map(tail);
+  return !own.includes(tail(origin));
 }
 
 /** Effects without on/off state, origin or bookkeeping, and without effects applied from elsewhere. */
@@ -265,6 +309,11 @@ export function definitionGroups(itemData) {
     advancement: advancementDefinition(system.advancement)
   };
   for ( const key of ["description", "activities", "uses", "damage", "advancement"] ) delete system[key];
+  if ( system.source && (typeof system.source === "object") ) {
+    const source = { ...system.source };
+    for ( const key of DERIVED_SOURCE_KEYS ) delete source[key];
+    system.source = source;
+  }
   groups.other = { type: data.type, system };
 
   const out = {};
@@ -294,6 +343,15 @@ export function changedGroups(a, b) {
   if ( !a?.system?.identifier !== !b?.system?.identifier ) {
     a = { ...a, system: { ...a?.system, identifier: "" } };
     b = { ...b, system: { ...b?.system, identifier: "" } };
+  }
+  // The same preparation fills an empty `source.book` from the pack's placeholder, on whichever side
+  // it ran. An empty book and the placeholder are the same book.
+  const placeholder = a?.system?.source?.bookPlaceholder || b?.system?.source?.bookPlaceholder;
+  if ( placeholder ) {
+    const fill = d => (d?.system?.source && !d.system.source.book)
+      ? { ...d, system: { ...d.system, source: { ...d.system.source, book: placeholder } } } : d;
+    a = fill(a);
+    b = fill(b);
   }
   const ga = definitionGroups(a);
   const gb = definitionGroups(b);

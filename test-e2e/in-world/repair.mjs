@@ -79,11 +79,19 @@ async function skipOverrides(scenario, rules) {
   return out;
 }
 
+/**
+ * Every open level as "Class level: titles". Native builds here leave every creation-phase spell choice
+ * unanswered by design (`answers.mjs#isDeferred`: the creator applies feat spells itself), so a
+ * character whose origins carry Magic Initiate has that open on level 1 before anything is skipped.
+ * The wrench now reaches origin choices, so the cases measure against what was open before.
+ */
+const openLevels = actor => repairTargets(actor).flatMap(t => t.levels.map(g => `${t.classItem.name} ${g.level}: ${g.titles.join(", ")}`));
+
 /** Wait for the writes dnd5e makes off a commit to land before anything reads the actor. */
 const settle = ms => new Promise(r => setTimeout(r, ms));
 
-/** Repair one class level headlessly, answered from `book`. */
-async function repairLevel(actor, classId, level, book) {
+/** Repair one class level headlessly, answered from `book`. Also used by content-update.mjs. */
+export async function repairLevel(actor, classId, level, book) {
   const manager = buildRepairManager(actor, classId, level);
   if ( !manager.steps.length ) return { level, steps: 0 };
   const driver = new LevelUpDriver(manager);
@@ -186,6 +194,8 @@ async function runCheckCase() {
     const problems = () => [...report.element.querySelectorAll(".sogrom-check-item.is-problem")];
     const level4 = problems().find(el => el.textContent.includes("4"));
     out.gaps = problems().map(el => el.querySelector(".sogrom-check-text")?.textContent.trim());
+    const { checkCharacter: checkNow } = await import(`${MODULE}/levelup/character-check.mjs`);
+    const problemsBefore = new Set(checkNow(actor).filter(f => (f.kind === "problem") && !/\b4\b/.test(f.text)).map(f => f.text));
     if ( !level4 ) throw new Error(`the report names no level-4 problem: ${out.gaps.join(" | ") || "none"}`);
     if ( !level4.querySelector('button[data-action="repair"]') ) failures.push("the level-4 problem has no Repair button");
 
@@ -216,7 +226,7 @@ async function runCheckCase() {
 
     // 5. Checked again, nothing is a problem any more.
     const { checkCharacter } = await import(`${MODULE}/levelup/character-check.mjs`);
-    out.left = checkCharacter(actor).filter(f => f.kind === "problem").map(f => f.text);
+    out.left = checkCharacter(actor).filter(f => (f.kind === "problem") && !problemsBefore.has(f.text)).map(f => f.text);
     if ( out.left.length ) failures.push(`problems left after the repair: ${out.left.join(" | ")}`);
     out.differences = failures.map(f => ({ path: "ui", native: "expected", creator: f }));
     out.ok = !failures.length;
@@ -253,7 +263,8 @@ async function runUiCase() {
     const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: true, origins });
     actor = await buildNative({ ...scenario, name: `${PREFIX}repair [ui]`, incremental: true },
       { book: new AnswerBook({ overrides: { ...(scenario.answers ?? {}), ...skips }, generate: true, origins }) });
-    out.gaps = repairTargets(actor).flatMap(t => t.levels.map(g => `${t.classItem.name} ${g.level}: ${g.titles.join(", ")}`));
+    out.gaps = openLevels(actor);
+    const baseline = new Set(out.gaps.filter(g => !/ 4: /.test(g)));
 
     // The button is on the rendered sheet.
     await actor.sheet.render(true);
@@ -268,8 +279,16 @@ async function runUiCase() {
       unhook.push(() => Hooks.off(hook, id));
     }
 
-    // One level to repair, so the prompt goes straight to the shell.
-    shell = await promptRepair(actor);
+    // One level to repair goes straight to the shell; more than one (the deferred origin spells besides
+    // the skipped ASI) asks which, and the player picks level 4 in the real dialog.
+    const prompted = promptRepair(actor);
+    if ( baseline.size ) {
+      const levelFour = () => [...document.querySelectorAll(".application.dialog button[data-action]")]
+        .find(b => / 4\b/.test(b.textContent));
+      if ( !(await until(levelFour)) ) throw new Error("the repair prompt offered no level 4");
+      levelFour().click();
+    }
+    shell = await prompted;
     await settle(1500);
     if ( !shell ) throw new Error("promptRepair opened no shell");
     if ( shell.state.repairLevel !== 4 ) failures.push(`the shell repairs level ${shell.state.repairLevel}, not 4`);
@@ -289,12 +308,15 @@ async function runUiCase() {
     await settle(2000);
     out.repaired.push({ level: 4, steps: driver.steps.length });
 
-    out.left = repairTargets(actor).flatMap(t => t.levels.map(g => `${t.classItem.name} ${g.level}: ${g.titles.join(", ")}`));
+    const stillOpen = openLevels(actor);
+    out.left = stillOpen.filter(g => !baseline.has(g));
     if ( out.left.length ) failures.push("Apply left the level unanswered");
     if ( (actor.system?.details?.level ?? 0) !== 4 ) failures.push(`the repair changed the character's level to ${actor.system?.details?.level}`);
     await actor.sheet.render(true);
     await settle(1000);
-    if ( actor.sheet.element?.querySelector(".sogrom-repair-btn") ) failures.push("the repair button outlived the repair");
+    // The button stays exactly while something is still open (the origin spells, here).
+    const button = !!actor.sheet.element?.querySelector(".sogrom-repair-btn");
+    if ( button !== (stillOpen.length > 0) ) failures.push(button ? "the repair button outlived the repair" : "the repair button went with origin choices still open");
     const sequence = heard.map(h => h.name).join(" → ");
     if ( sequence !== "levelUpStarted → levelUpApplied" ) failures.push(`hooks heard: ${sequence || "none"}`);
     if ( heard.some(h => h.repairLevel !== 4) ) failures.push("a hook payload did not carry state.repairLevel = 4");
@@ -337,14 +359,17 @@ async function runCase(spec) {
       throw new Error("the broken build already matches the reference — nothing to prove");
     }
 
+    // A level the fully answered reference leaves open too (deferred spell choices) is not the skip's.
+    const refOpen = new Set(openLevels(reference));
     for ( const target of before ) {
       for ( const group of target.levels ) {
+        if ( refOpen.has(`${target.classItem.name} ${group.level}: ${group.titles.join(", ")}`) ) continue;
         const classItem = broken.items.get(target.classItem.id);
         out.repaired.push(await repairLevel(broken, classItem.id, group.level, book));
       }
     }
 
-    out.left = repairTargets(broken).flatMap(t => t.levels.map(g => `${t.classItem.name} ${g.level}: ${g.titles.join(", ")}`));
+    out.left = openLevels(broken).filter(g => !refOpen.has(g));
     const a = snapshot(reference);
     const b = snapshot(broken);
     out.differences = [...diff(a.source, b.source, "source"), ...diff(a.derived, b.derived, "derived")];

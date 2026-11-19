@@ -158,6 +158,11 @@ export async function postCreationSummary(actor, { magicShop = null, readyMade =
     rows.push({ label: t("chat.creation.hitPoints"), value: String(sys.attributes?.hp?.max ?? 0) });
     const ac = sys.attributes?.ac?.value;
     if ( ac ) rows.push({ label: t("chat.creation.armourClass"), value: String(ac) });
+    // Read off the sheet, not the build: the card says so whenever the character has it, however it
+    // got there (a 2024 Human's Resourceful, see actor-assembler `startsWithHeroicInspiration`).
+    if ( sys.attributes?.inspiration ) {
+      rows.push({ label: t("chat.creation.inspiration"), value: t("chat.creation.inspirationValue") });
+    }
     rows.push(...magicShopRows(magicShop));
 
     await postCard(actor, "creation", mode, {

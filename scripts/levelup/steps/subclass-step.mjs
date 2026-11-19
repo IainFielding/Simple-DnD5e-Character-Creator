@@ -31,7 +31,11 @@ export const subclassStep = {
     // Scoped to the levelling class's own edition: a world can hold both, and a 2024 subclass grants
     // its features on the 2024 progression. See `SourceIndex#subclasses`.
     const rules = record.advancement.item.system?.source?.rules ?? null;
+    // A class whose subclass is fixed — a World of Warcraft Death Knight is always Oath of the Ebon
+    // Blade — offers only that one; dnd5e's own Subclass advancement refuses any other.
+    const fixed = fixedSubclass(record);
     const cards = (await source.subclasses(identifier, { rules }))
+      .filter(c => !fixed || (c.uuid === fixed))
       .map(c => ({ ...c, selected: c.uuid === sub.uuid }));
     const detail = sub.uuid ? await source.detail(sub.uuid) : null;
     const groups = sub.uuid ? await source.advancementGroups(sub.uuid) : null;
@@ -58,6 +62,16 @@ export const subclassStep = {
   async handle(action, el, { state, driver }) {
     if ( action !== "pick-subclass" ) return;
     const record = state.subclassSteps[Number(el.dataset.index)];
-    if ( record && el.dataset.uuid ) await driver.selectSubclass(record, el.dataset.uuid);
+    if ( !record || !el.dataset.uuid ) return;
+    // A fixed subclass cannot be cleared: re-clicking it would leave a pick nothing else can fill.
+    const fixed = fixedSubclass(record);
+    if ( fixed && (el.dataset.uuid === fixed) && (record.advancement.value?.uuid === fixed) ) return false;
+    await driver.selectSubclass(record, el.dataset.uuid);
   }
 };
+
+/** The subclass a class's Subclass advancement is locked to (`suggested.fixed`), or null. */
+function fixedSubclass(record) {
+  const suggested = record?.advancement?.configuration?.suggested;
+  return (suggested?.fixed && suggested.uuid) ? suggested.uuid : null;
+}

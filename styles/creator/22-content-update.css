@@ -1,31 +1,203 @@
 /* ---------------------------------------------- Update to New Content
 
-   The review window (content-update/update-app.mjs). A plain Foundry window, styled on its own like
-   Check Character: lists of items, the carried decisions, a before/after table and the backup block. */
+   The review window (content-update/update-app.mjs). It wears the creator's own chrome — the window
+   carries `.sogrom-creator .sogrom-creator-windowed`, so the header, background, ambience, resize grip
+   and every --cc-* token come from 01-foundation.css and 02-window.css, and the Ember skin re-themes it
+   with the rest. The buttons are the shared `.creator-btn` family (04-stage.css).
+
+   Layout: 02-window.css makes `.window-content` a flex column that does not scroll, so the body below
+   is its own column — a scrolling area over a footer that stays pinned, however long the review.
+
+   Colour follows the creator's one rule: brass (--cc-settled) is what is settled — a decision carried
+   over — and teal (--cc-open) is what still asks for the player — a choice to make again. */
 
 .sogrom-content-update .sogrom-cu-body {
+  position: relative;          /* above the window's ambience layer */
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  font-family: var(--cc-font-body);
 }
+
+.sogrom-content-update .sogrom-cu-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 1.25rem 1.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cc-line) transparent;
+}
+
+.sogrom-content-update .sogrom-cu-footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--cc-line);
+  background: var(--cc-chrome-grad);
+}
+
+/* ---------------------------------------------- Type */
 
 .sogrom-content-update h3 {
-  margin: 0.6rem 0 0;
-  border-bottom: 1px solid var(--color-border-light-tertiary, #8884);
+  margin: 0.8rem 0 0;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--cc-line);
+  font-family: var(--cc-font-heading);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cc-bright);
 }
 
-.sogrom-content-update p { margin: 0; }
+.sogrom-content-update h4 {
+  margin: 0.25rem 0;
+  font-family: var(--cc-font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+
+.sogrom-content-update p { margin: 0; line-height: 1.45; }
+
+/* Foundry's `.hint` colour is meant for its light sheets; on this background it would vanish. */
+.sogrom-content-update .hint { color: var(--cc-muted); font-size: 0.85rem; }
+
+.sogrom-content-update .sogrom-cu-intro { color: var(--cc-text); }
 
 .sogrom-content-update .sogrom-cu-loading,
-.sogrom-content-update .sogrom-cu-empty { padding: 1rem 0; }
-
-.sogrom-content-update .sogrom-cu-empty i { color: var(--color-level-success, #3b8d3b); }
+.sogrom-content-update .sogrom-cu-empty {
+  padding: 1.5rem 0;
+  color: var(--cc-muted);
+}
+.sogrom-content-update .sogrom-cu-loading i { color: var(--cc-open); margin-right: 0.4rem; }
+.sogrom-content-update .sogrom-cu-empty i { color: var(--cc-settled); margin-right: 0.4rem; }
 
 .sogrom-content-update .sogrom-cu-error {
   font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-12, 12px);
+  font-size: 0.8rem;
   white-space: pre-wrap;
+  color: var(--cc-muted);
 }
+
+/* A note that asks for something: teal edge, like every other outstanding thing. */
+.sogrom-content-update .sogrom-cu-callout {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--cc-line);
+  border-left: 3px solid var(--cc-open);
+  background: var(--cc-open-soft);
+  color: var(--cc-text);
+}
+.sogrom-content-update .sogrom-cu-callout.is-error {
+  border-left-color: var(--cc-danger);
+  background: rgba(236, 112, 130, 0.10);
+}
+
+/* ---------------------------------------------- Update which things */
+
+.sogrom-content-update .sogrom-cu-which {
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.6rem;
+  border: 1px solid var(--cc-line);
+  background: var(--cc-panel-grad);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.sogrom-content-update .sogrom-cu-which-title {
+  margin: 0;
+  font-family: var(--cc-font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+.sogrom-content-update .sogrom-cu-which-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+.sogrom-content-update .sogrom-cu-which-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-sm);
+  background: var(--cc-sunk);
+  color: var(--cc-bright);
+  cursor: pointer;
+}
+.sogrom-content-update .sogrom-cu-which-toggle.is-off { color: var(--cc-muted); }
+
+.sogrom-content-update .sogrom-cu-group-count {
+  font-size: 0.75rem;
+  color: var(--cc-muted);
+  font-weight: normal;
+}
+
+/* Each heading folds: closed by default, its title the click target. */
+.sogrom-content-update .sogrom-cu-group > summary {
+  list-style: none;
+  cursor: pointer;
+  margin-bottom: 0.35rem;
+}
+.sogrom-content-update .sogrom-cu-group > summary::-webkit-details-marker { display: none; }
+.sogrom-content-update .sogrom-cu-group > summary h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+.sogrom-content-update .sogrom-cu-group > summary:hover h3 { color: var(--cc-bright); }
+.sogrom-content-update .sogrom-cu-chevron {
+  font-size: 0.7rem;
+  color: var(--cc-muted);
+  transition: transform 0.15s ease;
+}
+.sogrom-content-update .sogrom-cu-group[open] .sogrom-cu-chevron { transform: rotate(90deg); }
+
+/* A heading switched off: still listed, so the player sees what they are leaving behind. */
+.sogrom-content-update .sogrom-cu-group.is-off .sogrom-cu-items { opacity: 0.5; }
+
+.sogrom-content-update .sogrom-cu-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--cc-text);
+}
+.sogrom-content-update .sogrom-cu-sources i { color: var(--cc-muted); margin-right: 0.3rem; }
+
+.sogrom-content-update .sogrom-cu-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.sogrom-content-update .sogrom-cu-version { color: var(--cc-text); font-size: 0.85rem; }
+
+.sogrom-content-update .sogrom-cu-tier {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-sm);
+  color: var(--cc-muted);
+  font-weight: normal;
+}
+.sogrom-content-update .sogrom-cu-tier.is-rebuild { border-color: var(--cc-open); color: var(--cc-open-bright); }
+.sogrom-content-update .sogrom-cu-tier.is-refresh { border-color: var(--cc-settled); color: var(--cc-settled); }
+
+/* ---------------------------------------------- Item lists */
 
 .sogrom-content-update .sogrom-cu-items,
 .sogrom-content-update .sogrom-cu-decisions,
@@ -35,87 +207,197 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
 }
 
 .sogrom-content-update .sogrom-cu-item {
   display: grid;
-  grid-template-columns: 32px 1fr;
-  gap: 0.5rem;
+  grid-template-columns: 36px 1fr;
+  gap: 0.6rem;
   align-items: start;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--cc-line);
+  background: var(--cc-panel-grad);
+  box-shadow: var(--cc-sheen);
 }
 
 .sogrom-content-update .sogrom-cu-icon {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 4px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--cc-line);
+  border-radius: var(--cc-radius-sm);
+  background: var(--cc-sunk);
+  object-fit: cover;
 }
 
 .sogrom-content-update .sogrom-cu-item-text {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
+  min-width: 0;
 }
 
-.sogrom-content-update .sogrom-cu-item-name { font-weight: bold; }
+.sogrom-content-update .sogrom-cu-item-name { font-weight: 600; color: var(--cc-bright); }
+
+.sogrom-content-update .sogrom-cu-untouched li { color: var(--cc-text); padding: 0.1rem 0; }
 
 .sogrom-content-update .sogrom-cu-keep {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.4rem;
+  width: fit-content;
+  color: var(--cc-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.sogrom-content-update input[type="checkbox"] { accent-color: var(--cc-settled); margin: 0; }
+
+.sogrom-content-update .sogrom-cu-desc summary {
+  cursor: pointer;
+  color: var(--cc-open-bright);
+  font-size: 0.85rem;
 }
 
-.sogrom-content-update .sogrom-cu-desc summary { cursor: pointer; }
-
+/* Two columns, each its own scroll box: the updated text is often much longer than the old (an
+   embedded rules page), and one shared box left it unreachable past the shorter column's end.
+   `overscroll-behavior` keeps the wheel in the column rather than scrolling the whole review. */
 .sogrom-content-update .sogrom-cu-desc-cols {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.75rem;
-  max-height: 16rem;
-  overflow-y: auto;
-  font-size: var(--font-size-12, 12px);
+  margin-top: 0.35rem;
 }
 
-.sogrom-content-update .sogrom-cu-desc-cols h4 { margin: 0.25rem 0; }
+.sogrom-content-update .sogrom-cu-desc-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--cc-line);
+  background: var(--cc-sunk);
+}
+.sogrom-content-update .sogrom-cu-desc-col h4 {
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--cc-line);
+}
+
+.sogrom-content-update .sogrom-cu-desc-text {
+  max-height: 20rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--cc-text);
+  scrollbar-width: thin;
+  scrollbar-color: var(--cc-line) transparent;
+}
+/* Enriched rules text: an embedded page brings its own headings and tables, written for a light sheet. */
+.sogrom-content-update .sogrom-cu-desc-text :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.5rem 0 0.25rem;
+  padding: 0;
+  border: none;
+  font-family: var(--cc-font-heading);
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: var(--cc-bright);
+}
+.sogrom-content-update .sogrom-cu-desc-text :is(p, li, td, th, dd, dt, span) { color: var(--cc-text); }
+.sogrom-content-update .sogrom-cu-desc-text table { width: 100%; border-collapse: collapse; margin: 0.4rem 0; }
+.sogrom-content-update .sogrom-cu-desc-text :is(td, th) { padding: 0.15rem 0.3rem; border-bottom: 1px solid var(--cc-line); }
+.sogrom-content-update .sogrom-cu-desc-text .content-embed { margin: 0.4rem 0; }
+/* Links and rolls in running prose. Foundry draws them as light grey chips, which on this background
+   left teal text on pale grey; here they read as text, teal with a dotted rule, the way the creator's
+   review shows its links (no chip), brass on hover. */
+.sogrom-content-update .sogrom-cu-desc-text :is(a.content-link, a.inline-roll) {
+  display: inline;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--cc-open-bright);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  white-space: normal;
+}
+.sogrom-content-update .sogrom-cu-desc-text :is(a.content-link, a.inline-roll) i {
+  margin-right: 0.2em;
+  color: var(--cc-muted);
+  font-size: 0.85em;
+}
+.sogrom-content-update .sogrom-cu-desc-text :is(a.content-link, a.inline-roll):hover {
+  color: var(--cc-settled-bright);
+  text-shadow: none;
+}
+
+/* ---------------------------------------------- Carried choices */
 
 .sogrom-content-update .sogrom-cu-decisions li {
   display: grid;
   grid-template-columns: 1.2rem auto 1fr auto;
-  gap: 0.4rem;
+  gap: 0.5rem;
   align-items: baseline;
-  padding: 0.2rem 0.4rem;
-  border-left: 3px solid transparent;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid transparent;
+  border-left: 3px solid var(--cc-line);
+  background: rgba(255, 255, 255, 0.02);
 }
 
-.sogrom-content-update .sogrom-cu-decisions .is-carried i { color: var(--color-level-success, #3b8d3b); }
-.sogrom-content-update .sogrom-cu-decisions .is-partial { border-left-color: var(--color-level-warning, #c98a1b); }
-.sogrom-content-update .sogrom-cu-decisions .is-partial i { color: var(--color-level-warning, #c98a1b); }
-.sogrom-content-update .sogrom-cu-decisions .is-ask { border-left-color: var(--color-level-error, #b33a3a); }
-.sogrom-content-update .sogrom-cu-decisions .is-ask i { color: var(--color-level-error, #b33a3a); }
-.sogrom-content-update .sogrom-cu-decisions .is-default i { color: var(--color-level-info, #4a7bb3); }
+.sogrom-content-update .sogrom-cu-decisions .is-carried { border-left-color: var(--cc-settled); }
+.sogrom-content-update .sogrom-cu-decisions .is-carried i { color: var(--cc-settled); }
+.sogrom-content-update .sogrom-cu-decisions .is-partial { border-left-color: var(--cc-open); }
+.sogrom-content-update .sogrom-cu-decisions .is-partial i { color: var(--cc-open); }
+.sogrom-content-update .sogrom-cu-decisions .is-ask {
+  border-color: var(--cc-open-soft);
+  border-left-color: var(--cc-open);
+  background: var(--cc-open-soft);
+}
+.sogrom-content-update .sogrom-cu-decisions .is-ask i { color: var(--cc-open-bright); }
+.sogrom-content-update .sogrom-cu-decisions .is-default i { color: var(--cc-muted); }
 
-.sogrom-content-update .sogrom-cu-decision-title { font-weight: bold; }
-.sogrom-content-update .sogrom-cu-decision-status { text-align: right; }
+.sogrom-content-update .sogrom-cu-decision-title { font-weight: 600; color: var(--cc-bright); }
+.sogrom-content-update .sogrom-cu-decision-status { text-align: right; color: var(--cc-muted); font-size: 0.85rem; }
+
+/* ---------------------------------------------- Before / after */
 
 .sogrom-content-update .sogrom-cu-diff {
   width: 100%;
   margin: 0;
   border-collapse: collapse;
+  border: 1px solid var(--cc-line);
+  background: transparent;
 }
 
 .sogrom-content-update .sogrom-cu-diff th,
 .sogrom-content-update .sogrom-cu-diff td {
-  padding: 0.15rem 0.4rem;
+  padding: 0.3rem 0.6rem;
   text-align: left;
+  border-bottom: 1px solid var(--cc-line);
+  color: var(--cc-text);
+  background: transparent;
 }
+
+.sogrom-content-update .sogrom-cu-diff thead th {
+  font-family: var(--cc-font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+  background: var(--cc-sunk);
+}
+.sogrom-content-update .sogrom-cu-diff tbody th { color: var(--cc-muted); font-weight: 500; }
+.sogrom-content-update .sogrom-cu-diff tbody td:last-child { color: var(--cc-settled-bright); }
+
+/* ---------------------------------------------- Backup */
 
 .sogrom-content-update .sogrom-cu-backup {
   margin-top: 0.6rem;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
+.sogrom-content-update .sogrom-cu-backup > p > i { color: var(--cc-settled); margin-right: 0.3rem; }
 
 .sogrom-content-update .sogrom-cu-backup-actions {
   display: flex;
@@ -123,19 +405,19 @@
   align-items: center;
   gap: 0.75rem;
 }
-
-.sogrom-content-update .sogrom-cu-downloaded i { color: var(--color-level-success, #3b8d3b); }
-
-/* A button styled by us must reset the height Foundry's blanket button rule sets. */
-.sogrom-content-update button {
-  height: auto;
-  width: auto;
-  padding: 0.25rem 0.8rem;
+.sogrom-content-update .sogrom-cu-backup-actions label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
 }
 
-.sogrom-content-update .sogrom-cu-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+.sogrom-content-update .sogrom-cu-downloaded i { color: var(--cc-settled); }
+
+/* Foundry's blanket button rule sets a fixed height and full width; the shared creator buttons expect
+   neither, and outside the creator's own layouts nothing else resets them. */
+.sogrom-content-update .creator-btn {
+  height: auto;
+  width: auto;
+  flex: none;
 }

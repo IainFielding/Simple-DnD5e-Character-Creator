@@ -9,6 +9,7 @@ import { isPreparedPick } from "./spells-step.mjs";
 import { summarizeEquipment } from "../data/equipment-source.mjs";
 import { pdfExportContext } from "../build/pdf-export.mjs";
 import { partyJoinContext } from "../build/party.mjs";
+import { chosenHeroClass, readableDoc } from "../data/warcraft.mjs";
 
 /*
  * The Review step (the step module itself is at the bottom of the file). It's read-only: it gathers
@@ -162,7 +163,9 @@ async function reviewSections(state, source, equipBySource, spells, featSpellsBy
   for ( const { key, field, labelKey, emptyKey } of ORIGIN_META ) {
     const uuid = state[field];
     const card = uuid ? source.card(uuid) : null;
-    const doc = uuid ? await fromUuid(uuid).catch(() => null) : null;
+    // Read as it will be built: a World of Warcraft hero class lists its own swapped features.
+    const hero = (key === "class") ? chosenHeroClass(state, source) : null;
+    const doc = uuid ? await readableDoc(await fromUuid(uuid).catch(() => null), { heroClass: hero?.identifier ?? null }) : null;
     const rows = doc ? [...await fixedGrants(doc), ...summaryPicks(resolved, key)] : [];
     const grantedSpells = doc ? await originGrantedSpells(doc, state.advChoices?.[key] ?? {}) : null;
     out.push({
@@ -170,8 +173,8 @@ async function reviewSections(state, source, equipBySource, spells, featSpellsBy
       kind: t(labelKey),
       empty: t(emptyKey),
       chosen: !!(card || doc),
-      name: card?.name ?? doc?.name ?? "",
-      img: card?.img ?? doc?.img ?? "icons/svg/mystery-man.svg",
+      name: hero?.name ?? card?.name ?? doc?.name ?? "",
+      img: hero?.img ?? card?.img ?? doc?.img ?? "icons/svg/mystery-man.svg",
       rows,
       spells: (key === "class" && spells.hasAny) ? spells : null,
       // Spells an origin grants outright (e.g. a species cantrip), in the same cantrips/level-1 layout.

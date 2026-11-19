@@ -76,6 +76,29 @@
     they have committed to a class.
   --}}
   <aside class="creator-work-side">
+    {{!-- "Play as": a World of Warcraft hero class built on the chosen class (Paladin → Death
+          Knight), when the GM shows hero classes here rather than as cards of their own. The class
+          itself is the first option. See class-step.mjs heroPickContext(). --}}
+    {{#with heroPick}}
+    <section class="creator-work-block creator-hero-class">
+      <h3 class="creator-work-block-title">{{localize "sogrom-dnd5e-character-creator.step.class.hero.title"}}</h3>
+      <p class="creator-lineage-hint">{{localize "sogrom-dnd5e-character-creator.step.class.hero.hint"}}</p>
+      <ul class="creator-lineage-list">
+        {{#each options}}
+        <li>
+          <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}}"
+                  data-action="stepAction" data-step-action="pick-hero-class" data-hero="{{identifier}}"
+                  aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+            <img class="creator-choice-card-img" src="{{img}}" alt="">
+            <span class="creator-choice-card-name">{{name}}</span>
+            {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+          </button>
+        </li>
+        {{/each}}
+      </ul>
+    </section>
+    {{/with}}
+
     {{#with targetLevel}}
     {{!--
       Target level: the creator always builds a level-1 character; anything above 1 hands off to

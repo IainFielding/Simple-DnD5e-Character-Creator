@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   stableStringify, hashString, definitionGroups, groupHashes, changedGroups, advancementChanged,
-  sourceStamp, readStamp, editedGroups, packageOfUuid, FIELD_GROUPS
+  sourceStamp, readStamp, editedGroups, packageOfUuid, normalizeHtml, FIELD_GROUPS
 } from "../scripts/content-update/fingerprint.mjs";
 import { refreshedItemData } from "../scripts/content-update/merge.mjs";
 import { isForeignEffect } from "../scripts/content-update/fingerprint.mjs";
@@ -42,6 +42,32 @@ function sword(over = {}) {
 describe("fingerprint", () => {
   it("serialises equal objects equally whatever their key order, dropping empties", () => {
     expect(stableStringify({ b: 1, a: { d: [], c: 2 } })).toBe(stableStringify({ a: { c: 2 }, b: 1, e: "" }));
+  });
+
+  it("reads HTML as Foundry stores it: a pack's <br /> is the same as a stored <br>", () => {
+    // dnd5e 6.1.0's 2014 Cleric: the pack has `<br />`, every created copy `<br>`. Unnormalised, a
+    // character without stamps could never come up to date.
+    const pack = sword({ system: { ...sword().system, description: { value: "<p>1d8 per cleric level<br /><strong>HP</strong></p>\n<hr />" } } });
+    const stored = sword({ system: { ...sword().system, description: { value: "<p>1d8 per cleric level<br><strong>HP</strong></p>\n<hr>" } } });
+    expect(changedGroups(stored, pack)).toEqual([]);
+    expect(normalizeHtml('<img src="a.webp" />')).toBe('<img src="a.webp">');
+    expect(normalizeHtml("no markup / here")).toBe("no markup / here");
+    // A real change still shows.
+    const edited = sword({ system: { ...sword().system, description: { value: "<p>1d10 per cleric level<br></p>" } } });
+    expect(changedGroups(edited, pack)).toEqual(["description"]);
+    // A bare ampersand is stored escaped, markup or not (dnd5e 6.1.0's Druid armour hint).
+    expect(normalizeHtml("Light Armor, Medium Armor, & Shields")).toBe("Light Armor, Medium Armor, &amp; Shields");
+    expect(normalizeHtml("Tom &amp; Jerry &#38; co")).toBe("Tom &amp; Jerry &#38; co");
+  });
+
+  it("ignores what dnd5e prepares onto system.source, and reads an empty book as the placeholder", () => {
+    const src = { book: "", page: "", custom: "", license: "", revision: 1, rules: "2014" };
+    const stored = sword({ system: { ...sword().system, source: { ...src } } });
+    const pack = sword({ system: { ...sword().system, source: { ...src, book: "TCoE", bookPlaceholder: "TCoE",
+      label: "TCoE", value: "TCoE", slug: "tcoe" } } });
+    expect(changedGroups(stored, pack)).toEqual([]);
+    const otherBook = sword({ system: { ...sword().system, source: { ...src, book: "XGE" } } });
+    expect(changedGroups(otherBook, pack)).toEqual(["other"]);
   });
 
   it("hashes to 8 hex characters, stably", () => {
@@ -197,6 +223,19 @@ describe("refreshedItemData", () => {
     expect(out.effects.find(e => e._id === "e1")).toMatchObject({ name: "Own (new)", disabled: true });
     expect(out.effects.some(e => e._id === "ench")).toBe(true);
     expect(isForeignEffect({ origin: null }, old)).toBe(false);
+  });
+
+  it("treats a relative pack origin as the item's own effect on both the pack entry and the copy", () => {
+    // dnd5e 6.1.0's 2014 Unarmored Movement: origin "Item.<pack id>" on an effect the copy keeps.
+    const pack = { _id: "zCeqyQ8uIPNdYJSW", type: "feat", name: "Unarmored Movement", system: {},
+      effects: [{ _id: "Veg0vXI93A0qlxZn", name: "Unarmored Movement", origin: "Item.zCeqyQ8uIPNdYJSW", transfer: true }] };
+    const copy = { ...structuredClone(pack), _id: "MLNeJkHQw04MMTeP",
+      _stats: { compendiumSource: "Compendium.dnd5e.classfeatures.Item.zCeqyQ8uIPNdYJSW" } };
+    expect(isForeignEffect(copy.effects[0], copy)).toBe(false);
+    expect(isForeignEffect(pack.effects[0], pack)).toBe(false);
+    expect(changedGroups(copy, pack)).toEqual([]);
+    // Pointing at another item is still foreign.
+    expect(isForeignEffect({ origin: "Actor.a.Item.wizard00000000000" }, copy)).toBe(true);
   });
 });
 
@@ -366,6 +405,24 @@ describe("trees and identities", () => {
 });
 
 describe("pairItems / remapIds", () => {
+  it("pairs a species with the one it replaces, though they share no id, identifier or name", () => {
+    // PHB 3.0.0: "Gnome, Rock" (gnome-rock) became Gnome (gnome) with a Rock Gnome lineage.
+    const old = [{ _id: "OLDrace00000000", type: "race", name: "Gnome, Rock", system: { identifier: "gnome-rock" },
+      _stats: { compendiumSource: "Compendium.phb.origins.Item.phbspRockGnome00" } }];
+    const fresh = [
+      { _id: "NEWrace00000000", type: "race", name: "Gnome", system: { identifier: "gnome" },
+        _stats: { compendiumSource: "Compendium.phb.origins.Item.phbspGnome000000" } },
+      { _id: "NEWlineage00000", type: "feat", name: "Rock Gnome", system: { identifier: "rock-gnome" } }
+    ];
+    expect([...pairItems(old, fresh)]).toEqual([["NEWrace00000000", "OLDrace00000000"]]);
+  });
+
+  it("does not offer an identifier as a source match when an item has no source", () => {
+    const old = [{ _id: "OLDa000000000000", type: "feat", name: "A", system: { identifier: "x" } }];
+    const fresh = [{ _id: "NEWb000000000000", type: "feat", name: "B", _stats: { compendiumSource: "C.p.c.Item.x" } }];
+    expect(pairItems(old, fresh).size).toBe(0);
+  });
+
   it("pairs by document id first, then identifier, then name, one to one", () => {
     const old = [
       { _id: "OLDsecondwind000", type: "feat", name: "Second Wind", _stats: { compendiumSource: "C.p.c.Item.secondwind" } },

@@ -9,8 +9,13 @@ All notable changes to the Simple D&D Character Creator.
 - **Update to New Content.** When a content module or dnd5e itself updates, the classes, species,
   backgrounds, spells and gear on existing characters stay on the old version until you delete them
   and add them again, which re-asks every choice. A character with outdated content now has
-  **Update to New Content** in its sheet's ⋯ menu and in its right-click menu. It shows what will
-  change and which of your choices carry over, then updates everything at once:
+  **Update to New Content** in its sheet's ⋯ menu. It shows what will change and which of your
+  choices carry over, then updates everything at once:
+  - Changes are listed under each class, then species, background, feats, spells and equipment,
+    each heading folded until you open it. Every item names the module it comes from and its old
+    and new version. Items added before this release show "earlier version", because their old
+    version was never recorded.
+  - Toggles at the top choose which of those to update. Anything switched off stays as it is.
   - Items whose rules changed are updated in place. Uses spent, quantity, what's equipped and
     prepared, and a changed name or icon stay as they were.
   - When a class, species or background changed how it levels up (as many did in dnd5e 6.1 and the
@@ -22,6 +27,18 @@ All notable changes to the Simple D&D Character Creator.
   - A copy of the character is saved first. A player who can't create actors is offered a download
     instead, and must download it or tick **Proceed without backup**.
   The GM can stop players updating their own characters in **Level-Up Options**.
+- **Humans start with Heroic Inspiration.** Under the 2024 rules a Human's Resourceful trait gives
+  Heroic Inspiration after every Long Rest, but dnd5e never switches it on. A new Human now starts
+  with it, and the creation chat card says so.
+- **World of Warcraft hero classes and Renown.** With the D&D World of Warcraft module, a character
+  can be built as a hero class: Death Knight, Demon Hunter, Evoker, Hunter, Mage, Priest, Shaman or
+  Warrior. The hero's own features replace the class's, and a Death Knight, Demon Hunter or Evoker
+  takes its fixed subclass. The same choice is offered when a character takes a new class at
+  level-up. By default it is a **Play As** choice on the class's page; the GM can show hero classes
+  as their own cards in the class list instead (**Hero classes** in the module settings). With
+  dnd5e's Renown rule turned on, the Renown choices the module adds to classes, species and lineages
+  are asked too. A Druid, Monk, Paladin, Rogue or Warlock also gets the module's class badge, as
+  dragging the class onto a sheet does.
 
 ### Changed
 
@@ -40,6 +57,10 @@ All notable changes to the Simple D&D Character Creator.
   Goliath chooses an ancestry. That choice now sits beside the species you picked, and you choose
   it before moving on, instead of finding it several pages later. Lineages from other modules show
   up too, as long as they name the species they belong to.
+- **Every lineage has its own card on the Species page.** The species list shows each lineage as a
+  card of its own, such as **Elf (Drow)**, **Elf (Blood Elf)** or **Dragonborn (Gold Dragon
+  Ancestor)**, instead of one Elf card with the lineage chosen beside it. Picking a card chooses
+  the species and the lineage together, and the lineage's own description follows the species'.
 
 ### Fixed
 
