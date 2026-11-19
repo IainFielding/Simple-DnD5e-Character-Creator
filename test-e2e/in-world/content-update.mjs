@@ -1,0 +1,639 @@
+/**
+ * End-to-end checks of "Update to New Content" (`scripts/content-update/`).
+ *
+ * **Rebuild is a no-op on unchanged content.** The strongest invariant the rebuild has: a character
+ * built natively, then rebuilt against the very content it was built from, must come back exactly as
+ * it was — same items, same ids, same advancement records, same derived numbers, same state. That
+ * exercises every part of the rebuild that a real update uses (dnd5e's reversal of every advancement,
+ * the fresh walk, answer harvesting and matching, id reconciliation, the state merge and the commit)
+ * with a known right answer. The cases span the shapes that have bitten before: a 2024 class, Savant
+ * choices, invocations, Arcane Trickster cantrips, expertise, metamagic, and 2014 classes carrying
+ * Tasha's optional and replacement features.
+ *
+ * **Refresh in place keeps state and id.** An item whose definition is changed under it (standing in
+ * for an older version) is refreshed back to its source, keeping its id, quantity and equipped state;
+ * with *Keep mine* it is left alone.
+ *
+ * **Real old content.** A character built on an old copy of a package (loaded as world compendia from a
+ * fixture, see `legacy-fixture.mjs`) is updated to the installed version. Six PHB 2.1 → 3.0 cases run
+ * with the suite; the SRD gate (`srd: true`, dnd5e 6.0 → 6.1 across every SRD subclass) runs alone.
+ */
+
+const BUST = new URL(import.meta.url).search;
+const { buildNative } = await import(`./native.mjs${BUST}`);
+const { AnswerBook } = await import(`./answers.mjs${BUST}`);
+const { sweepScenarios } = await import(`./sweep.mjs${BUST}`);
+const { snapshot, diff } = await import(`./normalize.mjs${BUST}`);
+
+const MODULE = "/modules/sogrom-dnd5e-character-creator/scripts";
+const { scanActor } = await import(`${MODULE}/content-update/scan.mjs`);
+const { definitionGroups } = await import(`${MODULE}/content-update/fingerprint.mjs`);
+const { rehearse, commitRehearsal } = await import(`${MODULE}/content-update/rebuild.mjs`);
+const { repairTargets } = await import(`${MODULE}/levelup/repair.mjs`);
+const { repairLevel } = await import(`./repair.mjs${BUST}`);
+
+const PREFIX = "[e2e] ";
+
+/** Scenario id fragment + level. The first scenario whose id contains the fragment is used. */
+const NOOP_CASES = [
+  { find: "sweep:fighter/champion", exact: true, level: 5 },
+  { find: "sweep:wizard/conjurer", exact: true, level: 6 },
+  { find: "sweep:warlock/archfey", level: 11 },
+  { find: "sweep:rogue/arcane-trickster", level: 10 },
+  { find: "sweep:bard/college-of-lore", level: 6 },
+  { find: "sweep:sorcerer/draconic-sorcery", level: 10 },
+  { find: "sweep:fighter/champion-dnd5e-subclasses", exact: true, level: 5 },
+  { find: "sweep:ranger/hunter-dnd5e-subclasses", exact: true, level: 6 }
+];
+
+const settle = ms => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Run the suite.
+ * @param {object} [options]
+ * @param {string} [options.only]   Run only cases whose label contains this text.
+ * @param {boolean} [options.srd]   Run the SRD gate instead: every subclass the sweep builds from the
+ *                                  dnd5e system's own packs, built on the 6.0.0 fixture and updated.
+ * @param {number} [options.level]  The SRD gate's level (default 20: 6.1.0 recreated the level-19 Epic
+ *                                  Boon on new items, so a lower level misses that change).
+ */
+export async function checkContentUpdate({ only = null, srd = false, level = 20 } = {}) {
+  const cases = [];
+  const want = label => !only || label.toLowerCase().includes(String(only).toLowerCase());
+  const byLevel = new Map();
+  const scenariosAt = async lvl => {
+    if ( !byLevel.has(lvl) ) byLevel.set(lvl, (await sweepScenarios({ level: lvl, incremental: true })).scenarios);
+    return byLevel.get(lvl);
+  };
+  const fromSource = (source, s) => s.classUuid?.startsWith(`Compendium.${source.pkg}.`);
+  const legacyLabel = (source, id, lvl) => `${source.label} ${id.replace("sweep:", "")} at ${lvl}: built on the legacy package, updated to the installed one`;
+
+  if ( srd ) {
+    // The subclass decides it, not the class: a 2014 SRD class also carries every Tasha's and module
+    // subclass the sweep pairs with it, and those are other packages' updates.
+    const source = LEGACY_SOURCES.srd;
+    const subclassOf = s => Object.values(s.answers ?? {}).find(v => (typeof v === "string") && v.startsWith("Compendium."));
+    const all = (await scenariosAt(level)).filter(s => fromSource(source, s)
+      && subclassOf(s)?.startsWith(`Compendium.${source.pkg}.`));
+    if ( !all.length ) return { ok: false, cases: [{ label: "SRD gate", ok: false, error: `no ${source.pkg} scenario at level ${level}`, differences: [] }] };
+    for ( const scenario of all ) {
+      const label = legacyLabel(source, scenario.id, level);
+      if ( !want(label) || source.missing ) continue;
+      cases.push(await runLegacy(source, scenario, label, { equivalent: true }));
+    }
+    return { ok: (cases.length > 0) && cases.every(c => c.ok), cases };
+  }
+
+  for ( const spec of NOOP_CASES ) {
+    const scenario = (await scenariosAt(spec.level)).find(s => spec.exact ? (s.id === spec.find) : s.id.startsWith(spec.find));
+    const label = `rebuild is a no-op: ${spec.find.replace("sweep:", "")} at ${spec.level}`;
+    if ( !want(label) ) continue;
+    cases.push(scenario ? await runNoop(scenario, label) : { label, ok: false, error: `no scenario ${spec.find}`, differences: [] });
+  }
+  if ( want("refresh") ) cases.push(await runRefresh());
+  const phb = LEGACY_SOURCES.phb;
+  for ( const spec of PHB_CASES ) {
+    const label = legacyLabel(phb, spec.find, spec.level);
+    if ( !want(label) || phb.missing ) continue;
+    const scenario = (await scenariosAt(spec.level)).find(s => (s.id === spec.find) && fromSource(phb, s));
+    cases.push(scenario ? await runLegacy(phb, scenario, label)
+      : { label, ok: false, error: `no ${phb.pkg} scenario ${spec.find}`, differences: [] });
+  }
+  if ( want("review window") && !phb.missing ) {
+    const scenario = (await scenariosAt(5)).find(s => (s.id === "sweep:fighter/champion") && fromSource(phb, s));
+    if ( scenario ) cases.push(await runUi(phb, scenario));
+  }
+  return { ok: cases.every(c => c.ok), cases };
+}
+
+/** A few bits of state the rebuild must carry: current hit points and a used-up feature. */
+async function scribbleState(actor) {
+  const marks = {};
+  const hp = actor.system.attributes.hp;
+  marks.hp = Math.max(1, (hp.max ?? 2) - 3);
+  await actor.update({ "system.attributes.hp.value": marks.hp });
+  const used = actor.items.find(i => (i.type === "feat") && Number(i.system?.uses?.max) >= 2);
+  if ( used ) {
+    marks.usesId = used.id;
+    marks.spent = 1;
+    await used.update({ "system.uses.spent": 1 });
+  }
+  return marks;
+}
+
+/** Build, rebuild against the same content, and compare. */
+async function runNoop(scenario, label) {
+  const out = { label, ok: false, error: null, differences: [], notes: [] };
+  let actor = null;
+  try {
+    const origins = [scenario.speciesUuid, scenario.backgroundUuid, scenario.classUuid].filter(Boolean);
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: true, origins });
+    actor = await buildNative({ ...scenario, name: `${PREFIX}content-update [${label}]`, incremental: true }, { book });
+    await settle(500);
+    const marks = await scribbleState(actor);
+    await settle(300);
+
+    const before = snapshot(actor);
+    const beforeItems = actor.items.map(i => ({ id: i.id, src: i._stats?.compendiumSource ?? null, granted: !!i.flags?.dnd5e?.advancementOrigin }));
+    const idsBefore = new Set(actor.items.map(i => i.id));
+    const gapsBefore = repairTargets(actor).length;
+
+    const scan = await scanActor(actor);
+    const rehearsal = await rehearse(actor, { ...scan, needsRebuild: true });
+    for ( const d of rehearsal.decisions.filter(x => ["optional", "choice"].includes(x.kind)) ) out.notes.push(`decision ${d.kind} ${d.title} (${d.host}) @${d.level}: ${d.status} ${d.detail}`);
+    const asked = rehearsal.decisions.filter(d => d.status === "ask");
+    for ( const d of asked ) out.notes.push(`not carried: ${d.title} (${d.host}, level ${d.level}) wanted ${d.wanted}; candidates: ${(d.candidates ?? []).join(" | ") || "none"}`);
+    await commitRehearsal(rehearsal);
+    await settle(1200);
+
+    const after = snapshot(actor);
+    // Two things the rebuild is allowed to change, reported as notes rather than failures: a feature
+    // dnd5e granted twice over a level-by-level build comes back once (the second copy and its record
+    // go), and an advancement the native walk wrote an empty `chosen: []` to is left without one.
+    const dupSrcs = [...new Set(beforeItems.filter(i => dupIdsOf(beforeItems).includes(i.id)).map(i => i.src))];
+    const allowed = d => dupSrcs.some(src => d.path.includes(src) || String(d.native).includes(src))
+      || (d.path.startsWith("derived.itemsByType") && String(d.native).includes("×"))
+      || ((d.native === "[]") && (d.creator === "<missing>"));
+    const raw = diff(before, after);
+    for ( const d of raw.filter(allowed) ) out.notes.push(`allowed: ${d.path}: ${d.native} → ${d.creator}`);
+    out.differences = raw.filter(d => !allowed(d));
+    const idsAfter = new Set(actor.items.map(i => i.id));
+    const dupIds = new Set(dupIdsOf(beforeItems));
+    const lost = [...idsBefore].filter(id => !idsAfter.has(id) && !dupIds.has(id)).map(id => `lost id ${id}`);
+    const gained = [...idsAfter].filter(id => !idsBefore.has(id))
+      .map(id => `new id ${id} (${actor.items.get(id)?.name})`);
+    for ( const m of [...lost, ...gained] ) out.differences.push({ path: "ids", native: "same ids", creator: m });
+    if ( actor.system.attributes.hp.value !== marks.hp ) {
+      out.differences.push({ path: "hp.value", native: marks.hp, creator: actor.system.attributes.hp.value });
+    }
+    if ( marks.usesId && (actor.items.get(marks.usesId)?.system?.uses?.spent !== marks.spent) ) {
+      out.differences.push({ path: "uses.spent", native: marks.spent, creator: actor.items.get(marks.usesId)?.system?.uses?.spent });
+    }
+    const gapsAfter = repairTargets(actor).length;
+    if ( gapsAfter > gapsBefore ) out.differences.push({ path: "repair", native: gapsBefore, creator: `${gapsAfter} level(s) to repair` });
+    // A decision the build never answered is "to choose" again, legitimately; a carried answer that was
+    // lost shows up above as a source difference and as a level left to repair.
+    out.ok = !out.differences.length;
+  } catch ( err ) {
+    out.error = `${err.message}\n${err.stack ?? ""}`;
+  } finally {
+    if ( actor && !globalThis.__keepActors ) await actor.delete().catch(() => {});
+  }
+  return out;
+}
+
+/** An item changed under the character is refreshed back, keeping its id and state; Keep mine leaves it. */
+async function runRefresh() {
+  const out = { label: "refresh in place keeps id and state; Keep mine leaves the item", ok: false, error: null,
+    differences: [], notes: [] };
+  let actor = null;
+  const fail = (path, expected, got) => out.differences.push({ path, native: expected, creator: got });
+  try {
+    actor = await Actor.implementation.create({ name: `${PREFIX}content-update [refresh]`, type: "character" });
+    const pack = game.packs.get("dnd5e.equipment24") ?? game.packs.find(p => p.metadata.id?.endsWith("equipment24"));
+    const index = await pack.getIndex();
+    const entry = index.find(e => e.name === "Longsword") ?? index.find(e => e.type === "weapon");
+    const source = await pack.getDocument(entry._id);
+    const [item] = await actor.createEmbeddedDocuments("Item", [game.items.fromCompendium(source, { keepId: false })]);
+
+    // Stand in for an older version: different damage and description; and some state.
+    const sourceDie = source.system.damage?.base?.denomination;
+    await item.update({
+      "system.damage.base.denomination": (sourceDie === 4) ? 6 : 4,
+      "system.description.value": "<p>An older description.</p>",
+      "system.quantity": 2, "system.equipped": false
+    });
+
+    let scan = await scanActor(actor);
+    const e = scan.entries.find(x => x.item.id === item.id);
+    if ( e?.tier !== "refresh" ) fail("tier", "refresh", e?.tier);
+    if ( !e?.customised ) fail("customised", true, e?.customised);
+
+    // Keep mine: nothing changes.
+    let rehearsal = await rehearse(actor, scan, { keep: new Map([[item.id, true]]) });
+    await commitRehearsal(rehearsal);
+    await settle(500);
+    if ( actor.items.get(item.id)?.system.damage.base.denomination === sourceDie ) fail("keep", "unchanged", "refreshed");
+
+    // Update anyway.
+    scan = await scanActor(actor);
+    rehearsal = await rehearse(actor, scan, { keep: new Map([[item.id, false]]) });
+    await commitRehearsal(rehearsal);
+    await settle(500);
+    const now = actor.items.get(item.id);
+    if ( !now ) fail("id", item.id, "gone");
+    else {
+      if ( now.system.damage.base.denomination !== sourceDie ) fail("damage", sourceDie, now.system.damage.base.denomination);
+      if ( now.system.description.value !== source.system.description.value ) fail("description", "source", "old");
+      if ( now.system.quantity !== 2 ) fail("quantity", 2, now.system.quantity);
+      if ( now.system.equipped !== false ) fail("equipped", false, now.system.equipped);
+      if ( !now.getFlag("sogrom-dnd5e-character-creator", "source")?.groups ) fail("stamp", "present", "missing");
+    }
+    const again = await scanActor(actor);
+    if ( again.counts.refresh || again.counts.rebuild ) fail("rescan", "nothing left", JSON.stringify(again.counts));
+    out.ok = !out.differences.length;
+  } catch ( err ) {
+    out.error = `${err.message}\n${err.stack ?? ""}`;
+  } finally {
+    if ( actor && !globalThis.__keepActors ) await actor.delete().catch(() => {});
+  }
+  return out;
+}
+
+/* -------------------------------------------- */
+/*  Real old content                             */
+/* -------------------------------------------- */
+
+/**
+ * The packages with a legacy fixture (see legacy-fixture.mjs). `make` is the command that writes it;
+ * `missing` is set by a run that found no fixture, so the rest of that source's cases are skipped.
+ */
+const LEGACY_SOURCES = {
+  phb: {
+    pkg: "dnd-players-handbook", label: "PHB",
+    make: "node legacy-fixture.mjs H:/Code/DO-NOT-USE/dnd-players-handbook classes feats origins spells equipment"
+  },
+  srd: {
+    pkg: "dnd5e", label: "SRD",
+    make: "node legacy-fixture.mjs H:/Code/dnd5e-release-6.0.0 classes24 origins24 feats24 spells24 equipment24 "
+      + "classes subclasses classfeatures races backgrounds spells items"
+  }
+};
+
+/** PHB classes built on the legacy package and updated to the installed version. */
+const PHB_CASES = [
+  { find: "sweep:fighter/champion", level: 5 },
+  { find: "sweep:wizard/conjurer", level: 6 },
+  { find: "sweep:rogue/arcane-trickster", level: 10 },
+  { find: "sweep:warlock/archfey-patron", level: 11 },
+  { find: "sweep:bard/college-of-lore", level: 6 },
+  { find: "sweep:ranger/hunter", level: 6 }
+];
+
+/**
+ * Import a source's fixture into world compendia once. Returns the fixture's package version and pack
+ * names, or null when there is no fixture (run the source's `make` command first).
+ * @returns {Promise<{version: string, packs: string[]}|null>}
+ */
+async function ensureLegacyPacks(source) {
+  if ( source.loaded ) return source.loaded;
+  const url = `/modules/sogrom-dnd5e-character-creator/test-e2e/fixtures/legacy-${source.pkg}.json`;
+  const res = await fetch(url);
+  if ( !res.ok ) return null;
+  const fixture = await res.json();
+  const { CompendiumCollection } = foundry.documents.collections;
+  for ( const def of Object.values(fixture.packs) ) {
+    const items = def.documents.filter(d => !String(d._key ?? "").startsWith("!folders"));
+    let pack = game.packs.get(`world.${def.name}`);
+    // The pack flags carry dnd5e's `sourceBook`, which fills in each item's `source.book`.
+    if ( !pack ) pack = await CompendiumCollection.createCompendium({
+      type: "Item", label: def.label, name: def.name, package: "world", flags: def.flags ?? {}
+    });
+    const index = await pack.getIndex();
+    if ( index.size >= items.length ) continue;
+    const have = new Set(index.map(e => e._id));
+    const todo = items.filter(d => !have.has(d._id)).map(d => {
+      const data = structuredClone(d);
+      delete data._key;
+      data.folder = null;
+      return data;
+    });
+    for ( let i = 0; i < todo.length; i += 100 ) {
+      await Item.implementation.createDocuments(todo.slice(i, i + 100), { pack: pack.collection, keepId: true });
+    }
+  }
+  source.loaded = { version: fixture.version, packs: Object.keys(fixture.packs) };
+  return source.loaded;
+}
+
+/**
+ * Rewrite every uuid between the installed package and its legacy world copies, for the packs the
+ * fixture holds. The trailing dot keeps `classes` from matching `classes24`.
+ */
+function swapPackage(source, value, toLegacy) {
+  let text = JSON.stringify(value);
+  for ( const pack of source.loaded.packs ) {
+    const installed = `Compendium.${source.pkg}.${pack}.`;
+    const legacy = `Compendium.world.legacy-${source.pkg}-${pack}.`;
+    text = toLegacy ? text.split(installed).join(legacy) : text.split(legacy).join(installed);
+  }
+  return JSON.parse(text);
+}
+
+/** Ability scores, hit point maximum, proficient skills, level and subclass: what a carried build keeps. */
+function vitals(actor) {
+  const out = {};
+  for ( const k of Object.keys(CONFIG.DND5E.abilities) ) out[`ability.${k}`] = actor.system.abilities[k]?.value;
+  out["hp.max"] = actor.system.attributes.hp.max;
+  for ( const [k, v] of Object.entries(actor.system.skills ?? {}) ) if ( v.value ) out[`skill.${k}`] = v.value;
+  out.level = actor.system.details.level;
+  out.subclass = actor.items.find(i => i.type === "subclass")?.name ?? null;
+  return out;
+}
+
+/**
+ * Build the scenario on the legacy package, make the character look as if it had been built before the
+ * update (its uuids naming the installed package), then update it.
+ *
+ * Asserted: the update runs; a scan afterwards finds nothing left to update; no level is left with an
+ * unanswered decision the review did not flag; and the character keeps its ability scores, hit point
+ * maximum, proficient skills, level and subclass. Every decision the review could not carry is
+ * printed, so a choice new in this version (expected) can be told from a lost one.
+ *
+ * With `equivalent` (the SRD gate), also: the same scenario built natively on the installed content,
+ * given the old build's answers, is the reference (§8.3: "a native build given the same answers").
+ * A decision new in this version is generated as usual. Each level the updated character has
+ * unanswered and the reference does not is repaired with the wrench from that same book, and the
+ * result must then equal the reference — source and derived data, as the sweep compares them.
+ * A fresh book would not do: it picks from the new version's options, and the update rightly keeps
+ * the old picks (an origin feat, an invocation), so the two differ by design, not by a bug.
+ * @param {object} [options]
+ * @param {boolean} [options.equivalent]
+ */
+async function runLegacy(source, scenario, label, { equivalent = false } = {}) {
+  const out = { label, ok: false, error: null, differences: [], notes: [] };
+  let legacyActor = null;
+  let actor = null;
+  let reference = null;
+  const fail = (path, before, after) => out.differences.push({ path, native: before, creator: after });
+  try {
+    const built = await buildLegacyCharacter(source, scenario, label);
+    ({ legacyActor, actor } = built);
+    out.notes.push(`legacy ${source.pkg} ${built.version}`);
+    const before = vitals(actor);
+    const idsBefore = new Set(actor.items.map(i => i.id));
+    // What the old build itself left unanswered. The update must not be blamed for these, and must not
+    // add to them beyond what its review flags.
+    const gapsBefore = new Set(unansweredOf(actor));
+    for ( const g of gapsBefore ) out.notes.push(`unanswered before the update: ${g}`);
+
+    const scan = await scanActor(actor);
+    out.notes.push(`scan: ${JSON.stringify(scan.counts)}`);
+    if ( !scan.needsRebuild ) out.notes.push("no advancement changed: refresh only");
+    const rehearsal = await rehearse(actor, scan);
+    const tally = {};
+    for ( const d of rehearsal.decisions ) tally[d.status] = (tally[d.status] ?? 0) + 1;
+    out.notes.push(`decisions: ${JSON.stringify(tally)}`);
+    const asked = rehearsal.decisions.filter(d => d.status === "ask");
+    for ( const d of asked ) out.notes.push(`to choose: ${d.title} (${d.host}, level ${d.level}) wanted ${d.wanted}; candidates: ${(d.candidates ?? []).join(" | ") || "none"}`);
+    for ( const d of rehearsal.decisions.filter(x => x.status === "partial") ) {
+      out.notes.push(`partly carried: ${d.title} (${d.host}, level ${d.level}): ${d.detail}`);
+    }
+    const head = html => String(html ?? "").replace(/<[^>]+>/g, " ").trim().slice(0, 50);
+    const planned = rehearsal.preview.items.find(i => i.type === "class");
+    out.notes.push(`planned class: id ${planned?._id}, ${Object.keys(planned?.system?.advancement ?? {}).length} adv, "${head(planned?.system?.description?.value)}"`);
+    let completed = false;
+    const hookId = Hooks.on("dnd5e.advancementManagerComplete", () => { completed = true; });
+    await commitRehearsal(rehearsal);
+    Hooks.off("dnd5e.advancementManagerComplete", hookId);
+    await settle(1500);
+    const cls = actor.items.find(i => i.type === "class");
+    out.notes.push(`commit completed: ${completed}; class now: id ${cls?.id}, "${head(cls?.system?.description?.value)}"`);
+
+    const after = vitals(actor);
+    for ( const [k, v] of Object.entries(before) ) if ( after[k] !== v ) fail(k, v, after[k]);
+    for ( const k of Object.keys(after) ) if ( !(k in before) ) fail(k, undefined, after[k]);
+    const again = await scanActor(actor);
+    for ( const e of again.entries.filter(x => ["refresh", "rebuild"].includes(x.tier)) ) {
+      fail("still outdated", "none", `${e.item.name} (${e.tier}: ${e.changed.join(", ")})`);
+      const mine = definitionGroups(e.item.toObject());
+      const theirs = definitionGroups(e.source.toObject());
+      for ( const g of e.changed ) out.notes.push(`  ${e.item.name}.${g}: ${firstDifference(JSON.parse(mine[g]), JSON.parse(theirs[g]))}`);
+    }
+    const kept = [...idsBefore].filter(id => actor.items.has(id)).length;
+    out.notes.push(`item ids kept: ${kept} of ${idsBefore.size}`);
+    const fresh = unansweredOf(actor).filter(g => !gapsBefore.has(g));
+    if ( fresh.length > asked.length ) for ( const g of fresh ) fail("unanswered", "flagged on the review", g);
+    else for ( const g of fresh ) out.notes.push(`left for the wrench: ${g}`);
+
+    if ( equivalent ) {
+      const origins = [scenario.speciesUuid, scenario.backgroundUuid, scenario.classUuid].filter(Boolean);
+      const book = new AnswerBook({ overrides: { ...oldAnswers(source, built.book), ...(scenario.answers ?? {}) }, generate: true, origins });
+      reference = await buildNative({ ...scenario, name: `${PREFIX}content-update [reference]`, incremental: true }, { book });
+      await settle(800);
+      const refGaps = new Set(unansweredOf(reference));
+      for ( const g of refGaps ) out.notes.push(`unanswered in the reference too: ${g}`);
+      for ( const target of repairTargets(actor) ) {
+        for ( const group of target.levels ) {
+          const gap = `${target.classItem.name} ${group.level}: ${group.titles.join(", ")}`;
+          if ( refGaps.has(gap) ) continue;
+          const r = await repairLevel(actor, target.classItem.id, group.level, book);
+          out.notes.push(`repaired ${gap} (${r.steps} step(s))`);
+        }
+      }
+      for ( const g of unansweredOf(actor).filter(x => !refGaps.has(x)) ) fail("unanswered after the repair", "answered", g);
+      const a = snapshot(reference);
+      const b = snapshot(actor);
+      // Three differences the update makes by design, reported as notes: the player's icon is always
+      // kept (an art module re-skins the pack's at runtime); a used-up feature stays used; and a
+      // feature the native level-by-level build granted twice comes back once (the same allowance as
+      // the no-op cases; dnd5e 6.1.0's Ranger holds Hunter's Mark twice natively).
+      const counts = new Map();
+      for ( const i of reference.items ) {
+        const src = i._stats?.compendiumSource;
+        if ( src ) counts.set(src, (counts.get(src) ?? 0) + 1);
+      }
+      const doubled = [...counts].filter(([, n]) => n > 1).map(([src]) => src);
+      const byDesign = d => d.path.endsWith(".img") || d.path.endsWith(".system.uses.spent")
+        || doubled.some(src => d.path.includes(src) || String(d.native).includes(src))
+        || (d.path.startsWith("derived.itemsByType") && String(d.native).includes("×"));
+      for ( const d of [...diff(a.source, b.source, "source"), ...diff(a.derived, b.derived, "derived")] ) {
+        if ( byDesign(d) ) out.notes.push(`by design: ${d.path}: ${String(d.native).slice(0, 80)} → ${String(d.creator).slice(0, 80)}`);
+        else out.differences.push({ path: `≠ native: ${d.path}`, native: d.native, creator: d.creator });
+      }
+    }
+    out.ok = !out.differences.length;
+  } catch ( err ) {
+    out.error = `${err.message}\n${err.stack ?? ""}`;
+  } finally {
+    if ( legacyActor ) await legacyActor.delete().catch(() => {});
+    if ( reference && !globalThis.__keepActors ) await reference.delete().catch(() => {});
+    if ( actor && !globalThis.__keepActors ) await actor.delete().catch(() => {});
+  }
+  return out;
+}
+
+/**
+ * The answers an old build was given, as an override table for a new book: keyed by advancement id,
+ * per level where one advancement answered at several, with the legacy uuids pointing back at the
+ * installed package. An answer of `null` (a decision deliberately left open) is kept.
+ */
+function oldAnswers(source, book) {
+  const byAdv = new Map();
+  for ( const e of book.entries ) {
+    if ( e.answer === undefined ) continue;
+    if ( !byAdv.has(e.advId) ) byAdv.set(e.advId, {});
+    byAdv.get(e.advId)[e.level] = (e.answer === null) ? null : swapPackage(source, e.answer, false);
+  }
+  const out = {};
+  for ( const [advId, levels] of byAdv ) {
+    const values = Object.values(levels);
+    out[advId] = (values.length === 1) ? values[0] : levels;
+  }
+  return out;
+}
+
+/** Every class level the repair wrench would offer, as "Class level: titles". */
+function unansweredOf(actor) {
+  return repairTargets(actor).flatMap(t => t.levels.map(g => `${t.classItem.name} ${g.level}: ${g.titles.join(", ")}`));
+}
+
+/** The first path at which two values differ, with both sides, for a diagnostic note. */
+function firstDifference(a, b, path = "") {
+  if ( JSON.stringify(a) === JSON.stringify(b) ) return null;
+  if ( a && b && (typeof a === "object") && (typeof b === "object") ) {
+    for ( const k of new Set([...Object.keys(a), ...Object.keys(b)]) ) {
+      const d = firstDifference(a[k], b[k], path ? `${path}.${k}` : k);
+      if ( d ) return d;
+    }
+  }
+  const show = v => JSON.stringify(v)?.slice(0, 160);
+  return `${path || "(root)"}: mine ${show(a)} / source ${show(b)}`;
+}
+
+/** Ids of the second and later copies of a granted item (same source, granted more than once). */
+function dupIdsOf(items) {
+  const seen = new Set();
+  const out = [];
+  for ( const i of items ) {
+    if ( !i.granted || !i.src ) continue;
+    if ( seen.has(i.src) ) out.push(i.id);
+    seen.add(i.src);
+  }
+  return out;
+}
+
+/**
+ * Build a scenario on the legacy package and turn it into a character "from before the update": the
+ * same items, its uuids naming the installed package, no source stamps.
+ * @returns {Promise<{legacyActor: Actor5e, actor: Actor5e, version: string, book: AnswerBook}>}   Both
+ *   actors must be deleted; `book` holds every answer the old build was given.
+ */
+async function buildLegacyCharacter(source, scenario, label) {
+  const loaded = await ensureLegacyPacks(source);
+  if ( !loaded ) {
+    source.missing = true;
+    throw new Error(`no ${source.pkg} fixture: run "${source.make}" in test-e2e`);
+  }
+  const { version } = loaded;
+  // The scenario on the legacy copies. The subclass decision is keyed by the legacy class's own
+  // Subclass advancement id, in case it differs from the installed class's.
+  const legacy = swapPackage(source, scenario, true);
+  const legacyClass = await fromUuid(legacy.classUuid);
+  if ( !legacyClass ) throw new Error(`the legacy package has no ${legacy.classUuid}`);
+  const subAdv = Object.values(legacyClass.advancement?.byId ?? {}).find(a => a.type === "Subclass")?.id;
+  const subUuid = Object.values(legacy.answers ?? {})[0];
+  if ( subAdv && subUuid ) legacy.answers = { [subAdv]: subUuid };
+  const origins = [legacy.speciesUuid, legacy.backgroundUuid, legacy.classUuid].filter(Boolean);
+  const book = new AnswerBook({ overrides: legacy.answers ?? {}, generate: true, origins });
+  const legacyActor = await buildNative({ ...legacy, name: `${PREFIX}content-update [legacy build]`, incremental: true }, { book });
+  await settle(800);
+
+  // As if built before the update: the same character, its uuids naming the installed package.
+  const data = swapPackage(source, legacyActor.toObject(), false);
+  delete data._id;
+  // A character from before this feature carries no source stamps. (Left on, they would also be
+  // wrong here: the uuid rewrite above changes the very definitions they hashed.)
+  for ( const item of data.items ) delete item.flags?.["sogrom-dnd5e-character-creator"]?.source;
+  data.name = `${PREFIX}content-update [${label}]`;
+  const actor = await Actor.implementation.create(data, { keepEmbeddedIds: true });
+  await settle(800);
+  return { legacyActor, actor, version, book };
+}
+
+/* -------------------------------------------- */
+/*  The window                                   */
+/* -------------------------------------------- */
+
+/**
+ * The review window on a legacy-built Fighter, through the real UI: the entry point offers it, the
+ * window renders the rebuilt and refreshed lists and the carried choices; without Create Actor the
+ * Update button is locked until "Proceed without backup" is ticked; with it, Update makes the backup
+ * copy, writes the character, posts the chat note and closes, and nothing is left out of date.
+ */
+async function runUi(source, scenario) {
+  const out = { label: "the review window: entry point, lists, backup gate, Update", ok: false, error: null,
+    differences: [], notes: [] };
+  const fail = (path, expected, got) => out.differences.push({ path, native: expected, creator: got });
+  let legacyActor = null;
+  let actor = null;
+  let backup = null;
+  const realCan = game.user.can.bind(game.user);
+  try {
+    const { openContentUpdate, updateAvailable } = await import(`${MODULE}/content-update/update-app.mjs`);
+    ({ legacyActor, actor } = await buildLegacyCharacter(source, scenario, "ui"));
+
+    // The entry point: the first ask starts the scan and says no; once it lands, yes.
+    let ready = false;
+    updateAvailable(actor, () => { ready = true; });
+    for ( let i = 0; (i < 100) && !ready; i++ ) await settle(100);
+    if ( !updateAvailable(actor) ) fail("entry point", "offered", "not offered");
+
+    // Without Create Actor: locked until the box is ticked. Opened the way a player does, from the
+    // sheet's ⋯ menu.
+    game.user.can = perm => ((perm === "ACTOR_CREATE") ? false : realCan(perm));
+    const label = game.i18n.localize("sogrom-dnd5e-character-creator.contentUpdate.button");
+    await actor.sheet.render(true);
+    await settle(1500);
+    const findEntry = () => [...document.querySelectorAll("#context-menu .context-item, .controls-dropdown .header-control, menu.controls-dropdown li")]
+      .find(el => (el.textContent.trim() === label) && el.isConnected && (el.offsetParent !== null));
+    let entry = findEntry();
+    for ( let i = 0; !entry && (i < 2); i++ ) {
+      actor.sheet.element?.querySelector('[data-action="toggleControls"]')?.click();
+      await settle(400);
+      entry = findEntry();
+    }
+    if ( entry ) entry.click();
+    else {
+      fail("entry point", `"${label}" in the sheet's ⋯ menu`, "missing");
+      openContentUpdate(actor);
+    }
+    await settle(500);
+    const app = foundry.applications.instances?.get(`sogrom-content-update-${actor.id}`);
+    if ( !app ) throw new Error("the sheet's entry opened no window");
+    await actor.sheet.close().catch(() => {});
+    const button = () => app.element?.querySelector('button[data-action="update"]');
+    for ( let i = 0; (i < 300) && !button(); i++ ) await settle(200);
+    if ( !button() ) throw new Error(`the window never finished: ${app.element?.textContent?.trim().slice(0, 200)}`);
+    const count = sel => app.element.querySelectorAll(sel).length;
+    out.notes.push(`rebuilt ${count(".sogrom-cu-items li")} item row(s), ${count(".sogrom-cu-decisions li")} decision row(s)`);
+    if ( !count(".sogrom-cu-items li") ) fail("lists", "items listed", "none");
+    if ( !count(".sogrom-cu-decisions li.is-carried") ) fail("choices", "carried choices listed", "none");
+    if ( !button().disabled ) fail("backup gate", "Update locked", "Update enabled");
+    if ( !app.element.querySelector('button[data-action="download"]') ) fail("backup gate", "Download offered", "none");
+    app.element.querySelector('input[data-action="skipBackup"]').click();
+    await settle(800);
+    if ( button()?.disabled ) fail("backup gate", "unlocked by Proceed without backup", "still locked");
+
+    // With Create Actor: a backup copy, then the update.
+    game.user.can = realCan;
+    await app.render();
+    await settle(800);
+    if ( app.element.querySelector('button[data-action="download"]') ) fail("backup", "copy, not download", "download offered");
+    const messages = game.messages.size;
+    button().click();
+    for ( let i = 0; (i < 300) && app.rendered; i++ ) await settle(200);
+    await settle(1500);
+    if ( app.rendered ) fail("window", "closed after Update", "still open");
+    backup = game.actors.find(a => a.getFlag("sogrom-dnd5e-character-creator", "backupOf") === actor.uuid) ?? null;
+    if ( !backup ) fail("backup", "a copy in the backups folder", "none");
+    else if ( !backup.folder?.getFlag("sogrom-dnd5e-character-creator", "contentUpdateBackups") ) fail("backup", "in the backups folder", backup.folder?.name ?? "no folder");
+    if ( game.messages.size <= messages ) fail("chat", "a summary note", "none");
+    const again = await scanActor(actor);
+    if ( again.counts.refresh || again.counts.rebuild ) fail("result", "nothing left to update", JSON.stringify(again.counts));
+    if ( backup && updateAvailable(backup) ) fail("backup", "never offered an update itself", "offered");
+    // The repair wrench opens for anything left to choose; close it.
+    for ( const w of foundry.applications.instances?.values() ?? [] ) {
+      if ( (w.constructor?.name === "LevelUpShell") || (w.constructor?.name === "DialogV2") ) await w.close?.({ animate: false });
+    }
+    out.ok = !out.differences.length;
+  } catch ( err ) {
+    out.error = `${err.message}\n${err.stack ?? ""}`;
+  } finally {
+    game.user.can = realCan;
+    if ( legacyActor ) await legacyActor.delete().catch(() => {});
+    if ( backup ) await backup.delete().catch(() => {});
+    if ( actor && !globalThis.__keepActors ) await actor.delete().catch(() => {});
+  }
+  return out;
+}

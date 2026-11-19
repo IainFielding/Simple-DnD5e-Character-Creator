@@ -18,6 +18,7 @@ import { launchLevelUpTo } from "../levelup/intercept.mjs";
 import { chooserContext, premadeContext, applyPremade, takePregen } from "./entry-chooser.mjs";
 import { isQuickLevel, quickClimb } from "../data/quick-climb.mjs";
 import { foundryPregens } from "../data/premades.mjs";
+import { chosenHeroClass } from "../data/warcraft.mjs";
 import {
   QUICK_FILLED_STEPS, thresholdClear, thresholdContext, thresholdCreate, thresholdRoll,
   thresholdRollAll, thresholdRollName, seedThreshold
@@ -769,7 +770,7 @@ export class CreatorShell extends CreatorShellBase {
     return {
       portrait: this.state.portrait,
       name: this.state.details.name?.trim() ?? "",
-      className: this.source.card(this.state.classUuid)?.name ?? "",
+      className: chosenHeroClass(this.state, this.source)?.name ?? this.source.card(this.state.classUuid)?.name ?? "",
       level: this.state.targetLevel ?? 1,
       ...this.#dossierAbilities(threshold),
       steps: lines

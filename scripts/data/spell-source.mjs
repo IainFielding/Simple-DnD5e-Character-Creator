@@ -17,8 +17,8 @@ export const MAGIC_INITIATE_LISTS = ["cleric", "druid", "wizard"];
  */
 export const SUBCLASS_SPELL_LISTS = {
   "fighter:eldritch-knight": "wizard",
-  "rogue:trickster": "wizard",       // the PHB Arcane Trickster's identifier is "trickster"
-  "rogue:arcane-trickster": "wizard" // …but older/third-party data spells it out
+  "rogue:trickster": "wizard",       // the PHB Arcane Trickster's identifier before PHB 3.0.0
+  "rogue:arcane-trickster": "wizard" // …and from PHB 3.0.0 on (Nov 2026)
 };
 
 /**
@@ -526,12 +526,18 @@ function valueAtLevel(table, level) {
  * to the level-1 table only when the class carries no cantrip scale, which no real caster does.
  * @param {Item5e|object} classDoc   The class item or document.
  * @param {number} level             The class's current level.
+ * @param {object} [options]
+ * @param {boolean} [options.ownChoice]  The content asks its cantrips itself, through a cantrip
+ *   `ItemChoice` (see `lvl-spells-step.mjs#hasOwnCantripChoice`). The fallback table is then
+ *   skipped, since it only exists for content that gave no way to pick them.
  * @returns {number}
  */
-export function cantripsKnownAtLevel(classDoc, level) {
+export function cantripsKnownAtLevel(classDoc, level, { ownChoice = false } = {}) {
   const classId = classDoc?.system?.identifier ?? classDoc?.name?.toLowerCase() ?? "";
+  if ( ownChoice ) return scaleCount(classDoc, classId, "cantrip", {}, level);
   // A caster with no cantrip scale of its own reads the table kept for it (the PHB Arcane
-  // Trickster) before the flat level-1 defaults, which know nothing about later levels.
+  // Trickster before PHB 3.0.0) before the flat level-1 defaults, which know nothing about later
+  // levels.
   const table = FALLBACK_CANTRIP_SCALES[classId];
   const fallback = table ? { [classId]: Number(valueAtLevel(table, level) ?? 0) } : DEFAULT_CANTRIPS;
   return scaleCount(classDoc, classId, "cantrip", fallback, level);

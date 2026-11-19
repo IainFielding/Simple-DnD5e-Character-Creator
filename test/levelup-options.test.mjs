@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 /**
- * The Level-Up Options window writes seven settings that used to sit in four separate stretches of
+ * The Level-Up Options window writes eight settings, seven of which used to sit in four separate stretches of
  * the flat settings list. The keys are unchanged, so every existing accessor still reads them — the
  * only thing that moved is where a GM edits them.
  *
@@ -23,18 +23,19 @@ describe("Level-Up Options submit guards its values", () => {
     levelUpHpMode: oneOf(HP_MODES, data.levelUpHpMode, DEFAULTS.levelUpHpMode),
     levelUpHpRollToChat: !!data.levelUpHpRollToChat,
     levelUpSummary: oneOf(SUMMARY_MODES, data.levelUpSummary, DEFAULTS.levelUpSummary),
-    levelUpReadyNotice: oneOf(SUMMARY_MODES, data.levelUpReadyNotice, DEFAULTS.levelUpReadyNotice)
+    levelUpReadyNotice: oneOf(SUMMARY_MODES, data.levelUpReadyNotice, DEFAULTS.levelUpReadyNotice),
+    contentUpdatePlayers: !!data.contentUpdatePlayers
   });
 
   it("keeps valid values as given", () => {
     expect(submit({
       showLevelUpButton: true, showLevelUpHeaderMenu: false, showContextMenu: true,
       levelUpHpMode: "average-roll", levelUpHpRollToChat: true,
-      levelUpSummary: "gm", levelUpReadyNotice: "off"
+      levelUpSummary: "gm", levelUpReadyNotice: "off", contentUpdatePlayers: true
     })).toEqual({
       showLevelUpButton: true, showLevelUpHeaderMenu: false, showContextMenu: true,
       levelUpHpMode: "average-roll", levelUpHpRollToChat: true,
-      levelUpSummary: "gm", levelUpReadyNotice: "off"
+      levelUpSummary: "gm", levelUpReadyNotice: "off", contentUpdatePlayers: true
     });
   });
 
@@ -45,6 +46,7 @@ describe("Level-Up Options submit guards its values", () => {
     expect(out.showLevelUpHeaderMenu).toBe(false);
     expect(out.showContextMenu).toBe(false);
     expect(out.levelUpHpRollToChat).toBe(false);
+    expect(out.contentUpdatePlayers).toBe(false);
   });
 
   it("rejects an unknown hit-point mode", () => {

@@ -43,11 +43,13 @@ export const UUID = {
   human: "Compendium.dnd5e.origins24.Item.phbspHuman000000",
   sage: "Compendium.dnd5e.origins24.Item.phbbgSage0000000",
   // Human "Versatile" origin-feat options.
-  alert: "Compendium.dnd5e.feats24.Item.phbftAlert000000",
-  savageAttacker: "Compendium.dnd5e.feats24.Item.phbftSavageAttac",
-  // Fighter fighting styles.
-  archery: "Compendium.dnd5e.feats24.Item.phbfstArchery000",
-  defense: "Compendium.dnd5e.feats24.Item.phbfstDefense000",
+  alert: "Compendium.dnd-players-handbook.feats.Item.phbftAlert000000",
+  savageAttacker: "Compendium.dnd-players-handbook.feats.Item.phbftSavageAttac",
+  // Fighter fighting styles. PHB copies since dnd5e 6.1.0 moved the choice onto the Fighting Style
+  // feature with an empty pool: candidates come from browsing (subtype fightingStyle), where the
+  // creator's name dedupe keeps the book copy, so the SRD uuid is never offered.
+  archery: "Compendium.dnd-players-handbook.feats.Item.phbfstArchery000",
+  defense: "Compendium.dnd-players-handbook.feats.Item.phbfstDefense000",
   // Arcana Unleashed: a background whose origin feat picks a school-restricted cantrip.
   covenantRecruit: "Compendium.dnd-arcana-unleashed.backgrounds.Item.aunCovenantofTRS",
   arcaneUndertaker: "Compendium.dnd-arcana-unleashed.feats.Item.aunArcaneUnder1Z",

@@ -56,6 +56,7 @@ const SAVE_DELAY = 1500;
 const DRAFT_FIELDS = {
   // Origin selections and the level being built towards.
   classUuid: "value",
+  heroClass: "value",
   speciesUuid: "value",
   backgroundUuid: "value",
   targetLevel: "value",

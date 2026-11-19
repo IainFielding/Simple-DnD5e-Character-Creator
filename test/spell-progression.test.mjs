@@ -65,6 +65,49 @@ describe("Arcane Trickster cantrips", () => {
     expect(plan.addCantrips).toBe(2);
     expect(plan.addSpells).toBe(3);
   });
+
+  // PHB 3.0.0: the Spellcasting feature the subclass grants asks for the cantrips itself, and dnd5e
+  // tags those picks with the feature's identifier, so the tally never counts them.
+  describe("when the content asks for its cantrips itself (PHB 3.0.0)", () => {
+    const rogue = {
+      id: "rogue00000000000", type: "class", name: "Rogue",
+      system: { identifier: "rogue", levels: 3, spellcasting: { progression: "none" }, advancement: [] }
+    };
+    const at = { ...trickster, id: "arcTrickster0000",
+      system: { ...trickster.system, identifier: "arcane-trickster" } };
+    const chooseCantrips = { type: "ItemChoice", configuration: { type: "spell",
+      restriction: { list: ["class:wizard"], level: "0" }, choices: { 3: { count: 2 }, 10: { count: 1 } } } };
+    const spellcasting = {
+      id: "spellcastingFeat", type: "feat", name: "Spellcasting",
+      flags: { dnd5e: { advancementOrigin: "arcTrickster0000.52x82ltPXCgmrh1K" } },
+      advancement: { byId: { pmEzhtpVHKTAjiYX: chooseCantrips } }
+    };
+    const picked = { type: "spell", system: { level: 0, sourceItem: "feat:spellcasting" } };
+    const actor = items => ({ items, system: { details: { level: 3 }, spells: { spell1: { max: 2 } } } });
+
+    it("offers no cantrips of its own on top of the feature's choice", () => {
+      const plan = computeSpellPlan(actor([rogue, at, spellcasting, picked, picked]), rogue);
+      expect(plan.addCantrips).toBe(0);
+      expect(plan.addSpells).toBe(3);
+    });
+
+    it("still uses the fallback for the earlier data, which has no such choice", () => {
+      expect(computeSpellPlan(actor([rogue, at]), rogue).addCantrips).toBe(2);
+    });
+
+    it("finds a choice granted further down the chain", () => {
+      const holder = { id: "holderFeat000000", type: "feat", advancement: { byId: {} },
+        flags: { dnd5e: { advancementOrigin: "arcTrickster0000.x" } } };
+      const deep = { ...spellcasting, id: "deepFeat00000000",
+        flags: { dnd5e: { advancementOrigin: "holderFeat000000.y" } } };
+      expect(computeSpellPlan(actor([rogue, at, holder, deep]), rogue).addCantrips).toBe(0);
+    });
+
+    it("ignores a cantrip choice on a feature some other item granted", () => {
+      const other = { ...spellcasting, flags: { dnd5e: { advancementOrigin: "someFeat00000000.z" } } };
+      expect(computeSpellPlan(actor([rogue, at, other]), rogue).addCantrips).toBe(2);
+    });
+  });
 });
 
 describe("2014 known casters", () => {

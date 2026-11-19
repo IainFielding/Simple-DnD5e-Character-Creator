@@ -1,7 +1,7 @@
 import { t, log } from "../../config.mjs";
 import { advancementTitle } from "../../data/advancement-util.mjs";
 import { atLevel, advancementHint } from "../levelup-state.mjs";
-import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended } from "../../data/choice-resolver.mjs";
+import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended, recommendAuthoredPool } from "../../data/choice-resolver.mjs";
 
 /**
  * Feature choices — the `ItemChoice` advancements a level grants (a Fighting Style, a Maneuver,
@@ -223,6 +223,7 @@ async function buildOptions(record, st, spells) {
   // A scanned pool has no meaningful authored order, so sort it alphabetically for scanability;
   // a small static pool (fighting styles, maneuvers) keeps its authored order.
   if ( meta.size ) options.sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang));
+  recommendAuthoredPool(cfg, options, o => pool.includes(o.uuid));
   return options;
 }
 

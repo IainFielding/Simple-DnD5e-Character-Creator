@@ -622,9 +622,47 @@ async function generate(adv, level, { offered, asiFeats = false, reserved, phase
  * @param {Advancement} adv
  * @param {number} level
  */
-function memoKey(adv, level) {
+function memoKey(adv, level, origin = featOrigin(adv)) {
   const item = adv?.item?.identifier || adv?.item?.name || "";
-  return `${item}:${adv?.id}@${level}`;
+  return `${item}:${adv?.id}@${level}${origin ? `~${origin}` : ""}`;
+}
+
+/**
+ * Which origin granted a feat, when it was the species or the background — the one place a build can
+ * hold two copies of one feat. dnd5e 6.1's Human Versatile offers Skilled alone, and Noble, Scribe,
+ * Charlatan and Chondathan Freebooter grant Skilled too. Both copies share an identifier and an
+ * advancement id, so keyed on those alone the second copy was handed the first's skills, which it no
+ * longer offers. Anything else returns null and keeps its plain key, so no other answer moves.
+ *
+ * Read from the embedded item's `advancementRoot` (or, failing that, its `advancementOrigin` chain),
+ * which both the native manager and the driver set. The creator's creation path asks with a
+ * compendium document instead and passes its requirement's source as `origin` explicitly.
+ * @param {Advancement} adv
+ * @returns {"species"|"background"|null}
+ */
+export function featOrigin(adv) {
+  const item = adv?.item;
+  const actor = item?.actor;
+  if ( (item?.type !== "feat") || !actor ) return null;
+  let id = String(item.flags?.dnd5e?.advancementRoot ?? "").split(".")[0];
+  if ( !actor.items.get(id) ) {
+    // No root flag: climb the origin chain, guarding against a loop.
+    let cur = item;
+    for ( let i = 0; (i < 6) && cur; i++ ) {
+      const next = actor.items.get(String(cur.flags?.dnd5e?.advancementOrigin ?? "").split(".")[0]);
+      if ( !next ) break;
+      cur = next;
+    }
+    id = cur?.id;
+  }
+  return originKind(actor.items.get(id)?.type);
+}
+
+/** @param {string} [type]  An item type. */
+export function originKind(type) {
+  if ( type === "race" ) return "species";
+  if ( type === "background" ) return "background";
+  return null;
 }
 
 export class AnswerBook {
@@ -716,6 +754,28 @@ export class AnswerBook {
     return this.#reserved;
   }
 
+  /**
+   * The reserved keys, plus whatever another copy of the same feat already took. The side that asks
+   * first may ask about both copies before applying either — the creator answers the whole build at
+   * once — so the second copy's own offered list can still show the first copy's picks. Taking them
+   * again hands the other side a pick its screen no longer offers.
+   * @param {object} entry  The ledger entry being generated.
+   */
+  async #siblingReserved(entry) {
+    const reserved = await this.#reservedKeys();
+    const siblings = [...this.#memo.values()].filter(e => (e !== entry) && (e.base === entry.base));
+    if ( !siblings.length ) return reserved;
+    const out = new Set(reserved);
+    for ( const sibling of siblings ) {
+      if ( !Array.isArray(sibling.answer) ) continue;
+      // Trait keys carry no mode of their own; the copies are one advancement, so one mode.
+      for ( const mode of ["default", "expertise", "forcedExpertise", "upgrade", "mastery"] ) {
+        for ( const k of sibling.answer ) if ( typeof k === "string" ) out.add(`${mode}|${k}`);
+      }
+    }
+    return out;
+  }
+
   /* -------------------------------------------- */
 
   /**
@@ -747,9 +807,9 @@ export class AnswerBook {
    *   "available" spell restriction (see {@link generateSpellChoice}).
    * @returns {Promise<*>}  The answer, or `undefined` when there is none.
    */
-  async answer(adv, level, { asker, offered, phase = "creation", maxSpellSlot } = {}) {
+  async answer(adv, level, { asker, offered, phase = "creation", maxSpellSlot, origin } = {}) {
     if ( !adv?.id ) return undefined;
-    const key = memoKey(adv, level);
+    const key = memoKey(adv, level, origin);
 
     let entry = this.#memo.get(key);
     if ( !entry ) {
@@ -757,6 +817,9 @@ export class AnswerBook {
         advId: adv.id, level, type: adv.type, title: adv.name ?? null,
         item: adv.item?.name ?? null, source: null, answer: undefined,
         missing: null, note: null, askedBy: [],
+        // The key without its origin: copies of one feat granted by different origins share it.
+        base: memoKey(adv, level, null),
+        key,
         // Recorded so the ledger can tell a forced increase a scenario states from a real choice.
         forced: isForcedAsi(adv)
       };
@@ -768,7 +831,7 @@ export class AnswerBook {
         entry.source = "override";
       } else if ( this.#generate ) {
         const result = await generate(adv, level, {
-          offered, asiFeats: this.#asiFeats, reserved: await this.#reservedKeys(), phase, maxSpellSlot
+          offered, asiFeats: this.#asiFeats, reserved: await this.#siblingReserved(entry), phase, maxSpellSlot
         });
         entry.answer = result.answer;
         entry.missing = result.missing ?? null;
@@ -796,8 +859,8 @@ export class AnswerBook {
    * @param {number} level
    * @param {string} [asker]
    */
-  peek(adv, level, asker) {
-    const entry = this.#memo.get(memoKey(adv, level));
+  peek(adv, level, asker, origin) {
+    const entry = this.#memo.get(memoKey(adv, level, origin));
     if ( !entry ) return undefined;
     if ( asker && !entry.askedBy.includes(asker) ) entry.askedBy.push(asker);
     return entry.answer;

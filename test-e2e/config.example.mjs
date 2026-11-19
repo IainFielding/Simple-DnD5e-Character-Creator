@@ -55,12 +55,16 @@ export const BASE_MODULES = [
   // classes), 10 backgrounds and 37 feats. The first content to use dnd5e 6.0's ModifyItem advancement.
   "dnd-arcana-unleashed",
   // Operation Deadfall — equipment only; enabled so its items are in the world's pools.
-  "dnd-deadfall"
+  "dnd-deadfall",
+  // World of Warcraft (Nov 2026) — 9 subclasses, 12 species, 14 lineages (four of them attach to the
+  // Elf), 11 feats. Its hero classes and Renown are hung on the sheet-drop hook, so neither side here
+  // sees them: both build through AdvancementManager.forNewItem.
+  "dnd-world-warcraft"
 ];
 
 /** The system the test worlds run, and the version this harness was written against. */
 export const SYSTEM = "dnd5e";
-export const SYSTEM_VERSION = "6.0.5";
+export const SYSTEM_VERSION = "6.1.1";
 export const CORE_VERSION = "14.368";
 
 /**

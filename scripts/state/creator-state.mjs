@@ -32,6 +32,15 @@ export class CreatorState {
 
   /** Origin selections, stored as source-compendium UUIDs. */
   classUuid = null;
+
+  /**
+   * The World of Warcraft hero class the chosen class is played as ("death-knight" for a Paladin),
+   * or null for the class itself. Set on the Class step and applied to the class item when it is
+   * built — see {@link module:data/warcraft}. Cleared whenever the class changes.
+   * @type {string|null}
+   */
+  heroClass = null;
+
   speciesUuid = null;
   backgroundUuid = null;
 
@@ -473,6 +482,8 @@ export class CreatorState {
     // background/species items back to the picks that produced them. (dnd5e's item type for species is "race".)
     const source = item => item?._stats?.compendiumSource ?? null;
     this.classUuid = source(actor.items?.find(i => i.type === "class"));
+    // A World of Warcraft hero class is a class item the module flagged; keep playing it as that.
+    this.heroClass = actor.items?.find(i => i.type === "class")?.flags?.["dnd-world-warcraft"]?.heroClass ?? null;
     this.backgroundUuid = source(actor.items?.find(i => i.type === "background"));
     this.speciesUuid = source(actor.items?.find(i => i.type === "race"));
 

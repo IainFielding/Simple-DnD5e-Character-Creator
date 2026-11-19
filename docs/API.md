@@ -153,6 +153,30 @@ itself. The API object itself exists earlier, from `init`.
 > creation hook and card, and no level-up hook fires. An Ember hand-off announces neither: Ember
 > owns that moment.
 
+### Content updates
+
+| Hook | Cancellable | Payload |
+|---|:---:|---|
+| `simpleCharacterCreator.preUpdateContent` | **yes** | `{actor, scan, rehearsal}` |
+| `simpleCharacterCreator.contentUpdated` | no | `{actor, backup, rehearsal}` |
+
+"Update to New Content" brings a character's items up to the versions of their compendium sources
+now installed, carrying the player's decisions over into any rebuilt classes, species or
+backgrounds.
+
+- **`preUpdateContent`** — fires when the player presses **Update**, after the review page has been
+  shown and before the backup or any write. `scan.entries` lists every item with its tier
+  (`same`, `refresh`, `rebuild`, `report`); `rehearsal.preview` is the actor data about to be
+  written. Return `false` and nothing is written; the window stays open.
+- **`contentUpdated`** — the update has been written. `backup` is the backup actor, or `null` when
+  the user could not create actors (they were offered a download instead). If any decision could
+  not be carried over, the repair wrench opens straight after this hook.
+
+Items made from a compendium carry `flags["sogrom-dnd5e-character-creator"].source`:
+`{v, uuid, package, version, groups}`, where `groups` holds a short hash of each part of the item's
+definition as it arrived. It is how a later update tells a player's edit from a content change.
+Treat it as read-only.
+
 ---
 
 ## The API object

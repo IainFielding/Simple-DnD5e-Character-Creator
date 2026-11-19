@@ -55,6 +55,7 @@
     "styles/creator/19-native-flow.css",
     "styles/creator/20-entry-paths.css",
     "styles/creator/21-magic-shop-buying.css",
+    "styles/creator/22-content-update.css",
     "styles/ember-skin.css"
   ],
   "languages": [

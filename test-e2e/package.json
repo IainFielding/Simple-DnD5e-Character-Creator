@@ -15,6 +15,7 @@
     "screenshots:ember": "node screenshots.mjs --world=playwright-ember"
   },
   "devDependencies": {
+    "js-yaml": "^4.1.0",
     "playwright": "^1.62.1"
   }
 }

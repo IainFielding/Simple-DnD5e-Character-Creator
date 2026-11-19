@@ -10,6 +10,25 @@ import { bookFreeUpdate } from "../data/spellbook.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { buildCreationManager, CreationChoiceProvider } from "./creation-advancement.mjs";
 import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
+import { transformItemData } from "../data/warcraft.mjs";
+
+/**
+ * Whether a new character starts with Heroic Inspiration. The 2024 Human's Resourceful trait
+ * (identifier `resourceful`, in dnd5e's own species and the Player's Handbook module alike) gives it
+ * whenever they finish a Long Rest, and a character at the start of their first adventure is rested.
+ * Nothing in dnd5e applies it: the trait carries no effect, and inspiration is a plain sheet toggle.
+ * Under the 2014 rules inspiration is the DM's to award, and the 2014 Human has no such trait; a
+ * 2014-tagged item is skipped all the same.
+ * @param {Iterable<{type: string, system?: object}>} items
+ * @returns {boolean}
+ */
+export function startsWithHeroicInspiration(items) {
+  for ( const item of items ?? [] ) {
+    if ( (item.type === "feat") && (item.system?.identifier === "resourceful")
+      && (String(item.system?.source?.rules ?? "") !== "2014") ) return true;
+  }
+  return false;
+}
 
 /**
  * Turns a finished {@link CreatorState} into a real character.
@@ -35,8 +54,9 @@ import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
  * @returns {Promise<{actor: Actor, magicShop: object|null}>} The built actor, and what the 1st-level
  *   magic shop granted (null when it granted nothing) for the creation card to report.
  */
-// `addSpells`, `buildFeatSpell` and `detailsUpdate` are exported for their unit tests: they decide
-// the data written to the actor, which the e2e runs check only as a whole character.
+// `addSpells`, `buildFeatSpell`, `detailsUpdate` and `startsWithHeroicInspiration` are exported for
+// their unit tests: they decide the data written to the actor, which the e2e runs check only as a
+// whole character.
 export async function assembleActor(state, source, equipment) {
   const actor = state.actor;
 
@@ -70,6 +90,12 @@ export async function assembleActor(state, source, equipment) {
   stage("species", "system.details.race");
   stage("background", "system.details.background");
   stage("class", "system.details.originalClass", data => { data.system.levels = 0; });
+  // World of Warcraft: the hero class the player chose (its name, badge, locked subclass and swapped
+  // features) and the Renown choices its module adds to a dropped class or species — the creator
+  // stages rather than drops, so the module's own drop handlers never see these items.
+  for ( const data of items ) {
+    await transformItemData(data, { heroClass: (data.type === "class") ? (state.heroClass ?? null) : null });
+  }
 
   // Write the actor-level update: identity/visuals, the base ability scores, and the detail→item
   // links. An origin's ability increase is NOT layered in here — its ASI advancement applies it in
@@ -103,6 +129,11 @@ export async function assembleActor(state, source, equipment) {
     // round trip is a no-op — and a freshly created character is at full health by definition.
     const hp = actor.system.attributes?.hp;
     if ( hp?.max ) await actor.update({ "system.attributes.hp.value": hp.max }, { render: false });
+
+    // Likewise rested: a 2024 Human's Resourceful gives Heroic Inspiration on every Long Rest.
+    if ( startsWithHeroicInspiration(actor.items) && !actor.system.attributes?.inspiration ) {
+      await actor.update({ "system.attributes.inspiration": true }, { render: false });
+    }
   }
 
   // Add the spells chosen on the Spells step, as prepared class spells.

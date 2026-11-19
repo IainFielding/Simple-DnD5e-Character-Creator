@@ -57,6 +57,29 @@ function pickValue(p) {
   return (typeof p === "string") ? p : p?.uuid ?? null;
 }
 
+/** The resolver's source key for each origin item type. */
+const SOURCE_FOR_TYPE = { race: "species", background: "background", class: "class" };
+
+/**
+ * The resolver source (species, background or class) an embedded item came from: the item itself
+ * when it is an origin, otherwise the origin named by the `advancementRoot` flag dnd5e sets on every
+ * granted item, with the `advancementOrigin` chain as a fallback.
+ * @param {Item5e} [item]
+ * @returns {string|null}
+ */
+export function rootSource(item) {
+  const items = item?.actor?.items;
+  if ( !items ) return null;
+  const owner = flag => items.get(String(flag ?? "").split(".")[0]);
+  let cur = owner(item.flags?.dnd5e?.advancementRoot) ?? item;
+  for ( let i = 0; (i < 8) && !SOURCE_FOR_TYPE[cur.type]; i++ ) {
+    const next = owner(cur.flags?.dnd5e?.advancementOrigin);
+    if ( !next ) break;
+    cur = next;
+  }
+  return SOURCE_FOR_TYPE[cur.type] ?? null;
+}
+
 /**
  * Answers the driver's decisions from the creator's recorded state — the headless counterpart of the
  * level-up wizard. Constructed from the choice-resolver output (which carries every choice-bearing
@@ -86,10 +109,25 @@ export class CreationChoiceProvider {
     }
   }
 
-  /** The requirements referencing an advancement id, optionally filtered by type. */
-  #reqs(advId, type = null) {
-    const list = this.#byAdv.get(advId) ?? [];
-    return type ? list.filter(r => r.type === type) : list;
+  /**
+   * The requirements behind one decision, optionally filtered by type.
+   *
+   * Matched by advancement id, which is not unique when two origins each grant a copy of one feat:
+   * under dnd5e 6.1 a Human's Versatile offers Skilled alone, and a Noble, Scribe or Charlatan
+   * background grants Skilled too. Both copies share Skilled's advancement id, so read by id alone
+   * each copy took both origins' picks. When the id spans more than one origin, the copy is matched
+   * to the origin that granted it.
+   * @param {object} rec            The driver's decision record.
+   * @param {string|null} [type]
+   */
+  #reqs(rec, type = null) {
+    let list = this.#byAdv.get(rec.advancement?.id) ?? [];
+    if ( type ) list = list.filter(r => r.type === type);
+    if ( new Set(list.map(r => r.source)).size > 1 ) {
+      const origin = rootSource(rec.advancement?.item);
+      if ( origin && list.some(r => r.source === origin) ) list = list.filter(r => r.source === origin);
+    }
+    return list;
   }
 
   /** The player's recorded picks for one requirement, normalised to key/uuid strings. */
@@ -107,13 +145,13 @@ export class CreationChoiceProvider {
 
   /** The chosen size key for a size decision, or null. */
   size(rec) {
-    const req = this.#reqs(rec.advancement.id, "Size")[0];
+    const req = this.#reqs(rec, "Size")[0];
     return req ? this.#picks(req)[0] ?? null : null;
   }
 
   /** The chosen casting ability for a spell-granting ItemGrant, or null. */
   grantAbility(rec) {
-    const req = this.#reqs(rec.advancement.id, "SpellAbility")[0];
+    const req = this.#reqs(rec, "SpellAbility")[0];
     return req ? this.#picks(req)[0] ?? null : null;
   }
 
@@ -128,7 +166,7 @@ export class CreationChoiceProvider {
    * synthesises the subclass's features exactly as the level-up path does.
    */
   subclass(rec) {
-    const req = this.#reqs(rec.advancement.id, "Subclass")[0];
+    const req = this.#reqs(rec, "Subclass")[0];
     return req ? this.#picks(req)[0] ?? null : null;
   }
 
@@ -156,7 +194,7 @@ export class CreationChoiceProvider {
    */
   traitKeys(rec) {
     const keys = [];
-    for ( const req of this.#reqs(rec.advancement.id, "Trait") ) keys.push(...this.#picks(req));
+    for ( const req of this.#reqs(rec, "Trait") ) keys.push(...this.#picks(req));
     return keys;
   }
 
@@ -171,7 +209,7 @@ export class CreationChoiceProvider {
 
   /** The recorded uuids for a (non-spell) feature ItemChoice. */
   choiceUuids(rec) {
-    const req = this.#reqs(rec.advancement.id, "ItemChoice")[0];
+    const req = this.#reqs(rec, "ItemChoice")[0];
     return req ? this.#picks(req) : [];
   }
 
@@ -183,7 +221,7 @@ export class CreationChoiceProvider {
    * player has not visited the choice. An empty array is a real answer: decline all of them.
    */
   optionalGrant(rec) {
-    const req = this.#reqs(rec.advancement.id, "OptionalGrant")[0];
+    const req = this.#reqs(rec, "OptionalGrant")[0];
     if ( !req ) return null;
     const raw = this.#state.advChoices?.[req.source]?.[req.selKey];
     return raw ? Array.from(raw).map(pickValue).filter(Boolean) : null;

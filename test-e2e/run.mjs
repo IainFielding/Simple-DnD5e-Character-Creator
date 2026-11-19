@@ -13,6 +13,8 @@
  *   node run.mjs --granted-spells         # assert an always-prepared grant is never duplicated
  *   node run.mjs --hooks                  # assert the public hook/API surface, through the real wizards
  *   node run.mjs --repair                 # skipped-choice builds repaired, plus Check Character
+ *   node run.mjs --content-update         # Update to New Content: no-op rebuilds + refresh in place
+ *   node run.mjs --content-update --srd   # the 3.5.0 gate: every SRD subclass, 6.0.0 fixture → installed
  *   node run.mjs --quick-build            # Quick Build every class; assert the finished character
  *   node run.mjs --quick-build --level 5  # ...and again at each higher starting rung (3, 5)
  *   node run.mjs --pregens                # every ready-made character is imported whole, not rebuilt
@@ -111,6 +113,13 @@ try {
     console.log(JSON.stringify(await harness("probeMagicShopClimb", {
       match: value("probe-magic-climb") || undefined, to: Number(value("level") ?? 5)
     }), null, 2));
+  } else if ( flag("probe-import") ) {
+    // Import an actor export the way the sidebar's "Import Data" does, and report what fails.
+    const { readFileSync } = await import("node:fs");
+    const json = readFileSync(value("probe-import"), "utf8");
+    console.log(JSON.stringify(await harness("probeImportActor", { json }), null, 2));
+  } else if ( flag("probe-cantrip-plan") ) {
+    console.log(JSON.stringify(await harness("probeCantripPlan", { match: value("probe-cantrip-plan") || undefined }), null, 2));
   } else if ( flag("probe-magic-shop") ) {
     console.log(JSON.stringify(await harness("probeMagicShopStep", { level: Number(value("level") ?? 5) }), null, 2));
   } else if ( flag("probe-bookorder") ) {
@@ -156,6 +165,29 @@ try {
       for ( const f of r.failures ) console.log(`  ${f}`);
       exitCode = 1;
     }
+  } else if ( flag("content-update") ) {
+    // "Update to New Content": rebuild against unchanged content must be a no-op, and a refresh keeps
+    // id and state. See in-world/content-update.mjs.
+    if ( keep ) await session.eval(() => { globalThis.__keepActors = true; });
+    // --srd: the 3.5.0 gate instead, every SRD subclass built on the dnd5e 6.0.0 fixture and updated
+    // (at --level, default 20).
+    const r = await harness("checkContentUpdate", {
+      only: value("only") || null, srd: flag("srd"), level: Number(value("level") ?? 20)
+    });
+    for ( const c of r.cases ) {
+      console.log(`\n${c.ok ? "PASS  " : "FAIL  "} ${c.label}`);
+      if ( c.error ) {
+        console.log(`  error: ${c.error.split("\n").slice(0, 6).join("\n         ")}`);
+        continue;
+      }
+      for ( const n of c.notes ?? [] ) console.log(`  note: ${n}`);
+      for ( const d of c.differences.slice(0, 25) ) {
+        console.log(`  ! ${d.path}\n      before: ${d.native}\n      after : ${d.creator}`);
+      }
+      if ( c.differences.length > 25 ) console.log(`  … and ${c.differences.length - 25} more`);
+    }
+    console.log(r.ok ? "\nPASS   every content-update case" : "\nFAIL   a content-update case");
+    if ( !r.ok ) exitCode = 1;
   } else if ( flag("repair") ) {
     // "Repair this level": a native build with decisions skipped, repaired, and compared against
     // the fully answered native build. See in-world/repair.mjs.
@@ -419,6 +451,13 @@ async function runSweep(harness, session) {
     console.log(`skipping ${plan.skipped.length} subclass(es):`);
     for ( const s of plan.skipped ) console.log(`  ${s.subclass.padEnd(30)} ${s.reason}`);
   }
+  // A lineage no scenario picks is a coverage hole, not a skip: the run exits non-zero for it even
+  // when every scenario passes. See `sweep.mjs#speciesScenarios`.
+  const uncovered = plan.uncovered ?? [];
+  if ( uncovered.length ) {
+    console.log(`\nUNCOVERED: ${uncovered.length} lineage(s) no scenario picks — the run will fail:`);
+    for ( const l of uncovered ) console.log(`  ${`${l.name} (${l.pack})`.padEnd(50)} ${l.reason}`);
+  }
 
   let ids = plan.scenarios.map(s => s.id);
 
@@ -463,8 +502,9 @@ async function runSweep(harness, session) {
       const markers = (names.get(id)?.match(/\[[^\]]+\]/g) ?? []).join(" ");
       console.log(`${id}${markers ? `  ${markers}` : ""}`);
     }
-    console.log(`\n${ids.length} scenario(s) at level ${level}`);
-    return 0;
+    console.log(`\n${ids.length} scenario(s) at level ${level}`
+      + `${uncovered.length ? `; ${uncovered.length} lineage(s) UNCOVERED` : ""}`);
+    return uncovered.length ? 1 : 0;
   }
 
   // Without this a second unflagged run appends straight onto the first: `--resume` is the only
@@ -536,9 +576,10 @@ async function runSweep(harness, session) {
     }
   }
 
-  console.log(`\n${passed} identical, ${failed} differing, ${errored} errored (of ${ids.length})`);
+  console.log(`\n${passed} identical, ${failed} differing, ${errored} errored (of ${ids.length})`
+    + `${uncovered.length ? `, ${uncovered.length} lineage(s) UNCOVERED` : ""}`);
   console.log("group sweep-results.jsonl by difference path to triage — one cause spans many subclasses");
-  return (failed || errored) ? 1 : 0;
+  return (failed || errored || uncovered.length) ? 1 : 0;
 }
 
 /* -------------------------------------------- */

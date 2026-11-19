@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  choicesComplete, traitChoiceTitle, evalItemPrereq, groupRecommended, collectGrantedFeatNames
+  choicesComplete, traitChoiceTitle, evalItemPrereq, groupRecommended, recommendAuthoredPool, collectGrantedFeatNames
 } from "../scripts/data/choice-resolver.mjs";
 import { advancementArray } from "../scripts/data/advancement-util.mjs";
 import { fighter, sage } from "./fixtures/dnd5e-5.3.3.mjs";
@@ -121,6 +121,40 @@ describe("evalItemPrereq", () => {
  * claim — "your build unlocked this one" — it only means anything when it separates some options from
  * others, so a flag the whole pickable pool shares is cleared rather than shown on every card.
  */
+describe("recommendAuthoredPool", () => {
+  // dnd5e 6.1's Human Versatile: Skilled authored, any origin feat allowed by drop.
+  const cfg = { allowDrops: true, restriction: { type: "feat", subtype: "origin" } };
+  const options = () => [{ key: "skilled" }, { key: "alert" }, { key: "tough" }];
+  const inPool = o => o.key === "skilled";
+
+  it("recommends the authored pick when the scan added others", () => {
+    const opts = options();
+    recommendAuthoredPool(cfg, opts, inPool);
+    expect(opts.filter(o => o.recommended).map(o => o.key)).toEqual(["skilled"]);
+    expect(groupRecommended(opts).map(g => g.options.map(o => o.key))).toEqual([["skilled"], ["alert", "tough"]]);
+  });
+
+  it("changes nothing when every option is authored", () => {
+    const opts = options().map(o => ({ ...o }));
+    recommendAuthoredPool(cfg, opts, () => true);
+    expect(opts.some(o => o.recommended)).toBe(false);
+  });
+
+  it("changes nothing without allowDrops or outside feats", () => {
+    for ( const c of [{ ...cfg, allowDrops: false }, { allowDrops: true, restriction: { type: "class", subtype: "eldritchInvocation" } }] ) {
+      const opts = options();
+      recommendAuthoredPool(c, opts, inPool);
+      expect(opts.some(o => o.recommended)).toBe(false);
+    }
+  });
+
+  it("leaves an earlier pick out of it", () => {
+    const opts = [{ key: "skilled", owned: true }, { key: "alert" }];
+    recommendAuthoredPool(cfg, opts, inPool);
+    expect(opts.some(o => o.recommended)).toBe(false);
+  });
+});
+
 describe("groupRecommended", () => {
   it("returns null when no option is recommended", () => {
     expect(groupRecommended([{ key: "a" }, { key: "b" }])).toBeNull();

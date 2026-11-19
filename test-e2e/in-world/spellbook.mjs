@@ -26,7 +26,7 @@ const BUST = new URL(import.meta.url).search;
 
 const { CreatorShell } = await import(`${MODULE}/app/creator-shell.mjs`);
 const { applyQuickBuild } = await import(`${MODULE}/data/quick-build.mjs`);
-const { getSources } = await import(`${MODULE}/data/source-cache.mjs`);
+const { getSources, invalidateSources, warmSources } = await import(`${MODULE}/data/source-cache.mjs`);
 const { MODULE_ID, SETTINGS, launchWindowOptions } = await import(`${MODULE}/config.mjs`);
 const { CreatorState } = await import(`${MODULE}/state/creator-state.mjs`);
 const { assembleActor } = await import(`${MODULE}/build/actor-assembler.mjs`);
@@ -1024,6 +1024,16 @@ export async function checkSpellbook({ only = null } = {}) {
   await game.settings.set(MODULE_ID, SETTINGS.levelUpSummary, "public");
   // Average hit points, a decision made in advance, so no level screen waits on a hit-point click.
   await game.settings.set(MODULE_ID, SETTINGS.levelUpHpMode, "average");
+  // dnd5e 6.1 hides the 2014 SRD packs from a 2024 world unless the GM switches them on, and the
+  // creator follows it. The 2014 cases need them, so switch them on as a GM wanting both editions
+  // would, and put the setting back afterwards.
+  const sourcesBefore = game.settings.get("dnd5e", "packSourceConfiguration") ?? {};
+  const legacyOn = Object.fromEntries(game.packs
+    .filter(p => p.metadata.flags?.dnd5e?.rulesVersion === "legacy")
+    .map(p => [p.collection, true]));
+  await game.settings.set("dnd5e", "packSourceConfiguration", { ...sourcesBefore, ...legacyOn });
+  invalidateSources();
+  await warmSources();
   const results = [];
   const made = [];
   try {
@@ -1041,6 +1051,8 @@ export async function checkSpellbook({ only = null } = {}) {
   } finally {
     await game.settings.set(MODULE_ID, SETTINGS.levelUpSummary, chatBefore);
     await game.settings.set(MODULE_ID, SETTINGS.levelUpHpMode, hpBefore);
+    await game.settings.set("dnd5e", "packSourceConfiguration", sourcesBefore);
+    invalidateSources();
     const ids = made.filter(id => game.actors.get(id));
     if ( ids.length ) await Actor.implementation.deleteDocuments(ids, { render: false }).catch(() => {});
     await closeAll();

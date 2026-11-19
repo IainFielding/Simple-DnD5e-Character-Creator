@@ -456,6 +456,8 @@
         "subclass": "Subclass",
         "hitPoints": "Hit Points",
         "armourClass": "Armour Class",
+        "inspiration": "Heroic Inspiration",
+        "inspirationValue": "Starts with it",
         "bonusGold": "Bonus Gold",
         "bonusGoldValue": "{gp} gp (d10 rolled {die}: {base} gp + {die} × {per} gp)",
         "bonusGoldFlat": "{gp} gp",
@@ -554,6 +556,10 @@
         "features": "Class Features",
         "spells": "Spells",
         "levelTag": "Lvl {level}",
+        "hero": {
+          "title": "Play As",
+          "hint": "A hero class is built on this class, with some of its features swapped for the hero's own."
+        },
         "targetLevel": {
           "label": "Starting Level",
           "custom": "Other",
@@ -579,7 +585,14 @@
         "traits": "Traits",
         "features": "Features",
         "spells": "Spells",
-        "instruction": "Your species gives you size, speed and a handful of traits — and, under the 2014 rules, an ability score increase."
+        "instruction": "Your species gives you size, speed and a handful of traits — and, under the 2014 rules, an ability score increase.",
+        "lineage": {
+          "prompt": "Every {species} has one of these. Hover over one to see what it gives you.",
+          "change": "You can change this here or on the Choices step.",
+          "hint": "Pick one under “{title}” to continue.",
+          "card": "{species} ({lineage})",
+          "cardColon": "{species}: {lineage}"
+        }
       },
       "background": {
         "label": "Background",
@@ -931,6 +944,12 @@
         "name": "Ability roll formula",
         "hint": "Dice formula rolled for each ability when using the Roll method (standard rules use 4d6kh3)."
       },
+      "heroClassDisplay": {
+        "name": "Hero classes",
+        "hint": "How World of Warcraft's hero classes (Death Knight, Demon Hunter, Evoker…) are offered: as a “Play as” choice on the class they are built on, or as cards of their own in the class list.",
+        "detail": "“Play as” on the class page",
+        "cards": "Their own cards in the class list"
+      },
       "displayMode": {
         "name": "Display mode",
         "hint": "How the Character Creator opens: Fullscreen covers the whole screen; Windowed opens a draggable, resizable window.",
@@ -1034,6 +1053,10 @@
         "name": "Recommended way to build",
         "hint": "Chooses which character creation method is marked as recommended.",
         "none": "No recommendation"
+      },
+      "contentUpdatePlayers": {
+        "name": "Players can update their own characters",
+        "hint": "Lets players run Update to New Content on characters they own. Off, only the GM can."
       }
     },
     "storeConfig": {
@@ -1132,7 +1155,8 @@
       "hitPoints": "Hit Points",
       "announcements": "Announcements",
       "creationNote": "The character-creation summary card is set separately, in the main settings list.",
-      "save": "Save Changes"
+      "save": "Save Changes",
+      "maintenance": "Content updates"
     },
     "entry": {
       "heading": "Choose a Character Creation Method",
@@ -1173,6 +1197,98 @@
         "levelAria": "Character level"
       },
       "returnToChooser": "Other ways to build"
+    },
+    "contentUpdate": {
+      "button": "Update to New Content",
+      "title": "Update to New Content: {name}",
+      "loading": "Checking this character against the installed content…",
+      "empty": "Everything on this character already matches the installed content.",
+      "intro": "Some of this character's content has a newer version installed. Nothing changes until you choose Update.",
+      "rebuiltHint": "Some of these changed how they level up, so the character's species, background and classes are put back together with the choices already made, level by level.",
+      "tier": {
+        "rebuild": "Rebuilt with your choices",
+        "refresh": "Updated in place"
+      },
+      "category": {
+        "class": "Class: {name}",
+        "species": "Species",
+        "background": "Background",
+        "feats": "Feats",
+        "spells": "Spells",
+        "equipment": "Equipment",
+        "other": "Other"
+      },
+      "which": "Update which things",
+      "notUpdating": "Not updating",
+      "nothingSelected": "Nothing is selected, so there is nothing to update.",
+      "untouched": "Not touched",
+      "choices": "Your choices",
+      "toChoose": "{count} choice(s) could not be carried over. After the update you'll be taken to pick them.",
+      "beforeAfter": "Before and after",
+      "before": "Before",
+      "after": "After",
+      "noNumbers": "No ability score, hit point, armour class or skill changes.",
+      "recalculating": "Working out the update with your answer…",
+      "added": "Added:",
+      "removed": "Removed:",
+      "keep": "Keep mine",
+      "keepTip": "This item differs from the new version in ways the update can't explain, so it may have been edited. Tick to leave your copy as it is.",
+      "compareDescription": "Compare descriptions",
+      "yours": "Yours",
+      "updated": "New version",
+      "version": {
+        "changed": "{package} {from} → {to}",
+        "same": "{package} {to}",
+        "moved": "{fromPackage} {from} → {package} {to}",
+        "unknownFrom": "{package}: earlier version → {to}",
+        "movedUnknown": "{fromPackage} → {package} {to}",
+        "unknownTip": "This item was added before the creator started recording which version content came from, so only the new version is known.",
+        "count": "{count} item(s)"
+      },
+      "update": "Update",
+      "cancel": "Cancel",
+      "failed": "The update could not be completed. The character has not been changed.",
+      "group": {
+        "name": "name",
+        "img": "icon",
+        "description": "description",
+        "activities": "activities",
+        "uses": "uses",
+        "damage": "damage",
+        "effects": "effects",
+        "advancement": "levelling",
+        "other": "details"
+      },
+      "matchedBy": {
+        "identifier": "matched by identifier",
+        "name": "matched by name",
+        "split": "now {species}, with the {lineage} lineage"
+      },
+      "reason": {
+        "missing": "its source can no longer be found"
+      },
+      "status": {
+        "carried": "Carried over",
+        "partial": "Partly carried over",
+        "ask": "To choose",
+        "default": "Average taken"
+      },
+      "backup": {
+        "folder": "Content update backups",
+        "name": "{name} (before update {date})",
+        "copy": "A copy of this character will be saved in the \"Content update backups\" folder first.",
+        "noPermission": "You don't have permission to create a backup copy. Download one before updating?",
+        "download": "Download backup",
+        "downloaded": "Downloaded",
+        "skip": "Proceed without backup",
+        "failed": "The backup copy could not be made, so nothing was changed."
+      },
+      "chat": {
+        "title": "{name} updated to new content",
+        "body": "{refreshed} item(s) updated in place, {rebuilt} rebuilt with the choices already made.",
+        "asked": "{count} choice(s) still to make.",
+        "backup": "Backup: {name}."
+      }
     }
   }
 }

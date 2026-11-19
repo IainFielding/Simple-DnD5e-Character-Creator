@@ -86,7 +86,12 @@ export const HOOKS = Object.freeze({
   /** `{actor, state}` — the player discarded a level-up; the actor was never touched. */
   levelUpCancelled: `${HOOK_PREFIX}.levelUpCancelled`,
   /** `{manager, actor}` — we claimed Ember's advancement manager to ask its level-1 questions. */
-  emberHandoff: `${HOOK_PREFIX}.emberHandoff`
+  emberHandoff: `${HOOK_PREFIX}.emberHandoff`,
+
+  /** `{actor, scan, rehearsal}` — **cancellable**; return false to veto an Update to New Content before anything is written. */
+  preUpdateContent: `${HOOK_PREFIX}.preUpdateContent`,
+  /** `{actor, backup, rehearsal}` — a character has been updated to the installed content. */
+  contentUpdated: `${HOOK_PREFIX}.contentUpdated`
 });
 
 /**
@@ -194,6 +199,8 @@ export const SETTINGS = {
   magicShopConfig: "magicShopConfig",
   welcomeCards: "showWelcomeCards",
   welcomeVersion: "welcomeVersion",
+  contentUpdatePlayers: "contentUpdatePlayers",
+  heroClassDisplay: "heroClassDisplay",
   debug: "debugLogging"
 };
 
@@ -230,10 +237,16 @@ export const DEFAULTS = {
   // badge is for is the one who does not yet know which they want — and that is the path that
   // asks least of them. A table that would rather everyone built by hand says so here.
   recommendedPath: "quick",
+  // World of Warcraft hero classes: a "Play as" pick on the class page (one Paladin card), or a card
+  // of their own in the class grid beside the class they are built on.
+  heroClassDisplay: "detail",
   magicShopConfig: {
     inventory: [],
     wealthTable: null          // null = the DMG table; see data/magic-shop.mjs
   },
+  // On by default: a player's character is theirs to bring up to date, and the update always backs
+  // up first (or, for a player who cannot create actors, offers a download).
+  contentUpdatePlayers: true,
   debug: false
 };
 
@@ -547,6 +560,10 @@ export const DEFAULT_LEVEL1_SPELLS = {
  * Mage Hand, which the subclass grants itself with no spell configuration, so dnd5e leaves it
  * without a `subclass:trickster` tag and it never counts as one of this caster's cantrips. These
  * are the ones the player picks beside it.
+ *
+ * PHB 3.0.0 (Nov 2026) gave the Arcane Trickster a "Choose Cantrips" ItemChoice of its own, and the
+ * table is skipped for any caster whose content asks its cantrips itself (`hasOwnCantripChoice` in
+ * `lvl-spells-step.mjs`) — kept for worlds still on the earlier PHB data.
  */
 export const FALLBACK_CANTRIP_SCALES = {
   trickster: { 3: 2, 10: 3 },

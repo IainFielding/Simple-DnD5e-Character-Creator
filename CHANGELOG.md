@@ -2,6 +2,80 @@
 
 All notable changes to the Simple D&D Character Creator.
 
+## 3.5.0 — dnd5e 6.1
+
+### Added
+
+- **Update to New Content.** When a content module or dnd5e itself updates, the classes, species,
+  backgrounds, spells and gear on existing characters stay on the old version until you delete them
+  and add them again, which re-asks every choice. A character with outdated content now has
+  **Update to New Content** in its sheet's ⋯ menu. It shows what will change and which of your
+  choices carry over, then updates everything at once:
+  - Changes are listed under each class, then species, background, feats, spells and equipment,
+    each heading folded until you open it. Every item names the module it comes from and its old
+    and new version. Items added before this release show "earlier version", because their old
+    version was never recorded.
+  - Toggles at the top choose which of those to update. Anything switched off stays as it is.
+  - Items whose rules changed are updated in place. Uses spent, quantity, what's equipped and
+    prepared, and a changed name or icon stay as they were.
+  - When a class, species or background changed how it levels up (as many did in dnd5e 6.1 and the
+    Player's Handbook 3.0), the character is rebuilt with the choices you already made: hit points,
+    skills, ability increases, feats, subclass, fighting styles, invocations and so on. A choice
+    that no longer fits is left for you to make, and the repair wrench opens straight after.
+  - An item that looks edited can be kept as it is. Its description can be compared with the new
+    one first.
+  - A copy of the character is saved first. A player who can't create actors is offered a download
+    instead, and must download it or tick **Proceed without backup**.
+  The GM can stop players updating their own characters in **Level-Up Options**.
+- **Humans start with Heroic Inspiration.** Under the 2024 rules a Human's Resourceful trait gives
+  Heroic Inspiration after every Long Rest, but dnd5e never switches it on. A new Human now starts
+  with it, and the creation chat card says so.
+- **World of Warcraft hero classes and Renown.** With the D&D World of Warcraft module, a character
+  can be built as a hero class: Death Knight, Demon Hunter, Evoker, Hunter, Mage, Priest, Shaman or
+  Warrior. The hero's own features replace the class's, and a Death Knight, Demon Hunter or Evoker
+  takes its fixed subclass. The same choice is offered when a character takes a new class at
+  level-up. By default it is a **Play As** choice on the class's page; the GM can show hero classes
+  as their own cards in the class list instead (**Hero classes** in the module settings). With
+  dnd5e's Renown rule turned on, the Renown choices the module adds to classes, species and lineages
+  are asked too. A Druid, Monk, Paladin, Rogue or Warlock also gets the module's class badge, as
+  dragging the class onto a sheet does.
+
+### Changed
+
+- **Ready for dnd5e 6.1.** dnd5e 6.1 shows only the content for a world's own rules edition unless
+  the GM turns the other edition on: a 2024 world hides the 2014 classes, species, backgrounds,
+  spells and items, and a 2014 world hides the 2024 ones. The creator follows the same setting
+  everywhere, so its spell, feat and equipment lists now match its class and species lists. To keep
+  offering 2014 content in a 2024 world after updating dnd5e, turn those sources back on in dnd5e's
+  **Compendium Browser Sources** settings.
+- **A feat choice recommends the feat it names.** Some choices name a feat but let you take any
+  feat of that kind instead. In dnd5e 6.1, the Human's Versatile names Skilled but allows any origin
+  feat. The named feat now sits under **Recommended**, with every other feat you can take listed
+  below it under **Other**. This applies at creation and at level-up.
+- **Choose your lineage on the Species page.** In dnd5e 6.1 an Elf, Gnome or Tiefling is one
+  species with a lineage to choose (Drow, High Elf or Wood Elf, for example), and a Dragonborn or
+  Goliath chooses an ancestry. That choice now sits beside the species you picked, and you choose
+  it before moving on, instead of finding it several pages later. Lineages from other modules show
+  up too, as long as they name the species they belong to.
+- **Every lineage has its own card on the Species page.** The species list shows each lineage as a
+  card of its own, such as **Elf (Drow)**, **Elf (Blood Elf)** or **Dragonborn (Gold Dragon
+  Ancestor)**, instead of one Elf card with the lineage chosen beside it. Picking a card chooses
+  the species and the lineage together, and the lineage's own description follows the species'.
+
+### Fixed
+
+- **Choosing a spell's casting ability when a feat lets you choose it.** Some feats let you pick a
+  spell and the ability you cast it with, such as Cold Caster in Heroes of Faerûn 2.0. Taken at a
+  level-up, the creator never asked for the ability and always used the first one listed. It now
+  asks, the same way it does for a species' spells.
+- **Expertise in a skill from an origin feat.** A Rogue who took Expertise in a skill that their
+  origin feat gave them, such as a Human whose Versatile pick is Skilled, was left with plain
+  proficiency. Expertise is now applied after every other choice, so the skill is always there first.
+- **Taking the same feat from both your species and your background.** A Human whose Versatile pick
+  is Skilled, with a background that also gives Skilled (Noble, Scribe or Charlatan, for example),
+  ends up with two copies of the feat. The character had the right skills, but each copy recorded
+  all six of them instead of its own three. Each copy now records only the skills chosen for it.
+
 ## 3.4.0 — Milestone Levels & Check Character
 
 ### New

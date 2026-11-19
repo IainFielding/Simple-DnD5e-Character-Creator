@@ -175,8 +175,13 @@ export class QuickClimbProvider {
    */
   subclass(rec) {
     const current = rec?.advancement?.value?.uuid ?? null;
-    if ( current && (current === this.#subclassUuid) ) return null;
-    return this.#subclassUuid;
+    // A subclass the class is locked to (a World of Warcraft Death Knight's Ebon Blade) wins over the
+    // suggestion table: dnd5e's Subclass advancement refuses any other, so the climb would otherwise
+    // finish with none.
+    const suggested = rec?.advancement?.configuration?.suggested;
+    const want = (suggested?.fixed && suggested.uuid) ? suggested.uuid : this.#subclassUuid;
+    if ( current && (current === want) ) return null;
+    return want;
   }
 
   /**

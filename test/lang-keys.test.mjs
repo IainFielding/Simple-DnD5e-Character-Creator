@@ -166,5 +166,18 @@ const RUNTIME = [
   { file: "scripts/steps/origin-abilities-panel.mjs", builds: "step.originAbilities.fixed.${source}",
     keys: each("step.originAbilities.fixed", ["species", "background"]) },
   { file: "scripts/steps/origin-abilities-panel.mjs", builds: "step.originAbilities.locked.${source}",
-    keys: each("step.originAbilities.locked", ["species", "background"]) }
+    keys: each("step.originAbilities.locked", ["species", "background"]) },
+  { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.group.${g}",
+    keys: each("contentUpdate.group", ["name", "img", "description", "activities", "uses", "damage", "effects",
+      "advancement", "other"]) },
+  { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.matchedBy.${e.how}",
+    keys: each("contentUpdate.matchedBy", ["identifier", "name"]) },
+  { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.reason.${e.how}",
+    keys: each("contentUpdate.reason", ["missing"]) },
+  { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.status.${d.status}",
+    keys: each("contentUpdate.status", ["carried", "partial", "ask", "default"]) },
+  { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.tier.${e.tier}",
+    keys: each("contentUpdate.tier", ["rebuild", "refresh"]) },
+  { file: "scripts/content-update/update-app.mjs", builds: "contentUpdate.category.${g.kind}",
+    keys: each("contentUpdate.category", ["species", "background", "feats", "spells", "equipment", "other"]) }
 ];
