@@ -58,9 +58,13 @@ All notable changes to the Simple D&D Character Creator.
   it before moving on, instead of finding it several pages later. Lineages from other modules show
   up too, as long as they name the species they belong to.
 - **Every lineage has its own card on the Species page.** The species list shows each lineage as a
-  card of its own, such as **Elf (Drow)**, **Elf (Blood Elf)** or **Dragonborn (Gold Dragon
-  Ancestor)**, instead of one Elf card with the lineage chosen beside it. Picking a card chooses
-  the species and the lineage together, and the lineage's own description follows the species'.
+  card of its own, such as **Elf (Drow)**, **Elf (Blood Elf)**, **Dragonborn (Gold Dragon
+  Ancestor)** or **Goliath (Cloud Giant)**, instead of one Elf card with the lineage chosen beside
+  it. Picking a card chooses the species and the lineage together, and the lineage's own description
+  follows the species'. A lineage with its own art, such as the Player's Handbook's Drow, shows it on
+  the card. The finished character's species reads the same way on the sheet: an enchantment on the
+  species gives it the card's name and art, and deleting the enchantment from the species' Effects
+  tab puts the plain species back.
 
 ### Fixed
 

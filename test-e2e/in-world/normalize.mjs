@@ -368,6 +368,12 @@ export function sourceSnapshot(actor) {
     normaliseSourceBook(entry, item._stats?.compendiumSource ?? item.flags?.core?.sourceId ?? null);
     // The module under test stamps its own flags; they are bookkeeping, not advancement output.
     if ( entry.flags ) delete entry.flags[MODULE_FLAG];
+    // The creator names a species for its lineage with an enchantment of its own ("Elf (Drow)") —
+    // presentation the native flow has no equivalent of. Checked on its own by
+    // harness.mjs#assertLineageName, so it is set aside here rather than reported as a difference.
+    if ( Array.isArray(entry.effects) ) {
+      entry.effects = entry.effects.filter(e => !e?.flags?.[MODULE_FLAG]?.lineageName);
+    }
 
     // An *empty* rider list is bookkeeping too, and was the single noisiest thing in the whole
     // comparison: the pack ships `flags.dnd5e.riders`, the native walk drops it from every item it
@@ -437,8 +443,10 @@ export function derivedSnapshot(actor) {
       dc: sys.attributes?.spell?.dc ?? sys.attributes?.spelldc ?? null
     },
     // Item names by type — the cheapest readable signal that the same things were granted.
+    // A species reads by its stored name: the creator's lineage enchantment renames it for display
+    // (see the effect filter in sourceSnapshot), which the native flow does not.
     itemsByType: [...actor.items].reduce((acc, i) => {
-      (acc[i.type] ??= []).push(i.name);
+      (acc[i.type] ??= []).push(i.type === "race" ? (i._source?.name ?? i.name) : i.name);
       return acc;
     }, {})
   };

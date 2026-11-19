@@ -590,8 +590,7 @@
           "prompt": "Every {species} has one of these. Hover over one to see what it gives you.",
           "change": "You can change this here or on the Choices step.",
           "hint": "Pick one under “{title}” to continue.",
-          "card": "{species} ({lineage})",
-          "cardColon": "{species}: {lineage}"
+          "card": "{species} ({lineage})"
         }
       },
       "background": {

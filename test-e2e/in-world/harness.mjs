@@ -111,6 +111,29 @@ function assertBookComplete(book) {
 }
 
 /**
+ * A lineage scenario's creator build must read as the card the player picked: its species item
+ * carries the creator's lineage enchantment, and the prepared name is "Species (Lineage)" — the
+ * Goliath's "Cloud's Jaunt (Cloud Giant)" as "Goliath (Cloud Giant)". The comparison sets the
+ * enchantment aside (normalize.mjs), so this is where it is checked. Restates the naming rule
+ * rather than importing it, so a creator that stops naming the species is caught.
+ * @param {object} scenario
+ * @param {Actor} creator
+ */
+function assertLineageName(scenario, creator) {
+  const lineage = scenario.expectItems?.[0];
+  if ( !lineage || !scenario.speciesUuid ) return;
+  const species = creator.items.find(i => i.type === "race");
+  if ( !species ) return;
+  const effect = species.effects.find(e => e.flags?.["sogrom-dnd5e-character-creator"]?.lineageName);
+  const short = /\(([^()]+)\)\s*$/.exec(lineage.name)?.[1]?.trim() ?? lineage.name;
+  const want = `${species._source.name} (${short})`;
+  if ( !effect || (species.name !== want) ) {
+    throw new Error(`the creator's species should read "${want}" through its lineage enchantment; `
+      + `it reads "${species.name}"${effect ? "" : " and carries no lineage enchantment"}`);
+  }
+}
+
+/**
  * Snapshot the native build as the creator is *meant* to leave it at the start of play.
  *
  * The 2024 Human's Resourceful trait gives Heroic Inspiration after every Long Rest, and a new
@@ -379,6 +402,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
     assertAnswersConsumed(scenario.answers ?? {}, consumed, advancementTypes(originDocs), report.diagnostics);
     assertBookComplete(book);
     assertExpectedItems(scenario.expectItems, { native, creator });
+    assertLineageName(scenario, creator);
     report.decisions = book.entries.map(({ askedBy, ...rest }) => ({ ...rest, askedBy: [...askedBy] }));
 
     // `render` opens each sheet in turn, for problems that only exist once something prepares an

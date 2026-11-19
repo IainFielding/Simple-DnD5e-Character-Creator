@@ -11,6 +11,7 @@ import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { buildCreationManager, CreationChoiceProvider } from "./creation-advancement.mjs";
 import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
 import { transformItemData } from "../data/warcraft.mjs";
+import { nameSpeciesForLineage } from "../data/lineage-name.mjs";
 
 /**
  * Whether a new character starts with Heroic Inspiration. The 2024 Human's Resourceful trait
@@ -134,6 +135,10 @@ export async function assembleActor(state, source, equipment) {
     if ( startsWithHeroicInspiration(actor.items) && !actor.system.attributes?.inspiration ) {
       await actor.update({ "system.attributes.inspiration": true }, { render: false });
     }
+
+    // The species item reads as the card the player picked — "Elf (Drow)" — through an enchantment,
+    // not a rename, so the stored item stays the compendium's. See data/lineage-name.mjs.
+    await nameSpeciesForLineage(actor, resolved);
   }
 
   // Add the spells chosen on the Spells step, as prepared class spells.
