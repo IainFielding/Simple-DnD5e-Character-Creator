@@ -1,6 +1,8 @@
 import { atLevel } from "../levelup-state.mjs";
 import { pinContext } from "../../app/compare.mjs";
 import { hasSourcePage } from "../../data/journal-source.mjs";
+import { specializationOf } from "../../data/specializations.mjs";
+import { t } from "../../config.mjs";
 
 /**
  * Subclass — at the level a class unlocks it, choose the subclass. Presented exactly like the
@@ -34,9 +36,12 @@ export const subclassStep = {
     // A class whose subclass is fixed — a World of Warcraft Death Knight is always Oath of the Ebon
     // Blade — offers only that one; dnd5e's own Subclass advancement refuses any other.
     const fixed = fixedSubclass(record);
+    // The subclass the class's World of Warcraft specialization names, badged on its card.
+    const spec = await specializationOf(record.advancement.item);
+    const suggested = spec?.subclass ? t("step.class.spec.recommended", { spec: spec.name }) : null;
     const cards = (await source.subclasses(identifier, { rules }))
       .filter(c => !fixed || (c.uuid === fixed))
-      .map(c => ({ ...c, selected: c.uuid === sub.uuid }));
+      .map(c => ({ ...c, selected: c.uuid === sub.uuid, suggested: (c.uuid === spec?.subclass) ? suggested : null }));
     const detail = sub.uuid ? await source.detail(sub.uuid) : null;
     const groups = sub.uuid ? await source.advancementGroups(sub.uuid) : null;
 

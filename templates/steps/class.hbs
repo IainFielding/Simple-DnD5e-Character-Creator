@@ -99,6 +99,29 @@
     </section>
     {{/with}}
 
+    {{!-- Specialization: World of Warcraft's per-class guidance (Paladin → Holy, Protection,
+          Retribution). Optional; its picks are marked recommended later. See class-step.mjs
+          specPickContext(). --}}
+    {{#with specPick}}
+    <section class="creator-work-block creator-specialization">
+      <h3 class="creator-work-block-title">{{localize "sogrom-dnd5e-character-creator.step.class.spec.title"}}</h3>
+      <p class="creator-lineage-hint">{{localize "sogrom-dnd5e-character-creator.step.class.spec.hint"}}</p>
+      <ul class="creator-lineage-list">
+        {{#each options}}
+        <li>
+          <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}}"
+                  data-action="stepAction" data-step-action="pick-specialization" data-spec="{{id}}"
+                  aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+            <span class="creator-choice-card-name">{{name}}</span>
+            {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
+          </button>
+        </li>
+        {{/each}}
+      </ul>
+      {{#if intro}}<div class="creator-spec-intro">{{{intro}}}</div>{{/if}}
+    </section>
+    {{/with}}
+
     {{#with targetLevel}}
     {{!--
       Target level: the creator always builds a level-1 character; anything above 1 hands off to

@@ -706,38 +706,9 @@ async function loadSpellsForClass(classId, maxLevel = 1, listType = "class", poo
     log("spell list registry lookup failed", err);
   }
 
-  if ( !uuids.size ) await scanSpellListPacks(classId, uuids);
   if ( uuids.size ) return fetchSpellsByUuids(uuids, maxLevel, poolPromise);
 
   return scanSpellsByClassTag(classId, maxLevel);
-}
-
-/** Legacy fallback: collect spell UUIDs from any `spellList` item matching the class. */
-async function scanSpellListPacks(classId, uuids) {
-  const enabled = getEnabledPacks();
-  for ( const pack of game.packs ) {
-    if ( !isUsableItemPack(pack, enabled) ) continue;
-    try {
-      const index = await packIndex(pack, { fields: ["type", "system.identifier"] });
-      for ( const entry of index ) {
-        if ( entry.type !== "spellList" || (entry.system?.identifier ?? "") !== classId ) continue;
-        const doc = await pack.getDocument(entry._id);
-        collectSpellUuids(doc, uuids);
-      }
-    } catch ( err ) {
-      log(`spell-list pack scan failed for ${pack.collection}`, err);
-    }
-  }
-}
-
-/** Pull spell UUIDs out of a spellList document's `system.spells` collection. */
-function collectSpellUuids(doc, uuids) {
-  const raw = doc?.system?.spells ?? [];
-  const list = raw instanceof Set ? [...raw] : Array.isArray(raw) ? raw : Object.values(raw ?? {});
-  for ( const entry of list ) {
-    const uuid = typeof entry === "string" ? entry : entry?.uuid;
-    if ( uuid ) uuids.add(uuid);
-  }
 }
 
 /**

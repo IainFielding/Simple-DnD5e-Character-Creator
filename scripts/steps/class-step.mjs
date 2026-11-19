@@ -13,6 +13,7 @@ import { t, log, levelUpEnabled, systemRulesEdition, MODULE_ID, SETTINGS } from 
 import { pinContext } from "../app/compare.mjs";
 import { matchesRules } from "../data/source-index.mjs";
 import { heroClassesFor, readableDoc, chosenHeroClass as heroOf } from "../data/warcraft.mjs";
+import { specializationsFor } from "../data/specializations.mjs";
 
 /**
  * The Class step. Class selection and ability scores share one step: the chosen class's page and
@@ -133,11 +134,19 @@ export const classStep = {
       state.targetLevel = clampLevel(el.value);
       return;
     }
+    if ( action === "pick-specialization" ) {
+      // Re-clicking the chosen one clears it; a specialization only advises, so nothing else resets.
+      const id = el.dataset.spec || null;
+      state.specialization = (id === state.specialization) ? null : id;
+      return;
+    }
     if ( action === "pick-hero-class" ) {
       // "Play as" on the class page. The hero swaps class features, so the class's own answers go.
       const hero = el.dataset.hero || null;
       if ( !state.classUuid || (hero === (state.heroClass ?? null)) ) return false;
       state.heroClass = hero;
+      // A hero class has specializations of its own (a Death Knight's Blood, Frost, Unholy).
+      state.specialization = null;
       state.advChoices.class = {};
       state.choiceCache = await resolveChoices(state, source);
       return;
@@ -150,6 +159,7 @@ export const classStep = {
       const same = (state.classUuid === uuid) && ((state.heroClass ?? null) === hero);
       state.classUuid = same ? null : uuid;
       state.heroClass = same ? null : hero;
+      state.specialization = null;
       // Spells, class advancement picks, and class equipment are all class-specific.
       state.resetClassDependent();
       // Changing to a class of a different edition invalidates origins the new class would never
@@ -230,7 +240,8 @@ export const classStep = {
           : null
       }),
       targetLevel: targetLevelContext(state),
-      heroPick: asCards ? null : heroPickContext(state, selectedCard)
+      heroPick: asCards ? null : heroPickContext(state, selectedCard),
+      specPick: await specPickContext(state, selectedCard)
     };
   }
 };
@@ -238,6 +249,26 @@ export const classStep = {
 /* -------------------------------------------- */
 /*  Hero classes                                */
 /* -------------------------------------------- */
+
+/**
+ * The Specialization block: World of Warcraft's specializations for the chosen class (or the hero
+ * class it is played as), with the chosen one's introduction. Null when its book describes none.
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ * @param {object|null} card   The chosen class's card.
+ */
+async function specPickContext(state, card) {
+  if ( !card ) return null;
+  const specs = await specializationsFor(card.identifier, state.heroClass ?? null);
+  if ( !specs.length ) return null;
+  const chosen = specs.find(s => s.id === state.specialization) ?? null;
+  const intro = chosen?.intro
+    ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(chosen.intro, { secrets: false })
+    : null;
+  return {
+    options: specs.map(s => ({ id: s.id, name: s.name, selected: s.id === state.specialization })),
+    intro
+  };
+}
 
 /** How hero classes are offered: "detail" ("Play as" on the class page) or "cards". */
 function heroClassDisplay() {

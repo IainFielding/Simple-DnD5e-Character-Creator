@@ -68,11 +68,6 @@ function heroEntry(classIdentifier, heroId) {
   return wowConfig()?.heroClasses?.[classIdentifier]?.find(h => h.identifier === heroId) ?? null;
 }
 
-/** The hero class an existing class item was made as (its module flag), or null. */
-export function heroClassOf(item) {
-  return item?.flags?.[FLAG]?.heroClass ?? item?.getFlag?.(FLAG, "heroClass") ?? null;
-}
-
 /** An item's advancements as a list, whichever of dnd5e's two source shapes it is stored in. */
 function advList(data) {
   const adv = data?.system?.advancement;
@@ -132,6 +127,33 @@ export async function applyHeroClass(data, heroId) {
   data.img = hero.img;
   foundry.utils.setProperty(data, `flags.${FLAG}.heroClass`, hero.identifier);
   return data;
+}
+
+/**
+ * Pet Specialization, which the module adds to a Beast Master Hunter's level-6 Roving grant (in its
+ * `dnd5e.preAdvancementManagerRender` hook, which the driver fires). The module keeps this uuid in a
+ * private constant, so it is repeated here — the one World of Warcraft item this file names.
+ */
+const PET_SPECIALIZATION = "Compendium.dnd-world-warcraft.classes.Item.wowrngPetSpecial";
+
+/**
+ * The "one or the other" a World of Warcraft grant offers, as a replacement map (`{base: alt}`) the
+ * level-up screen's pairs understand — or null for any other grant.
+ *
+ * The module makes the Hunter's level-6 grant optional and adds Pet Specialization to it, then
+ * turns its dialog's checkboxes into radio buttons: the Hunter takes Roving **or** Pet
+ * Specialization, never both. Plain optional grants are independent checkboxes on our screen, so
+ * this names the pair: the grant's one non-optional item (Roving, which dnd5e and the driver both
+ * keep by default) against Pet Specialization.
+ * @param {object} advancement   An ItemGrant advancement.
+ * @returns {Record<string, string>|null}
+ */
+export function exclusiveGrantPair(advancement) {
+  if ( !warcraftActive() || !advancement?.configuration?.optional ) return null;
+  const items = Array.from(advancement.configuration.items ?? []).map(i => (typeof i === "string") ? { uuid: i } : i);
+  if ( !items.some(i => i.uuid === PET_SPECIALIZATION) ) return null;
+  const bases = items.filter(i => !i.optional && (i.uuid !== PET_SPECIALIZATION));
+  return (bases.length === 1) ? { [bases[0].uuid]: PET_SPECIALIZATION } : null;
 }
 
 /* -------------------------------------------- */

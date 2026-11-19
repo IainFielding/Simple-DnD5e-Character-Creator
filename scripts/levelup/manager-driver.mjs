@@ -5,6 +5,8 @@ import {
 import { phbWeaponIcon } from "../data/weapon-source.mjs";
 import { bg3TraitIcon } from "../data/bg3-icons.mjs";
 import { findAsiFeats, classifyAsiFeats, evalContentPrereq } from "../data/choice-resolver.mjs";
+import { exclusiveGrantPair } from "../data/warcraft.mjs";
+import { specializationOf } from "../data/specializations.mjs";
 
 /**
  * Drives a native dnd5e {@link AdvancementManager} from the outside.
@@ -600,7 +602,15 @@ export class LevelUpDriver {
         // the right default besides: the world only carries these at all because the GM turned them
         // on, and the player can still decline in the wizard.
         await this.#seed(flow);
-        this.optionalGrantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        // A grant whose items are "one or the other" by its module's own rule — World of Warcraft's
+        // Roving-or-Pet-Specialization — is recorded as a replacement pair, so the screen offers the
+        // choice as alternatives instead of two boxes a player could both tick. The seed already
+        // holds the base (the non-optional item), which is the pair's default too.
+        const pair = exclusiveGrantPair(adv);
+        this.optionalGrantSteps.push({
+          level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item,
+          ...(pair ? { replacements: pair } : {})
+        });
         // An optional grant can *also* let the player choose the spell's casting ability — Cold
         // Caster's Ray of Frost may be cast with Intelligence, Wisdom or Charisma. The native screen
         // asks both questions at once; here the ability is its own decision, so it gets the same
@@ -1338,7 +1348,9 @@ export class LevelUpDriver {
     const entries = await findAsiFeats(level);
     const owned = new Set(record.advancement.actor?.identifiedItems?.keys() ?? []);
     const taken = this.#takenFeatNames(record);
-    return classifyAsiFeats(entries, level, owned, taken);
+    // The feats the class's World of Warcraft specialization suggests join the Recommended group.
+    const spec = await specializationOf(record.advancement.item);
+    return classifyAsiFeats(entries, level, owned, taken, spec ? new Set(spec.feats) : null);
   }
 
   /**

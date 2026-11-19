@@ -93,8 +93,6 @@
 }
 
 .creator-choice-source-img { width: 32px; height: 32px; border-radius: var(--cc-radius); object-fit: cover; }
-.creator-choice { padding: 0.75rem 0; border-top: 1px solid var(--cc-line); }
-.creator-choice:first-of-type { border-top: none; }
 .creator-choice-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
 .creator-choice-head h3 { margin: 0; font-size: 0.95rem; color: var(--cc-text); }
 .creator-choice-count { font-size: 0.8rem; color: var(--cc-muted); white-space: nowrap; }

@@ -556,6 +556,11 @@
         "features": "Class Features",
         "spells": "Spells",
         "levelTag": "Lvl {level}",
+        "spec": {
+          "title": "Specialization",
+          "hint": "Optional. The book's advice for playing this class one way: the subclass, spells and feats it suggests are marked as recommended when you choose them.",
+          "recommended": "Recommended for {spec}"
+        },
         "hero": {
           "title": "Play As",
           "hint": "A hero class is built on this class, with some of its features swapped for the hero's own."

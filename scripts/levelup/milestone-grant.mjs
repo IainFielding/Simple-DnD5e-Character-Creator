@@ -1,6 +1,7 @@
 import { MODULE_ID, tpl, t, log, levelUpEnabled } from "../config.mjs";
 import { MILESTONE_FLAG, usesMilestones, nextGrantTarget } from "./milestone.mjs";
 import { noticeRecipients } from "./xp-notice.mjs";
+import { addDirectoryButton } from "../app/directory-button.mjs";
 
 /**
  * The GM's side of milestone levelling: granting a level to one character or several.
@@ -193,16 +194,9 @@ export function registerMilestoneGrants() {
   Hooks.on("renderActorDirectory", (_app, html) => {
     if ( (game.system?.id !== "dnd5e") || !milestonesOffered() ) return;
     const root = html instanceof HTMLElement ? html : html?.[0];
-    if ( !root || root.querySelector(".sogrom-grant-levels") ) return;
-    const container = root.querySelector(".header-actions")
-      ?? root.querySelector(".directory-header .action-buttons")
-      ?? root.querySelector(".directory-header");
-    if ( !container ) return;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "sogrom-grant-levels";
-    button.innerHTML = `<i class="fa-solid fa-arrow-up-right-dots" aria-hidden="true"></i> ${t("milestone.headerButton")}`;
-    button.addEventListener("click", ev => { ev.preventDefault(); promptGrantLevels(); });
-    container.appendChild(button);
+    addDirectoryButton(root, {
+      cls: "sogrom-grant-levels", icon: "fa-solid fa-arrow-up-right-dots",
+      label: t("milestone.headerButton"), onClick: promptGrantLevels
+    });
   });
 }

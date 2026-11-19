@@ -39,9 +39,20 @@ All notable changes to the Simple D&D Character Creator.
   dnd5e's Renown rule turned on, the Renown choices the module adds to classes, species and lineages
   are asked too. A Druid, Monk, Paladin, Rogue or Warlock also gets the module's class badge, as
   dragging the class onto a sheet does.
+- **World of Warcraft specializations.** The World of Warcraft book suggests a way to play each
+  class: Holy, Protection or Retribution for a Paladin, Arcane, Fire or Frost for a Mage. The Class
+  page now offers these as an optional **Specialization**. The subclass, spells and feats it suggests
+  are marked **Recommended for Holy** (or whichever you chose) when you pick them, at creation and at
+  every level-up, and Quick Build follows it: its subclass, its spells, its fighting style, and its
+  feats in place of ability increases where the character qualifies.
+- **A Beast Master Hunter chooses Roving or Pet Specialization.** At level 6 the World of Warcraft
+  Hunter takes one or the other, and the level-up page now offers them as a choice of one instead of
+  two boxes that could both be ticked.
 
 ### Changed
 
+- **Needs dnd5e 6.1 and Foundry 14.367.** dnd5e 6.0 is no longer supported. Update dnd5e before
+  updating the module.
 - **Ready for dnd5e 6.1.** dnd5e 6.1 shows only the content for a world's own rules edition unless
   the GM turns the other edition on: a 2024 world hides the 2014 classes, species, backgrounds,
   spells and items, and a 2014 world hides the 2024 ones. The creator follows the same setting

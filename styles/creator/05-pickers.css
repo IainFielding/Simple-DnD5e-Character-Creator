@@ -566,6 +566,17 @@
   color: var(--cc-muted);
   font-variant-numeric: tabular-nums;
 }
+/* "Recommended for Holy": a pick the class's specialization names (World of Warcraft). */
+.creator-pickrow-suggest {
+  justify-self: start;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--cc-gold);
+  border-radius: 999px;
+  color: var(--cc-gold-bright);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
 /* Two-line rows only where the tag exists, so a list without editions is unchanged. */
 .creator-drawer .creator-pickrow:has(.creator-pickrow-rules) {
   display: grid;
@@ -1016,6 +1027,8 @@
    rather than the tall level-up cards: a module can add lineages to a species, so the list has to
    stay readable at any length inside the narrow side column. */
 .creator-lineage-hint { margin: 0 0 0.75rem; color: var(--cc-muted); font-size: 0.85rem; }
+.creator-spec-intro { margin-top: 0.6rem; color: var(--cc-text); font-size: 0.85rem; line-height: 1.45; }
+.creator-spec-intro p { margin: 0; }
 .creator-lineage-list {
   list-style: none;
   margin: 0;

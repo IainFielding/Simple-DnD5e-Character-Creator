@@ -41,6 +41,14 @@ export class CreatorState {
    */
   heroClass = null;
 
+  /**
+   * The specialization the class is played towards ("holy" for a Paladin), from World of Warcraft's
+   * class pages, or null. Marks its picks as recommended and steers Quick Build — see
+   * {@link module:data/specializations}. Cleared whenever the class or hero class changes.
+   * @type {string|null}
+   */
+  specialization = null;
+
   speciesUuid = null;
   backgroundUuid = null;
 

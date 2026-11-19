@@ -2,6 +2,7 @@ import { t } from "../../config.mjs";
 import { cantripsKnownAtLevel, buildSpellFromEntry, spellFilterOptions, spellListNotice, spellMethodFor,
   spellAlternatives, spellsKnownAtLevel } from "../../data/spell-source.mjs";
 import { ownedSpellKeys, spellKey } from "../../data/spell-identity.mjs";
+import { specializationOf } from "../../data/specializations.mjs";
 import { planSpellReconciliation } from "../../build/spell-reconcile.mjs";
 import { swapAllowance } from "../../data/spell-swap.mjs";
 import { pinContext } from "../../app/compare.mjs";
@@ -477,7 +478,14 @@ export const lvlSpellsStep = {
     const caps = (isCantrips || isPrepareTab) ? null : levelCapsFor(plan, marks.length);
     const levels = pickedLevels(state);
     const capped = s => !!caps && !canAddLevel(levels, s.level, caps);
-    const decorate = s => ({ ...s, levelLabel: s.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: s.level }) });
+    // The spells the class's World of Warcraft specialization suggests, badged on their rows.
+    const spec = await specializationOf(state.classItem);
+    const suggestedSpells = new Set(spec?.spells ?? []);
+    const suggestedLabel = spec ? t("step.class.spec.recommended", { spec: spec.name }) : null;
+    const decorate = s => ({
+      ...s, levelLabel: s.level === 0 ? "" : t("levelup.step.spells.levelTag", { level: s.level }),
+      ...(suggestedSpells.has(s.uuid) ? { suggested: suggestedLabel } : {})
+    });
 
     // Owned spells the player may swap out — offered only when this bucket has add capacity (you
     // replace a spell in the same breath as learning one) *and* the edition grants that class the

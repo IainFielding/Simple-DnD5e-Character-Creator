@@ -96,6 +96,11 @@ export async function assembleActor(state, source, equipment) {
   // stages rather than drops, so the module's own drop handlers never see these items.
   for ( const data of items ) {
     await transformItemData(data, { heroClass: (data.type === "class") ? (state.heroClass ?? null) : null });
+    // The specialization the class is played towards stays with the class, so level-ups go on
+    // recommending its picks (see data/specializations.mjs).
+    if ( (data.type === "class") && state.specialization ) {
+      foundry.utils.setProperty(data, `flags.${MODULE_ID}.specialization`, state.specialization);
+    }
   }
 
   // Write the actor-level update: identity/visuals, the base ability scores, and the detail→item

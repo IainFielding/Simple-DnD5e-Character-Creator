@@ -189,7 +189,7 @@ export function artPlan(category, packageId, keys) {
   for ( const sub of spec.subdirs ) {
     const dir = `modules/${packageId}/${sub}`;
     for ( const key of keys ) {
-      for ( const file of spec.candidates(key) ) plan.push({ dir, file });
+      for ( const file of artCandidates(category, key) ) plan.push({ dir, file });
     }
   }
   return plan;

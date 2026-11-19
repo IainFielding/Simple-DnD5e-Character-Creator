@@ -3,6 +3,7 @@ import { pinContext } from "../app/compare.mjs";
 import { levelOneSpellLimits, spellFilterOptions, spellListNotice } from "../data/spell-source.mjs";
 import { originGrantedSpellCards } from "./feat-spells-step.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
+import { findSpecialization } from "../data/specializations.mjs";
 
 /**
  * The Spells step: for a spellcasting class, choose the cantrips and level-1 spells
@@ -256,6 +257,13 @@ export const spellsStep = {
     // On the Prepare tab the granted spells sit among the book by name; elsewhere they lead the list.
     const byNameRow = (a, b) => a.name.localeCompare(b.name, game.i18n.lang);
     const list = isPrepareTab ? [...ownRows, ...grantedRows].sort(byNameRow) : [...grantedRows, ...ownRows];
+    // The spells the class's World of Warcraft specialization suggests, badged.
+    const spec = await findSpecialization(source?.card(state.classUuid)?.identifier, state.heroClass ?? null, state.specialization);
+    if ( spec?.spells?.length ) {
+      const suggested = new Set(spec.spells);
+      const label = t("step.class.spec.recommended", { spec: spec.name });
+      for ( const row of list ) if ( suggested.has(row.uuid) ) row.suggested = label;
+    }
 
     // Focused spell detail (with its lazily-enriched description).
     let focused = null;

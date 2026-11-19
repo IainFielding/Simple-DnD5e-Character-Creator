@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import {
-  heroClassesFor, applyHeroClass, addRenown, transformItemData, chosenHeroClass
+  heroClassesFor, applyHeroClass, addRenown, transformItemData, chosenHeroClass, exclusiveGrantPair
 } from "../scripts/data/warcraft.mjs";
 
 /**
@@ -122,6 +122,21 @@ describe("World of Warcraft hero classes and Renown", () => {
     expect(Object.keys(addRenown(barbarian).system.advancement)).toHaveLength(0);
     barbarian.flags[WOW] = { heroClass: "shaman" };
     expect(Object.keys(addRenown(barbarian).system.advancement)).toHaveLength(1);
+  });
+
+  it("pairs Roving with Pet Specialization as one-or-the-other", () => {
+    const PET = "Compendium.dnd-world-warcraft.classes.Item.wowrngPetSpecial";
+    const ROVING = "Compendium.p.classes.Item.roving";
+    const grant = items => ({ configuration: { optional: true, items } });
+    expect(exclusiveGrantPair(grant([{ uuid: ROVING }, { uuid: PET, optional: true }]))).toEqual({ [ROVING]: PET });
+    // Any other optional grant stays a list of independent boxes.
+    expect(exclusiveGrantPair(grant([{ uuid: ROVING }, { uuid: "Compendium.x.Item.other", optional: true }]))).toBeNull();
+    // Not one base to pair against: leave it alone rather than guess.
+    expect(exclusiveGrantPair(grant([{ uuid: ROVING }, { uuid: "Compendium.x.Item.b" }, { uuid: PET, optional: true }]))).toBeNull();
+    // A grant the module has not made optional is not its choice.
+    expect(exclusiveGrantPair({ configuration: { items: [{ uuid: ROVING }, { uuid: PET }] } })).toBeNull();
+    game.modules = { get: () => null };
+    expect(exclusiveGrantPair(grant([{ uuid: ROVING }, { uuid: PET, optional: true }]))).toBeNull();
   });
 
   it("names the hero a creator build is played as", () => {

@@ -29,6 +29,8 @@
     <img class="creator-pickrow-img" src="{{img}}" alt="">
     <span class="creator-spellrow-text">
       <span class="creator-pickrow-name">{{name}}</span>
+      {{!-- A spell the class's specialization suggests (World of Warcraft). --}}
+      {{#if suggested}}<span class="creator-pickrow-suggest">{{suggested}}</span>{{/if}}
       <span class="creator-spellrow-meta">
         {{#if levelLabel}}<span class="creator-spellrow-level">{{levelLabel}}</span>{{/if}}
         {{#if school}}<span>{{school}}</span>{{/if}}

@@ -57,6 +57,7 @@ const DRAFT_FIELDS = {
   // Origin selections and the level being built towards.
   classUuid: "value",
   heroClass: "value",
+  specialization: "value",
   speciesUuid: "value",
   backgroundUuid: "value",
   targetLevel: "value",

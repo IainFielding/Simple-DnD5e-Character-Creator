@@ -5,6 +5,7 @@ import { resolveChoices } from "./choice-resolver.mjs";
 import { resolveFeatSpells, originGrantedSpellKeys } from "../steps/feat-spells-step.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
 import { normalizePrepared, spellInfoFor, spellLimits } from "../steps/spells-step.mjs";
+import { findSpecialization } from "./specializations.mjs";
 import { generateName } from "./name-generator.mjs";
 
 /**
@@ -156,8 +157,14 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
     // A Wizard fills its whole six-spell book here; `normalizePrepared` then prepares the first of
     // them up to its allowance, exactly as picking them one by one on the Spells step would.
     const { maxCantrips, maxSpells } = spellLimits(state);
-    state.selectedCantrips = pickSpells(free(data.cantrips), profile.cantrips, maxCantrips);
-    state.selectedSpells = pickSpells(free(data.level1), profile.spells, maxSpells);
+    // A World of Warcraft specialization's suggested spells come first, ahead of the table's.
+    const spec = await findSpecialization(identifier, state.heroClass ?? null, state.specialization);
+    const suggested = new Set(spec?.spells ?? []);
+    const prefer = (pool, names) => [...pool.filter(s => suggested.has(s.uuid)).map(s => s.name), ...(names ?? [])];
+    const cantripPool = free(data.cantrips);
+    const spellPool = free(data.level1);
+    state.selectedCantrips = pickSpells(cantripPool, prefer(cantripPool, profile.cantrips), maxCantrips);
+    state.selectedSpells = pickSpells(spellPool, prefer(spellPool, profile.spells), maxSpells);
     normalizePrepared(state);
   });
 

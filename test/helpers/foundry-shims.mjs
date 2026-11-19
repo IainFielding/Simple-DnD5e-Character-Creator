@@ -161,6 +161,21 @@ export function installFoundryShims() {
     // it is what `systemRulesEdition()` translates into "2024"/"2014" — and "modern" is the
     // system's own default, so a test that cares flips it to "legacy".
     settings: { rulesVersion: "modern" },
+    // dnd5e 6.1's source rule, which `getEnabledPacks` asks: the GM's per-pack setting (the same
+    // `packSourceConfiguration` value tests write through `game.settings`) wins, otherwise a pack
+    // of the other rules edition is off. Every world the module supports has it.
+    applications: {
+      settings: {
+        CompendiumBrowserSettingsConfig: {
+          isSourceEnabled(pack) {
+            const setting = globalThis.game?.settings?._values?.packSourceConfiguration?.[pack.collection];
+            if ( setting !== undefined ) return setting;
+            const rv = pack.metadata?.flags?.dnd5e?.rulesVersion;
+            return !rv || (rv === globalThis.dnd5e?.settings?.rulesVersion);
+          }
+        }
+      }
+    },
     // The system's own formatters, which the spell card borrows so a row is worded exactly as the
     // sheet words it. These stand in with the plain English forms.
     utils: {
