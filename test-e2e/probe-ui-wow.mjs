@@ -26,10 +26,10 @@ try {
   await ev(async () => {
     globalThis.__shots = await import(`/modules/sogrom-dnd5e-character-creator/test-e2e/in-world/shots.mjs?v=${Date.now()}`);
     await game.settings.set("sogrom-dnd5e-character-creator", "heroClassDisplay", "detail");
-    await __shots.openCreator();
-    await __shots.entryPath("custom");
-    await __shots.goto("class");
-    await __shots.picker(true);
+    await globalThis.__shots.openCreator();
+    await globalThis.__shots.entryPath("custom");
+    await globalThis.__shots.goto("class");
+    await globalThis.__shots.picker(true);
   });
   await settle();
 
@@ -37,7 +37,7 @@ try {
   report.paladinCards = await ev(() => [...document.querySelectorAll('.creator-pickrow[data-name="Paladin"]')].length);
   await session.page.locator('.creator-pickrow[data-name="Paladin"]').first().click();
   await settle();
-  await ev(() => __shots.picker(false));
+  await ev(() => globalThis.__shots.picker(false));
   await settle();
   report.playAs = await ev(() => [...document.querySelectorAll(".creator-hero-class .creator-choice-card-name")].map(e => e.textContent.trim()));
   await shot("1-class-paladin-play-as");
@@ -54,7 +54,7 @@ try {
   // Cards mode: the hero classes as cards of their own.
   await ev(async () => {
     await game.settings.set("sogrom-dnd5e-character-creator", "heroClassDisplay", "cards");
-    await __shots.picker(true);
+    await globalThis.__shots.picker(true);
   });
   await settle();
   report.heroCards = await ev(() => [...document.querySelectorAll(".creator-pickrow[data-hero-class]")].map(b => b.dataset.name));
@@ -63,8 +63,8 @@ try {
 
   // Species: Quick Build fills the rest so the step is reachable, then the lineage cards.
   await ev(async () => {
-    await __shots.quickBuild({ seed: 7, goTo: "species" });
-    await __shots.picker(true);
+    await globalThis.__shots.quickBuild({ seed: 7, goTo: "species" });
+    await globalThis.__shots.picker(true);
   });
   await settle();
   report.elfCards = await ev(() => [...document.querySelectorAll(".creator-pickrow[data-lineage-key]")]
@@ -72,7 +72,7 @@ try {
   await shot("4-species-grid");
   await session.page.locator('.creator-pickrow[data-name="Elf (Blood Elf)"]').first().click();
   await settle();
-  await ev(() => __shots.picker(false));
+  await ev(() => globalThis.__shots.picker(false));
   await settle();
   report.afterLineage = await ev(() => ({
     title: document.querySelector(".creator-detail-head h2")?.textContent.trim(),
