@@ -2,7 +2,7 @@ import { t, log } from "../../config.mjs";
 import { advancementTitle } from "../../data/advancement-util.mjs";
 import { atLevel, advancementHint } from "../levelup-state.mjs";
 import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended, recommendAuthoredPool } from "../../data/choice-resolver.mjs";
-import { specializationOf } from "../../data/specializations.mjs";
+import { recommends, specializationOf } from "../../data/specializations.mjs";
 
 /**
  * Feature choices — the `ItemChoice` advancements a level grants (a Fighting Style, a Maneuver,
@@ -250,12 +250,11 @@ export const choicesStep = {
     // The feats the class's World of Warcraft specialization suggests (its fighting style among
     // them) join each block's Recommended group.
     const spec = await specializationOf(state.classItem);
-    const suggestedFeats = new Set(spec?.feats ?? []);
     for ( const record of records ) {
       const st = driver.choiceState(record);
       const hasOwned = st.replaceable && st.priorEntries.length > 0;
       const options = await buildOptions(record, st, spells);
-      for ( const o of options ) if ( !o.owned && suggestedFeats.has(o.uuid) ) o.recommended = true;
+      for ( const o of options ) if ( !o.owned && recommends(spec, "feat", o) ) o.recommended = true;
       record.exhausted = !st.full && !options.some(o => !o.owned && !o.selected && !o.disabled);
       const section = {
         index: state.choiceSteps.indexOf(record),

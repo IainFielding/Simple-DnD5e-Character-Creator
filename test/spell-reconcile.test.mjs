@@ -237,6 +237,33 @@ describe("reconcileGrantedSpells", () => {
     expect(result.merged).toEqual([]);
   });
 
+  it("leaves a spell from a real feat on the actor alone", async () => {
+    const actor = makeActor([
+      { ...feature("featMI", "Magic Initiate"), system: { type: { value: "feat" } } },
+      spell({ id: "granted", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 2,
+        sourceItem: "feat:magic-initiate", origin: "featMI.adv" }),
+      spell({ id: "chosen", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 1,
+        sourceItem: "class:paladin" })
+    ]);
+    expect((await reconcileGrantedSpells(actor)).merged).toEqual([]);
+  });
+
+  it("merges an oath's spell, which dnd5e also tags \"feat:\" — the feature is a class feature", async () => {
+    // A 2024 Paladin's "Oath of the Holy Spells" is a feat-type item of subtype "class"; its grants
+    // carry "feat:oath-of-the-holy-spells". A Holy Paladin who picked Cure Wounds at level 1 kept
+    // both copies at level 3 until this was told apart from Magic Initiate.
+    const actor = makeActor([
+      { ...feature("oathSpells", "Oath of the Holy Spells"), system: { type: { value: "class" } } },
+      spell({ id: "granted", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 2,
+        sourceItem: "feat:oath-of-the-holy-spells", origin: "oathSpells.adv" }),
+      spell({ id: "chosen", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 1,
+        sourceItem: "class:paladin" })
+    ]);
+    const result = await reconcileGrantedSpells(actor);
+    expect(actor.seen.deleted).toEqual(["chosen"]);
+    expect(result.merged[0].grantedBy).toBe("Oath of the Holy Spells");
+  });
+
   it("leaves a pact-magic copy and a spell-slot copy separate", async () => {
     const actor = makeActor([
       spell({ id: "granted", prepared: 2, method: "pact", origin: "clsWarlock.adv" }),

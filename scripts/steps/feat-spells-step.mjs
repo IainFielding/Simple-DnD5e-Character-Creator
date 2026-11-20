@@ -2,6 +2,7 @@ import { t } from "../config.mjs";
 import { advancementArray, advancementTitle} from "../data/advancement-util.mjs";
 import { MAGIC_INITIATE_LISTS, spellFilterOptions } from "../data/spell-source.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
+import { readableDoc } from "../data/warcraft.mjs";
 
 /**
  * The Feat Spells step: the spell picks a feat defers to the player — the Magic Initiate shape and
@@ -431,7 +432,10 @@ export async function originGrantedSpellCards(state) {
   for ( const [field, source] of ORIGIN_FIELDS ) {
     const uuid = state[field];
     if ( !uuid ) continue;
-    const doc = await fromUuid(uuid).catch(() => null);
+    // Read as built: a World of Warcraft hero class swaps class features, and its own may grant a
+    // spell the base class's do not (or not by the same feature) — read raw, a Hunter was offered
+    // Hunter's Mark as a pick beside the copy it is already given.
+    const doc = await readableDoc(await fromUuid(uuid).catch(() => null), { heroClass: state.heroClass ?? null });
     if ( !doc ) continue;
     cards.push(...await grantedSpellCards(doc, state.advChoices?.[source] ?? {}));
   }

@@ -66,6 +66,58 @@ export function specializationId(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+/**
+ * The ways one item can be recognised: its uuid, its identifier and its name, each scoped by type.
+ * The book links one package's copy of a spell or feat (Hunter's Mark from the Player's Handbook, say)
+ * while a picker may list another's — the system's own, or a different book's — so a uuid alone
+ * recognises nothing in most worlds. The same rule as the "already known" check
+ * ({@link module:data/spell-identity}): the same spell from two packages is one spell.
+ * @param {string} type                       "spell" | "feat" | "subclass"
+ * @param {{uuid?: string, identifier?: string, system?: object, name?: string}} item
+ * @returns {string[]}
+ */
+export function recommendationKeys(type, item) {
+  if ( !item ) return [];
+  const keys = [];
+  if ( item.uuid ) keys.push(`uuid:${item.uuid}`);
+  const identifier = item.identifier || item.system?.identifier;
+  if ( identifier ) keys.push(`${type}:id:${identifier}`);
+  const name = String(item.name ?? "").trim().toLowerCase();
+  if ( name ) keys.push(`${type}:name:${name}`);
+  return keys;
+}
+
+/**
+ * Whether a specialization recommends this item. **Pure.**
+ * @param {object|null} spec                  From {@link findSpecialization}.
+ * @param {string} type                       "spell" | "feat" | "subclass"
+ * @param {object} item                       A picker row, an index entry or a document.
+ * @returns {boolean}
+ */
+export function recommends(spec, type, item) {
+  const keys = spec?.keys;
+  if ( !keys?.length ) return false;
+  return recommendationKeys(type, item).some(k => keys.includes(k));
+}
+
+/**
+ * The candidates a specialization recommends, in the order the book names them. **Pure.**
+ * @param {object|null} spec
+ * @param {string} type
+ * @param {object[]} candidates
+ * @returns {object[]}
+ */
+export function recommendedInOrder(spec, type, candidates) {
+  const refs = (spec?.refs ?? []).filter(r => r.type === type);
+  const out = [];
+  for ( const ref of refs ) {
+    const want = recommendationKeys(type, ref);
+    const hit = candidates.find(c => !out.includes(c) && recommendationKeys(type, c).some(k => want.includes(k)));
+    if ( hit ) out.push(hit);
+  }
+  return out;
+}
+
 /* -------------------------------------------- */
 /*  The index                                   */
 /* -------------------------------------------- */
@@ -89,7 +141,7 @@ function keyOf(classIdentifier, heroClass = null) {
 async function describeLink(uuid) {
   const doc = await fromUuid(uuid).catch(() => null);
   if ( !doc ) return null;
-  return { uuid: doc.uuid ?? uuid, type: doc.type, identifier: doc.system?.identifier ?? null };
+  return { uuid: doc.uuid ?? uuid, type: doc.type, identifier: doc.system?.identifier ?? null, name: doc.name };
 }
 
 /**
@@ -123,7 +175,7 @@ async function build() {
 
       const specs = [];
       for ( const s of sections ) {
-        const picks = { subclass: null, feats: [], spells: [] };
+        const picks = { subclass: null, feats: [], spells: [], refs: [] };
         for ( const uuid of s.links ) {
           if ( !described.has(uuid) ) described.set(uuid, await describeLink(uuid));
           const d = described.get(uuid);
@@ -131,8 +183,12 @@ async function build() {
           if ( (d.type === "subclass") && !picks.subclass ) picks.subclass = d.uuid;
           else if ( d.type === "feat" ) picks.feats.push(d.uuid);
           else if ( d.type === "spell" ) picks.spells.push(d.uuid);
+          else continue;
+          picks.refs.push(d);
         }
-        specs.push({ id: specializationId(s.name), name: s.name, intro: s.intro, pageUuid: page.uuid, ...picks });
+        // Every way a recommended item can be recognised in a picker — see {@link recommends}.
+        const keys = [...new Set(picks.refs.flatMap(r => recommendationKeys(r.type, r)))];
+        specs.push({ id: specializationId(s.name), name: s.name, intro: s.intro, pageUuid: page.uuid, ...picks, keys });
       }
       map.set(keyOf(cls.identifier, hero), specs);
     }

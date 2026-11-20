@@ -5,7 +5,7 @@ import { resolveChoices } from "./choice-resolver.mjs";
 import { resolveFeatSpells, originGrantedSpellKeys } from "../steps/feat-spells-step.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
 import { normalizePrepared, spellInfoFor, spellLimits } from "../steps/spells-step.mjs";
-import { findSpecialization } from "./specializations.mjs";
+import { findSpecialization, recommendedInOrder } from "./specializations.mjs";
 import { generateName } from "./name-generator.mjs";
 
 /**
@@ -159,8 +159,7 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
     const { maxCantrips, maxSpells } = spellLimits(state);
     // A World of Warcraft specialization's suggested spells come first, ahead of the table's.
     const spec = await findSpecialization(identifier, state.heroClass ?? null, state.specialization);
-    const suggested = new Set(spec?.spells ?? []);
-    const prefer = (pool, names) => [...pool.filter(s => suggested.has(s.uuid)).map(s => s.name), ...(names ?? [])];
+    const prefer = (pool, names) => [...recommendedInOrder(spec, "spell", pool).map(s => s.name), ...(names ?? [])];
     const cantripPool = free(data.cantrips);
     const spellPool = free(data.level1);
     state.selectedCantrips = pickSpells(cantripPool, prefer(cantripPool, profile.cantrips), maxCantrips);

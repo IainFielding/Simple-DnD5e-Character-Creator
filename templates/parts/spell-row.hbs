@@ -21,16 +21,14 @@
 --}}
 <li>
   <button type="button"
-          class="creator-pickrow creator-spellrow {{#if active}}is-selected{{/if}} {{#if owned}}is-owned{{/if}} {{#if granted}}is-owned is-granted{{/if}} {{#if swapMarked}}is-swapping{{/if}} {{#if focused}}is-focused{{/if}} {{#if disabled}}is-disabled{{/if}}"
+          class="creator-pickrow creator-spellrow {{#if active}}is-selected{{/if}} {{#if owned}}is-owned{{/if}} {{#if granted}}is-owned is-granted{{/if}} {{#if swapMarked}}is-swapping{{/if}} {{#if focused}}is-focused{{/if}} {{#if disabled}}is-disabled{{/if}} {{#if suggested}}is-recommended{{/if}}"
           data-action="stepAction" data-step-action="focus-spell"
           data-uuid="{{uuid}}" data-name="{{name}}" data-level="{{level}}" data-school="{{school}}"
           data-props="{{propertyKeys}}" data-casting="{{castingTimeKey}}" data-range="{{rangeKey}}"
           data-tooltip="{{ccItemTooltip uuid}}">
     <img class="creator-pickrow-img" src="{{img}}" alt="">
     <span class="creator-spellrow-text">
-      <span class="creator-pickrow-name">{{name}}</span>
-      {{!-- A spell the class's specialization suggests (World of Warcraft). --}}
-      {{#if suggested}}<span class="creator-pickrow-suggest">{{suggested}}</span>{{/if}}
+      <span class="creator-pickrow-name">{{name}}{{!-- A spell the class's specialization suggests (World of Warcraft). --}}{{#if suggested}}<i class="creator-pickrow-rec fa-solid fa-star" data-tooltip="{{suggested}}" aria-label="{{suggested}}"></i>{{/if}}</span>
       <span class="creator-spellrow-meta">
         {{#if levelLabel}}<span class="creator-spellrow-level">{{levelLabel}}</span>{{/if}}
         {{#if school}}<span>{{school}}</span>{{/if}}

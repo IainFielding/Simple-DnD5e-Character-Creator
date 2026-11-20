@@ -566,15 +566,16 @@
   color: var(--cc-muted);
   font-variant-numeric: tabular-nums;
 }
-/* "Recommended for Holy": a pick the class's specialization names (World of Warcraft). */
-.creator-pickrow-suggest {
-  justify-self: start;
-  padding: 0.05rem 0.45rem;
-  border: 1px solid var(--cc-gold);
-  border-radius: 999px;
+/* A pick the class's specialization names (World of Warcraft): the row reads gold, and a star beside
+   the name says why on hover ("Recommended for Marksmanship"). Selection still wins the left edge. */
+.creator-pickrow.is-recommended:not(.is-selected) { border-left-color: var(--cc-gold); }
+.creator-pickrow.is-recommended .creator-pickrow-name { color: var(--cc-gold-bright); }
+.creator-pickrow.is-recommended .creator-pickrow-img { border-color: var(--cc-gold); }
+.creator-pickrow-rec {
+  margin-left: 0.4rem;
   color: var(--cc-gold-bright);
-  font-size: 0.68rem;
-  white-space: nowrap;
+  font-size: 0.72em;
+  vertical-align: 0.1em;
 }
 
 /* Two-line rows only where the tag exists, so a list without editions is unchanged. */

@@ -47,6 +47,15 @@ try {
     }, className);
     await settle();
   };
+  /** Climb a built character headlessly, exactly as the shell does after a Quick Build. */
+  const climb = (uuid, level) => ev(async ([u, lvl]) => {
+    const M = "/modules/sogrom-dnd5e-character-creator/scripts";
+    const { getSources } = await import(`${M}/data/source-cache.mjs`);
+    const { quickClimb } = await import(`${M}/data/quick-climb.mjs`);
+    const { source, spells } = getSources();
+    const r = await quickClimb(await fromUuid(u), lvl, source, spells);
+    return r.reached;
+  }, [uuid, level]);
   const describeBuilt = uuid => ev(async u => {
     const a = await fromUuid(u);
     const cls = a.items.find(i => i.type === "class");
@@ -55,7 +64,7 @@ try {
       specialization: cls?.flags?.["sogrom-dnd5e-character-creator"]?.specialization ?? null,
       subclass: a.items.find(i => i.type === "subclass")?.name ?? null,
       feats: a.items.filter(i => (i.type === "feat") && (i.system?.type?.value === "feat")).map(i => i.name).sort(),
-      spells: a.items.filter(i => i.type === "spell").map(i => i.name).sort()
+      spells: a.items.filter(i => i.type === "spell").map(i => `${i.name}${i.flags?.dnd5e?.advancementOrigin ? " [" + i.flags.dnd5e.advancementOrigin + "]" : ""} p${i.system?.prepared}`).sort()
     };
   }, uuid);
 
@@ -67,17 +76,19 @@ try {
   await shot("1-class-paladin-holy");
 
   // 3. Quick Build at level 5, then Create: the climb should follow Holy.
-  await click('.creator-level-chip[data-level="5"]');
   await ev(() => globalThis.__shots.quickBuild({ seed: 7, goTo: "review" }));
-  report.holy = await describeBuilt(await ev(() => globalThis.__shots.buildActor()));
+  const holyUuid = await ev(() => globalThis.__shots.buildActor());
+  report.holyReached = await climb(holyUuid, 5);
+  report.holy = await describeBuilt(holyUuid);
 
   // 4. Hunter (Ranger) → Beast Mastery, level 5, then level up to 6 in the real window.
   await startClass("Ranger");
   await click('.creator-hero-class [data-hero="hunter"]');
   await click('.creator-specialization [data-spec="beast-mastery"]');
-  await click('.creator-level-chip[data-level="5"]');
   await ev(() => globalThis.__shots.quickBuild({ seed: 7, goTo: "review" }));
-  report.hunter = await describeBuilt(await ev(() => globalThis.__shots.buildActor()));
+  const hunterUuid = await ev(() => globalThis.__shots.buildActor());
+  report.hunterReached = await climb(hunterUuid, 5);
+  report.hunter = await describeBuilt(hunterUuid);
   await ev(() => globalThis.__shots.levelUp());
   await settle();
   report.level6 = await ev(() => {

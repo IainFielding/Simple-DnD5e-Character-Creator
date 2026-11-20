@@ -3,7 +3,7 @@ import { pinContext } from "../app/compare.mjs";
 import { levelOneSpellLimits, spellFilterOptions, spellListNotice } from "../data/spell-source.mjs";
 import { originGrantedSpellCards } from "./feat-spells-step.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
-import { findSpecialization } from "../data/specializations.mjs";
+import { findSpecialization, recommends } from "../data/specializations.mjs";
 
 /**
  * The Spells step: for a spellcasting class, choose the cantrips and level-1 spells
@@ -260,9 +260,8 @@ export const spellsStep = {
     // The spells the class's World of Warcraft specialization suggests, badged.
     const spec = await findSpecialization(source?.card(state.classUuid)?.identifier, state.heroClass ?? null, state.specialization);
     if ( spec?.spells?.length ) {
-      const suggested = new Set(spec.spells);
       const label = t("step.class.spec.recommended", { spec: spec.name });
-      for ( const row of list ) if ( suggested.has(row.uuid) ) row.suggested = label;
+      for ( const row of list ) if ( recommends(spec, "spell", row) ) row.suggested = label;
     }
 
     // Focused spell detail (with its lazily-enriched description).

@@ -21,13 +21,11 @@
     <ul class="creator-picklist">
       {{#each cards}}
       <li>
-        <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}}"
+        <button type="button" class="creator-pickrow {{#if selected}}is-selected{{/if}} {{#if suggested}}is-recommended{{/if}}"
                 data-action="stepAction" data-step-action="pick-subclass"
                 data-index="{{../index}}" data-uuid="{{uuid}}" data-name="{{name}}">
           <img class="creator-pickrow-img" src="{{img}}" alt="">
-          <span class="creator-pickrow-name">{{name}}</span>
-          {{!-- The subclass the class's specialization names (World of Warcraft). --}}
-          {{#if suggested}}<span class="creator-pickrow-suggest">{{suggested}}</span>{{/if}}
+          <span class="creator-pickrow-name">{{name}}{{!-- The subclass the class's specialization names (World of Warcraft). --}}{{#if suggested}}<i class="creator-pickrow-rec fa-solid fa-star" data-tooltip="{{suggested}}" aria-label="{{suggested}}"></i>{{/if}}</span>
           {{#if selected}}<i class="creator-pickrow-tick fa-solid fa-check"></i>{{/if}}
         </button>
         {{!-- A sibling of the row, not a child: the row is a button already. See work-picker.hbs. --}}

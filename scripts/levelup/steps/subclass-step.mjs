@@ -1,7 +1,7 @@
 import { atLevel } from "../levelup-state.mjs";
 import { pinContext } from "../../app/compare.mjs";
 import { hasSourcePage } from "../../data/journal-source.mjs";
-import { specializationOf } from "../../data/specializations.mjs";
+import { recommends, specializationOf } from "../../data/specializations.mjs";
 import { t } from "../../config.mjs";
 
 /**
@@ -41,7 +41,7 @@ export const subclassStep = {
     const suggested = spec?.subclass ? t("step.class.spec.recommended", { spec: spec.name }) : null;
     const cards = (await source.subclasses(identifier, { rules }))
       .filter(c => !fixed || (c.uuid === fixed))
-      .map(c => ({ ...c, selected: c.uuid === sub.uuid, suggested: (c.uuid === spec?.subclass) ? suggested : null }));
+      .map(c => ({ ...c, selected: c.uuid === sub.uuid, suggested: recommends(spec, "subclass", c) ? suggested : null }));
     const detail = sub.uuid ? await source.detail(sub.uuid) : null;
     const groups = sub.uuid ? await source.advancementGroups(sub.uuid) : null;
 

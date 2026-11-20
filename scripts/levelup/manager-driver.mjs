@@ -6,7 +6,7 @@ import { phbWeaponIcon } from "../data/weapon-source.mjs";
 import { bg3TraitIcon } from "../data/bg3-icons.mjs";
 import { findAsiFeats, classifyAsiFeats, evalContentPrereq } from "../data/choice-resolver.mjs";
 import { exclusiveGrantPair } from "../data/warcraft.mjs";
-import { specializationOf } from "../data/specializations.mjs";
+import { recommends, specializationOf } from "../data/specializations.mjs";
 
 /**
  * Drives a native dnd5e {@link AdvancementManager} from the outside.
@@ -1350,7 +1350,7 @@ export class LevelUpDriver {
     const taken = this.#takenFeatNames(record);
     // The feats the class's World of Warcraft specialization suggests join the Recommended group.
     const spec = await specializationOf(record.advancement.item);
-    return classifyAsiFeats(entries, level, owned, taken, spec ? new Set(spec.feats) : null);
+    return classifyAsiFeats(entries, level, owned, taken, spec ? e => recommends(spec, "feat", e) : null);
   }
 
   /**

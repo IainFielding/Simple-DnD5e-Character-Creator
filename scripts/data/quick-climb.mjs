@@ -1,4 +1,4 @@
-import { specializationOf } from "./specializations.mjs";
+import { recommendedInOrder, specializationOf } from "./specializations.mjs";
 import { log, levelUpHpDefault } from "../config.mjs";
 import { QUICK_BUILD, FEATURE_PREFERENCES } from "./quick-build-data.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
@@ -142,8 +142,9 @@ export class QuickClimbProvider {
     if ( !cards.length ) return;
 
     // The subclass the specialization names leads, where it is installed for this class.
-    if ( this.#spec?.subclass && cards.some(c => c.uuid === this.#spec.subclass) ) {
-      this.#subclassUuid = this.#spec.subclass;
+    const specSubclass = recommendedInOrder(this.#spec, "subclass", cards)[0];
+    if ( specSubclass ) {
+      this.#subclassUuid = specSubclass.uuid;
       return;
     }
     for ( const name of names ) {
@@ -290,9 +291,8 @@ export class QuickClimbProvider {
         if ( this.#asiFeats.has(rec) || !rec.advancement?.allowFeat ) continue;
         try {
           const { options } = await driver.asiFeatOptions(rec);
-          const offered = new Set((options ?? []).map(o => o.uuid));
-          for ( const uuid of this.#spec.feats ) {
-            if ( !offered.has(uuid) || chosen.has(uuid) ) continue;
+          for ( const { uuid } of recommendedInOrder(this.#spec, "feat", options ?? []) ) {
+            if ( chosen.has(uuid) ) continue;
             const doc = await fromUuid(uuid).catch(() => null);
             if ( doc?.system?.assertPrerequisites?.(driver.clone, { showMessage: false }) !== true ) continue;
             this.#asiFeats.set(rec, uuid);
@@ -378,9 +378,10 @@ export class QuickClimbProvider {
     const out = [];
     // The specialization's feats lead (a Holy Paladin's Blessed Warrior, a Protection one's
     // Interception), ahead of the table's preferences.
-    for ( const uuid of this.#spec?.feats ?? [] ) {
+    const candidates = [...named].map(([uuid, name]) => ({ uuid, name }));
+    for ( const { uuid } of recommendedInOrder(this.#spec, "feat", candidates) ) {
       if ( out.length >= wanted ) break;
-      if ( named.has(uuid) && !out.includes(uuid) ) out.push(uuid);
+      if ( !out.includes(uuid) ) out.push(uuid);
     }
     for ( const want of prefer ) {
       if ( out.length >= wanted ) break;
