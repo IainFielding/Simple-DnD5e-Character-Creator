@@ -9,10 +9,10 @@ import { resetWeaponIcons } from "./weapon-source.mjs";
 import { getEnabledPacks, resetPackIndexes } from "./compendium-util.mjs";
 import { invalidateJournalIndex, warmSourcePages } from "./journal-source.mjs";
 import { invalidateRulesPages, warmRulesPages } from "./rules-source.mjs";
-import { invalidateArtCache } from "./art-cache.mjs";
+import { invalidateArtCache, resolveArtFor } from "./art-cache.mjs";
 import { foundryPregens, invalidatePregenCache } from "./premades.mjs";
 import { resetWarcraftDocs } from "./warcraft.mjs";
-import { resetSpecializations } from "./specializations.mjs";
+import { resetSpecializations, warmSpecializations } from "./specializations.mjs";
 
 /**
  * Shared, warm-once compendium data for the builder.
@@ -172,7 +172,13 @@ export function warmSources() {
       // by the bar, which counts origins. Ember never shows the chooser, so it is spared the reads.
       // The class step awaits both of these before it renders, so left cold they sat behind the
       // first class click: over a second in the harness world, more in one with more journal packs.
-      phase("bookPages", () => Promise.all([warmSourcePages(), warmRulesPages()]), () => {}),
+      // Likewise the specialization index (World of Warcraft's class pages, read whole along with
+      // every item they link) and the class art directory listings, both added to the Class step
+      // after this warm was written and both awaited before a selected class renders.
+      phase("bookPages", () => Promise.all([
+        warmSourcePages(), warmRulesPages(), warmSpecializations(),
+        resolveArtFor(classes.map(card => ({ card, category: "class" })))
+      ]), () => {}),
       emberActive() ? null : phase("pregens", () => foundryPregens(), tick)
     ]);
     emit(100);

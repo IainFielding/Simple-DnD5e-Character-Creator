@@ -820,7 +820,15 @@ node run.mjs --features               # party switch + card, level-up-ready card
                                       # Maximum only HP
 node run.mjs --spellbook              # Wizard spellbook at creation and level-up (both editions), Prepare tab,
                                       # granted spells as locked cards, legacy books, Cleric multi-swaps
+node probe-class-click.mjs            # first class click after the ready warm renders in < 750ms
 ```
+
+**`probe-class-click.mjs` is the timing check nothing else makes.** The suites above assert what a
+build contains, never how long a render waits, so a lookup the Class step awaits but the `ready`
+warm never fills passes them all and ships. That happened with the World of Warcraft
+specializations: their index was built on the first class click (2.3s, against ~0.1s warmed). The unit test
+`test/warm-coverage.test.mjs` guards the code shape on every check-in (every cache
+`invalidateSources()` clears must be filled by `warmSources()`); this probe times the real click.
 
 `--only <text>` and `--limit <n>` narrow `--quick-build` and `--pregens` to matching classes or pregens.
 `--only <text>` also narrows `--spellbook` to cases whose name contains it. Its Ember case needs the
