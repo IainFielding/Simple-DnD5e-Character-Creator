@@ -1428,17 +1428,48 @@ export class LevelUpDriver {
       await record.advancement.apply(record.level, { type: "feat", uuid });
       this.clone.reset();
 
-      // Run the feat's own advancements (fixed ASI bonus, granted features, sub-choices).
+      // Run the feat's own advancements (fixed ASI bonus, granted features, sub-choices) — every level
+      // of them up to the character's, as dnd5e walks an item added mid-flow: a feat is not
+      // class-linked, so its levels are character levels. Walked at level 0 alone, the PHB's Ritual
+      // Caster taken at 19 lost the spells it picks at 5, 9, 13 and 17. See {@link featLevelWindow}.
       const featItem = this.#asiFeatItem(record.advancement);
       if ( featItem ) {
-        record.featSynth = await this.#ingestItemFeatures(featItem, 0);
-        // The feat's own advancements come off level-0 flows; surface any choices they reveal on the
-        // same screen as the granting ASI rather than a phantom "level 0" screen.
-        for ( const r of LevelUpDriver.#synthRecords(record.featSynth) ) r.screenLevel = record.level;
+        const classItem = record.advancement.item;
+        const targetClassLevel = this.steps.reduce((max, s) => Math.max(max, s.class?.level ?? 0), record.level);
+        const otherClassLevels = this.clone.items
+          .filter(i => (i.type === "class") && (i.id !== classItem?.id))
+          .reduce((sum, i) => sum + (Number(i.system?.levels) || 0), 0);
+        const { maxLevel, screenFor } = LevelUpDriver.featLevelWindow(record, targetClassLevel, otherClassLevels);
+        record.featSynth = await this.#ingestItemFeatures(featItem, maxLevel);
+        // A decision at or below this improvement's level goes on its screen rather than a phantom
+        // "level 0" one; a later one of a multi-level jump, on the screen of its own level.
+        for ( const r of LevelUpDriver.#synthRecords(record.featSynth) ) r.screenLevel = screenFor(r.level);
       }
       this.clone.reset();
       return true;
     });
+  }
+
+  /**
+   * How far to walk a feat taken at an ability-score improvement, and which screen each decision it
+   * reveals belongs on. **Pure.**
+   *
+   * A feat's advancement levels are *character* levels (it is not class-linked), so it is walked to
+   * the level-up's final character level: the class's target level plus the character's levels in
+   * its other classes. Screens are class levels, so a decision at character level `L` maps back by
+   * the same offset — and never onto a screen before the improvement that took the feat.
+   * @param {{level: number, screenLevel?: number}} record   The ASI decision that took the feat.
+   * @param {number} targetClassLevel   The class level this level-up finishes at.
+   * @param {number} otherClassLevels   The character's levels in its other classes.
+   * @returns {{maxLevel: number, screenFor: (characterLevel: number) => number}}
+   */
+  static featLevelWindow(record, targetClassLevel, otherClassLevels) {
+    const screen = record.screenLevel ?? record.level;
+    const offset = Number(otherClassLevels) || 0;
+    return {
+      maxLevel: targetClassLevel + offset,
+      screenFor: characterLevel => Math.max((Number(characterLevel) || 0) - offset, screen)
+    };
   }
 
   /* -------------------------------------------- */
