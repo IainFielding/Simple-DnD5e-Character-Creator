@@ -96,3 +96,24 @@ export async function nameSpeciesForLineage(actor, resolved) {
     log(`could not name ${species.name} for its lineage`, err);
   }
 }
+
+/**
+ * The lineage option the player holds for their species, or null: read from the resolved choices
+ * (`state.choiceCache`) and matched against the picks themselves, so a cache resolved before the
+ * pick still finds it. The option carries its `selKey` and `source`, the decision it answers.
+ * @param {object} state   A CreatorState.
+ * @returns {{key: string, uuid: string, label: string, identifier?: string, selKey: string, source: string}|null}
+ */
+export function chosenLineage(state) {
+  const reqs = (state?.choiceCache?.sources ?? [])
+    .filter(s => s.key === "species")
+    .flatMap(s => s.requirements ?? [])
+    .filter(r => r.lineage);
+  for ( const req of reqs ) {
+    const picks = Array.from(state.advChoices?.[req.source ?? "species"]?.[req.selKey] ?? [])
+      .map(k => (typeof k === "string" ? k : k?.uuid));
+    const option = (req.options ?? []).find(o => picks.includes(o.key));
+    if ( option ) return option;
+  }
+  return null;
+}

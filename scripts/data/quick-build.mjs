@@ -7,6 +7,7 @@ import { spellKey } from "../data/spell-identity.mjs";
 import { normalizePrepared, spellInfoFor, spellLimits } from "../steps/spells-step.mjs";
 import { findSpecialization, recommendedInOrder } from "./specializations.mjs";
 import { generateName, speciesNameKey } from "./name-generator.mjs";
+import { chosenLineage } from "./lineage-name.mjs";
 
 /**
  * The Quick Build engine: fill the whole CreatorState from the selected class's suggestion
@@ -39,11 +40,13 @@ import { generateName, speciesNameKey } from "./name-generator.mjs";
  * @param {string} [opts.speciesUuid]     Pin the species instead of rolling one.
  * @param {string} [opts.backgroundUuid]  Pin the background instead of choosing by ability fit.
  * @param {string} [opts.name]            Pin the name instead of rolling one.
+ * @param {{selKey: string, key: string}} [opts.lineage]  Pin the pinned species' lineage — the one the
+ *   name was rolled for — instead of letting the choice fill pick one.
  * @returns {Promise<{ok: boolean, warnings: string[]}>}
  */
 export async function applyQuickBuild({ state, source, spells, equipment }, {
   rng = Math.random, profile: profileOverride = null,
-  speciesUuid = null, backgroundUuid = null, name: fixedName = null
+  speciesUuid = null, backgroundUuid = null, name: fixedName = null, lineage = null
 } = {}) {
   if ( !state.classUuid ) return { ok: false, warnings: ["no-class"] };
 
@@ -110,22 +113,27 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
       ? speciesUuid
       : (list[Math.floor(rng() * list.length)]?.uuid ?? null);
     if ( !state.speciesUuid ) return;
+    // Only with the species it belongs to: a lineage held for a species the roll replaced is moot.
+    if ( lineage?.selKey && lineage.key && (state.speciesUuid === speciesUuid) ) {
+      (state.advChoices.species ??= {})[lineage.selKey] = [lineage.key];
+    }
     state.originAsi.species = await source.abilityScoreIncrease(state.speciesUuid);
     allocateOriginAsi(state, "species", profile.abilities);
   });
 
-  // Name: rolled in the chosen species' style (the generator falls back to a generic pool).
+  // Advancement choices across all three origins (and the features/feats they grant).
+  await attempt("choices", () => fillAdvancementChoices(state, source, profile));
+
+  // Name: rolled in the chosen species' style (the generator falls back to a generic pool) — after
+  // the choices, because the lineage is one of them and a Blood Elf is not named like a Night Elf.
   await attempt("name", () => {
     if ( fixedName ) { state.details.name = fixedName; return; }
     // Some species ship without an identifier (every Ravenloft lineage does), so fall
     // back to the name — the generator folds either into the same style key.
     const species = source.card(state.speciesUuid);
-    const name = generateName(speciesNameKey(species));
+    const name = generateName(speciesNameKey(species, chosenLineage(state)));
     if ( name ) state.details.name = name;
   });
-
-  // Advancement choices across all three origins (and the features/feats they grant).
-  await attempt("choices", () => fillAdvancementChoices(state, source, profile));
 
   // The class's own cantrips and level-1 spells.
   await attempt("spells", async () => {

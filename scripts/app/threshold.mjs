@@ -6,6 +6,7 @@ import { allocateOriginAsi, applyQuickBuild } from "../data/quick-build.mjs";
 import { QUICK_LEVELS } from "../data/quick-climb.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
 import { generateName, speciesNameKey } from "../data/name-generator.mjs";
+import { chosenLineage, lineageCardName } from "../data/lineage-name.mjs";
 
 /**
  * The quick-build screen — "the threshold". Three art cards (class, species, background), a name,
@@ -200,8 +201,10 @@ const FIELDS = {
  * @param {object} ctx
  * @param {"class"|"species"|"background"} category
  * @param {string} uuid
+ * @param {object} [options]
+ * @param {() => number} [options.rng]   Picks the lineage of a species that has them.
  */
-export async function thresholdSelect({ state, source }, category, uuid) {
+export async function thresholdSelect({ state, source }, category, uuid, { rng = Math.random } = {}) {
   const spec = FIELDS[category];
   if ( !spec || !uuid ) return;
   state[spec.field] = uuid;
@@ -210,6 +213,29 @@ export async function thresholdSelect({ state, source }, category, uuid) {
   if ( category === "class" ) state.resetClassDependent();
   if ( spec.asi ) state.originAsi[spec.asi] = await source.abilityScoreIncrease(uuid);
   state.choiceCache = await resolveChoices(state, source);
+  if ( category === "species" && await pickThresholdLineage(state, rng) ) {
+    state.choiceCache = await resolveChoices(state, source);
+  }
+}
+
+/**
+ * Settle a species' lineage at random, as everything else on this screen is settled, so the name is
+ * rolled for the people the character will be — a Blood Elf is not named like a Night Elf — and the
+ * build keeps the same lineage (see {@link thresholdCreate}). Without it, Quick Build picked the
+ * lineage after the name was fixed.
+ * @param {object} state
+ * @param {() => number} rng
+ * @returns {Promise<boolean>}   Whether a lineage was picked.
+ */
+async function pickThresholdLineage(state, rng) {
+  const req = (state.choiceCache?.sources ?? [])
+    .filter(s => s.key === "species")
+    .flatMap(s => s.requirements ?? [])
+    .find(r => r.lineage && (r.options?.length ?? 0) > 0);
+  const options = req?.options.filter(o => !o.disabled) ?? [];
+  if ( !options.length ) return false;
+  (state.advChoices[req.source ?? "species"] ??= {})[req.selKey] = [options[Math.floor(rng() * options.length)].key];
+  return true;
 }
 
 /**
@@ -251,7 +277,7 @@ export async function thresholdRoll(ctx, category, { rng = Math.random, rerollNa
   const current = state[FIELDS[category]?.field ?? ""];
   const pool = cardsFor(source, category, rules).filter(c => c.uuid !== current);
   if ( !pool.length ) return;
-  await thresholdSelect(ctx, category, pool[Math.floor(rng() * pool.length)].uuid);
+  await thresholdSelect(ctx, category, pool[Math.floor(rng() * pool.length)].uuid, { rng });
   if ( category === "species" && rerollName ) thresholdRollName(ctx);
 }
 
@@ -283,7 +309,7 @@ export async function thresholdRollAll(ctx, { rng = Math.random, rules = null } 
  */
 export function thresholdRollName({ state, source }) {
   const species = source.card(state.speciesUuid);
-  const name = generateName(speciesNameKey(species));
+  const name = generateName(speciesNameKey(species, chosenLineage(state)));
   if ( name ) state.details.name = name;
 }
 
@@ -304,7 +330,7 @@ export async function seedThreshold(ctx, { rng = Math.random, rules = null } = {
     if ( state[FIELDS[category].field] ) continue;
     const pool = cardsFor(source, category, rules);
     if ( !pool.length ) continue;
-    await thresholdSelect(ctx, category, pool[Math.floor(rng() * pool.length)].uuid);
+    await thresholdSelect(ctx, category, pool[Math.floor(rng() * pool.length)].uuid, { rng });
   }
   if ( !state.details.name ) thresholdRollName(ctx);
 }
@@ -332,6 +358,8 @@ export async function thresholdContext({ state, source }, rules = null) {
     .filter(c => chosen[c])
     .map(c => ({ card: chosen[c], category: c }));
   const art = await resolveArtFor(requests);
+  // The lineage the screen settled for its species — "Elf (Blood Elf)" — as the Species page names it.
+  const lineage = chosenLineage(state);
 
   const cards = THRESHOLD_CATEGORIES.map(category => {
     const card = chosen[category];
@@ -339,7 +367,7 @@ export async function thresholdContext({ state, source }, rules = null) {
     return {
       category,
       label: t(`step.${category}.label`),
-      name: card?.name ?? "",
+      name: (card && (category === "species") && lineage) ? lineageCardName(card.name, lineage.label) : (card?.name ?? ""),
       uuid: card?.uuid ?? "",
       // Three tiers, each degrading cleanly into the next: the book's own scene, the item's icon
       // (always present, always legal to show), then our own frame. `seed` drives the frame's
@@ -408,6 +436,8 @@ export async function thresholdCreate({ state, source, spells, equipment }, el) 
     const result = await applyQuickBuild({ state, source, spells, equipment }, {
       speciesUuid: state.speciesUuid,
       backgroundUuid: state.backgroundUuid,
+      // The lineage the name was rolled for; Quick Build would otherwise pick its own.
+      lineage: chosenLineage(state),
       // The name in the field is the one the character gets. Without this the fill rolled a fresh
       // one over it — whatever the player typed, or the name a GM gave the blank sheet.
       name: state.details.name?.trim() || null

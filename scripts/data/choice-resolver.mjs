@@ -720,7 +720,9 @@ async function parseItemChoice(adv, ctx) {
     seen.add(uuid);
     seenNames.add(nameKey(doc.name));
     poolKeys.add(uuid);
-    options.push({ key: uuid, uuid, label: doc.name, img: doc.img, recommended: g.recommended });
+    // The identifier rides along so a lineage is still recognised in a world that translates names
+    // (the name generator styles a World of Warcraft lineage by it).
+    options.push({ key: uuid, uuid, label: doc.name, identifier: doc.system?.identifier ?? "", img: doc.img, recommended: g.recommended });
   }
   if ( cfg.allowDrops && cfg.restriction?.subtype ) {
     for ( const opt of await findRestrictedItems(cfg, maxPrereqLevel, ctx.rules) ) {
@@ -736,7 +738,7 @@ async function parseItemChoice(adv, ctx) {
       if ( !g ) continue;
       seen.add(opt.key);
       seenNames.add(nameKey(opt.label));
-      options.push({ key: opt.key, uuid: opt.uuid, label: opt.label, img: opt.img, recommended: g.recommended });
+      options.push({ key: opt.key, uuid: opt.uuid, label: opt.label, identifier: opt.identifier, img: opt.img, recommended: g.recommended });
     }
   }
   const pickKey = k => (typeof k === "string" ? k : k?.uuid);
@@ -1171,7 +1173,7 @@ export async function findRestrictedItems(cfg, maxLevel = null, rules = null) {
     if ( !pack.visible || !isUsableItemPack(pack, enabled) ) continue;
     try {
       const index = await packIndex(pack, {
-        fields: ["type", "system.type.value", "system.type.subtype", "system.source",
+        fields: ["type", "system.identifier", "system.type.value", "system.type.subtype", "system.source",
           "system.prerequisites.level", "system.prerequisites.items"]
       });
       for ( const e of index ) {
@@ -1192,7 +1194,7 @@ export async function findRestrictedItems(cfg, maxLevel = null, rules = null) {
         // prerequisites against the specific build — that check is build-dependent, unlike this
         // memoised scan.
         const prereqItems = Array.from(e.system?.prerequisites?.items ?? []);
-        byName.set(nk, { key: e.uuid, uuid: e.uuid, label: e.name, img: e.img, prereqItems });
+        byName.set(nk, { key: e.uuid, uuid: e.uuid, label: e.name, identifier: e.system?.identifier ?? "", img: e.img, prereqItems });
       }
     } catch ( err ) {
       log(`restricted-item scan failed for ${pack.collection}`, err);

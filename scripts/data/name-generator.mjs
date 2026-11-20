@@ -1,4 +1,4 @@
-import { NAME_STYLES, SPECIES_STYLE_ALIASES, PACKAGE_STYLE_ALIASES } from "./name-data.mjs";
+import { NAME_STYLES, SPECIES_STYLE_ALIASES, PACKAGE_STYLE_ALIASES, LINEAGE_STYLE_ALIASES } from "./name-data.mjs";
 // Species are matched on identifier *or* display name, so callers may pass either: "Elf, Drow" and
 // "elf-drow" fold to the same key.
 import { packageOf, slugify } from "./ids.mjs";
@@ -54,13 +54,34 @@ export function styleForSpecies(identifier) {
  * the publishing package names the people differently from another book using the same identifier —
  * that package's own style. World of Warcraft's Goblin and D&D's Goblin are both `goblin`; see
  * {@link PACKAGE_STYLE_ALIASES}.
+ *
+ * A chosen lineage whose people are named apart from the species wins over both: a Blood Elf and a
+ * Night Elf are one Elf species. See {@link LINEAGE_STYLE_ALIASES}.
  * @param {{uuid?: string, identifier?: string, name?: string}|null} card
+ * @param {{uuid?: string, identifier?: string, label?: string, name?: string}|null} [lineage]
+ *   The lineage chosen for it, as a choice option (`label`) or an item (`name`).
  * @returns {string}
  */
-export function speciesNameKey(card) {
+export function speciesNameKey(card, lineage = null) {
+  const byLineage = lineageStyle(lineage);
+  if ( byLineage ) return byLineage;
   const key = card?.identifier || card?.name || "";
   const byPackage = PACKAGE_STYLE_ALIASES[packageOf(card?.uuid)]?.[slugify(key)];
   return (byPackage && styleTables()[byPackage]) ? byPackage : key;
+}
+
+/**
+ * The style a lineage names its people in, or null when it takes its species'. Matched on the
+ * identifier without its "-lineage" suffix, else on the name — both slugify to the same key.
+ * @param {{uuid?: string, identifier?: string, label?: string, name?: string}|null} lineage
+ * @returns {string|null}
+ */
+function lineageStyle(lineage) {
+  const aliases = LINEAGE_STYLE_ALIASES[packageOf(lineage?.uuid)];
+  if ( !aliases ) return null;
+  const keys = [slugify(lineage.identifier).replace(/-lineage$/, ""), slugify(lineage.label ?? lineage.name)];
+  const style = keys.map(k => k && aliases[k]).find(Boolean);
+  return (style && styleTables()[style]) ? style : null;
 }
 
 /** A human-readable label for a style key ("half-orc" -> "Half-Orc", "default" -> "Generic"). */

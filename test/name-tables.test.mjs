@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { NAME_STYLES, SPECIES_STYLE_ALIASES, PACKAGE_STYLE_ALIASES } from "../scripts/data/name-data.mjs";
+import { NAME_STYLES, SPECIES_STYLE_ALIASES, PACKAGE_STYLE_ALIASES, LINEAGE_STYLE_ALIASES } from "../scripts/data/name-data.mjs";
 import { styleForSpecies, generateName, nameStyleOptions, speciesNameKey } from "../scripts/data/name-generator.mjs";
 
 /**
@@ -114,6 +114,70 @@ describe("name tables", () => {
     expect(speciesNameKey({ uuid: "Compendium.dnd-world-warcraft.origins.Item.x", identifier: "tauren" })).toBe("tauren");
     expect(speciesNameKey({ name: "Lupin" })).toBe("Lupin");
     expect(speciesNameKey(null)).toBe("");
+  });
+
+  it("points every lineage alias at a style that exists", () => {
+    for ( const [pkg, aliases] of Object.entries(LINEAGE_STYLE_ALIASES) ) {
+      for ( const [alias, style] of Object.entries(aliases) ) {
+        expect(NAME_STYLES[style], `${pkg} ${alias} -> ${style}`).toBeDefined();
+      }
+    }
+  });
+
+  /**
+   * World of Warcraft's fourteen lineages as the pack ships them, `[name, identifier, species, style]`.
+   * A lineage whose people are named like their species keeps the species' style.
+   */
+  const WOW = "Compendium.dnd-world-warcraft.origins.Item.";
+  const LINEAGES = [
+    ["Blood Elf", "blood-elf-lineage", "elf", "blood-elf"],
+    ["Void Elf", "void-elf-lineage", "elf", "void-elf"],
+    ["Night Elf", "night-elf-lineage", "elf", "night-elf"],
+    ["Nightborne", "nightborne-lineage", "elf", "nightborne"],
+    ["Zandalari Troll", "zandalari-troll-lineage", "troll", "zandalari-troll"],
+    ["Amani Troll", "amani-troll-lineage", "troll", "amani-troll"],
+    ["Darkspear Troll", "darkspear-troll-lineage", "troll", "troll"],
+    ["Highmountain Tauren", "highmountain-tauren-lineage", "tauren", "highmountain-tauren"],
+    ["Mulgore Tauren", "mulgore-tauren-lineage", "tauren", "tauren"],
+    ["Taunka", "taunka-lineage", "tauren", "taunka"],
+    ["Draenei", "draenei-lineage", "draenei", "draenei"],
+    ["Krokul", "krokul-lineage", "draenei", "krokul"],
+    ["Lightforged", "lightforged-lineage", "draenei", "draenei"],
+    ["Mar'ari", "marari-lineage", "draenei", "draenei"]
+  ];
+
+  it.each(LINEAGES)("names a %s in its own people's style", (label, identifier, species, style) => {
+    const lineage = { uuid: `${WOW}${identifier}`, identifier, label };
+    expect(styleForSpecies(speciesNameKey({ identifier: species }, lineage))).toBe(style);
+  });
+
+  it("names a Blood Elf and a Night Elf apart, though both are one Elf", () => {
+    const elf = { uuid: "Compendium.dnd-players-handbook.origins.Item.elf", identifier: "elf", name: "Elf" };
+    const blood = { uuid: `${WOW}bloodelf`, identifier: "blood-elf-lineage", label: "Blood Elf" };
+    const night = { uuid: `${WOW}nightelf`, identifier: "night-elf-lineage", label: "Night Elf" };
+    expect(speciesNameKey(elf, blood)).toBe("blood-elf");
+    expect(speciesNameKey(elf, night)).toBe("night-elf");
+    expect(NAME_STYLES["blood-elf"].surnames).toContain(generateName("blood-elf").split(" ")[1]);
+  });
+
+  it("finds a lineage by its identifier in a world that translates its name", () => {
+    const lineage = { uuid: `${WOW}zandalari`, identifier: "zandalari-troll-lineage", label: "Zandalari-Troll (übersetzt)" };
+    expect(speciesNameKey({ identifier: "troll" }, lineage)).toBe("zandalari-troll");
+  });
+
+  it("finds a lineage by its name when it has no identifier", () => {
+    const lineage = { uuid: `${WOW}taunka`, name: "Taunka" };
+    expect(speciesNameKey({ identifier: "tauren" }, lineage)).toBe("taunka");
+  });
+
+  it("keeps the species' style for a lineage of another book, or none", () => {
+    const elf = { identifier: "elf", name: "Elf" };
+    const drow = { uuid: "Compendium.dnd-players-handbook.origins.Item.drow", identifier: "drow", label: "Drow" };
+    // Another book's lineage that happens to share a Warcraft lineage's name is not a Warcraft one.
+    const imposter = { uuid: "Compendium.some-homebrew.origins.Item.x", identifier: "blood-elf-lineage", label: "Blood Elf" };
+    expect(speciesNameKey(elf, drow)).toBe("elf");
+    expect(speciesNameKey(elf, imposter)).toBe("elf");
+    expect(speciesNameKey(elf, null)).toBe("elf");
   });
 
   it("folds punctuation and case out of a lookup", () => {

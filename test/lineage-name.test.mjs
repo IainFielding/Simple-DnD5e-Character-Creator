@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import {
-  lineageShortName, lineageCardName, lineageArt, lineageRename, LINEAGE_FLAG
+  lineageShortName, lineageCardName, lineageArt, lineageRename, LINEAGE_FLAG, chosenLineage
 } from "../scripts/data/lineage-name.mjs";
 
 /**
@@ -53,5 +53,43 @@ describe("lineage naming", () => {
       { label: "Blood Elf", img: "icons/skills/wounds/blood-cells-red.webp" });
     expect(update).not.toHaveProperty("img");
     expect(update[`flags.sogrom-dnd5e-character-creator.${LINEAGE_FLAG}`].uuid).toBeNull();
+  });
+});
+
+/**
+ * The lineage the player holds: what the name generator styles a name by. Read from the picks
+ * themselves, so a resolve made before the pick still answers.
+ */
+describe("chosenLineage", () => {
+  const blood = { key: "Compendium.w.o.Item.blood", uuid: "Compendium.w.o.Item.blood", label: "Blood Elf", selKey: "advL", source: "species" };
+  const night = { key: "Compendium.w.o.Item.night", uuid: "Compendium.w.o.Item.night", label: "Night Elf", selKey: "advL", source: "species" };
+  const stateWith = (picks, { lineage = true, isSelected = false } = {}) => ({
+    advChoices: { species: { advL: picks } },
+    choiceCache: { sources: [
+      { key: "class", requirements: [{ lineage: true, selKey: "advL", source: "class", options: [blood] }] },
+      { key: "species", requirements: [
+        { selKey: "advS", source: "species", options: [] },
+        { lineage, selKey: "advL", source: "species", options: [{ ...blood, isSelected }, night] }
+      ] }
+    ] }
+  });
+
+  it("returns the picked lineage's option", () => {
+    expect(chosenLineage(stateWith([night.key]))?.label).toBe("Night Elf");
+  });
+
+  it("reads a pick stored as an object", () => {
+    expect(chosenLineage(stateWith([{ uuid: blood.key }]))?.label).toBe("Blood Elf");
+  });
+
+  it("goes by the picks, not a stale isSelected", () => {
+    expect(chosenLineage(stateWith([night.key], { isSelected: true }))?.label).toBe("Night Elf");
+  });
+
+  it("is null with no pick, no lineage choice or no resolve", () => {
+    expect(chosenLineage(stateWith([]))).toBeNull();
+    expect(chosenLineage(stateWith([night.key], { lineage: false }))).toBeNull();
+    expect(chosenLineage({ advChoices: {} })).toBeNull();
+    expect(chosenLineage(null)).toBeNull();
   });
 });
