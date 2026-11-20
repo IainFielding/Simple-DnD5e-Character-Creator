@@ -362,6 +362,14 @@ export function sourceSnapshot(actor) {
   const items = {};
   for ( const item of src.items ?? [] ) {
     const entry = rewrite(item, idMap, DROP_ITEM);
+    // The creator names a species for its lineage ("Elf (Drow)", maybe with the lineage's art) —
+    // presentation the native flow has no equivalent of. The flag keeps the compendium's name and
+    // image, so they are put back for the comparison; harness.mjs#assertLineageName checks the rename.
+    const renamed = item.flags?.[MODULE_FLAG]?.lineageName;
+    if ( renamed?.name ) {
+      entry.name = renamed.name;
+      if ( renamed.img ) entry.img = renamed.img;
+    }
     normaliseActivities(entry);
     normaliseEffectChanges(entry);
     normaliseModifyRecords(entry);
@@ -437,8 +445,10 @@ export function derivedSnapshot(actor) {
       dc: sys.attributes?.spell?.dc ?? sys.attributes?.spelldc ?? null
     },
     // Item names by type — the cheapest readable signal that the same things were granted.
+    // A species reads by its compendium name: the creator renames it for its lineage (see
+    // sourceSnapshot), which the native flow does not.
     itemsByType: [...actor.items].reduce((acc, i) => {
-      (acc[i.type] ??= []).push(i.name);
+      (acc[i.type] ??= []).push(i.flags?.[MODULE_FLAG]?.lineageName?.name ?? i.name);
       return acc;
     }, {})
   };

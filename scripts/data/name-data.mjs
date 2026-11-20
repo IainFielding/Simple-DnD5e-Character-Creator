@@ -15,7 +15,8 @@
  * 2014 and 2024 system packs, Player's Handbook, Eberron: Forge of the Artificer,
  * Heroes of the Borderlands, Ravenloft: Heroes of Horror, the DM's Toolkit species
  * pack (Spelljammer/Lorwyn/Ravnica/Planescape reprints), Theros and Wild Beyond the
- * Witchlight — resolves to a style below; see {@link SPECIES_STYLE_ALIASES}. Ember
+ * Witchlight, World of Warcraft — resolves to a style below; see {@link SPECIES_STYLE_ALIASES}
+ * and {@link PACKAGE_STYLE_ALIASES}. Ember
  * is deliberately absent: its builder owns naming, so the generator never runs there.
  * Every given-name pool holds at least twenty entries, and every non-empty surname
  * pool at least twelve, so no style repeats itself noticeably in play.
@@ -57,7 +58,7 @@ export const NAME_STYLES = {
 
   // Whimsical, busy, often double-syllabled given names; nickname-ish surnames.
   gnome: {
-    male: ["Alston", "Alvyn", "Boddynock", "Brocc", "Burgell", "Dimble", "Eldon", "Erky", "Fonkin", "Frug", "Gerbo", "Gimble", "Glim", "Jebeddo", "Kellen", "Namfoodle", "Orryn", "Pock", "Roondar", "Seebo", "Sindri", "Warryn", "Wrenn", "Zaffrab", "Zook", "Bimble", "Cogsly", "Fibblestib", "Gallywix", "Nim", "Sprocket", "Tinder", "Whizzle", "Zibbick", "Quill", "Fenwick", "Bippin", "Boddin", "Brannock", "Cobble", "Dabbledob", "Dimwick", "Fanlo", "Fizzik", "Flimble", "Gandin", "Gimbo", "Glimwick", "Grondle", "Hobble", "Jebbin", "Kribble", "Lorbin", "Mickle", "Nabbin", "Nimbus", "Oglin", "Pallabar", "Pindle", "Quillo", "Rondle", "Snibbet", "Sprig", "Thistle", "Tock", "Tumblin", "Uggle", "Vondle", "Whibble", "Wobbin", "Yondle", "Zimble"],
+    male: ["Alston", "Alvyn", "Boddynock", "Brocc", "Burgell", "Dimble", "Eldon", "Erky", "Fonkin", "Frug", "Gerbo", "Gimble", "Glim", "Jebeddo", "Kellen", "Namfoodle", "Orryn", "Pock", "Roondar", "Seebo", "Sindri", "Warryn", "Wrenn", "Zaffrab", "Zook", "Bimble", "Cogsly", "Fibblestib", "Fizzlecog", "Nim", "Sprocket", "Tinder", "Whizzle", "Zibbick", "Quill", "Fenwick", "Bippin", "Boddin", "Brannock", "Cobble", "Dabbledob", "Dimwick", "Fanlo", "Fizzik", "Flimble", "Gandin", "Gimbo", "Glimwick", "Grondle", "Hobble", "Jebbin", "Kribble", "Lorbin", "Mickle", "Nabbin", "Nimbus", "Oglin", "Pallabar", "Pindle", "Quillo", "Rondle", "Snibbet", "Sprig", "Thistle", "Tock", "Tumblin", "Uggle", "Vondle", "Whibble", "Wobbin", "Yondle", "Zimble"],
     female: ["Bimpnottin", "Breena", "Caramip", "Carlin", "Donella", "Duvamil", "Ella", "Ellyjobell", "Ellywick", "Lilli", "Loopmottin", "Lorilla", "Mardnab", "Nissa", "Nyx", "Oda", "Orla", "Roywyn", "Shamil", "Tana", "Waywocket", "Zanna", "Bizzle", "Cogwen", "Fizzwidget", "Glimmer", "Jinx", "Mella", "Niddle", "Pippa", "Quenna", "Sproket", "Tinka", "Whirla", "Zelda", "Zibilna", "Bimblet", "Brindle", "Cobbie", "Dazzle", "Dimple", "Ellabel", "Fizzy", "Flinda", "Gemma", "Gindle", "Glimma", "Grettabel", "Hobbina", "Idabel", "Jibby", "Kinnabel", "Lorabel", "Mippy", "Nibblet", "Nimbella", "Ondelle", "Pennyla", "Pipsy", "Quilla", "Rillabel", "Snibbie", "Sparkle", "Tabby", "Thimbella", "Tinkabel", "Uffie", "Velvet", "Wibblet", "Winnabel", "Yippa", "Zibbet"],
     surnames: ["Beren", "Daergel", "Folkor", "Garrick", "Nackle", "Murnig", "Ningel", "Raulnor", "Scheppen", "Timbers", "Turen", "Camberwick", "Coggspindle", "Copperbottom", "Fiddlewidget", "Gearloose", "Glitterspark", "Greasethumb", "Knappenspring", "Leatherbritches", "Nimblecog", "Quickwrench", "Sparkfizzle", "Steamwhistle", "Tinkertop", "Trinketspring", "Wheezleworth", "Whirligig", "Wobbleknock", "Zappercrank", "Bellowsprocket", "Bobblewrench", "Brasswhistle", "Cinderspring", "Clockmender", "Cogwhistle", "Dazzlespark", "Fiddlecrank", "Flintwhistle", "Gadgetwright", "Gigglegear", "Glimmerwick", "Grindlespark", "Hammerfizz", "Jinglepocket", "Kettlespring", "Lampwhistle", "Nimbletinker", "Oddlewrench", "Pipspanner", "Puttergear", "Quibblecrank", "Rattlewidget", "Sprocketwhistle", "Tangleknot", "Thimblewhirl", "Tockspring", "Widgetbottom", "Windupwick", "Zizzlecog"]
   },
@@ -327,6 +328,93 @@ export const NAME_STYLES = {
     surnames: []
   },
 
+  // ---- World of Warcraft species (dnd-world-warcraft). Original names in each culture's sound; no
+  // canon character names. -------------------------------------------------------------------------
+
+  // Dracthyr: long draconic names, hissed and rolled; no family names.
+  dracthyr: {
+    male: ["Vaelthrix", "Sorrakar", "Kalthesh", "Ithrazen", "Morvanth", "Zeltharion", "Drakhosh", "Pyrrethis", "Ulthravos", "Caztheros", "Velkarion", "Tharovesh", "Ranthagor", "Skelzhar", "Oradrith", "Xyvareth", "Galvarex", "Heskorran", "Nymrathos", "Brethazar", "Ezvalith", "Kordrethan"],
+    female: ["Vaelyssa", "Sorrinth", "Kalythra", "Ithrasa", "Morvessa", "Zelthyra", "Pyrrhessa", "Ulthiria", "Caztheria", "Velkira", "Tharovyn", "Ranthessa", "Skelvira", "Oradyss", "Xyvaria", "Galvessa", "Heskyra", "Nymrissa", "Brethyss", "Ezvyra", "Kordessa", "Amarethis"],
+    surnames: []
+  },
+
+  // Draenei: long open vowels, the doubled "aa" and "uu"; a single name.
+  draenei: {
+    male: ["Adaruun", "Belaar", "Coraanos", "Dethuun", "Eloraan", "Haadrim", "Iraluun", "Kaarven", "Lothraan", "Mehaar", "Noraaz", "Oruuvan", "Rathaar", "Soluun", "Taaresh", "Tovaar", "Valuun", "Zaavrem", "Hezaar", "Moraadon", "Kehlaar", "Ishuuro"],
+    female: ["Aaresha", "Belaani", "Coraalia", "Dethaana", "Elaanya", "Hesaari", "Iruuna", "Kaelaara", "Liraana", "Maruuni", "Naaressa", "Oshaala", "Raaveni", "Saaluna", "Taalira", "Uuressa", "Vehaari", "Yeshaana", "Zuuria", "Ameluun", "Ithaala", "Oruuna"],
+    surnames: []
+  },
+
+  // Earthen: stone-hewn, northern names; family names of rock and craft.
+  earthen: {
+    male: ["Granvold", "Basaltor", "Korrund", "Thurmak", "Brekhal", "Ostrum", "Durnvek", "Haldrom", "Gravik", "Skarnul", "Torvesk", "Uldrak", "Varnhal", "Bromskar", "Klinthar", "Dornvald", "Rugmar", "Sterrik", "Fjalgrim", "Hornak", "Ormvek", "Zarnhald"],
+    female: ["Granvyld", "Basalta", "Korrunda", "Thurma", "Brekka", "Ostrid", "Durnveig", "Haldra", "Gravilde", "Skarna", "Torvessa", "Uldra", "Varnhild", "Bromskja", "Klintha", "Dornvilde", "Rugmara", "Sterra", "Fjalra", "Hornessa", "Ormveig", "Zarnhild"],
+    surnames: ["Bedrockborn", "Geodeheart", "Quartzvein", "Shalebrow", "Strataforge", "Corestone", "Graniteward", "Feldsparr", "Obsidianhew", "Slatemantle", "Deepcrust", "Tremorhand", "Lodestar", "Gneissmark"]
+  },
+
+  // Forsaken: the names they had in life, old-fashioned and formal, with grim family names.
+  forsaken: {
+    male: ["Aldwick", "Bastien", "Corvin", "Dorian", "Emeric", "Faustin", "Gideon", "Horace", "Ignatius", "Jasper", "Lucan", "Mordecai", "Nathaniel", "Osmund", "Percival", "Quintus", "Remiel", "Silas", "Tobias", "Ulrich", "Valerian", "Wendell"],
+    female: ["Agatha", "Beatrice", "Cordelia", "Drusilla", "Evangeline", "Florence", "Gwendolyn", "Hester", "Imogen", "Josephine", "Lenore", "Mathilde", "Morwen", "Octavia", "Prudence", "Rosalind", "Seraphine", "Temperance", "Ursula", "Vesper", "Winifred", "Ysolde"],
+    surnames: ["Ashgrave", "Blightwood", "Coldmarrow", "Duskwither", "Gravewick", "Hollowbone", "Mournvale", "Pallmoor", "Rotwell", "Sablecross", "Tombridge", "Wraithmore", "Cinderwake", "Bleakhallow"]
+  },
+
+  // Goblin (World of Warcraft): short, buzzing names; family names that sound like a sales pitch.
+  "warcraft-goblin": {
+    male: ["Bixxle", "Crankz", "Dizbot", "Fizznuk", "Gribbz", "Hackzo", "Jinxo", "Kazzik", "Lugnut", "Nixwick", "Pazzle", "Quibbs", "Razzik", "Snikkit", "Tazzle", "Vexx", "Wizzlo", "Zeeb", "Grubnik", "Moxle", "Ratchik", "Blixo"],
+    female: ["Bizzy", "Cogga", "Dazzla", "Fizzeta", "Glitzi", "Hexxa", "Jazzle", "Kitzi", "Lixxa", "Mizza", "Nikka", "Pixxa", "Quizzi", "Rizza", "Sprocka", "Tixxie", "Vizzy", "Wixxa", "Zappa", "Grizza", "Moxxie", "Bazzia"],
+    surnames: ["Coinsnatch", "Gearsprocket", "Boltbrain", "Sparkfuse", "Cashgrab", "Fusewhistle", "Profitwick", "Scrapwrench", "Haggleby", "Tinkerspend", "Boomgrin", "Quickhaggle", "Rivetjaw", "Overclock"]
+  },
+
+  // Haranir: green, growing names; family names from root, moss and bloom.
+  haranir: {
+    male: ["Thornel", "Rhizar", "Bramwyr", "Moskar", "Fernath", "Loamir", "Tendrus", "Barkell", "Cerrun", "Dappel", "Glenrith", "Hollin", "Ivrast", "Lichan", "Merrowen", "Nettar", "Oskeld", "Rootvar", "Spurran", "Taproth", "Wyldar", "Yewen"],
+    female: ["Thornia", "Rhizla", "Bramwen", "Mossa", "Ferna", "Loamra", "Tendra", "Barkla", "Cerrea", "Dappla", "Glenna", "Hollia", "Ivra", "Lichel", "Merrowyn", "Nettira", "Oskra", "Rootha", "Spurra", "Taprel", "Wyldra", "Yewna"],
+    surnames: ["Deeproot", "Mosshollow", "Underbloom", "Rootweaver", "Loamsong", "Fernshade", "Barkhide", "Sporelight", "Vinecradle", "Mycelwood", "Hollowgrowth", "Thornmantle", "Gloomcap", "Tanglemere"]
+  },
+
+  // Mechagnome: clipped, technical given names; family names of the workshop.
+  mechagnome: {
+    male: ["Axlo", "Boltrin", "Cogmar", "Dynlo", "Fluxen", "Gearvin", "Hydrik", "Ionbert", "Joulix", "Kilowen", "Lumbic", "Magnix", "Nanbert", "Ohmlin", "Pistrel", "Quarkin", "Rotorin", "Servik", "Torquil", "Voltrin", "Wattrin", "Zinkel"],
+    female: ["Axla", "Boltra", "Cogmira", "Dynla", "Fluxa", "Gearna", "Hydrila", "Ionna", "Joulia", "Kilowyn", "Lumbica", "Magnia", "Nanbra", "Ohmla", "Pistra", "Quarka", "Rotorra", "Servia", "Torqua", "Voltessa", "Wattia", "Zinka"],
+    surnames: ["Cogspinner", "Gearlock", "Springcoil", "Torquewright", "Flywheel", "Sparkplug", "Rivetsworth", "Cranksley", "Gyrobolt", "Ratchetson", "Dynamoth", "Wirewhistle", "Pistonbright", "Bitshifter"]
+  },
+
+  // Pandaren: one-syllable given names; family names of brewing, bamboo and weather.
+  pandaren: {
+    male: ["Bao", "Dai", "Feng", "Gan", "Hu", "Jun", "Kai", "Lun", "Ming", "Ning", "Pao", "Qiang", "Rong", "Shen", "Tao", "Wen", "Xun", "Yao", "Zhen", "Bo", "Heng", "Long"],
+    female: ["An", "Bai", "Chun", "Fen", "Hua", "Jia", "Lan", "Mian", "Ling", "Nuan", "Ping", "Qing", "Rui", "Shu", "Ting", "Wan", "Xia", "Yan", "Yue", "Zhi", "Hui", "Lian"],
+    surnames: ["Bamboobrew", "Mistpaw", "Jadebelly", "Pearlwhisker", "Riverbrew", "Silkfur", "Teapetal", "Thunderbelly", "Plumblossom", "Stonebrow", "Lotuswind", "Kegsong", "Cloudpaw", "Ricewind"]
+  },
+
+  // Tauren: broad, rolling names; family names from the plains, the herd and the sky.
+  tauren: {
+    male: ["Haroth", "Maheko", "Orrun", "Taklo", "Hevaro", "Kurohn", "Ahoka", "Bekanu", "Denohr", "Gahruk", "Ishkar", "Jorrah", "Kelonu", "Lorrak", "Mukaro", "Nahrun", "Pahkeo", "Rohken", "Sakaro", "Tohrun", "Ulakan", "Wahrok"],
+    female: ["Ahona", "Bekana", "Denaya", "Gahrena", "Ishala", "Jorana", "Kelona", "Lorahe", "Mukara", "Nahrena", "Pahka", "Rohana", "Sakari", "Tohrena", "Ulana", "Wahna", "Hareka", "Taneya", "Maheka", "Orrena", "Haveya", "Kurena"],
+    surnames: ["Stonemane", "Dawnstrider", "Prairiehorn", "Grasswind", "Cloudhoof", "Rivermane", "Sunhorn", "Earthbraid", "Stormhide", "Mesarunner", "Thunderstep", "Longplain", "Duskhoof", "Sagebraid"]
+  },
+
+  // Troll: hard consonants, the occasional apostrophe; a single name.
+  troll: {
+    male: ["Akarzu", "Dakhaz", "Gor'zan", "Hexuma", "Ikaro", "Jakkan", "Kazru", "Mahrek", "Nazuri", "Ozuk", "Rak'zen", "Shakku", "Tazrah", "Ulmaz", "Vazhi", "Wazu", "Yan'tak", "Zhakar", "Bozuk", "Dazrek", "Kwashi", "Muzanji"],
+    female: ["Akarza", "Dakhira", "Gor'zala", "Hexa'ni", "Ikara", "Jakka", "Kazra", "Mahri", "Nazala", "Ozala", "Rak'zia", "Shakara", "Tazra", "Ulmani", "Vazha", "Wazala", "Yan'tila", "Zhakira", "Bozala", "Dazri", "Kwasha", "Muzari"],
+    surnames: []
+  },
+
+  // Vulpera: quick, bright names for the caravan; family names of sand, sun and road.
+  vulpera: {
+    male: ["Fennik", "Sarrow", "Dusko", "Rassik", "Tumbo", "Zeffir", "Miro", "Pikkel", "Jassur", "Kettik", "Lazzo", "Nabbi", "Ossi", "Qerro", "Riko", "Tarrik", "Ullo", "Vasko", "Wikki", "Yazzo", "Bisko", "Hazzik"],
+    female: ["Fenna", "Sarra", "Duska", "Rassa", "Tummi", "Zeffa", "Mirri", "Pikka", "Jassa", "Ketta", "Lazza", "Nabba", "Ossa", "Qerra", "Rikka", "Sanda", "Tarri", "Ulla", "Vaska", "Wikka", "Yazza", "Biska"],
+    surnames: ["Dunetrotter", "Sandwhisker", "Brushtail", "Sunsnout", "Dustpelt", "Mirageear", "Oasisfinder", "Scrubtail", "Duneburrow", "Quickpaw", "Saltwind", "Copperear", "Heatshimmer", "Wagonwise"]
+  },
+
+  // Worgen: the formal names of a gaslit, rain-soaked kingdom; manor and moorland family names.
+  worgen: {
+    male: ["Ambrose", "Barnaby", "Cornelius", "Desmond", "Ellis", "Fitzroy", "Gilbert", "Harold", "Humphrey", "Jonah", "Laurence", "Mortimer", "Neville", "Oswin", "Phineas", "Reginald", "Rupert", "Sebastian", "Thaddeus", "Victor", "Walter", "Wilfred"],
+    female: ["Adelaide", "Beatrix", "Clementine", "Delphine", "Eleanor", "Felicity", "Georgiana", "Harriet", "Henrietta", "Isadora", "Juliet", "Lavinia", "Margaret", "Philippa", "Rosamund", "Sophronia", "Theodora", "Violet", "Wilhelmina", "Arabella", "Cecily", "Eugenia"],
+    surnames: ["Ashbury", "Blackwood", "Cresthaven", "Duskmoor", "Fogwell", "Hawthorne", "Lowmarsh", "Moorcroft", "Nightingale", "Pemberton", "Ravensworth", "Stormcliff", "Thornfield", "Whitcombe"]
+  },
+
   // Fallback for any unmapped species — a broad, neutral fantasy voice, deliberately the largest pool.
   default: {
     male: ["Aric", "Bram", "Caelum", "Doran", "Eron", "Fendrel", "Galdor", "Halric", "Joren", "Kael", "Soren", "Theron", "Aldan", "Borin", "Calder", "Daric", "Edric", "Faelin", "Gareth", "Hadon", "Ilric", "Jovan", "Korin", "Larem", "Maric", "Nerian", "Orin", "Perrin", "Quill", "Raen", "Sevrin", "Talen", "Ulric", "Varic", "Wystan", "Aldric", "Bevan", "Cael", "Doren", "Emeric", "Faron", "Gildas", "Haldor", "Ivor", "Jarek", "Kelvar", "Loran", "Merek", "Noren", "Phelan", "Rowan", "Serik", "Tomar", "Veylin", "Aeron", "Anwyl", "Arden", "Barric", "Brannic", "Caspian", "Cerric", "Corvan", "Dalen", "Darion", "Drevan", "Eamon", "Elric", "Emmeric", "Evrard", "Fenrick", "Fintan", "Galen", "Garvan", "Gideon", "Halden", "Harlin", "Idris", "Isen", "Jarric", "Jorven", "Kaeric", "Kester", "Laric", "Leoric", "Lucan", "Maldan", "Marek", "Nolric", "Oswin", "Owain", "Pellin", "Quinlan", "Rafferty", "Renn", "Roderin", "Sabin", "Sedric", "Sorrel", "Tavin", "Thorne", "Tobias", "Torren", "Ulmar", "Vandric", "Vesric", "Warric", "Yelric", "Zorin"],
@@ -389,4 +477,14 @@ export const SPECIES_STYLE_ALIASES = {
   triton: "triton",
   fairy: "fairy",
   harengon: "harengon"
+};
+
+/**
+ * Per-package overrides of {@link SPECIES_STYLE_ALIASES}, for an identifier two books use for two
+ * different peoples. World of Warcraft's Goblin and D&D's Goblin are both `goblin`: the D&D one
+ * keeps the goblinoid style, the Warcraft one its own. Keyed by the package that publishes the
+ * species, then by identifier; read through `name-generator.mjs#speciesNameKey`.
+ */
+export const PACKAGE_STYLE_ALIASES = {
+  "dnd-world-warcraft": { goblin: "warcraft-goblin" }
 };

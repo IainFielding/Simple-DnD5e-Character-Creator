@@ -44,10 +44,10 @@ describe("getEnabledPacks", () => {
     expect([...getEnabledPacks()].sort()).toEqual(["dnd5e.classes", "world.homebrew"]);
   });
 
-  it("before 6.1, excludes only what the setting switches off", () => {
-    install({ withIsSourceEnabled: false });
-    expect(getEnabledPacks()).toBeNull();
+  // dnd5e 6.1 is the module's minimum, so there is no setting-only fallback any more: without the
+  // system's rule there is nothing to filter by, and every pack is read.
+  it("filters nothing when dnd5e's source rule is absent", () => {
     install({ withIsSourceEnabled: false, setting: { "dnd5e.classes24": false } });
-    expect([...getEnabledPacks()].sort()).toEqual(["dnd5e.classes", "world.homebrew"]);
+    expect(getEnabledPacks()).toBeNull();
   });
 });

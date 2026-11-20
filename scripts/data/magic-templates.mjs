@@ -701,11 +701,9 @@ export function shellItemData({ base, baseUuid, shell, shellUuid, name }) {
     attunement: shell.system?.attunement || data.system?.attunement || "",
     activities
   };
-  // dnd5e 6.0.2 keeps a `rarities` set where earlier versions keep one `rarity`; write the shape the
-  // base item's own data uses.
+  // dnd5e keeps rarity as a `rarities` set (since 6.0.2, under the module's 6.1 minimum).
   const key = rarity ? (SYSTEM_RARITY[rarity] ?? rarity) : "";
-  if ( "rarities" in (base.system ?? {}) ) data.system.rarities = key ? [key] : [];
-  else data.system.rarity = key;
+  data.system.rarities = key ? [key] : [];
   data.effects = [...valuesOf(data.effects), ...valuesOf(shell.effects).map(e => structuredClone(e))];
   data._stats = { ...data._stats, compendiumSource: shellUuid ?? null };
   data.flags = {

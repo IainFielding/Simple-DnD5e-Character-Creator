@@ -2,6 +2,7 @@ import { t, log } from "../../config.mjs";
 import { advancementTitle } from "../../data/advancement-util.mjs";
 import { atLevel, advancementHint } from "../levelup-state.mjs";
 import { choiceBlurb, findRestrictedItems, evalItemPrereq, groupRecommended, recommendAuthoredPool } from "../../data/choice-resolver.mjs";
+import { recommends, specializationOf } from "../../data/specializations.mjs";
 
 /**
  * Feature choices — the `ItemChoice` advancements a level grants (a Fighting Style, a Maneuver,
@@ -217,6 +218,8 @@ async function buildOptions(record, st, spells) {
       // extra one): show it enumerated but as taken, not a fresh pick — it can't be chosen twice.
       const taken = !selected && !!st.ownedElsewhere?.has(uuid);
       options.push({ uuid, name: doc.name, img: doc.img, owned: false, selected, taken,
+        // Carried so a specialization's pick matches the same item from another package.
+        identifier: doc.system?.identifier ?? doc.identifier ?? null,
         disabled: taken || (!selected && st.full), recommended: hasReq && met });
     }
   });
@@ -246,10 +249,16 @@ export const choicesStep = {
     // One block per decision (see trait-step.mjs for why): each feature pick keeps its own
     // collapsible panel, titled and counted in its header.
     const blocks = [];
+    // The feats the class's World of Warcraft specialization suggests (its fighting style among
+    // them) join each block's Recommended group.
+    const spec = await specializationOf(state.classItem);
     for ( const record of records ) {
       const st = driver.choiceState(record);
       const hasOwned = st.replaceable && st.priorEntries.length > 0;
       const options = await buildOptions(record, st, spells);
+      // A spell ItemChoice's options are spells, matched against the book's spell picks.
+      const kind = (record.advancement.configuration?.type === "spell") ? "spell" : "feat";
+      for ( const o of options ) if ( !o.owned && recommends(spec, kind, o) ) o.recommended = true;
       record.exhausted = !st.full && !options.some(o => !o.owned && !o.selected && !o.disabled);
       const section = {
         index: state.choiceSteps.indexOf(record),

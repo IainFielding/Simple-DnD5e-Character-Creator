@@ -8,6 +8,7 @@ import { traitStep } from "./trait-step.mjs";
 import { grantStep } from "./grant-step.mjs";
 import { optionalGrantStep } from "./optional-grant-step.mjs";
 import { nativeFlowStep } from "./native-flow-step.mjs";
+import { specializationStep } from "./specialization-step.mjs";
 
 /**
  * The decision components that can appear on a single level's screen, in display order: hit points
@@ -21,7 +22,8 @@ import { nativeFlowStep } from "./native-flow-step.mjs";
  * `level` arg is because ONE screen shows all decisions for one character level, and each component
  * contributes a block to it. levelStep() below is the real step; it just composes these components.
  */
-const COMPONENTS = [hpStep, subclassStep, asiStep, choicesStep, traitStep, grantStep, optionalGrantStep,
+// The specialization leads: it is advice that colours the picks below it (first level screen only).
+const COMPONENTS = [specializationStep, hpStep, subclassStep, asiStep, choicesStep, traitStep, grantStep, optionalGrantStep,
   nativeFlowStep];
 
 /**
@@ -39,6 +41,7 @@ function routeFor(action) {
   if ( action.startsWith("optionalGrant") ) return optionalGrantStep;
   if ( action.startsWith("grant") ) return grantStep;
   if ( action === "pick-subclass" ) return subclassStep;
+  if ( action === "specPick" ) return specializationStep;
   return null;
 }
 

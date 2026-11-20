@@ -41,6 +41,56 @@
       {{/if}}
       <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
     </button>
+
+    {{!-- "Play as" and Specialization refine the class just chosen, so they sit beside the switcher
+          that names it. They lived in the side column once, which pushed the ability scores below
+          the fold. Both are World of Warcraft content and absent for any class without it.
+          "Play as": a hero class built on the class (Paladin → Death Knight); the class itself is
+          the first option. See class-step.mjs heroPickContext(). --}}
+    {{#with heroPick}}
+    {{!-- A menu rather than a <select>: each option carries the hero's badge, which an <option>
+          cannot show. <details> opens and closes itself; the shell closes it on an outside click or
+          Escape (creator-shell.mjs #wireBarMenus), and picking re-renders it closed. --}}
+    <div class="creator-work-bar-pick creator-hero-class">
+      <span data-tooltip="{{localize 'sogrom-dnd5e-character-creator.step.class.hero.hint'}}">{{localize "sogrom-dnd5e-character-creator.step.class.hero.title"}}</span>
+      <details class="creator-bar-menu">
+        <summary class="creator-bar-menu-current">
+          <img src="{{current.img}}" alt="">
+          <span>{{current.name}}</span>
+          <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </summary>
+        <ul class="creator-bar-menu-list" role="list">
+          {{#each options}}
+          <li>
+            <button type="button" class="creator-bar-menu-option {{#if selected}}is-selected{{/if}}"
+                    data-action="stepAction" data-step-action="pick-hero-class" data-hero="{{identifier}}"
+                    aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+              <img src="{{img}}" alt="">
+              <span>{{name}}</span>
+              {{#if selected}}<i class="fa-solid fa-check" aria-hidden="true"></i>{{/if}}
+            </button>
+          </li>
+          {{/each}}
+        </ul>
+      </details>
+    </div>
+    {{/with}}
+
+    {{!-- Specialization: the book's per-class guidance (Paladin → Holy, Protection, Retribution).
+          Optional, so "None" is an option; its picks are marked recommended later. See
+          class-step.mjs specPickContext(). --}}
+    {{#with specPick}}
+    <label class="creator-work-bar-pick creator-specialization">
+      <span data-tooltip="{{localize 'sogrom-dnd5e-character-creator.step.class.spec.hint'}}">{{localize "sogrom-dnd5e-character-creator.step.class.spec.title"}}</span>
+      <select data-step-change="pick-specialization">
+        <option value="" {{#unless chosen}}selected{{/unless}}>{{localize "sogrom-dnd5e-character-creator.step.class.spec.none"}}</option>
+        {{#each options}}
+        <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+        {{/each}}
+      </select>
+    </label>
+    {{/with}}
+
     <span class="creator-work-bar-note">
       {{localize "sogrom-dnd5e-character-creator.common.available"}}: {{count}}
     </span>
@@ -51,6 +101,13 @@
   <div class="creator-work-body">
     <div class="creator-work-page">
       {{#if hasSelection}}
+      {{!-- The chosen specialization's own advice, read before the class it narrows. --}}
+      {{#if specPick.intro}}
+      <aside class="creator-spec-intro">
+        <h3 class="creator-spec-intro-title">{{specPick.chosen}}</h3>
+        {{{specPick.intro}}}
+      </aside>
+      {{/if}}
       {{> "modules/sogrom-dnd5e-character-creator/templates/parts/work-detail.hbs" this}}
       {{/if}}
     </div>
@@ -76,29 +133,6 @@
     they have committed to a class.
   --}}
   <aside class="creator-work-side">
-    {{!-- "Play as": a World of Warcraft hero class built on the chosen class (Paladin → Death
-          Knight), when the GM shows hero classes here rather than as cards of their own. The class
-          itself is the first option. See class-step.mjs heroPickContext(). --}}
-    {{#with heroPick}}
-    <section class="creator-work-block creator-hero-class">
-      <h3 class="creator-work-block-title">{{localize "sogrom-dnd5e-character-creator.step.class.hero.title"}}</h3>
-      <p class="creator-lineage-hint">{{localize "sogrom-dnd5e-character-creator.step.class.hero.hint"}}</p>
-      <ul class="creator-lineage-list">
-        {{#each options}}
-        <li>
-          <button type="button" class="creator-choice-card {{#if selected}}is-selected{{/if}}"
-                  data-action="stepAction" data-step-action="pick-hero-class" data-hero="{{identifier}}"
-                  aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
-            <img class="creator-choice-card-img" src="{{img}}" alt="">
-            <span class="creator-choice-card-name">{{name}}</span>
-            {{#if selected}}<span class="creator-choice-card-check"><i class="fa-solid fa-check"></i></span>{{/if}}
-          </button>
-        </li>
-        {{/each}}
-      </ul>
-    </section>
-    {{/with}}
-
     {{#with targetLevel}}
     {{!--
       Target level: the creator always builds a level-1 character; anything above 1 hands off to

@@ -453,6 +453,9 @@ export async function buildCreator(
   state.classUuid = scenario.classUuid ?? null;
   // A World of Warcraft hero class, as the Class step's "Play as" records it.
   state.heroClass = scenario.heroClass ?? null;
+  // The specialization axis: recorded on the class as the Class page would, so the climb's level-ups
+  // read it (their Recommended marks and feat options) exactly as a player's would.
+  state.specialization = scenario.specialization ?? null;
   state.speciesUuid = scenario.speciesUuid ?? null;
   state.backgroundUuid = scenario.backgroundUuid ?? null;
   state.details.name = scenario.name;

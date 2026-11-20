@@ -62,15 +62,95 @@ export function chosenHeroClass(state, source) {
   return heroClassesFor(identifier).find(h => h.identifier === state.heroClass) ?? null;
 }
 
+/**
+ * Whether a book entry or page name is a hero class's. The module's hero names are localisation keys
+ * and its book is written in English, so in a world in another language the translated name and the
+ * book's own disagree. A name matches when it is the hero's translated name (a translated book), or
+ * when it slugs to the hero's identifier — "Death Knight" → `death-knight`, which is how the module
+ * coins its identifiers (an untranslated book). **Pure.**
+ * @param {string} name                                The entry's or page's name.
+ * @param {{identifier: string, name: string}} hero    From {@link heroClassesFor}.
+ * @returns {boolean}
+ */
+export function isHeroName(name, hero) {
+  if ( !name || !hero ) return false;
+  if ( name === hero.name ) return true;
+  const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return !!slug && (slug === hero.identifier);
+}
+
+/**
+ * A hero class's own description, from the module's book: the entry named for the hero ("Death
+ * Knight") opens with a page of the same name describing it. The large art the page opens with is
+ * left out; the smaller piece further down is moved to the front, so the class page can float it
+ * beside the text rather than after it. Null when the book has no such page.
+ * @param {{identifier: string, name: string}} hero   From {@link heroClassesFor}.
+ * @returns {Promise<string|null>}   Enriched HTML.
+ */
+export function heroDescription(hero) {
+  if ( !hero?.identifier || !wowConfig() ) return Promise.resolve(null);
+  if ( !HERO_TEXT.has(hero.identifier) ) {
+    HERO_TEXT.set(hero.identifier, (async () => {
+      const pack = game.packs?.get?.(`${PACKAGE}.book`);
+      const index = pack ? await pack.getIndex() : null;
+      const id = index?.find(e => isHeroName(e.name, hero))?._id;
+      const entry = id ? await pack.getDocument(id) : null;
+      const pages = [...(entry?.pages ?? [])].filter(p => (p.type === "text") && p.text?.content);
+      const page = pages.find(p => isHeroName(p.name, hero)) ?? null;
+      if ( !page ) return null;
+      const html = artFirst(stripLeadingEmbed(page.text.content));
+      return foundry.applications.ux.TextEditor.implementation.enrichHTML(html, { relativeTo: page, secrets: false });
+    })().catch(err => {
+      log(`warcraft: could not read ${hero.name}'s description`, err);
+      return null;
+    }));
+  }
+  return HERO_TEXT.get(hero.identifier);
+}
+
+/**
+ * The book a hero class comes from, as dnd5e names it: the module registers its book under
+ * `flags.dnd5e.sourceBooks` (a localisation key), which its own items' source badges read. Falls back
+ * to the module's title.
+ * @returns {string|null}
+ */
+export function warcraftSourceBook() {
+  const mod = game.modules?.get(PACKAGE);
+  if ( !mod?.active ) return null;
+  const books = mod.flags?.dnd5e?.sourceBooks ?? {};
+  const label = Object.values(books)[0];
+  return label ? game.i18n.localize(label) : (mod.title ?? null);
+}
+
+/** Hero identifier → promise of its enriched description. Cleared with the sources. */
+const HERO_TEXT = new Map();
+
+/**
+ * A page's text without the art it opens with: a leading paragraph holding nothing but an `@Embed`.
+ * @param {string} html
+ * @returns {string}
+ */
+export function stripLeadingEmbed(html) {
+  return String(html ?? "").replace(/^\s*<p>\s*@Embed\[[^\]]*\]\s*<\/p>/, "");
+}
+
+/**
+ * A page's text with its art paragraphs (a paragraph holding nothing but an `@Embed`) moved to the
+ * front, in their order, so the art can sit beside the text it illustrates.
+ * @param {string} html
+ * @returns {string}
+ */
+export function artFirst(html) {
+  const ART = /<p>\s*@Embed\[[^\]]*\]\s*<\/p>/g;
+  const text = String(html ?? "");
+  const art = text.match(ART) ?? [];
+  return art.length ? art.join("") + text.replace(ART, "") : text;
+}
+
 /** The raw hero-class entry for one class, or null. */
 function heroEntry(classIdentifier, heroId) {
   if ( !heroId ) return null;
   return wowConfig()?.heroClasses?.[classIdentifier]?.find(h => h.identifier === heroId) ?? null;
-}
-
-/** The hero class an existing class item was made as (its module flag), or null. */
-export function heroClassOf(item) {
-  return item?.flags?.[FLAG]?.heroClass ?? item?.getFlag?.(FLAG, "heroClass") ?? null;
 }
 
 /** An item's advancements as a list, whichever of dnd5e's two source shapes it is stored in. */
@@ -132,6 +212,33 @@ export async function applyHeroClass(data, heroId) {
   data.img = hero.img;
   foundry.utils.setProperty(data, `flags.${FLAG}.heroClass`, hero.identifier);
   return data;
+}
+
+/**
+ * Pet Specialization, which the module adds to a Beast Master Hunter's level-6 Roving grant (in its
+ * `dnd5e.preAdvancementManagerRender` hook, which the driver fires). The module keeps this uuid in a
+ * private constant, so it is repeated here — the one World of Warcraft item this file names.
+ */
+const PET_SPECIALIZATION = "Compendium.dnd-world-warcraft.classes.Item.wowrngPetSpecial";
+
+/**
+ * The "one or the other" a World of Warcraft grant offers, as a replacement map (`{base: alt}`) the
+ * level-up screen's pairs understand — or null for any other grant.
+ *
+ * The module makes the Hunter's level-6 grant optional and adds Pet Specialization to it, then
+ * turns its dialog's checkboxes into radio buttons: the Hunter takes Roving **or** Pet
+ * Specialization, never both. Plain optional grants are independent checkboxes on our screen, so
+ * this names the pair: the grant's one non-optional item (Roving, which dnd5e and the driver both
+ * keep by default) against Pet Specialization.
+ * @param {object} advancement   An ItemGrant advancement.
+ * @returns {Record<string, string>|null}
+ */
+export function exclusiveGrantPair(advancement) {
+  if ( !warcraftActive() || !advancement?.configuration?.optional ) return null;
+  const items = Array.from(advancement.configuration.items ?? []).map(i => (typeof i === "string") ? { uuid: i } : i);
+  if ( !items.some(i => i.uuid === PET_SPECIALIZATION) ) return null;
+  const bases = items.filter(i => !i.optional && (i.uuid !== PET_SPECIALIZATION));
+  return (bases.length === 1) ? { [bases[0].uuid]: PET_SPECIALIZATION } : null;
 }
 
 /* -------------------------------------------- */
@@ -219,6 +326,7 @@ const DOCS = new Map();
 
 /** Forget the transformed documents — called when the enabled sources or the Renown rule change. */
 export function resetWarcraftDocs() {
+  HERO_TEXT.clear();
   DOCS.clear();
 }
 

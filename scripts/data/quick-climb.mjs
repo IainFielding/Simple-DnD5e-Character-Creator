@@ -1,3 +1,4 @@
+import { recommendedInOrder, recommendsAny, specializationOf } from "./specializations.mjs";
 import { log, levelUpHpDefault } from "../config.mjs";
 import { QUICK_BUILD, FEATURE_PREFERENCES } from "./quick-build-data.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
@@ -78,6 +79,16 @@ export class QuickClimbProvider {
   /** Subclass name → uuid, resolved during {@link warm}. */
   #subclassUuid = null;
 
+  /**
+   * The World of Warcraft specialization the class follows, if any (see data/specializations.mjs):
+   * its subclass leads, its feats are preferred for feature choices and taken at improvements.
+   * @type {object|null}
+   */
+  #spec = null;
+
+  /** ASI decision record → the specialization feat to take there, filled by {@link warmDecisions}. */
+  #asiFeats = new Map();
+
   /** decision record → the trait keys chosen for it, filled by {@link warmDecisions}. */
   #traitPicks = new Map();
 
@@ -115,8 +126,9 @@ export class QuickClimbProvider {
    * @param {Item5e} classItem   The character's class item.
    */
   async warm(classItem) {
+    this.#spec = await specializationOf(classItem).catch(() => null);
     const names = this.#profile.subclasses ?? [];
-    if ( !names.length ) return;
+    if ( !names.length && !recommendsAny(this.#spec, "subclass") ) return;
 
     const identifier = classItem?.system?.identifier ?? "";
     const rules = classItem?.system?.source?.rules ?? null;
@@ -129,6 +141,12 @@ export class QuickClimbProvider {
     }
     if ( !cards.length ) return;
 
+    // The subclass the specialization names leads, where it is installed for this class.
+    const specSubclass = recommendedInOrder(this.#spec, "subclass", cards)[0];
+    if ( specSubclass ) {
+      this.#subclassUuid = specSubclass.uuid;
+      return;
+    }
     for ( const name of names ) {
       const match = cards.find(c => c.name?.toLowerCase() === String(name).toLowerCase());
       if ( match ) { this.#subclassUuid = match.uuid; return; }
@@ -187,15 +205,20 @@ export class QuickClimbProvider {
   /**
    * Spend an ability-score improvement down the class's priority order, +2 then +1.
    *
-   * A feat is the other thing this decision can take, and deliberately not offered: choosing a feat
+   * A feat is the other thing this decision can take, and not chosen by the table: choosing a feat
    * well depends on the whole build, a suggestion table cannot do it, and a *wrong* feat is harder
    * for a player to undo later than an ability increase. Increases are also what the 2014 quick-build
-   * sidebars themselves recommended.
+   * sidebars themselves recommended. The exception is a World of Warcraft specialization, whose book
+   * names the feats for later levels: one it names, offered and eligible, is taken instead (see
+   * {@link warmDecisions}).
    *
    * Only the first two priorities are raised, and never past 20 — the cap the driver would enforce
    * anyway, applied here so the allocation it is handed is already legal.
    */
   asi(rec) {
+    // The specialization names feats for later levels; take one where one was found eligible.
+    const feat = this.#asiFeats.get(rec);
+    if ( feat ) return { feat };
     // Read through the driver's own `asiState` rather than off the record: the record carries no
     // scores, and the budget is not simply `configuration.points` — it discounts fixed and locked
     // abilities, and a capstone's undecided bonus, exactly as the interactive screen does. Deriving
@@ -256,6 +279,29 @@ export class QuickClimbProvider {
       } catch ( err ) {
         log("quick climb: could not read trait options", err);
         this.#traitPicks.set(rec, []);
+      }
+    }
+
+    // A specialization feat for each improvement: the first it names that the picker offers and
+    // whose own prerequisites the character meets. A feat dnd5e would refuse leaves the improvement
+    // unspent, so anything doubtful falls back to the ability increase.
+    if ( recommendsAny(this.#spec, "feat") ) {
+      const chosen = new Set(this.#asiFeats.values());
+      for ( const rec of driver.asiSteps ?? [] ) {
+        if ( this.#asiFeats.has(rec) || !rec.advancement?.allowFeat ) continue;
+        try {
+          const { options } = await driver.asiFeatOptions(rec);
+          for ( const { uuid } of recommendedInOrder(this.#spec, "feat", options ?? []) ) {
+            if ( chosen.has(uuid) ) continue;
+            const doc = await fromUuid(uuid).catch(() => null);
+            if ( doc?.system?.assertPrerequisites?.(driver.clone, { showMessage: false }) !== true ) continue;
+            this.#asiFeats.set(rec, uuid);
+            chosen.add(uuid);
+            break;
+          }
+        } catch ( err ) {
+          log("quick climb: could not read the feat options", err);
+        }
       }
     }
 
@@ -321,15 +367,27 @@ export class QuickClimbProvider {
     // Names are resolved here, in the async warm, because matching a preference against a pool
     // means reading each document — which the synchronous accessor could never do.
     const named = new Map();
+    // The identifier rides along so the specialization's feats match the same feat from another
+    // package (see data/specializations.mjs), not only by name.
+    const identifiers = new Map();
     for ( const uuid of pool ) {
       if ( already.has(uuid) ) continue;
       const doc = await fromUuid(uuid).catch(() => null);
-      if ( doc?.name ) named.set(uuid, doc.name.toLowerCase());
+      if ( !doc?.name ) continue;
+      named.set(uuid, doc.name.toLowerCase());
+      identifiers.set(uuid, doc.system?.identifier ?? null);
     }
 
     const prefer = [...(this.#profile.features ?? []), ...FEATURE_PREFERENCES]
       .map(n => String(n).toLowerCase());
     const out = [];
+    // The specialization's feats lead (a Holy Paladin's Blessed Warrior, a Protection one's
+    // Interception), ahead of the table's preferences.
+    const candidates = [...named].map(([uuid, name]) => ({ uuid, name, identifier: identifiers.get(uuid) }));
+    for ( const { uuid } of recommendedInOrder(this.#spec, "feat", candidates) ) {
+      if ( out.length >= wanted ) break;
+      if ( !out.includes(uuid) ) out.push(uuid);
+    }
     for ( const want of prefer ) {
       if ( out.length >= wanted ) break;
       for ( const [uuid, name] of named ) {

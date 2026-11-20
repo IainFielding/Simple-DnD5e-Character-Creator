@@ -1,6 +1,6 @@
 import { t, allowedAlignments } from "../config.mjs";
 import { hasRulesPage } from "../data/rules-source.mjs";
-import { generateName, nameStyleOptions } from "../data/name-generator.mjs";
+import { generateName, nameStyleOptions, speciesNameKey } from "../data/name-generator.mjs";
 import { yieldTakeoverTo } from "../app/takeover.mjs";
 
 /**
@@ -154,7 +154,7 @@ export const detailsStep = {
         // Some species ship without an identifier (every Ravenloft lineage does), so fall
         // back to the name — the generator folds either into the same style key.
         const speciesCard = source?.card(state.speciesUuid);
-        const speciesId = speciesCard?.identifier || speciesCard?.name;
+        const speciesId = speciesNameKey(speciesCard);
         const style = (state.nameStyle && state.nameStyle !== "auto") ? state.nameStyle : speciesId;
         // "any" passes no gender, so the generator draws from both pools at random.
         const gender = state.nameGender === "any" ? "" : state.nameGender;

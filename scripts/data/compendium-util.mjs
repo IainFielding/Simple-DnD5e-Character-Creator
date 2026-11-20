@@ -15,37 +15,21 @@
  * @returns {Set<string>|null}
  */
 export function getEnabledPacks() {
-  // dnd5e 6.1 also hides, by default, any pack whose `flags.dnd5e.rulesVersion` differs from the
-  // world's rules (every 2014 SRD pack in a 2024 world, and the reverse). Its Compendium Browser,
-  // which the origin grids read through, applies that rule; ask the same function so spells,
-  // equipment and feat scans agree with the grids instead of offering 2014 spells beside no 2014
-  // classes. Older dnd5e has no such function and keeps the explicit-setting rule below.
-  const isSourceEnabled = dnd5e?.applications?.settings?.CompendiumBrowserSettingsConfig?.isSourceEnabled;
-  if ( typeof isSourceEnabled === "function" ) {
-    try {
-      const sources = new Set();
-      let excluded = false;
-      for ( const pack of game.packs ) {
-        if ( pack.documentName !== "Actor" && pack.documentName !== "Item" ) continue;
-        if ( isSourceEnabled.call(dnd5e.applications.settings.CompendiumBrowserSettingsConfig, pack) ) {
-          sources.add(pack.collection);
-        } else excluded = true;
-      }
-      return excluded ? sources : null;
-    } catch {
-      // Fall through to the setting-only rule.
-    }
-  }
+  // Asked of dnd5e's own rule, the one its Compendium Browser — and so our origin grids — applies:
+  // the GM's per-pack source settings, and by default no pack of the *other* rules edition (no 2014
+  // SRD pack in a 2024 world, and the reverse). Asking the same function keeps the spell, equipment
+  // and feat scans in step with the grids. It exists from dnd5e 6.1, the module's minimum.
+  const config = dnd5e?.applications?.settings?.CompendiumBrowserSettingsConfig;
+  if ( typeof config?.isSourceEnabled !== "function" ) return null;
   try {
-    const setting = game.settings.get("dnd5e", "packSourceConfiguration");
-    if ( !setting || typeof setting !== "object" ) return null;
-    if ( !Object.values(setting).some(v => v === false) ) return null;
     const sources = new Set();
-    for ( const { collection, documentName } of game.packs ) {
-      if ( documentName !== "Actor" && documentName !== "Item" ) continue;
-      if ( setting[collection] !== false ) sources.add(collection);
+    let excluded = false;
+    for ( const pack of game.packs ) {
+      if ( pack.documentName !== "Actor" && pack.documentName !== "Item" ) continue;
+      if ( config.isSourceEnabled(pack) ) sources.add(pack.collection);
+      else excluded = true;
     }
-    return sources;
+    return excluded ? sources : null;
   } catch {
     return null;
   }

@@ -72,8 +72,14 @@ export function planSpellReconciliation(actorLike) {
     if ( !bucket.granted.length || !bucket.chosen.length ) continue;
     // One granted copy claims one chosen copy. Two genuinely distinct grants of the same spell are
     // vanishingly rare, but pairing rather than sweeping keeps the arithmetic honest either way.
-    const survivor = bucket.granted[0];
-    const duplicate = bucket.chosen.find(candidate => mergeable(survivor, candidate));
+    // Every granted copy is tried in turn: a feat's grant that must stay apart (Fey Touched's Misty
+    // Step) can sit first in the bucket and must not stop an oath's grant of the same spell merging.
+    let survivor = null;
+    let duplicate = null;
+    for ( const granted of bucket.granted ) {
+      duplicate = bucket.chosen.find(candidate => mergeable(granted, candidate, actorLike));
+      if ( duplicate ) { survivor = granted; break; }
+    }
     if ( !duplicate ) continue;
 
     const level = Number(duplicate.system?.level ?? 0);
@@ -130,9 +136,10 @@ export async function reconcileGrantedSpells(actor) {
  *
  * @param {Item5e} granted
  * @param {Item5e} chosen
+ * @param {Actor5e|{items: Iterable<Item5e>}} actorLike
  * @returns {boolean}
  */
-function mergeable(granted, chosen) {
+function mergeable(granted, chosen, actorLike) {
   // Identity matched on `system.identifier`, which is deliberately loose enough to see the same
   // spell in two packages as one thing. The cost of that looseness is that a homebrew pack reusing
   // an official identifier for a different spell would match too, so the name has to agree as well.
@@ -142,9 +149,20 @@ function mergeable(granted, chosen) {
   // A feat's spell is its own entitlement. Magic Initiate grants Cure Wounds once per long rest
   // *and* a Cleric may prepare it normally; those are two different things the character can do, and
   // collapsing them would silently take one away.
+  //
+  // dnd5e tags *every* feat-type item's grants "feat:", class features included — a 2024 Paladin's
+  // "Oath of the Holy Spells", a Cleric's "Life Domain Spells". Those are the class's own always-
+  // prepared spells, not a feat's separate casting, so the granting item is looked up: only a
+  // class feature (`type.value` "class", subclass features included) may merge. Everything else stays
+  // apart — a real feat, a species trait ("race") or background feature, an uncategorised feat-type
+  // item (dnd5e's default `type.value` is "", not absent), and a grant whose owner cannot be found.
   const chosenSource = String(chosen.system?.sourceItem ?? "");
   const grantedSource = String(granted.system?.sourceItem ?? "");
-  if ( chosenSource.startsWith("feat:") || grantedSource.startsWith("feat:") ) return false;
+  if ( chosenSource.startsWith("feat:") ) return false;
+  if ( grantedSource.startsWith("feat:") ) {
+    const owner = grantOwner(granted, actorLike);
+    if ( owner?.system?.type?.value !== "class" ) return false;
+  }
 
   // Different slot pools are different resources — a Warlock's pact-magic copy and an ordinary
   // spell-slot copy are not interchangeable, so neither can stand in for the other.
@@ -171,13 +189,24 @@ function mergeable(granted, chosen) {
  * @returns {string}
  */
 function grantSourceName(item, actorLike) {
-  const origin = item.getFlag?.("dnd5e", "advancementOrigin") ?? item.flags?.dnd5e?.advancementOrigin ?? "";
-  const [ownerId] = String(origin).split(".");
-  if ( ownerId ) {
-    const owner = actorLike.items?.get?.(ownerId)
-      ?? [...(actorLike.items ?? [])].find(candidate => candidate.id === ownerId);
-    if ( owner?.name ) return owner.name;
-  }
+  const owner = grantOwner(item, actorLike);
+  if ( owner?.name ) return owner.name;
   const tag = String(item.system?.sourceItem ?? "");
   return tag.includes(":") ? tag.split(":")[1] : "";
+}
+
+/**
+ * The item whose advancement granted a spell — the id before the dot in its `advancementOrigin` —
+ * or null.
+ * @param {Item5e} item
+ * @param {Actor5e|{items: Iterable<Item5e>}} actorLike
+ * @returns {Item5e|null}
+ */
+function grantOwner(item, actorLike) {
+  const origin = item.getFlag?.("dnd5e", "advancementOrigin") ?? item.flags?.dnd5e?.advancementOrigin ?? "";
+  const [ownerId] = String(origin).split(".");
+  if ( !ownerId ) return null;
+  return actorLike?.items?.get?.(ownerId)
+    ?? [...(actorLike?.items ?? [])].find(candidate => candidate.id === ownerId)
+    ?? null;
 }

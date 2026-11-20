@@ -111,6 +111,29 @@ function assertBookComplete(book) {
 }
 
 /**
+ * A lineage scenario's creator build must read as the card the player picked: its species item
+ * carries the creator's lineage enchantment, and the prepared name is "Species (Lineage)" — the
+ * Goliath's "Cloud's Jaunt (Cloud Giant)" as "Goliath (Cloud Giant)". The comparison sets the
+ * enchantment aside (normalize.mjs), so this is where it is checked. Restates the naming rule
+ * rather than importing it, so a creator that stops naming the species is caught.
+ * @param {object} scenario
+ * @param {Actor} creator
+ */
+function assertLineageName(scenario, creator) {
+  const lineage = scenario.expectItems?.[0];
+  if ( !lineage || !scenario.speciesUuid ) return;
+  const species = creator.items.find(i => i.type === "race");
+  if ( !species ) return;
+  const flag = species.flags?.["sogrom-dnd5e-character-creator"]?.lineageName;
+  const short = /\(([^()]+)\)\s*$/.exec(lineage.name)?.[1]?.trim() ?? lineage.name;
+  const want = `${flag?.name ?? "?"} (${short})`;
+  if ( !flag?.name || (species.name !== want) ) {
+    throw new Error(`the creator's species should be renamed "${want}" for its lineage; `
+      + `it reads "${species.name}"${flag ? "" : " and carries no lineage flag"}`);
+  }
+}
+
+/**
  * Snapshot the native build as the creator is *meant* to leave it at the start of play.
  *
  * The 2024 Human's Resourceful trait gives Heroic Inspiration after every Long Rest, and a new
@@ -335,7 +358,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
     // whoever asks second, which is what makes a generated scenario comparable at all: the two
     // builds walk in different orders off different clones and still cannot disagree about what was
     // chosen. A scenario without `generate` answers only from its own table, exactly as before.
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario) });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario), prefer: scenario.prefer ?? null });
 
     // Both adapters record which answers they actually read, so an answer nobody wanted can be
     // caught below rather than quietly changing the character.
@@ -379,6 +402,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
     assertAnswersConsumed(scenario.answers ?? {}, consumed, advancementTypes(originDocs), report.diagnostics);
     assertBookComplete(book);
     assertExpectedItems(scenario.expectItems, { native, creator });
+    assertLineageName(scenario, creator);
     report.decisions = book.entries.map(({ askedBy, ...rest }) => ({ ...rest, askedBy: [...askedBy] }));
 
     // `render` opens each sheet in turn, for problems that only exist once something prepares an
@@ -949,7 +973,7 @@ export async function compareItem({ scenarioId, itemName, level = 20, incrementa
   let native = null;
   let creator = null;
   try {
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario) });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario), prefer: scenario.prefer ?? null });
     // The same tolerance `runScenario` grants a generating scenario. Without it the resolver's first
     // pass — which legitimately offers a narrower pool than the settled one — throws, and this tool
     // cannot be pointed at the sweep findings it exists to explain.
@@ -1802,7 +1826,7 @@ export async function probeNative({
   const byLevel = [];
   let actor = null;
   try {
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario) });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario), prefer: scenario.prefer ?? null });
     actor = await buildNative({ ...scenario, name: `${PREFIX}${scenario.name} [native]` }, {
       book,
       onLevel: (lvl, a) => {

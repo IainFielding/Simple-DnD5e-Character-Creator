@@ -32,6 +32,7 @@
  *   node run.mjs --sweep --jump           # the whole span in one manager, compared once at the end
  *   node run.mjs --sweep --axis species     # vary the species instead of the subclass
  *   node run.mjs --sweep --axis background  # vary the background, taking a feat at every ASI
+ *   node run.mjs --sweep --axis specialization  # every World of Warcraft specialization, answered as its book advises
  *   node run.mjs --sweep --shard 1/20     # one twentieth of it, for a smoke test
  *   node run.mjs --sweep --resume         # skip scenarios already in sweep-results.jsonl
  *   node run.mjs --sweep --fresh          # start a new results file over an unarchived one

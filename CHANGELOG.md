@@ -34,14 +34,36 @@ All notable changes to the Simple D&D Character Creator.
   can be built as a hero class: Death Knight, Demon Hunter, Evoker, Hunter, Mage, Priest, Shaman or
   Warrior. The hero's own features replace the class's, and a Death Knight, Demon Hunter or Evoker
   takes its fixed subclass. The same choice is offered when a character takes a new class at
-  level-up. By default it is a **Play As** choice on the class's page; the GM can show hero classes
-  as their own cards in the class list instead (**Hero classes** in the module settings). With
+  level-up. By default it is a **Play As** menu beside the class at the top of the Class page, showing
+  each hero's badge. The class stays chosen, so a Death Knight is still a Paladin in the class menu,
+  but the page shows the hero's own description and art from the World of Warcraft book, and the
+  book's name beside the title. The GM can show hero classes as their own cards in the class list
+  instead (**Hero classes** in the module settings). With
   dnd5e's Renown rule turned on, the Renown choices the module adds to classes, species and lineages
   are asked too. A Druid, Monk, Paladin, Rogue or Warlock also gets the module's class badge, as
   dragging the class onto a sheet does.
+- **World of Warcraft specializations.** The World of Warcraft book suggests a way to play each
+  class: Holy, Protection or Retribution for a Paladin, Arcane, Fire or Frost for a Mage. The Class
+  page now offers these as an optional **Specialization** menu beside the class. The page's title
+  names your choice, such as **Holy Paladin** or **Unholy Death Knight**, and the book's advice for
+  it opens the page. The subclass, spells and feats it suggests
+  are marked **Recommended for Holy** (or whichever you chose) when you pick them, at creation and at
+  every level-up, and Quick Build follows it: its subclass, its spells, its fighting style, and its
+  feats in place of ability increases where the character qualifies. The same menu opens the first
+  screen of every level-up, so a character can take up a specialization later, change it, or drop
+  it, and a class taken by multiclassing can choose one too.
+- **Names for World of Warcraft's peoples.** Rolling a name for a Dracthyr, Draenei, Earthen,
+  Forsaken, Goblin, Haranir, Mechagnome, Pandaren, Tauren, Troll, Vulpera or Worgen now uses names
+  in that people's own style instead of the generic list. A World of Warcraft Goblin gets its own
+  names, and a D&D Goblin keeps the ones it had.
+- **A Beast Master Hunter chooses Roving or Pet Specialization.** At level 6 the World of Warcraft
+  Hunter takes one or the other, and the level-up page now offers them as a choice of one instead of
+  two boxes that could both be ticked.
 
 ### Changed
 
+- **Needs dnd5e 6.1 and Foundry 14.367.** dnd5e 6.0 is no longer supported. Update dnd5e before
+  updating the module.
 - **Ready for dnd5e 6.1.** dnd5e 6.1 shows only the content for a world's own rules edition unless
   the GM turns the other edition on: a 2024 world hides the 2014 classes, species, backgrounds,
   spells and items, and a 2014 world hides the 2024 ones. The creator follows the same setting
@@ -58,9 +80,17 @@ All notable changes to the Simple D&D Character Creator.
   it before moving on, instead of finding it several pages later. Lineages from other modules show
   up too, as long as they name the species they belong to.
 - **Every lineage has its own card on the Species page.** The species list shows each lineage as a
-  card of its own, such as **Elf (Drow)**, **Elf (Blood Elf)** or **Dragonborn (Gold Dragon
-  Ancestor)**, instead of one Elf card with the lineage chosen beside it. Picking a card chooses
-  the species and the lineage together, and the lineage's own description follows the species'.
+  card of its own, such as **Elf (Drow)**, **Elf (Blood Elf)**, **Dragonborn (Gold Dragon
+  Ancestor)** or **Goliath (Cloud Giant)**, instead of one Elf card with the lineage chosen beside
+  it. Picking a card chooses the species and the lineage together, and the lineage's own description
+  follows the species'. A lineage with its own art, such as the Player's Handbook's Drow, shows it on
+  the card. The finished character's species reads the same way on the sheet, with the card's name
+  and art.
+- **The Class page shows the class's artwork.** Where the class's book has a painting of it, as the
+  Player's Handbook and Forge of the Artificer do, it sits beside the class's description.
+- **Back goes back to the list on the Class, Species and Background pages.** With a choice made,
+  Back reopens the list it was chosen from instead of leaving the page. With the list open, Back
+  goes to the previous page as before.
 
 ### Fixed
 
@@ -75,6 +105,15 @@ All notable changes to the Simple D&D Character Creator.
   is Skilled, with a background that also gives Skilled (Noble, Scribe or Charlatan, for example),
   ends up with two copies of the feat. The character had the right skills, but each copy recorded
   all six of them instead of its own three. Each copy now records only the skills chosen for it.
+- **A spell your oath or domain gives you, chosen again earlier.** A Paladin who picked Shield of
+  Faith at level 1 and took the Oath of Devotion at level 3 kept two copies of it, and the extra copy used
+  up one of their prepared spells. The chosen copy is now removed when the oath or domain grants the
+  spell. A spell from a feat, a species or a background is still kept separately, because you can
+  cast it in its own way as well.
+- **Check Character no longer reports a 2024 Ranger's second Hunter's Mark.** Favored Enemy both
+  gives you the spell and lets you cast it, and dnd5e keeps a copy of the spell for each. You
+  can't remove the second copy, and a character built without the creator has it too, so the check
+  doesn't report it any more.
 
 ## 3.4.0 — Milestone Levels & Check Character
 

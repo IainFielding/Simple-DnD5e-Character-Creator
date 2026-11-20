@@ -21,6 +21,7 @@ import { HouseRulesApp } from "./app/house-rules.mjs";
 import { LevelUpOptionsApp } from "./app/levelup-options.mjs";
 import { watchForeignWindows } from "./app/takeover.mjs";
 import { registerApi, launchCreator } from "./api.mjs";
+import { addDirectoryButton } from "./app/directory-button.mjs";
 
 /*
  * This is the module's entry point — module.json points Foundry here via "esmodules".
@@ -462,23 +463,12 @@ function rootElement(html) {
   return html?.[0] instanceof HTMLElement ? html[0] : null;
 }
 
-// Create the launch button and drop it into the directory header. Guards against adding it twice
-// (the hook can fire repeatedly) and falls back through a few known header containers because the
-// exact markup differs between Foundry/dnd5e versions.
+// The creator's launch button in the directory header (see app/directory-button.mjs).
 function injectLaunchButton(root) {
-  if ( !root || root.querySelector(".sogrom-launch") ) return;
-  const container = root.querySelector(".header-actions")
-    ?? root.querySelector(".directory-header .action-buttons")
-    ?? root.querySelector(".directory-header");
-  if ( !container ) return;
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "sogrom-launch";
   // `fa-d-and-d` is a Font Awesome *brand* glyph, so it needs `fa-brands`, not `fa-solid` — with
   // the wrong family it renders as an empty box. Font Awesome ships with Foundry, so no asset of
   // ours is involved.
-  button.innerHTML = `<i class="fa-brands fa-d-and-d" aria-hidden="true"></i> ${t("menu.launch")}`;
-  button.addEventListener("click", ev => { ev.preventDefault(); launchCreator(); });
-  container.appendChild(button);
+  addDirectoryButton(root, {
+    cls: "sogrom-launch", icon: "fa-brands fa-d-and-d", label: t("menu.launch"), onClick: launchCreator
+  });
 }

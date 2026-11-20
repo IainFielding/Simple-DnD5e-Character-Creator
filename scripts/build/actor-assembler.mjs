@@ -11,6 +11,7 @@ import { LevelUpDriver } from "../levelup/manager-driver.mjs";
 import { buildCreationManager, CreationChoiceProvider } from "./creation-advancement.mjs";
 import { reconcileGrantedSpells } from "./spell-reconcile.mjs";
 import { transformItemData } from "../data/warcraft.mjs";
+import { nameSpeciesForLineage } from "../data/lineage-name.mjs";
 
 /**
  * Whether a new character starts with Heroic Inspiration. The 2024 Human's Resourceful trait
@@ -95,6 +96,11 @@ export async function assembleActor(state, source, equipment) {
   // stages rather than drops, so the module's own drop handlers never see these items.
   for ( const data of items ) {
     await transformItemData(data, { heroClass: (data.type === "class") ? (state.heroClass ?? null) : null });
+    // The specialization the class is played towards stays with the class, so level-ups go on
+    // recommending its picks (see data/specializations.mjs).
+    if ( (data.type === "class") && state.specialization ) {
+      foundry.utils.setProperty(data, `flags.${MODULE_ID}.specialization`, state.specialization);
+    }
   }
 
   // Write the actor-level update: identity/visuals, the base ability scores, and the detail→item
@@ -134,6 +140,10 @@ export async function assembleActor(state, source, equipment) {
     if ( startsWithHeroicInspiration(actor.items) && !actor.system.attributes?.inspiration ) {
       await actor.update({ "system.attributes.inspiration": true }, { render: false });
     }
+
+    // The species item reads as the card the player picked — "Elf (Drow)", with the lineage's art
+    // where it has some. See data/lineage-name.mjs.
+    await nameSpeciesForLineage(actor, resolved);
   }
 
   // Add the spells chosen on the Spells step, as prepared class spells.

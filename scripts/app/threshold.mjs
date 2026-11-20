@@ -5,7 +5,7 @@ import { classGuide } from "../data/class-guide.mjs";
 import { allocateOriginAsi, applyQuickBuild } from "../data/quick-build.mjs";
 import { QUICK_LEVELS } from "../data/quick-climb.mjs";
 import { resolveChoices } from "../data/choice-resolver.mjs";
-import { generateName } from "../data/name-generator.mjs";
+import { generateName, speciesNameKey } from "../data/name-generator.mjs";
 
 /**
  * The quick-build screen — "the threshold". Three art cards (class, species, background), a name,
@@ -283,7 +283,7 @@ export async function thresholdRollAll(ctx, { rng = Math.random, rules = null } 
  */
 export function thresholdRollName({ state, source }) {
   const species = source.card(state.speciesUuid);
-  const name = generateName(species?.identifier || species?.name);
+  const name = generateName(speciesNameKey(species));
   if ( name ) state.details.name = name;
 }
 

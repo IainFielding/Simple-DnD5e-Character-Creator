@@ -5,7 +5,8 @@ import { resolveChoices } from "./choice-resolver.mjs";
 import { resolveFeatSpells, originGrantedSpellKeys } from "../steps/feat-spells-step.mjs";
 import { spellKey } from "../data/spell-identity.mjs";
 import { normalizePrepared, spellInfoFor, spellLimits } from "../steps/spells-step.mjs";
-import { generateName } from "./name-generator.mjs";
+import { findSpecialization, recommendedInOrder } from "./specializations.mjs";
+import { generateName, speciesNameKey } from "./name-generator.mjs";
 
 /**
  * The Quick Build engine: fill the whole CreatorState from the selected class's suggestion
@@ -119,7 +120,7 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
     // Some species ship without an identifier (every Ravenloft lineage does), so fall
     // back to the name — the generator folds either into the same style key.
     const species = source.card(state.speciesUuid);
-    const name = generateName(species?.identifier || species?.name);
+    const name = generateName(speciesNameKey(species));
     if ( name ) state.details.name = name;
   });
 
@@ -156,8 +157,13 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
     // A Wizard fills its whole six-spell book here; `normalizePrepared` then prepares the first of
     // them up to its allowance, exactly as picking them one by one on the Spells step would.
     const { maxCantrips, maxSpells } = spellLimits(state);
-    state.selectedCantrips = pickSpells(free(data.cantrips), profile.cantrips, maxCantrips);
-    state.selectedSpells = pickSpells(free(data.level1), profile.spells, maxSpells);
+    // A World of Warcraft specialization's suggested spells come first, ahead of the table's.
+    const spec = await findSpecialization(identifier, state.heroClass ?? null, state.specialization);
+    const prefer = (pool, names) => [...recommendedInOrder(spec, "spell", pool).map(s => s.name), ...(names ?? [])];
+    const cantripPool = free(data.cantrips);
+    const spellPool = free(data.level1);
+    state.selectedCantrips = pickSpells(cantripPool, prefer(cantripPool, profile.cantrips), maxCantrips);
+    state.selectedSpells = pickSpells(spellPool, prefer(spellPool, profile.spells), maxSpells);
     normalizePrepared(state);
   });
 

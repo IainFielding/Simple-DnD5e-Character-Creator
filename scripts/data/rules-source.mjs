@@ -45,8 +45,11 @@ const PACKS = {
  * creation needing a step of that name, and so two steps asking the same question (species and
  * background both land on 2024's single "Character Origin" page) can share one entry.
  * A topic with no meaningful page under an edition maps to null, and callers get nothing back.
- * `page` lists the names known to carry it — the Player's Handbook module and the system's free
- * rules word the same page differently — and `prefix` is the step-number fallback (see
+ * A 2024 topic names its page by `id` first: the Player's Handbook module and the system's free rules
+ * share the page ids as well as the entry id, though they word four of the pages differently, so the
+ * id finds the page in either without reading its name (dnd5e's own advice — its page names are
+ * written for the journal, and are not ours to depend on). `page` lists the names known to carry it,
+ * and `prefix` is the step-number fallback, for a copy of the book whose page ids differ (see
  * {@link pickPage}).
  *
  * Deliberately absent: **feats**. The 2014 rules have a real page for them (Chapter 6), but the 2024
@@ -56,31 +59,31 @@ const PACKS = {
  */
 const TOPICS = {
   class: {
-    2024: { prefix: "Step 1:", page: ["Step 1: Choose a Class"] },
+    2024: { id: "5ay66aAVgkgRH7qH", prefix: "Step 1:", page: ["Step 1: Choose a Class"] },
     2014: { entry: "Chapter 3: Classes", page: ["Overview"] }
   },
   species: {
-    2024: { prefix: "Step 2:", page: ["Step 2: Determine Origin", "Step 2: Character Origin"] },
+    2024: { id: "t1WP9VEevo4TOTXw", prefix: "Step 2:", page: ["Step 2: Determine Origin", "Step 2: Character Origin"] },
     2014: { entry: "Chapter 2: Races", page: ["Races"] }
   },
   background: {
-    2024: { prefix: "Step 2:", page: ["Step 2: Determine Origin", "Step 2: Character Origin"] },
+    2024: { id: "t1WP9VEevo4TOTXw", prefix: "Step 2:", page: ["Step 2: Determine Origin", "Step 2: Character Origin"] },
     2014: { entry: "Chapter 4: Personality and Background", page: ["Backgrounds"] }
   },
   abilities: {
-    2024: { prefix: "Step 3:", page: ["Step 3: Determine Ability Scores", "Step 3: Ability Scores"] },
+    2024: { id: "9o8NbQ1Ph2xCxlQh", prefix: "Step 3:", page: ["Step 3: Determine Ability Scores", "Step 3: Ability Scores"] },
     2014: { entry: "Chapter 7: Using Ability Scores", page: ["Ability Scores and Modifiers"] }
   },
   alignment: {
-    2024: { prefix: "Step 4:", page: ["Step 4: Choose an Alignment", "Step 4: Alignment"] },
+    2024: { id: "6ThVICG0QSRy7L0F", prefix: "Step 4:", page: ["Step 4: Choose an Alignment", "Step 4: Alignment"] },
     2014: { entry: "Chapter 4: Personality and Background", page: ["Alignment"] }
   },
   levelUp: {
-    2024: { page: ["Gaining a Level"] },
+    2024: { id: "iHbj5aJvc1T7i5YI", page: ["Gaining a Level"] },
     2014: { entry: "Chapter 1: Beyond 1st Level", page: ["Beyond 1st Level"] }
   },
   multiclassing: {
-    2024: { page: ["Multiclassing"] },
+    2024: { id: "vcs4jfEKRxPCsgXm", page: ["Multiclassing"] },
     2014: { entry: "Chapter 6: Customization Options", page: ["Multiclassing"] }
   }
 };
@@ -101,6 +104,10 @@ const TOPICS = {
 function pickPage(entry, target) {
   const pages = entry?.pages;
   if ( !pages ) return null;
+  if ( target.id ) {
+    const byId = pages.get?.(target.id) ?? pages.find?.(p => (p._id ?? p.id) === target.id);
+    if ( byId ) return byId;
+  }
   for ( const name of target.page ) {
     const hit = pages.find(p => p.name === name);
     if ( hit ) return hit;

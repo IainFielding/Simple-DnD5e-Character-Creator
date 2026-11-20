@@ -167,6 +167,14 @@ export class CreatorShell extends CreatorShellBase {
    * standing on; consumed once by {@link CreatorShell##restoreFocus}.
    */
   #focusAfterRender = null;
+  /**
+   * Whether the current pick step's (Class, Species, Background) choice is made and its list is
+   * closed, as of the last render. Back on that screen reopens the list rather than leaving the
+   * step: see {@link CreatorShell#_navBack}.
+   */
+  #pickerBehind = false;
+  /** The class bar's menu listeners, aborted on the next render or on close: see {@link CreatorShell##wireBarMenus}. */
+  #barMenuWiring = null;
 
   constructor(actor, options = {}, draft = null) {
     super(options);
@@ -308,6 +316,7 @@ export class CreatorShell extends CreatorShellBase {
     // Both derived from `flags`, rather than re-running every step's isComplete() twice more.
     const missing = REQUIRED_STEPS.filter(s => !flags[STEPS.indexOf(s)]);
     const lines = this.#stepLines(flags);
+    this.#pickerBehind = !this.#entry && !!stepContext.hasSelection && !this.#drawerOpen(step, stepContext);
 
     return {
       loading: this.#loading,
@@ -370,7 +379,7 @@ export class CreatorShell extends CreatorShellBase {
           // chooser is the one place behind them. The chooser itself is the front door: nothing
           // is behind it, so it is the one entry screen where Back stays dead.
           canBack: this.#entry ? (this.#entry !== "chooser")
-            : ((this._prevIndex() >= 0) || Boolean(this.#returnTo)),
+            : ((this._prevIndex() >= 0) || Boolean(this.#returnTo) || this.#pickerBehind),
           canNext: hasNext && flags[this._stepIndex],
           backLabel: t("nav.back"),
           nextLabel: t("nav.next"),
@@ -424,6 +433,7 @@ export class CreatorShell extends CreatorShellBase {
     if ( !this._stageRendered(options) ) return;
     // Selects/inputs don't fire click "actions"; wire their change events to the dispatcher.
     this._wireStepChanges(root);
+    this.#wireBarMenus(root);
     this._wireOverlays(root);
     this.#wireDragDrop(root);
     // Client-side filtering — no re-render, so the field keeps focus while typing. A spell step's
@@ -614,6 +624,14 @@ export class CreatorShell extends CreatorShellBase {
       else await clearDraft();
     }
     return super.close(options);
+  }
+
+  /** @override */
+  _onClose(options) {
+    // A class-bar menu left open as the window closes would keep its document listener.
+    this.#barMenuWiring?.abort();
+    this.#barMenuWiring = null;
+    super._onClose(options);
   }
 
   /**
@@ -996,6 +1014,10 @@ export class CreatorShell extends CreatorShellBase {
    */
   _navBack() {
     if ( this.#entry && (this.#entry !== "chooser") ) return this._openEntry("chooser");
+    // A pick step (Class, Species, Background) with its choice made: the list it was chosen from is
+    // what is behind it. Back reopens that list before it leaves the step, so changing your mind
+    // about the class, species or background is one click. With the list open, Back leaves as usual.
+    if ( this.#pickerBehind ) return this._setPicker(true);
     // The first step of a build that came in through an entry screen: the screen it came from is
     // what is behind it, so Back means that rather than nothing. Without this the custom path led
     // to a greyed Back on its very first screen, which reads as "there is no way back" on the one
@@ -1238,6 +1260,37 @@ export class CreatorShell extends CreatorShellBase {
   #drawerOpen(step, stepContext) {
     if ( !("hasSelection" in stepContext) ) return false;    // not a pick step; it has no drawer
     return !stepContext.hasSelection || this.state.pickerFor === step.id;
+  }
+
+  /**
+   * Close the class bar's open menus ("Play as", templates/steps/class.hbs) on a click outside them
+   * or on Escape, as a dropdown does. A `<details>` only closes when its own summary is clicked.
+   * The document listener lives while a menu is open, and only then — and never past the render that
+   * drew it: picking an option re-renders the step with the menu still open, so its `toggle` never
+   * fires closed. Every listener is tied to {@link CreatorShell##barMenuWiring}, aborted by the next
+   * render and by closing the window.
+   * @param {HTMLElement} root
+   */
+  #wireBarMenus(root) {
+    this.#barMenuWiring?.abort();
+    const menus = root.querySelectorAll(".creator-bar-menu");
+    if ( !menus.length ) { this.#barMenuWiring = null; return; }
+    const wiring = this.#barMenuWiring = new AbortController();
+    for ( const menu of menus ) {
+      const outside = ev => { if ( !menu.contains(ev.target) ) menu.open = false; };
+      menu.addEventListener("toggle", () => {
+        if ( menu.open ) document.addEventListener("pointerdown", outside, { capture: true, signal: wiring.signal });
+        else document.removeEventListener("pointerdown", outside, true);
+      }, { signal: wiring.signal });
+      // Escape closes an open menu and goes no further. A closed menu leaves it alone, so Escape on
+      // its summary still reaches the window.
+      menu.addEventListener("keydown", ev => {
+        if ( (ev.key !== "Escape") || !menu.open ) return;
+        ev.stopPropagation();
+        menu.open = false;
+        menu.querySelector("summary")?.focus();
+      }, { signal: wiring.signal });
+    }
   }
 
   /**

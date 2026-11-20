@@ -5,6 +5,8 @@ import {
 import { phbWeaponIcon } from "../data/weapon-source.mjs";
 import { bg3TraitIcon } from "../data/bg3-icons.mjs";
 import { findAsiFeats, classifyAsiFeats, evalContentPrereq } from "../data/choice-resolver.mjs";
+import { exclusiveGrantPair } from "../data/warcraft.mjs";
+import { recommends, specializationOf } from "../data/specializations.mjs";
 
 /**
  * Drives a native dnd5e {@link AdvancementManager} from the outside.
@@ -600,7 +602,15 @@ export class LevelUpDriver {
         // the right default besides: the world only carries these at all because the GM turned them
         // on, and the player can still decline in the wizard.
         await this.#seed(flow);
-        this.optionalGrantSteps.push({ level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item });
+        // A grant whose items are "one or the other" by its module's own rule — World of Warcraft's
+        // Roving-or-Pet-Specialization — is recorded as a replacement pair, so the screen offers the
+        // choice as alternatives instead of two boxes a player could both tick. The seed already
+        // holds the base (the non-optional item), which is the pair's default too.
+        const pair = exclusiveGrantPair(adv);
+        this.optionalGrantSteps.push({
+          level: flow.level, screenLevel: flow.level, advancement: adv, item: adv.item,
+          ...(pair ? { replacements: pair } : {})
+        });
         // An optional grant can *also* let the player choose the spell's casting ability — Cold
         // Caster's Ray of Frost may be cast with Intelligence, Wisdom or Charisma. The native screen
         // asks both questions at once; here the ability is its own decision, so it gets the same
@@ -1338,7 +1348,9 @@ export class LevelUpDriver {
     const entries = await findAsiFeats(level);
     const owned = new Set(record.advancement.actor?.identifiedItems?.keys() ?? []);
     const taken = this.#takenFeatNames(record);
-    return classifyAsiFeats(entries, level, owned, taken);
+    // The feats the class's World of Warcraft specialization suggests join the Recommended group.
+    const spec = await specializationOf(record.advancement.item);
+    return classifyAsiFeats(entries, level, owned, taken, spec ? e => recommends(spec, "feat", e) : null);
   }
 
   /**
@@ -1416,17 +1428,48 @@ export class LevelUpDriver {
       await record.advancement.apply(record.level, { type: "feat", uuid });
       this.clone.reset();
 
-      // Run the feat's own advancements (fixed ASI bonus, granted features, sub-choices).
+      // Run the feat's own advancements (fixed ASI bonus, granted features, sub-choices) — every level
+      // of them up to the character's, as dnd5e walks an item added mid-flow: a feat is not
+      // class-linked, so its levels are character levels. Walked at level 0 alone, the PHB's Ritual
+      // Caster taken at 19 lost the spells it picks at 5, 9, 13 and 17. See {@link featLevelWindow}.
       const featItem = this.#asiFeatItem(record.advancement);
       if ( featItem ) {
-        record.featSynth = await this.#ingestItemFeatures(featItem, 0);
-        // The feat's own advancements come off level-0 flows; surface any choices they reveal on the
-        // same screen as the granting ASI rather than a phantom "level 0" screen.
-        for ( const r of LevelUpDriver.#synthRecords(record.featSynth) ) r.screenLevel = record.level;
+        const classItem = record.advancement.item;
+        const targetClassLevel = this.steps.reduce((max, s) => Math.max(max, s.class?.level ?? 0), record.level);
+        const otherClassLevels = this.clone.items
+          .filter(i => (i.type === "class") && (i.id !== classItem?.id))
+          .reduce((sum, i) => sum + (Number(i.system?.levels) || 0), 0);
+        const { maxLevel, screenFor } = LevelUpDriver.featLevelWindow(record, targetClassLevel, otherClassLevels);
+        record.featSynth = await this.#ingestItemFeatures(featItem, maxLevel);
+        // A decision at or below this improvement's level goes on its screen rather than a phantom
+        // "level 0" one; a later one of a multi-level jump, on the screen of its own level.
+        for ( const r of LevelUpDriver.#synthRecords(record.featSynth) ) r.screenLevel = screenFor(r.level);
       }
       this.clone.reset();
       return true;
     });
+  }
+
+  /**
+   * How far to walk a feat taken at an ability-score improvement, and which screen each decision it
+   * reveals belongs on. **Pure.**
+   *
+   * A feat's advancement levels are *character* levels (it is not class-linked), so it is walked to
+   * the level-up's final character level: the class's target level plus the character's levels in
+   * its other classes. Screens are class levels, so a decision at character level `L` maps back by
+   * the same offset — and never onto a screen before the improvement that took the feat.
+   * @param {{level: number, screenLevel?: number}} record   The ASI decision that took the feat.
+   * @param {number} targetClassLevel   The class level this level-up finishes at.
+   * @param {number} otherClassLevels   The character's levels in its other classes.
+   * @returns {{maxLevel: number, screenFor: (characterLevel: number) => number}}
+   */
+  static featLevelWindow(record, targetClassLevel, otherClassLevels) {
+    const screen = record.screenLevel ?? record.level;
+    const offset = Number(otherClassLevels) || 0;
+    return {
+      maxLevel: targetClassLevel + offset,
+      screenFor: characterLevel => Math.max((Number(characterLevel) || 0) - offset, screen)
+    };
   }
 
   /* -------------------------------------------- */

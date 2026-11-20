@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { NAME_STYLES, SPECIES_STYLE_ALIASES } from "../scripts/data/name-data.mjs";
-import { styleForSpecies, generateName, nameStyleOptions } from "../scripts/data/name-generator.mjs";
+import { NAME_STYLES, SPECIES_STYLE_ALIASES, PACKAGE_STYLE_ALIASES } from "../scripts/data/name-data.mjs";
+import { styleForSpecies, generateName, nameStyleOptions, speciesNameKey } from "../scripts/data/name-generator.mjs";
 
 /**
  * The random-name tables.
@@ -77,7 +77,11 @@ describe("name tables", () => {
     ["Tortle", "tortle"],
     // Theros and Wild Beyond the Witchlight
     ["Centaur", "centaur"], ["Leonin", "leonin"], ["Minotaur", "minotaur"], ["Satyr", "satyr"],
-    ["Triton", "triton"], ["Fairy", "fairy"], ["Harengon", "harengon"]
+    ["Triton", "triton"], ["Fairy", "fairy"], ["Harengon", "harengon"],
+    // World of Warcraft (its Goblin is told from the D&D one by package — see below)
+    ["Dracthyr", "dracthyr"], ["Draenei", "draenei"], ["Earthen", "earthen"], ["Forsaken", "forsaken"],
+    ["Haranir", "haranir"], ["Mechagnome", "mechagnome"], ["Pandaren", "pandaren"], ["Tauren", "tauren"],
+    ["Troll", "troll"], ["Vulpera", "vulpera"], ["Worgen", "worgen"]
   ];
 
   it.each(SPECIES)("gives %s a style of its own", (name, identifier) => {
@@ -89,6 +93,27 @@ describe("name tables", () => {
     // identifier alone dropped all four onto the generic pool their own styles were written for.
     const name = generateName("Lupin", { gender: "female" });
     expect(NAME_STYLES.lupin.female).toContain(name.split(" ")[0]);
+  });
+
+  it("points every package alias at a style that exists", () => {
+    for ( const [pkg, aliases] of Object.entries(PACKAGE_STYLE_ALIASES) ) {
+      for ( const [alias, style] of Object.entries(aliases) ) {
+        expect(NAME_STYLES[style], `${pkg} ${alias} -> ${style}`).toBeDefined();
+      }
+    }
+  });
+
+  // Both books' Goblin is `goblin`: the D&D one keeps the goblinoid names it always had, the
+  // Warcraft one gets its own, told apart by the package that publishes it.
+  it("names World of Warcraft's Goblin apart from D&D's", () => {
+    const wow = { uuid: "Compendium.dnd-world-warcraft.origins.Item.goblin0000000000", identifier: "goblin", name: "Goblin" };
+    const dnd = { uuid: "Compendium.sogrom-dms-toolkit.species.Item.goblin0000000000", identifier: "goblin", name: "Goblin" };
+    expect(styleForSpecies(speciesNameKey(wow))).toBe("warcraft-goblin");
+    expect(styleForSpecies(speciesNameKey(dnd))).toBe("goblinoid");
+    // Anything else is its identifier, or its name when it has none.
+    expect(speciesNameKey({ uuid: "Compendium.dnd-world-warcraft.origins.Item.x", identifier: "tauren" })).toBe("tauren");
+    expect(speciesNameKey({ name: "Lupin" })).toBe("Lupin");
+    expect(speciesNameKey(null)).toBe("");
   });
 
   it("folds punctuation and case out of a lookup", () => {

@@ -40,6 +40,7 @@ import { choicesStep } from "./choices-step.mjs";
 import { t } from "../config.mjs";
 import { pinContext } from "../app/compare.mjs";
 import { hasRulesPage } from "../data/rules-source.mjs";
+import { lineageCardName, lineageArt } from "../data/lineage-name.mjs";
 import {
   ASI_ACTIONS, asiComplete, asiContext, asiHandle, asiHint, asiSummary
 } from "./origin-abilities-panel.mjs";
@@ -97,7 +98,7 @@ export function cardLineage(source, speciesUuid) {
       return {
         selKey: req.selKey,
         title: req.title,
-        options: req.options.map(o => ({ key: o.key, uuid: o.uuid ?? o.key, label: o.label }))
+        options: req.options.map(o => ({ key: o.key, uuid: o.uuid ?? o.key, label: o.label, img: o.img ?? null }))
       };
     })().catch(err => { memo.delete(speciesUuid); throw err; });
     memo.set(speciesUuid, promise);
@@ -126,6 +127,8 @@ async function lineageCards(source, cards) {
       out.push({
         ...card,
         name: lineageCardName(card.name, opt.label),
+        // The lineage's own art where it has some (the Player's Handbook's Drow); else the species'.
+        img: lineageArt(opt.img) ?? card.img,
         lineageKey: opt.key,
         lineageUuid: opt.uuid,
         lineageSel: lineage.selKey
@@ -133,16 +136,6 @@ async function lineageCards(source, cards) {
     }
   }
   return out;
-}
-
-/**
- * A lineage card's name: "Elf (Drow)". A lineage whose own name already ends in brackets — the
- * Goliath's "Cloud's Jaunt (Cloud Giant)" — reads "Goliath: Cloud's Jaunt (Cloud Giant)" instead of
- * nesting them.
- */
-function lineageCardName(species, lineage) {
-  const key = String(lineage).includes("(") ? "step.species.lineage.cardColon" : "step.species.lineage.card";
-  return t(key, { species, lineage });
 }
 
 /** The lineage the player holds for a species-step decision, or null. */
@@ -267,7 +260,7 @@ export function originStep({ id, icon, labelKey, instructionKey, field, cards, h
         selectedName: heldCard?.name ?? detail?.name ?? "",
         // The bar and page title name the lineage too ("Elf (Blood Elf)"), and the lineage's own
         // description follows the species' — it is the part that tells one card from its neighbours.
-        detail: (detail && heldCard) ? { ...detail, name: heldCard.name } : detail,
+        detail: (detail && heldCard) ? { ...detail, name: heldCard.name, img: heldCard.img } : detail,
         lineageDetail: heldCard?.lineageUuid ? await source.detail(heldCard.lineageUuid).catch(() => null) : null,
         groups,
         // Null unless this origin both composes the panel and actually grants an increase; the

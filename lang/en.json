@@ -313,6 +313,9 @@
           "label": "Subclass",
           "intro": "Choose the subclass gained at this level."
         },
+        "specialization": {
+          "label": "Specialization"
+        },
         "grant": {
           "label": "Spell",
           "prompt": "Choose the spellcasting ability for this spell."
@@ -549,6 +552,7 @@
         "label": "Class & Abilities",
         "hint": "Choose a class to continue.",
         "switchPlaceholder": "Choose a Class",
+        "titleSpec": "{spec} {class}",
         "filterEditionAria": "Filter by rules edition",
         "filterAllEditions": "Both editions",
         "filterEdition": "{year} rules",
@@ -556,6 +560,12 @@
         "features": "Class Features",
         "spells": "Spells",
         "levelTag": "Lvl {level}",
+        "spec": {
+          "title": "Specialization",
+          "none": "None",
+          "hint": "Optional. The book's advice for playing this class one way: the subclass, spells and feats it suggests are marked as recommended when you choose them.",
+          "recommended": "Recommended for {spec}"
+        },
         "hero": {
           "title": "Play As",
           "hint": "A hero class is built on this class, with some of its features swapped for the hero's own."
@@ -590,8 +600,7 @@
           "prompt": "Every {species} has one of these. Hover over one to see what it gives you.",
           "change": "You can change this here or on the Choices step.",
           "hint": "Pick one under “{title}” to continue.",
-          "card": "{species} ({lineage})",
-          "cardColon": "{species}: {lineage}"
+          "card": "{species} ({lineage})"
         }
       },
       "background": {

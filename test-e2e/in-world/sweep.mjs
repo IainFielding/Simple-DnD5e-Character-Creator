@@ -12,6 +12,7 @@
  * | `subclass` (default) | every subclass installed | Human/Sage origins, points at every ASI |
  * | `species` | every 2024 species, and every lineage of each | Wizard/Evoker, Sage |
  * | `background` | every 2024 background | Fighter/Champion, Human — **a feat at every ASI** |
+| `specialization` | every World of Warcraft specialization, answered as its book advises | Human/Sage |
  *
  * The second and third exist because the first holds three things still that turned out to matter:
  * Human is the one PHB'24 species with no advancement above level 0, backgrounds were never varied
@@ -626,11 +627,77 @@ async function renownScenarios({ level, incremental }) {
   };
 }
 
+/**
+ * The specialization axis: every World of Warcraft specialization the book describes, on the class
+ * (or hero class) it is written for — Holy, Protection and Retribution Paladin, Blood, Frost and
+ * Unholy Death Knight, and so on — each answered the way the book recommends.
+ *
+ * The subclass is the one the specialization names (else the hero's fixed one, else the class's
+ * first). Every other decision is generated as usual, except that the specialization's picks lead:
+ * its fighting style and other feature feats where an `ItemChoice` offers them, its spells where a
+ * spell choice does, and its feats at ability-score improvements wherever one is a takeable general
+ * feat (else the points, as Quick Build does). Both sides read the same memoised answers, so this is
+ * the usual native-equivalence check over the builds a specialization steers a player to. The
+ * creator side also records the specialization on the class, so its level-ups run with it set.
+ *
+ * Quick Build itself has no native counterpart (see quick-build.mjs, an invariant suite); what this
+ * measures is that the choices it follows build the same both ways.
+ */
+async function specializationScenarios({ level, incremental }) {
+  const wow = game.modules.get(WOW);
+  if ( !wow?.active ) return { scenarios: [], skipped: [{ subclass: "specialization axis", reason: `${WOW} is not active` }] };
+  const { specializationsFor } = await import("/modules/sogrom-dnd5e-character-creator/scripts/data/specializations.mjs");
+  const heroTable = wow.config?.heroClasses ?? {};
+  const classes = await classesByIdentifier();
+  const subs = await allSubclasses();
+  const scenarios = [];
+  const skipped = [];
+  for ( const [identifier, candidates] of classes ) {
+    const cls = candidates.find(c => c.pack === "dnd-players-handbook.classes")
+      ?? candidates.find(c => String(c.rules) !== "2014");
+    if ( !cls ) continue;
+    const doc = await fromUuid(cls.uuid).catch(() => null);
+    const advId = doc ? subclassAdvancementId(doc) : null;
+    const own = subs.filter(s => s.classIdentifier === identifier).sort((a, b) => a.name.localeCompare(b.name));
+    for ( const hero of [null, ...(heroTable[identifier] ?? [])] ) {
+      for ( const spec of await specializationsFor(identifier, hero?.identifier ?? null) ) {
+        const named = spec.refs.find(r => r.type === "subclass");
+        const sub = (named && (own.find(s => s.uuid === named.uuid)
+            ?? own.find(s => s.name.toLowerCase() === String(named.name).toLowerCase())))
+          ?? (hero?.subclass ? (own.find(s => s.uuid === hero.subclass) ?? { uuid: hero.subclass, name: hero.subclass }) : null)
+          ?? own[0];
+        if ( !sub ) { skipped.push({ subclass: `${identifier}/${spec.id}`, reason: "no subclass installed" }); continue; }
+        const refsOf = type => spec.refs.filter(r => r.type === type)
+          .map(({ uuid, identifier: id, name }) => ({ uuid, identifier: id, name }));
+        const heroId = hero?.identifier ?? null;
+        scenarios.push({
+          id: `spec:${identifier}${heroId ? `/${heroId}` : ""}/${spec.id}`,
+          name: `Spec: ${spec.name} ${heroId ? game.i18n.localize(hero.name) : cls.name} ${level} — ${sub.name}`,
+          generate: true,
+          incremental,
+          heroClass: heroId,
+          specialization: spec.id,
+          prefer: { feat: refsOf("feat"), spell: refsOf("spell") },
+          speciesUuid: ORIGINS[2024].species,
+          backgroundUuid: ORIGINS[2024].background,
+          classUuid: cls.uuid,
+          targetLevel: level,
+          abilities: { ...ABILITIES },
+          answers: (advId && sub.uuid) ? { [advId]: sub.uuid } : {}
+        });
+      }
+    }
+  }
+  if ( !scenarios.length ) skipped.push({ subclass: "specialization axis", reason: "the book describes no specializations" });
+  return { scenarios, skipped };
+}
+
 export async function sweepScenarios({ level = 20, incremental = false, axis = "subclass" } = {}) {
   if ( axis === "species" ) return speciesScenarios({ level, incremental });
   if ( axis === "background" ) return backgroundScenarios({ level, incremental });
   if ( axis === "hero" ) return heroScenarios({ level, incremental });
   if ( axis === "renown" ) return renownScenarios({ level, incremental });
+  if ( axis === "specialization" ) return specializationScenarios({ level, incremental });
   const classes = await classesByIdentifier();
   const subclasses = await allSubclasses();
 

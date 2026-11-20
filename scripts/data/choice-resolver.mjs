@@ -1326,9 +1326,12 @@ export async function findAsiFeats(level) {
  *   dropped entirely rather than offered or recommended, since a second copy is never a legal pick
  *   (mirrors `Item5e#validatePrerequisites`, which would reject it) and re-showing your own pick back to
  *   you as "recommended" is exactly the confusing case this exists to avoid.
+ * @param {((entry: object) => boolean)|null} [suggested]  Whether the class's specialization suggests
+ *   a feat (World of Warcraft — see {@link module:data/specializations}); an eligible one is
+ *   recommended too.
  * @returns {{groups: object[]|null, options: object[], lockedOptions: object[]}}
  */
-export function classifyAsiFeats(entries, level, owned, takenNames = new Set()) {
+export function classifyAsiFeats(entries, level, owned, takenNames = new Set(), suggested = null) {
   const options = [];
   const lockedOptions = [];
   for ( const e of entries ) {
@@ -1345,7 +1348,8 @@ export function classifyAsiFeats(entries, level, owned, takenNames = new Set()) 
     if ( !levelLocked && (!hasReq || met) ) {
       options.push({
         uuid: e.uuid, name: e.name, img: e.img,
-        abilities: e.abilities ?? [], recommended: hasReq && met
+        // Recommended when the build unlocked it, or when the class's specialization names it.
+        abilities: e.abilities ?? [], recommended: (hasReq && met) || !!suggested?.(e)
       });
     } else {
       lockedOptions.push({

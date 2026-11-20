@@ -160,6 +160,17 @@ describe("rulesPageFor resolves a topic to a rulebook page", () => {
     expect(await rulesPageFor("levelUp", "2024")).toBeNull();
   });
 
+  // Both 2024 packs share the page ids as well as the entry id, so the id finds a page whatever its
+  // wording — dnd5e's advice is not to depend on its page names, which are written for the journal.
+  it("finds a 2024 page by its id, whatever the page is called", async () => {
+    packs = { "dnd5e.content24": pack([{
+      _id: "phbCreatingAChar", name: "Character Creation",
+      pages: [{ _id: "vcs4jfEKRxPCsgXm", name: "Taking More Than One Class" }, { _id: "x", name: "Multiclassing?" }]
+    }]) };
+    invalidateRulesPages();
+    expect((await rulesPageFor("multiclassing", "2024")).name).toBe("Taking More Than One Class");
+  });
+
   it("falls back to the system pack when the module is absent", async () => {
     expect(await hasRulesPage("class", "2024")).toBe(true);
   });

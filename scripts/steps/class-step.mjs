@@ -12,7 +12,9 @@ import { classGuide } from "../data/class-guide.mjs";
 import { t, log, levelUpEnabled, systemRulesEdition, MODULE_ID, SETTINGS } from "../config.mjs";
 import { pinContext } from "../app/compare.mjs";
 import { matchesRules } from "../data/source-index.mjs";
-import { heroClassesFor, readableDoc, chosenHeroClass as heroOf } from "../data/warcraft.mjs";
+import { resolveArtFor } from "../data/art-cache.mjs";
+import { heroClassesFor, heroDescription, warcraftSourceBook, readableDoc, chosenHeroClass as heroOf } from "../data/warcraft.mjs";
+import { specializationsFor } from "../data/specializations.mjs";
 
 /**
  * The Class step. Class selection and ability scores share one step: the chosen class's page and
@@ -133,11 +135,19 @@ export const classStep = {
       state.targetLevel = clampLevel(el.value);
       return;
     }
+    if ( action === "pick-specialization" ) {
+      // From the class bar's dropdown, where "None" clears it. A specialization only advises, so
+      // nothing else resets.
+      state.specialization = el.value || null;
+      return;
+    }
     if ( action === "pick-hero-class" ) {
-      // "Play as" on the class page. The hero swaps class features, so the class's own answers go.
+      // "Play as" in the class bar. The hero swaps class features, so the class's own answers go.
       const hero = el.dataset.hero || null;
       if ( !state.classUuid || (hero === (state.heroClass ?? null)) ) return false;
       state.heroClass = hero;
+      // A hero class has specializations of its own (a Death Knight's Blood, Frost, Unholy).
+      state.specialization = null;
       state.advChoices.class = {};
       state.choiceCache = await resolveChoices(state, source);
       return;
@@ -150,6 +160,7 @@ export const classStep = {
       const same = (state.classUuid === uuid) && ((state.heroClass ?? null) === hero);
       state.classUuid = same ? null : uuid;
       state.heroClass = same ? null : hero;
+      state.specialization = null;
       // Spells, class advancement picks, and class equipment are all class-specific.
       state.resetClassDependent();
       // Changing to a class of a different edition invalidates origins the new class would never
@@ -178,19 +189,28 @@ export const classStep = {
     const selected = state.classUuid;
     const hero = heroOf(state, source);
     let detail = selected ? await source.detail(selected) : null;
-    // A hero class reads as itself: its name and badge, and the features it swaps in.
+    // A hero class is played *as*, on top of the class: the page keeps the class's name and badge
+    // (the switcher names the class, "Play as" names the hero), but reads the hero's own
+    // description from the book and lists the features the hero swaps in.
     let groups = null;
     if ( selected && hero ) {
-      detail = detail ? { ...detail, name: hero.name, img: hero.img } : detail;
+      const text = await heroDescription(hero);
+      // The title row's book badge follows: a Death Knight is the World of Warcraft book's.
+      if ( detail && text ) detail = { ...detail, enriched: text, source: warcraftSourceBook() ?? detail.source };
       const doc = await readableDoc(await fromUuid(selected).catch(() => null), { heroClass: hero.identifier });
       groups = doc ? await source.advancementGroupsOf(doc) : null;
     } else if ( selected ) groups = await source.advancementGroups(selected);
+    // The book's own painting of the class (the Player's Handbook's journal-art/paladin.webp), at the
+    // head of the description so it floats beside the text as a hero's art does. A hero's page
+    // brings its own; a class whose book has none keeps the text alone.
+    if ( detail && !hero ) detail = await withClassArt(detail, source.card(selected));
     const asCards = heroClassDisplay() === "cards";
     // `guide` is the complexity rating and one-line role under each class's name; null for a class
     // the table doesn't know, which leaves the card as it always was.
     const cards = source.classes().flatMap(c => {
       const guide = classGuide(c.identifier);
-      const own = { ...c, selected: (c.uuid === selected) && !state.heroClass, guide };
+      // In cards mode a hero is a card of its own, so the class's card is selected only without one.
+      const own = { ...c, selected: (c.uuid === selected) && (!asCards || !state.heroClass), guide };
       if ( !asCards ) return [own];
       // Hero classes as cards of their own, after the class they are built on.
       return [own, ...heroClassesFor(c.identifier).map(h => ({
@@ -199,6 +219,17 @@ export const classStep = {
       }))];
     });
     const selectedCard = selected ? source.card(selected) : null;
+    const specPick = await specPickContext(state, selectedCard);
+    // The page's title names what is being played — "Unholy Death Knight", "Holy Paladin" — while
+    // the switcher keeps naming the class it is built on.
+    if ( detail && (hero || specPick?.chosen) ) {
+      const name = hero?.name ?? detail.name;
+      detail = {
+        ...detail,
+        title: specPick?.chosen ? t("step.class.titleSpec", { spec: specPick.chosen, class: name }) : name,
+        titleImg: hero?.img ?? null
+      };
+    }
     // Marks the off-edition cards hidden in place, so the first paint is already filtered.
     const rulesFilter = editionFilterContext(state, cards);
     return {
@@ -230,7 +261,8 @@ export const classStep = {
           : null
       }),
       targetLevel: targetLevelContext(state),
-      heroPick: asCards ? null : heroPickContext(state, selectedCard)
+      heroPick: asCards ? null : heroPickContext(state, selectedCard),
+      specPick
     };
   }
 };
@@ -238,6 +270,44 @@ export const classStep = {
 /* -------------------------------------------- */
 /*  Hero classes                                */
 /* -------------------------------------------- */
+
+/**
+ * The Specialization block: World of Warcraft's specializations for the chosen class (or the hero
+ * class it is played as), with the chosen one's introduction. Null when its book describes none.
+ * @param {import("../state/creator-state.mjs").CreatorState} state
+ * @param {object|null} card   The chosen class's card.
+ */
+async function specPickContext(state, card) {
+  if ( !card ) return null;
+  const specs = await specializationsFor(card.identifier, state.heroClass ?? null);
+  if ( !specs.length ) return null;
+  const chosen = specs.find(s => s.id === state.specialization) ?? null;
+  // Enriched relative to the book's page, so a relative link in the advice (`@UUID[.Item…]`)
+  // resolves as it does in the journal.
+  const page = chosen?.intro && chosen.pageUuid ? await fromUuid(chosen.pageUuid).catch(() => null) : null;
+  const intro = chosen?.intro
+    ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(chosen.intro, { relativeTo: page ?? undefined, secrets: false })
+    : null;
+  return {
+    options: specs.map(s => ({ id: s.id, name: s.name, selected: s.id === state.specialization })),
+    chosen: chosen?.name ?? null,
+    intro
+  };
+}
+
+/**
+ * A class page's detail with the class's book art leading its description, when the book has some.
+ * @param {object} detail   The class's detail (from SourceIndex#detail).
+ * @param {object|null} card
+ * @returns {Promise<object>}
+ */
+async function withClassArt(detail, card) {
+  if ( !card ) return detail;
+  const art = (await resolveArtFor([{ card, category: "class" }]).catch(() => null))?.get(card.uuid);
+  if ( !art?.path ) return detail;
+  const src = foundry.utils.escapeHTML?.(art.path) ?? art.path;
+  return { ...detail, enriched: `<figure class="creator-detail-art"><img src="${src}" alt=""></figure>${detail.enriched ?? ""}` };
+}
 
 /** How hero classes are offered: "detail" ("Play as" on the class page) or "cards". */
 function heroClassDisplay() {
@@ -253,12 +323,11 @@ function heroClassDisplay() {
 function heroPickContext(state, card) {
   const heroes = card ? heroClassesFor(card.identifier) : [];
   if ( !heroes.length ) return null;
-  return {
-    options: [
-      { identifier: "", name: card.name, img: card.img, selected: !state.heroClass },
-      ...heroes.map(h => ({ identifier: h.identifier, name: h.name, img: h.img, selected: state.heroClass === h.identifier }))
-    ]
-  };
+  const options = [
+    { identifier: "", name: card.name, img: card.img, selected: !state.heroClass },
+    ...heroes.map(h => ({ identifier: h.identifier, name: h.name, img: h.img, selected: state.heroClass === h.identifier }))
+  ];
+  return { options, current: options.find(o => o.selected) ?? options[0] };
 }
 
 /* -------------------------------------------- */

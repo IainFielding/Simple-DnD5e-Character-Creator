@@ -80,11 +80,19 @@ function spellCounts(actor) {
   return out;
 }
 
-/** The same spell owned twice from the same source: one copy is doing nothing. */
+/**
+ * The same spell owned twice from the same source: one copy is doing nothing.
+ *
+ * A spell dnd5e keeps as the cache of a feature's Cast activity (`flags.dnd5e.cachedFor`) is not
+ * counted. The system makes and removes it on its own, and some content asks for it beside a granted
+ * copy: the 2024 Ranger's Favored Enemy both grants Hunter's Mark and casts it, and a native build
+ * holds the same two. The player can do nothing about it, so it is not reported.
+ */
 function duplicateSpells(actor) {
   const seen = new Map();
   for ( const item of actor.items ) {
     if ( item.type !== "spell" ) continue;
+    if ( item.flags?.dnd5e?.cachedFor ) continue;
     const key = spellKey(item);
     if ( !key ) continue;
     const id = `${key}|${item.system?.sourceItem ?? ""}`;
