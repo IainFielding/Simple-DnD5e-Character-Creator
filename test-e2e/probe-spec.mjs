@@ -116,6 +116,27 @@ try {
   await pick(".creator-levelup-specialization select", "survival");
   report.levelUpSpecAfter = await levelUpSpec();
   await shot("3-hunter-levelup-spec");
+
+  // 6. Apply the level-up: the pick made on the clone must land on the real character's class.
+  report.applied = await ev(async () => {
+    const base = "/modules/sogrom-dnd5e-character-creator/test-e2e/in-world";
+    const { ScenarioChoiceProvider } = await import(`${base}/provider.mjs`);
+    const { AnswerBook } = await import(`${base}/answers.mjs`);
+    const shell = [...foundry.applications.instances.values()].find(a => a.constructor?.name === "LevelUpShell");
+    if ( !shell ) return { error: "no level-up window" };
+    const actor = shell.state.actor;
+    // Answer whatever the screens still ask (as the harness's climb does); the specialization is not
+    // an advancement, so this leaves it as picked above.
+    await shell.state.driver.autoResolve(new ScenarioChoiceProvider(new AnswerBook({ generate: true })));
+    await shell._finish();
+    await new Promise(r => setTimeout(r, 2000));
+    const cls = actor.items.find(i => i.type === "class");
+    return {
+      level: actor.system?.details?.level ?? null,
+      specialization: cls?.flags?.["sogrom-dnd5e-character-creator"]?.specialization ?? null,
+      windowOpen: foundry.applications.instances.has(shell.id)
+    };
+  });
   console.log(JSON.stringify(report, null, 1));
 } finally {
   await session?.close?.();
