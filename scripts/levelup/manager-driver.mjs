@@ -907,7 +907,19 @@ export class LevelUpDriver {
     const item = id ? this.clone.items.get(id) : null;
     if ( !item?.hasAdvancement ) return;
 
-    const targetLevel = this.steps.reduce((max, s) => Math.max(max, s.class?.level ?? 0), record.level);
+    const targetLevel = this.#targetClassLevel(record);
+    // dnd5e walks a class-linked pick (an invocation, a fighting style) by class level, but a true
+    // feat (`advancementClassLinked` false) by character level — as {@link applyAsiFeat} does for
+    // a feat taken at an improvement. Walked by class level, a multiclass character's feat picked
+    // through a feature choice would miss its advancements between the two (the Ritual Caster shape).
+    if ( item.system?.advancementClassLinked === false ) {
+      const { maxLevel, screenFor } = LevelUpDriver.featLevelWindow(
+        record, targetLevel, this.#otherClassLevels());
+      const synth = await this.#ingestItemFeatures(item, maxLevel);
+      for ( const r of LevelUpDriver.#synthRecords(synth) ) r.screenLevel = screenFor(r.level);
+      (record.pickSynth ??= {})[uuid] = synth;
+      return;
+    }
     const synth = await this.#ingestItemFeatures(item, targetLevel);
     // A pick's sub-decisions usually come off level-0 flows — surface them on the pick's screen.
     const screen = record.screenLevel ?? record.level;
@@ -915,6 +927,29 @@ export class LevelUpDriver {
       r.screenLevel = Math.max(r.screenLevel ?? r.level, screen);
     }
     (record.pickSynth ??= {})[uuid] = synth;
+  }
+
+  /**
+   * The class level this level-up finishes at, never below the decision's own level.
+   * @param {object} record   A decision record.
+   * @returns {number}
+   */
+  #targetClassLevel(record) {
+    return this.steps.reduce((max, s) => Math.max(max, s.class?.level ?? 0), record.level);
+  }
+
+  /**
+   * The character's levels in every class but the one being levelled — the offset between that
+   * class's levels (what {@link #targetClassLevel} and the screens count) and character levels. Taken
+   * from the levelled class rather than the decision's own item, which for a feature choice is a
+   * subclass or a feature, not a class.
+   * @returns {number}
+   */
+  #otherClassLevels() {
+    const classItem = this.steps.find(s => s.class)?.class?.item;
+    return this.clone.items
+      .filter(i => (i.type === "class") && (i.id !== classItem?.id))
+      .reduce((sum, i) => sum + (Number(i.system?.levels) || 0), 0);
   }
 
   /** Reverse whatever {@link #synthesizePick} folded in for one pick, if anything. */
@@ -1434,12 +1469,8 @@ export class LevelUpDriver {
       // Caster taken at 19 lost the spells it picks at 5, 9, 13 and 17. See {@link featLevelWindow}.
       const featItem = this.#asiFeatItem(record.advancement);
       if ( featItem ) {
-        const classItem = record.advancement.item;
-        const targetClassLevel = this.steps.reduce((max, s) => Math.max(max, s.class?.level ?? 0), record.level);
-        const otherClassLevels = this.clone.items
-          .filter(i => (i.type === "class") && (i.id !== classItem?.id))
-          .reduce((sum, i) => sum + (Number(i.system?.levels) || 0), 0);
-        const { maxLevel, screenFor } = LevelUpDriver.featLevelWindow(record, targetClassLevel, otherClassLevels);
+        const { maxLevel, screenFor } = LevelUpDriver.featLevelWindow(
+          record, this.#targetClassLevel(record), this.#otherClassLevels());
         record.featSynth = await this.#ingestItemFeatures(featItem, maxLevel);
         // A decision at or below this improvement's level goes on its screen rather than a phantom
         // "level 0" one; a later one of a multi-level jump, on the screen of its own level.

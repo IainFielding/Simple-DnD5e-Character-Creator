@@ -1,6 +1,7 @@
 import { t, allowedAlignments } from "../config.mjs";
 import { hasRulesPage } from "../data/rules-source.mjs";
 import { generateName, nameStyleOptions, speciesNameKey } from "../data/name-generator.mjs";
+import { chosenLineage } from "../data/lineage-name.mjs";
 import { yieldTakeoverTo } from "../app/takeover.mjs";
 
 /**
@@ -154,7 +155,8 @@ export const detailsStep = {
         // Some species ship without an identifier (every Ravenloft lineage does), so fall
         // back to the name — the generator folds either into the same style key.
         const speciesCard = source?.card(state.speciesUuid);
-        const speciesId = speciesNameKey(speciesCard);
+        // A lineage named apart from its species (a Blood Elf, a Zandalari Troll) takes its own style.
+        const speciesId = speciesNameKey(speciesCard, chosenLineage(state));
         const style = (state.nameStyle && state.nameStyle !== "auto") ? state.nameStyle : speciesId;
         // "any" passes no gender, so the generator draws from both pools at random.
         const gender = state.nameGender === "any" ? "" : state.nameGender;

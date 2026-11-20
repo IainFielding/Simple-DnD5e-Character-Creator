@@ -55,7 +55,11 @@ All notable changes to the Simple D&D Character Creator.
 - **Names for World of Warcraft's peoples.** Rolling a name for a Dracthyr, Draenei, Earthen,
   Forsaken, Goblin, Haranir, Mechagnome, Pandaren, Tauren, Troll, Vulpera or Worgen now uses names
   in that people's own style instead of the generic list. A World of Warcraft Goblin gets its own
-  names, and a D&D Goblin keeps the ones it had.
+  names, and a D&D Goblin keeps the ones it had. Lineages whose people are named differently get
+  their own styles too: a Blood Elf, Void Elf, Night Elf or Nightborne; a Zandalari or Amani Troll;
+  a Highmountain Tauren or Taunka; and a Krokul. The quick-start screen picks a lineage along with
+  the species and shows it on the species card, for example "Elf (Blood Elf)", and the character is
+  built with that lineage.
 - **A Beast Master Hunter chooses Roving or Pet Specialization.** At level 6 the World of Warcraft
   Hunter takes one or the other, and the level-up page now offers them as a choice of one instead of
   two boxes that could both be ticked.
@@ -110,6 +114,11 @@ All notable changes to the Simple D&D Character Creator.
   up one of their prepared spells. The chosen copy is now removed when the oath or domain grants the
   spell. A spell from a feat, a species or a background is still kept separately, because you can
   cast it in its own way as well.
+- **A feat chosen through a class feature, on a multiclass character.** A feat counts its own
+  levels by character level, not class level. When one was picked through a class feature at
+  level-up, such as a fighting style, the creator counted only the class's levels, so a multiclass
+  character missed any choice the feat makes at a higher level. It now counts the character's
+  levels, as it already did for a feat taken in place of an ability increase.
 - **Check Character no longer reports a 2024 Ranger's second Hunter's Mark.** Favored Enemy both
   gives you the spell and lets you cast it, and dnd5e keeps a copy of the spell for each. You
   can't remove the second copy, and a character built without the creator has it too, so the check

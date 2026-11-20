@@ -206,19 +206,24 @@ describe("resolveSubclass — nested feature advancements", () => {
  * A Ranger's level-2 "Fighting Style" ItemChoice whose "Druidic Warrior" pick carries its own
  * ItemChoice ("Choose Cantrips") — the PHB shape that must surface as a further decision.
  */
-function makeFightingStyleWorld() {
-  const clone = { items: makeItems([{ id: "clsRanger0000000", type: "class" }]), reset: () => {} };
+function makeFightingStyleWorld({ level = 2, otherClassLevels = 0, classLinked, flowLevel = 0 } = {}) {
+  const ranger = { id: "clsRanger0000000", type: "class", system: { levels: level } };
+  const classItems = [ranger];
+  if ( otherClassLevels ) classItems.push({ id: "clsFighter000000", type: "class", system: { levels: otherClassLevels } });
+  const clone = { items: makeItems(classItems), reset: () => {} };
   const styleFeat = { id: "featDruidicWarr0", name: "Druidic Warrior", hasAdvancement: true };
+  if ( classLinked !== undefined ) styleFeat.system = { advancementClassLinked: classLinked };
   const flowsByItem = new Map();
-  const cantripChoice = choiceFlow("ItemChoice", 0, styleFeat, "Choose Cantrips");
+  const cantripChoice = choiceFlow("ItemChoice", flowLevel, styleFeat, "Choose Cantrips");
   flowsByItem.set(styleFeat.id, [cantripChoice]);
 
-  const driver = new LevelUpDriver(makeManager({ steps: [classStep(2)], clone, flowsByItem }));
+  const step = { type: "forward", class: { item: ranger, level }, level };
+  const driver = new LevelUpDriver(makeManager({ steps: [step], clone, flowsByItem }));
 
   const uuid = "Compendium.phb.feats.Item.druidicWarrior";
   const choiceAdv = {
     type: "ItemChoice",
-    configuration: { choices: { 2: { count: 1, replacement: false } }, pool: [{ uuid }] },
+    configuration: { choices: { [level]: { count: 1, replacement: false } }, pool: [{ uuid }] },
     value: { added: {}, replaced: {} },
     getCounts(level) {
       const current = Object.keys(this.value.added[level] ?? {}).length;
@@ -241,7 +246,7 @@ function makeFightingStyleWorld() {
       }
     }
   };
-  const record = { level: 2, screenLevel: 2, advancement: choiceAdv, item: null };
+  const record = { level, screenLevel: level, advancement: choiceAdv, item: null };
   driver.choiceSteps.push(record);
   return { driver, clone, record, uuid, styleFeat, cantripChoice };
 }
@@ -268,6 +273,27 @@ describe("toggleChoice — picked item with its own advancements", () => {
     expect(w.driver.choiceSteps).toHaveLength(1);
     expect(w.clone.items.has(w.styleFeat.id)).toBe(false);
     expect(w.record.pickSynth?.[w.uuid]).toBeUndefined();
+  });
+
+  // A true feat (`advancementClassLinked` false) counts its advancement levels in character levels,
+  // as native dnd5e walks it — the Ritual Caster shape, reached through a feature choice instead of
+  // an improvement. A Fighter 5 / Ranger 4 is character level 9.
+  it("walks a picked feat to the character level on a multiclass character", async () => {
+    const w = makeFightingStyleWorld({ level: 4, otherClassLevels: 5, classLinked: false, flowLevel: 9 });
+    await w.driver.toggleChoice(w.record, w.uuid);
+
+    expect(w.driver.choiceSteps).toHaveLength(2);
+    const nested = w.driver.choiceSteps[1];
+    expect(nested.advancement).toBe(w.cantripChoice.advancement);
+    // Character level 9 maps back to Ranger level 4 — this level-up's screen.
+    expect(nested.screenLevel).toBe(4);
+  });
+
+  it("walks a class-linked pick only to the class level", async () => {
+    const w = makeFightingStyleWorld({ level: 4, otherClassLevels: 5, classLinked: true, flowLevel: 9 });
+    await w.driver.toggleChoice(w.record, w.uuid);
+
+    expect(w.driver.choiceSteps).toHaveLength(1);
   });
 });
 

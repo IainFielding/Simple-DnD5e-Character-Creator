@@ -26,6 +26,15 @@
  * {@link module:data/name-generator}.
  */
 
+/**
+ * Thalassian given names, shared by World of Warcraft's Blood Elves and Void Elves: one people, who
+ * kept the names they were born with when the void elves left. Their family names differ.
+ */
+const THALASSIAN = {
+  male: ["Aelithor", "Belaras", "Caelthan", "Dar'ithel", "Elaroth", "Faelthis", "Galaras", "Haeldrin", "Ithaleon", "Jaelorin", "Solivar", "Lothrenas", "Maelorin", "Naeleth", "Orithas", "Rel'tharion", "Saelarion", "Tal'ethor", "Vaelanis", "Ysindor", "Zaeleth", "Aranthis"],
+  female: ["Aelyssa", "Belanthra", "Caelira", "Dar'elle", "Elaria", "Faelyn", "Galathe", "Haeleth", "Ithania", "Jaelira", "Solenne", "Lothrissa", "Maelanna", "Naerith", "Orinthe", "Rel'anya", "Saelune", "Tal'ira", "Vaelith", "Ysandre", "Zaelia", "Aranelle"]
+};
+
 /** style id -> { male: string[], female: string[], surnames: string[] } */
 export const NAME_STYLES = {
   // A deliberately setting-neutral "fantasy human" voice — not modern/real-world.
@@ -415,6 +424,72 @@ export const NAME_STYLES = {
     surnames: ["Ashbury", "Blackwood", "Cresthaven", "Duskmoor", "Fogwell", "Hawthorne", "Lowmarsh", "Moorcroft", "Nightingale", "Pemberton", "Ravensworth", "Stormcliff", "Thornfield", "Whitcombe"]
   },
 
+  // ---- World of Warcraft lineages whose people are named apart from their species; chosen through
+  // LINEAGE_STYLE_ALIASES. Same rules: original names, no canon characters. ------------------------
+
+  // Blood Elf: Thalassian given names; family names of sun, flame and gold.
+  "blood-elf": {
+    male: THALASSIAN.male,
+    female: THALASSIAN.female,
+    surnames: ["Sunflare", "Dawnspire", "Emberglow", "Goldenbough", "Phoenixheart", "Flamewreath", "Brightspire", "Suncrest", "Goldleaf", "Highsun", "Embervale", "Dawnfeather", "Sunweaver", "Scarletsong"]
+  },
+
+  // Void Elf: the same Thalassian given names; family names taken from the void and the dusk.
+  "void-elf": {
+    male: THALASSIAN.male,
+    female: THALASSIAN.female,
+    surnames: ["Starhollow", "Duskveil", "Riftsong", "Nightglass", "Gloamspire", "Veilwalker", "Netherbloom", "Duskspire", "Riftborn", "Voidglass", "Hollowlight", "Darkwane", "Umberveil", "Shadeweaver"]
+  },
+
+  // Night Elf: soft, ancient names heavy with "th", "dr" and "sh"; family names of moon, star and wood.
+  "night-elf": {
+    male: ["Aldrathis", "Belduran", "Corivan", "Daelthos", "Elendril", "Feranthis", "Gaeldrin", "Harothil", "Ithrandel", "Kelduran", "Lethandris", "Maelthor", "Naldorin", "Orvathis", "Rhaeldor", "Sheldrath", "Taelrion", "Ulvathar", "Varothil", "Yldrenas", "Zhaedrin", "Amravel"],
+    female: ["Aelynthra", "Belanaia", "Cerithe", "Daeshala", "Ellinwe", "Feyrana", "Galashe", "Hyraleth", "Ishandra", "Jaenthil", "Kelyndra", "Lysandria", "Maeshiel", "Naelyra", "Ovryssa", "Rhaelith", "Shalyndra", "Thessiel", "Ulyndra", "Velishra", "Yshala", "Zhaelira"],
+    surnames: ["Moonbough", "Starthorn", "Owlfeather", "Glaivecrest", "Duskleaf", "Mossmantle", "Stagwhisper", "Silvergrove", "Nightbloom", "Thornshade", "Starbark", "Ravenleaf", "Wildmoon", "Dewglade"]
+  },
+
+  // Nightborne: the courtly names of an arcane city; family names of its great houses.
+  nightborne: {
+    male: ["Aurenthius", "Belvarius", "Cassaldrin", "Dorvalis", "Estrevan", "Felantius", "Galvenor", "Hesperin", "Isalorn", "Lucanthel", "Merovar", "Noctalis", "Orandel", "Peralthis", "Quintarion", "Riveldor", "Sevantis", "Tessarion", "Umbrelius", "Valcastor", "Xandrevar", "Zeravin"],
+    female: ["Aurelith", "Belvarra", "Cassalenne", "Dorvessa", "Estrelle", "Felanthe", "Galvenna", "Hesperelle", "Isalinde", "Lucanthea", "Merovelle", "Noctessa", "Orandelle", "Peralynn", "Quintessa", "Rivelle", "Sevantine", "Tessaliane", "Umbrielle", "Valcasta", "Xandrelle", "Zeravelle"],
+    surnames: ["Lunavarre", "Arcanthe", "Starvaunt", "Arcanelle", "Duskmantle", "Velvetshade", "Astraline", "Leyspire", "Silvercourt", "Moonvessel", "Starlace", "Gloamhall", "Manacrest", "Nocturne"]
+  },
+
+  // Zandalari Troll: long, stately names rich in "kh" and "zh"; a single name.
+  "zandalari-troll": {
+    male: ["Akhatzu", "Bazhakan", "Dazakhul", "Gazhuri", "Hazrakhi", "Itzakan", "Jakhazu", "Khalamazi", "Mazhakar", "Nakhuzar", "Ozhatli", "Pakhazan", "Quzhali", "Rakhuzan", "Sazhatul", "Tazhakhi", "Uzhkan", "Vazhakhar", "Xalakhu", "Yazhuri", "Zakhuran", "Kozhanti"],
+    female: ["Akhatza", "Bazhani", "Dazakhia", "Gazhura", "Hazrikha", "Itzala", "Jakhazi", "Khalamani", "Mazhira", "Nakhuza", "Ozhatla", "Pakhazi", "Quzhala", "Rakhuni", "Sazhati", "Tazhira", "Uzhkala", "Vazhanti", "Xalakha", "Yazhani", "Zakhura", "Kozhani"],
+    surnames: []
+  },
+
+  // Amani Troll: short, hard forest names, doubled "z" and "k", the apostrophe often; a single name.
+  "amani-troll": {
+    male: ["Bakkazu", "Drak'zal", "Gash'kar", "Hezzak", "Jarrok", "Kazzir", "Mak'tul", "Nazzak", "Rok'zan", "Shaz'ruk", "Takkaz", "Uzzar", "Vak'jin", "Waz'gul", "Zakkul", "Grok'tal", "Hak'raz", "Jazzuk", "Krazzin", "Muzzak", "Ruk'zar", "Tazz'gor"],
+    female: ["Bakka'zi", "Drak'zala", "Gash'ira", "Hezza", "Jarra'ka", "Kazziri", "Mak'tala", "Nazza", "Rok'zia", "Shaz'ra", "Takka", "Uzzara", "Vak'zia", "Waz'ula", "Zakkia", "Grok'tala", "Hak'rizi", "Jazzuka", "Krazzi", "Muzzara", "Ruk'zia", "Tazz'ira"],
+    surnames: []
+  },
+
+  // Highmountain Tauren: names with a mountain "kh"; family names of peak, antler and eagle.
+  "highmountain-tauren": {
+    male: ["Akohan", "Bekhor", "Dohraka", "Enahk", "Hahtor", "Kahrumo", "Lohkan", "Mahkeo", "Nohtah", "Ohkasi", "Rahkon", "Sohkwa", "Tahkor", "Uhkano", "Wahkeo", "Yohtan", "Hohken", "Kiraho", "Moskaro", "Tolahk", "Ahnuko", "Behrahk"],
+    female: ["Akohna", "Bekhara", "Dohrena", "Enahka", "Hahta", "Kahrumi", "Lohka", "Mahkeya", "Nohta", "Ohkasa", "Rahkena", "Sohkwi", "Tahkora", "Uhkani", "Wahkeya", "Yohtana", "Hohkena", "Kirahna", "Moskara", "Tolahna", "Ahnuka", "Behrena"],
+    surnames: ["Peakhorn", "Cragrunner", "Antlerbraid", "Eaglecrest", "Mistantler", "Ridgewalker", "Cliffstrider", "Pineantler", "Summitsong", "Cloudpeak", "Timberhoof", "Riverhorn", "Thornantler", "Skyridge"]
+  },
+
+  // Taunka: hard northern names, doubled consonants and "q"; family names of ice and long winter.
+  taunka: {
+    male: ["Akurak", "Bruhnar", "Dakhoru", "Ennuk", "Haruk", "Iskarun", "Kollunak", "Mahrok", "Nuttak", "Oskaru", "Qorrun", "Rukkaro", "Sukkan", "Taaruk", "Ukkonar", "Vorrak", "Yuklar", "Hakkurun", "Iqarun", "Kunnar", "Tuqqar", "Arnakh"],
+    female: ["Akura", "Bruhna", "Dakhora", "Ennuka", "Hareshka", "Iskara", "Kolluna", "Mahra", "Nuttaka", "Oskarra", "Qorra", "Rukkara", "Sukkana", "Taaruna", "Ukkona", "Vorra", "Yukla", "Hakkuna", "Iqara", "Kunnara", "Tuqqa", "Arnakha"],
+    surnames: ["Icehorn", "Snowdrift", "Rimehide", "Glacierhoof", "Coldwind", "Winterbraid", "Hoarfrost", "Tundrastride", "Drifthorn", "Floeborn", "Sleetmane", "Frostbraid", "Longwinter", "Northhoof"]
+  },
+
+  // Krokul: Draenei names worn down by exile, the long vowels mostly lost; a single name.
+  krokul: {
+    male: ["Akrum", "Boruk", "Dethak", "Grokul", "Iskor", "Kaduun", "Lokar", "Moruk", "Nurak", "Oduk", "Rukam", "Shakar", "Tavruk", "Udrak", "Vorum", "Zekrul", "Gadruun", "Kurdak", "Mekram", "Torvuk", "Brakaam", "Hadrum"],
+    female: ["Akra", "Boruka", "Dethka", "Groka", "Isrika", "Kadra", "Lokra", "Moruka", "Nuraka", "Oduka", "Rukka", "Shakra", "Tavra", "Udraka", "Vorka", "Zekra", "Gadra", "Kurda", "Mekra", "Torva", "Brakka", "Hadruna"],
+    surnames: []
+  },
+
   // Fallback for any unmapped species — a broad, neutral fantasy voice, deliberately the largest pool.
   default: {
     male: ["Aric", "Bram", "Caelum", "Doran", "Eron", "Fendrel", "Galdor", "Halric", "Joren", "Kael", "Soren", "Theron", "Aldan", "Borin", "Calder", "Daric", "Edric", "Faelin", "Gareth", "Hadon", "Ilric", "Jovan", "Korin", "Larem", "Maric", "Nerian", "Orin", "Perrin", "Quill", "Raen", "Sevrin", "Talen", "Ulric", "Varic", "Wystan", "Aldric", "Bevan", "Cael", "Doren", "Emeric", "Faron", "Gildas", "Haldor", "Ivor", "Jarek", "Kelvar", "Loran", "Merek", "Noren", "Phelan", "Rowan", "Serik", "Tomar", "Veylin", "Aeron", "Anwyl", "Arden", "Barric", "Brannic", "Caspian", "Cerric", "Corvan", "Dalen", "Darion", "Drevan", "Eamon", "Elric", "Emmeric", "Evrard", "Fenrick", "Fintan", "Galen", "Garvan", "Gideon", "Halden", "Harlin", "Idris", "Isen", "Jarric", "Jorven", "Kaeric", "Kester", "Laric", "Leoric", "Lucan", "Maldan", "Marek", "Nolric", "Oswin", "Owain", "Pellin", "Quinlan", "Rafferty", "Renn", "Roderin", "Sabin", "Sedric", "Sorrel", "Tavin", "Thorne", "Tobias", "Torren", "Ulmar", "Vandric", "Vesric", "Warric", "Yelric", "Zorin"],
@@ -487,4 +562,21 @@ export const SPECIES_STYLE_ALIASES = {
  */
 export const PACKAGE_STYLE_ALIASES = {
   "dnd-world-warcraft": { goblin: "warcraft-goblin" }
+};
+
+/**
+ * Lineages whose people are named apart from their species: a Blood Elf and a Night Elf are both
+ * the Player's Handbook's Elf, but are not named alike. Keyed by the package that publishes the
+ * lineage, then by the lineage's identifier without its "-lineage" suffix (or, for one with no
+ * identifier, its name), slugified: `blood-elf-lineage` and "Blood Elf" both read `blood-elf`.
+ * A lineage listed nowhere here, and every lineage of another book, takes its species' style.
+ * Read through `name-generator.mjs#speciesNameKey`.
+ */
+export const LINEAGE_STYLE_ALIASES = {
+  "dnd-world-warcraft": {
+    "blood-elf": "blood-elf", "void-elf": "void-elf", "night-elf": "night-elf", nightborne: "nightborne",
+    "zandalari-troll": "zandalari-troll", "amani-troll": "amani-troll", "darkspear-troll": "troll",
+    "highmountain-tauren": "highmountain-tauren", taunka: "taunka", "mulgore-tauren": "tauren",
+    krokul: "krokul", draenei: "draenei", lightforged: "draenei", marari: "draenei"
+  }
 };
