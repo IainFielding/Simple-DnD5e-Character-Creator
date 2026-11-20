@@ -436,6 +436,92 @@
   background: linear-gradient(160deg, #2a2d34, #191b20);
 }
 .creator-work-bar-note { font-size: 0.76rem; color: var(--cc-muted); }
+/* "Play as" and Specialization (World of Warcraft): dropdowns that refine the class beside the
+   switcher, so the side column holds only what every class asks for. The bar wraps when narrow. */
+.creator-work-bar { flex-wrap: wrap; }
+.creator-work-bar-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  color: var(--cc-muted);
+  white-space: nowrap;
+}
+.creator-work-bar-pick select {
+  width: auto;
+  max-width: 14rem;
+  height: auto;
+  padding: 0.22rem 0.4rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius);
+  color: var(--cc-bright);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.creator-work-bar-pick select option { background: var(--cc-panel); color: var(--cc-text); }
+/* "Play as": a menu, so each hero can show its badge (see templates/steps/class.hbs). */
+.creator-bar-menu { position: relative; }
+.creator-bar-menu-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.5rem;
+  background: var(--cc-panel-2);
+  border: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius);
+  color: var(--cc-bright);
+  font-size: 0.85rem;
+  cursor: pointer;
+  list-style: none;
+}
+.creator-bar-menu-current::-webkit-details-marker { display: none; }
+.creator-bar-menu-current i { font-size: 0.6rem; color: var(--cc-muted); }
+.creator-bar-menu[open] > .creator-bar-menu-current { border-color: var(--cc-settled); }
+.creator-bar-menu img {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border: 1px solid var(--cc-line-2);
+}
+.creator-bar-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line-2);
+  border-radius: var(--cc-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.creator-bar-menu-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  /* Override Foundry's fixed button height and centring. */
+  height: auto;
+  min-height: auto;
+  justify-content: flex-start;
+  padding: 0.3rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--cc-radius);
+  color: var(--cc-text);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.creator-bar-menu-option:hover, .creator-bar-menu-option:focus-visible { background: var(--cc-panel-2); color: var(--cc-bright); }
+.creator-bar-menu-option.is-selected { color: var(--cc-bright); }
+.creator-bar-menu-option i { margin-left: auto; font-size: 0.7rem; color: var(--cc-settled); }
 
 /* --- The body: page underneath, drawer over the top --- */
 .creator-work-body {
@@ -1031,7 +1117,17 @@
    rather than the tall level-up cards: a module can add lineages to a species, so the list has to
    stay readable at any length inside the narrow side column. */
 .creator-lineage-hint { margin: 0 0 0.75rem; color: var(--cc-muted); font-size: 0.85rem; }
-.creator-spec-intro { margin-top: 0.6rem; color: var(--cc-text); font-size: 0.85rem; line-height: 1.45; }
+/* The chosen specialization's advice, at the top of the class page (the choice is in the bar). */
+.creator-spec-intro {
+  margin-top: 1.2rem;
+  padding: 0.6rem 0.9rem;
+  border-left: 3px solid var(--cc-settled);
+  background: var(--cc-panel);
+  color: var(--cc-text);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.creator-spec-intro-title { margin: 0 0 0.25rem; border: none; color: var(--cc-bright); font-size: 0.9rem; }
 .creator-spec-intro p { margin: 0; }
 .creator-lineage-list {
   list-style: none;
@@ -1053,3 +1149,26 @@
 .creator-lineage-list .creator-choice-card-check { top: 50%; transform: translateY(-50%); right: 0.7rem; }
 /* Not yet chosen: the block is what holds Next shut, so it says so with the same gold the rail uses. */
 .creator-origin-lineage:not(.is-complete) .creator-work-block-title { color: var(--cc-gold-bright); }
+
+/* Art embedded in a description — the World of Warcraft book's hero and species pages carry
+   handout art sized for a journal, which swamped the class page. Kept to a modest size and floated
+   left, so the description wraps beside it (warcraft.mjs#artFirst moves a hero's art to the front).
+   The body is its own formatting context, so the float never hangs into the traits below. */
+.creator-detail-body { display: flow-root; }
+.creator-detail-body img {
+  max-width: min(100%, 320px);
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.creator-detail-body figure,
+.creator-detail-body img:not(figure img) {
+  float: left;
+  clear: left;
+  max-width: min(45%, 320px);
+  margin: 0.25rem 1.25rem 0.75rem 0;
+}
+/* The frame hugs its picture: at 45% wide it left a gap between a tall, narrow painting and the text. */
+.creator-detail-body figure { width: fit-content; }
+.creator-detail-body figure img { display: block; margin: 0; }

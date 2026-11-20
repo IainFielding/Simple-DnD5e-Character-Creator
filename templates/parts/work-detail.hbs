@@ -11,8 +11,8 @@
 --}}
 <article class="creator-detail">
   <header class="creator-detail-head">
-    <img class="creator-detail-img" src="{{detail.img}}" alt="">
-    <h2>{{detail.name}}</h2>
+    <img class="creator-detail-img" src="{{#if detail.titleImg}}{{detail.titleImg}}{{else}}{{detail.img}}{{/if}}" alt="">
+    <h2>{{#if detail.title}}{{detail.title}}{{else}}{{detail.name}}{{/if}}</h2>
     {{#if detail.source}}
     <span class="creator-detail-source" title="{{detail.source}}">
       <i class="fa-solid fa-book" aria-hidden="true"></i>{{detail.source}}

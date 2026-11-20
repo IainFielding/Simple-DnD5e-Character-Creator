@@ -23,7 +23,7 @@ try {
   await session.page.setViewportSize({ width: 1600, height: 1000 });
   const ev = (fn, arg) => session.eval(fn, arg);
   const settle = () => new Promise(r => setTimeout(r, 1500));
-  const click = async selector => { await session.page.locator(selector).first().click(); await settle(); };
+  const pick = async (selector, value) => { await session.page.locator(selector).first().selectOption(value); await settle(); };
 
   await ev(async () => {
     globalThis.__shots = await import(`/modules/sogrom-dnd5e-character-creator/test-e2e/in-world/shots.mjs?v=${Date.now()}`);
@@ -35,8 +35,10 @@ try {
     await globalThis.__shots.picker(false);
   });
   await settle();
-  await click('[data-step-action="pick-hero-class"][data-hero="hunter"]');
-  await click('[data-step-action="pick-specialization"][data-spec="marksmanship"]');
+  await session.page.locator(".creator-hero-class summary").first().click();
+  await session.page.locator('.creator-hero-class [data-hero="hunter"]').first().click();
+  await settle();
+  await pick('.creator-specialization select', "marksmanship");
   await session.page.screenshot({ path: join(out, `mm-1-class-${tag}.png`) });
 
   report.book = await ev(async () => {

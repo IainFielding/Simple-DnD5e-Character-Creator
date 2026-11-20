@@ -62,6 +62,74 @@ export function chosenHeroClass(state, source) {
   return heroClassesFor(identifier).find(h => h.identifier === state.heroClass) ?? null;
 }
 
+/**
+ * A hero class's own description, from the module's book: the entry named for the hero ("Death
+ * Knight") opens with a page of the same name describing it. The large art the page opens with is
+ * left out; the smaller piece further down is moved to the front, so the class page can float it
+ * beside the text rather than after it. Null when the book has no such page.
+ * @param {string} heroName   The hero's localised name, as {@link heroClassesFor} gives it.
+ * @returns {Promise<string|null>}   Enriched HTML.
+ */
+export function heroDescription(heroName) {
+  if ( !heroName || !wowConfig() ) return Promise.resolve(null);
+  if ( !HERO_TEXT.has(heroName) ) {
+    HERO_TEXT.set(heroName, (async () => {
+      const pack = game.packs?.get?.(`${PACKAGE}.book`);
+      const index = pack ? await pack.getIndex() : null;
+      const id = index?.find(e => e.name === heroName)?._id;
+      const entry = id ? await pack.getDocument(id) : null;
+      const pages = [...(entry?.pages ?? [])].filter(p => (p.type === "text") && p.text?.content);
+      const page = pages.find(p => p.name === heroName) ?? null;
+      if ( !page ) return null;
+      const html = artFirst(stripLeadingEmbed(page.text.content));
+      return foundry.applications.ux.TextEditor.implementation.enrichHTML(html, { relativeTo: page, secrets: false });
+    })().catch(err => {
+      log(`warcraft: could not read ${heroName}'s description`, err);
+      return null;
+    }));
+  }
+  return HERO_TEXT.get(heroName);
+}
+
+/**
+ * The book a hero class comes from, as dnd5e names it: the module registers its book under
+ * `flags.dnd5e.sourceBooks` (a localisation key), which its own items' source badges read. Falls back
+ * to the module's title.
+ * @returns {string|null}
+ */
+export function warcraftSourceBook() {
+  const mod = game.modules?.get(PACKAGE);
+  if ( !mod?.active ) return null;
+  const books = mod.flags?.dnd5e?.sourceBooks ?? {};
+  const label = Object.values(books)[0];
+  return label ? game.i18n.localize(label) : (mod.title ?? null);
+}
+
+/** Hero name → promise of its enriched description. Cleared with the sources. */
+const HERO_TEXT = new Map();
+
+/**
+ * A page's text without the art it opens with: a leading paragraph holding nothing but an `@Embed`.
+ * @param {string} html
+ * @returns {string}
+ */
+export function stripLeadingEmbed(html) {
+  return String(html ?? "").replace(/^\s*<p>\s*@Embed\[[^\]]*\]\s*<\/p>/, "");
+}
+
+/**
+ * A page's text with its art paragraphs (a paragraph holding nothing but an `@Embed`) moved to the
+ * front, in their order, so the art can sit beside the text it illustrates.
+ * @param {string} html
+ * @returns {string}
+ */
+export function artFirst(html) {
+  const ART = /<p>\s*@Embed\[[^\]]*\]\s*<\/p>/g;
+  const text = String(html ?? "");
+  const art = text.match(ART) ?? [];
+  return art.length ? art.join("") + text.replace(ART, "") : text;
+}
+
 /** The raw hero-class entry for one class, or null. */
 function heroEntry(classIdentifier, heroId) {
   if ( !heroId ) return null;
@@ -241,6 +309,7 @@ const DOCS = new Map();
 
 /** Forget the transformed documents — called when the enabled sources or the Renown rule change. */
 export function resetWarcraftDocs() {
+  HERO_TEXT.clear();
   DOCS.clear();
 }
 

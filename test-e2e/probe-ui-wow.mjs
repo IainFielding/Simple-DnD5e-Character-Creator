@@ -39,9 +39,10 @@ try {
   await settle();
   await ev(() => globalThis.__shots.picker(false));
   await settle();
-  report.playAs = await ev(() => [...document.querySelectorAll(".creator-hero-class .creator-choice-card-name")].map(e => e.textContent.trim()));
+  report.playAs = await ev(() => [...document.querySelectorAll(".creator-hero-class .creator-bar-menu-option")].map(e => e.textContent.trim()));
   await shot("1-class-paladin-play-as");
 
+  await session.page.locator(".creator-hero-class summary").click();
   await session.page.locator('.creator-hero-class [data-hero="death-knight"]').click();
   await settle();
   report.afterHero = await ev(() => ({

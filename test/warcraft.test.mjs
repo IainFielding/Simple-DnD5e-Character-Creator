@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import {
-  heroClassesFor, applyHeroClass, addRenown, transformItemData, chosenHeroClass, exclusiveGrantPair
+  heroClassesFor, applyHeroClass, addRenown, transformItemData, chosenHeroClass, exclusiveGrantPair, stripLeadingEmbed, artFirst
 } from "../scripts/data/warcraft.mjs";
 
 /**
@@ -143,5 +143,20 @@ describe("World of Warcraft hero classes and Renown", () => {
     const source = { card: () => ({ identifier: "paladin" }) };
     expect(chosenHeroClass({ classUuid: "x", heroClass: "death-knight" }, source)?.name).toBe("WOW.HeroClasses.DeathKnight");
     expect(chosenHeroClass({ classUuid: "x", heroClass: null }, source)).toBeNull();
+  });
+});
+
+describe("hero class description", () => {
+  it("drops the art a hero's page opens with, and nothing else", () => {
+    const html = '<p>@Embed[Compendium.x.book.JournalEntry.a.JournalEntryPage.b caption=false classes="size-four"]</p><p>The Lich King created death knights.</p>';
+    expect(stripLeadingEmbed(html)).toBe("<p>The Lich King created death knights.</p>");
+    expect(stripLeadingEmbed("<p>No art here. @Embed[x]</p>")).toBe("<p>No art here. @Embed[x]</p>");
+    expect(stripLeadingEmbed(null)).toBe("");
+  });
+
+  it("moves the art further down a page to the front, so it can sit beside the text", () => {
+    const html = '<p>First.</p><p>@Embed[Compendium.x.Page.a classes="noborder"]</p><p>Second.</p>';
+    expect(artFirst(html)).toBe('<p>@Embed[Compendium.x.Page.a classes="noborder"]</p><p>First.</p><p>Second.</p>');
+    expect(artFirst("<p>Plain.</p>")).toBe("<p>Plain.</p>");
   });
 });

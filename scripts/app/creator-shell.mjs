@@ -167,6 +167,11 @@ export class CreatorShell extends CreatorShellBase {
    * standing on; consumed once by {@link CreatorShell##restoreFocus}.
    */
   #focusAfterRender = null;
+  /**
+   * Whether the first step's choice is made and its list is closed, as of the last render. Back on
+   * that screen reopens the list rather than leaving the wizard: see {@link CreatorShell#_navBack}.
+   */
+  #pickerBehind = false;
 
   constructor(actor, options = {}, draft = null) {
     super(options);
@@ -308,6 +313,7 @@ export class CreatorShell extends CreatorShellBase {
     // Both derived from `flags`, rather than re-running every step's isComplete() twice more.
     const missing = REQUIRED_STEPS.filter(s => !flags[STEPS.indexOf(s)]);
     const lines = this.#stepLines(flags);
+    this.#pickerBehind = !this.#entry && !!stepContext.hasSelection && !this.#drawerOpen(step, stepContext);
 
     return {
       loading: this.#loading,
@@ -370,7 +376,7 @@ export class CreatorShell extends CreatorShellBase {
           // chooser is the one place behind them. The chooser itself is the front door: nothing
           // is behind it, so it is the one entry screen where Back stays dead.
           canBack: this.#entry ? (this.#entry !== "chooser")
-            : ((this._prevIndex() >= 0) || Boolean(this.#returnTo)),
+            : ((this._prevIndex() >= 0) || Boolean(this.#returnTo) || this.#pickerBehind),
           canNext: hasNext && flags[this._stepIndex],
           backLabel: t("nav.back"),
           nextLabel: t("nav.next"),
@@ -424,6 +430,7 @@ export class CreatorShell extends CreatorShellBase {
     if ( !this._stageRendered(options) ) return;
     // Selects/inputs don't fire click "actions"; wire their change events to the dispatcher.
     this._wireStepChanges(root);
+    this.#wireBarMenus(root);
     this._wireOverlays(root);
     this.#wireDragDrop(root);
     // Client-side filtering — no re-render, so the field keeps focus while typing. A spell step's
@@ -996,6 +1003,10 @@ export class CreatorShell extends CreatorShellBase {
    */
   _navBack() {
     if ( this.#entry && (this.#entry !== "chooser") ) return this._openEntry("chooser");
+    // The first step with its choice made: the list it was chosen from is what is behind it. Back
+    // reopens the class list before it leaves for the entry screen, so changing your mind about the
+    // class is one click, not a trip out of the wizard and back in.
+    if ( (this._prevIndex() < 0) && this.#pickerBehind ) return this._setPicker(true);
     // The first step of a build that came in through an entry screen: the screen it came from is
     // what is behind it, so Back means that rather than nothing. Without this the custom path led
     // to a greyed Back on its very first screen, which reads as "there is no way back" on the one
@@ -1238,6 +1249,29 @@ export class CreatorShell extends CreatorShellBase {
   #drawerOpen(step, stepContext) {
     if ( !("hasSelection" in stepContext) ) return false;    // not a pick step; it has no drawer
     return !stepContext.hasSelection || this.state.pickerFor === step.id;
+  }
+
+  /**
+   * Close the class bar's open menus ("Play as", templates/steps/class.hbs) on a click outside them
+   * or on Escape, as a dropdown does. A `<details>` only closes when its own summary is clicked.
+   * The document listener lives while a menu is open, and only then.
+   * @param {HTMLElement} root
+   */
+  #wireBarMenus(root) {
+    for ( const menu of root.querySelectorAll(".creator-bar-menu") ) {
+      const outside = ev => { if ( !menu.contains(ev.target) ) menu.open = false; };
+      const escape = ev => {
+        if ( ev.key !== "Escape" ) return;
+        ev.stopPropagation();
+        menu.open = false;
+        menu.querySelector("summary")?.focus();
+      };
+      menu.addEventListener("toggle", () => {
+        if ( menu.open ) document.addEventListener("pointerdown", outside, true);
+        else document.removeEventListener("pointerdown", outside, true);
+      });
+      menu.addEventListener("keydown", escape);
+    }
   }
 
   /**

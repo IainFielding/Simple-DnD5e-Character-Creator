@@ -23,7 +23,7 @@ try {
   const ev = (fn, arg) => session.eval(fn, arg);
   const shot = name => session.page.screenshot({ path: join(out, `${name}.png`) });
   const settle = () => new Promise(r => setTimeout(r, 1500));
-  const click = async selector => { await session.page.locator(selector).first().click(); await settle(); };
+  const pick = async (selector, value) => { await session.page.locator(selector).first().selectOption(value); await settle(); };
 
   // 1. What the reader made of the book.
   report.specs = await ev(async () => {
@@ -70,8 +70,8 @@ try {
 
   // 2. Paladin → Holy, on the Class page.
   await startClass("Paladin");
-  report.specBlock = await ev(() => [...document.querySelectorAll(".creator-specialization .creator-choice-card-name")].map(e => e.textContent.trim()));
-  await click('.creator-specialization [data-spec="holy"]');
+  report.specBlock = await ev(() => [...document.querySelectorAll(".creator-specialization option")].map(e => e.textContent.trim()));
+  await pick('.creator-specialization select', "holy");
   report.specIntro = await ev(() => document.querySelector(".creator-spec-intro")?.textContent.trim().slice(0, 120) ?? null);
   await shot("1-class-paladin-holy");
 
@@ -83,8 +83,10 @@ try {
 
   // 4. Hunter (Ranger) → Beast Mastery, level 5, then level up to 6 in the real window.
   await startClass("Ranger");
-  await click('.creator-hero-class [data-hero="hunter"]');
-  await click('.creator-specialization [data-spec="beast-mastery"]');
+  await session.page.locator(".creator-hero-class summary").first().click();
+  await session.page.locator('.creator-hero-class [data-hero="hunter"]').first().click();
+  await settle();
+  await pick('.creator-specialization select', "beast-mastery");
   await ev(() => globalThis.__shots.quickBuild({ seed: 7, goTo: "review" }));
   const hunterUuid = await ev(() => globalThis.__shots.buildActor());
   report.hunterReached = await climb(hunterUuid, 5);
