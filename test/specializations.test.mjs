@@ -59,7 +59,7 @@ describe("parseSpecializations", () => {
 describe("recommends", () => {
   const ref = { type: "spell", uuid: "Compendium.dnd-players-handbook.spells.Item.hm", identifier: "hunters-mark", name: "Hunter's Mark" };
   const spec = { refs: [ref, { type: "feat", uuid: "Compendium.p.feats.Item.ss", identifier: "sharpshooter", name: "Sharpshooter" }] };
-  spec.keys = spec.refs.flatMap(r => recommendationKeys(r.type, r));
+  spec.keys = new Set(spec.refs.flatMap(r => recommendationKeys(r.type, r)));
 
   it("matches the same spell from another package by identifier", () => {
     expect(recommends(spec, "spell", { uuid: "Compendium.dnd5e.spells24.Item.x", identifier: "hunters-mark", name: "Hunter's Mark" })).toBe(true);

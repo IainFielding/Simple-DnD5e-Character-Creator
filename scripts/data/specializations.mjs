@@ -96,8 +96,18 @@ export function recommendationKeys(type, item) {
  */
 export function recommends(spec, type, item) {
   const keys = spec?.keys;
-  if ( !keys?.length ) return false;
-  return recommendationKeys(type, item).some(k => keys.includes(k));
+  if ( !keys?.size ) return false;
+  return recommendationKeys(type, item).some(k => keys.has(k));
+}
+
+/**
+ * Whether a specialization recommends anything of a type at all. **Pure.**
+ * @param {object|null} spec
+ * @param {string} type   "spell" | "feat" | "subclass"
+ * @returns {boolean}
+ */
+export function recommendsAny(spec, type) {
+  return !!spec?.refs?.some(r => r.type === type);
 }
 
 /**
@@ -175,20 +185,18 @@ async function build() {
 
       const specs = [];
       for ( const s of sections ) {
-        const picks = { subclass: null, feats: [], spells: [], refs: [] };
+        // The picks, in the book's order: only the first subclass it links (a section names one).
+        // Matching always goes through `refs` and `keys`, never a bare uuid — see {@link recommends}.
+        const refs = [];
         for ( const uuid of s.links ) {
           if ( !described.has(uuid) ) described.set(uuid, await describeLink(uuid));
           const d = described.get(uuid);
-          if ( !d ) continue;
-          if ( (d.type === "subclass") && !picks.subclass ) picks.subclass = d.uuid;
-          else if ( d.type === "feat" ) picks.feats.push(d.uuid);
-          else if ( d.type === "spell" ) picks.spells.push(d.uuid);
-          else continue;
-          picks.refs.push(d);
+          if ( !d || !["subclass", "feat", "spell"].includes(d.type) ) continue;
+          if ( (d.type === "subclass") && refs.some(r => r.type === "subclass") ) continue;
+          refs.push(d);
         }
-        // Every way a recommended item can be recognised in a picker — see {@link recommends}.
-        const keys = [...new Set(picks.refs.flatMap(r => recommendationKeys(r.type, r)))];
-        specs.push({ id: specializationId(s.name), name: s.name, intro: s.intro, pageUuid: page.uuid, ...picks, keys });
+        const keys = new Set(refs.flatMap(r => recommendationKeys(r.type, r)));
+        specs.push({ id: specializationId(s.name), name: s.name, intro: s.intro, pageUuid: page.uuid, refs, keys });
       }
       map.set(keyOf(cls.identifier, hero), specs);
     }

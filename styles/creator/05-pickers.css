@@ -567,8 +567,9 @@
   font-variant-numeric: tabular-nums;
 }
 /* A pick the class's specialization names (World of Warcraft): the row reads gold, and a star beside
-   the name says why on hover ("Recommended for Marksmanship"). Selection still wins the left edge. */
-.creator-pickrow.is-recommended:not(.is-selected) { border-left-color: var(--cc-gold); }
+   the name says why on hover ("Recommended for Marksmanship"). Selection and focus still win the
+   left edge. */
+.creator-pickrow.is-recommended:not(.is-selected):not(.is-focused) { border-left-color: var(--cc-gold); }
 .creator-pickrow.is-recommended .creator-pickrow-name { color: var(--cc-gold-bright); }
 .creator-pickrow.is-recommended .creator-pickrow-img { border-color: var(--cc-gold); }
 .creator-pickrow-rec {
@@ -577,6 +578,8 @@
   font-size: 0.72em;
   vertical-align: 0.1em;
 }
+/* Before the name, where the spell grid's two-line clamp cannot hide it. */
+.creator-pickrow-rec.is-leading { margin: 0 0.35rem 0 0; }
 
 /* Two-line rows only where the tag exists, so a list without editions is unchanged. */
 .creator-drawer .creator-pickrow:has(.creator-pickrow-rules) {

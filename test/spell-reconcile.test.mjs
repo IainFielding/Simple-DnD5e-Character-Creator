@@ -264,6 +264,44 @@ describe("reconcileGrantedSpells", () => {
     expect(result.merged[0].grantedBy).toBe("Oath of the Holy Spells");
   });
 
+  it("leaves a spell from an uncategorised feat alone — dnd5e's default type.value is \"\"", async () => {
+    const actor = makeActor([
+      { ...feature("featFey", "Fey Step"), system: { type: { value: "" } } },
+      spell({ id: "granted", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 2,
+        sourceItem: "feat:fey-step", origin: "featFey.adv" }),
+      spell({ id: "chosen", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 1,
+        sourceItem: "class:paladin" })
+    ]);
+    expect((await reconcileGrantedSpells(actor)).merged).toEqual([]);
+  });
+
+  it("leaves a species trait's spell alone", async () => {
+    const actor = makeActor([
+      { ...feature("lineage", "Elven Lineage"), system: { type: { value: "race" } } },
+      spell({ id: "granted", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 2,
+        sourceItem: "feat:elven-lineage", origin: "lineage.adv" }),
+      spell({ id: "chosen", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 1,
+        sourceItem: "class:paladin" })
+    ]);
+    expect((await reconcileGrantedSpells(actor)).merged).toEqual([]);
+  });
+
+  it("merges an oath's grant even when a real feat's grant of the same spell comes first", async () => {
+    const actor = makeActor([
+      { ...feature("featMI", "Magic Initiate"), system: { type: { value: "feat" } } },
+      { ...feature("oathSpells", "Oath of the Holy Spells"), system: { type: { value: "class" } } },
+      spell({ id: "featCopy", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 2,
+        sourceItem: "feat:magic-initiate", origin: "featMI.adv" }),
+      spell({ id: "oathCopy", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 2,
+        sourceItem: "feat:oath-of-the-holy-spells", origin: "oathSpells.adv" }),
+      spell({ id: "chosen", uuid: CURE_WOUNDS, name: "Cure Wounds", identifier: "cure-wounds", prepared: 1,
+        sourceItem: "class:paladin" })
+    ]);
+    const result = await reconcileGrantedSpells(actor);
+    expect(actor.seen.deleted).toEqual(["chosen"]);
+    expect(result.merged[0].id).toBe("oathCopy");
+  });
+
   it("leaves a pact-magic copy and a spell-slot copy separate", async () => {
     const actor = makeActor([
       spell({ id: "granted", prepared: 2, method: "pact", origin: "clsWarlock.adv" }),

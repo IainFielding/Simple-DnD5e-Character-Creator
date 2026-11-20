@@ -1,7 +1,7 @@
 import { atLevel } from "../levelup-state.mjs";
 import { pinContext } from "../../app/compare.mjs";
 import { hasSourcePage } from "../../data/journal-source.mjs";
-import { recommends, specializationOf } from "../../data/specializations.mjs";
+import { recommends, recommendsAny, specializationOf } from "../../data/specializations.mjs";
 import { t } from "../../config.mjs";
 
 /**
@@ -38,7 +38,7 @@ export const subclassStep = {
     const fixed = fixedSubclass(record);
     // The subclass the class's World of Warcraft specialization names, badged on its card.
     const spec = await specializationOf(record.advancement.item);
-    const suggested = spec?.subclass ? t("step.class.spec.recommended", { spec: spec.name }) : null;
+    const suggested = recommendsAny(spec, "subclass") ? t("step.class.spec.recommended", { spec: spec.name }) : null;
     const cards = (await source.subclasses(identifier, { rules }))
       .filter(c => !fixed || (c.uuid === fixed))
       .map(c => ({ ...c, selected: c.uuid === sub.uuid, suggested: recommends(spec, "subclass", c) ? suggested : null }));

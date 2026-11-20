@@ -72,8 +72,14 @@ export function planSpellReconciliation(actorLike) {
     if ( !bucket.granted.length || !bucket.chosen.length ) continue;
     // One granted copy claims one chosen copy. Two genuinely distinct grants of the same spell are
     // vanishingly rare, but pairing rather than sweeping keeps the arithmetic honest either way.
-    const survivor = bucket.granted[0];
-    const duplicate = bucket.chosen.find(candidate => mergeable(survivor, candidate, actorLike));
+    // Every granted copy is tried in turn: a feat's grant that must stay apart (Fey Touched's Misty
+    // Step) can sit first in the bucket and must not stop an oath's grant of the same spell merging.
+    let survivor = null;
+    let duplicate = null;
+    for ( const granted of bucket.granted ) {
+      duplicate = bucket.chosen.find(candidate => mergeable(granted, candidate, actorLike));
+      if ( duplicate ) { survivor = granted; break; }
+    }
     if ( !duplicate ) continue;
 
     const level = Number(duplicate.system?.level ?? 0);
@@ -146,14 +152,16 @@ function mergeable(granted, chosen, actorLike) {
   //
   // dnd5e tags *every* feat-type item's grants "feat:", class features included — a 2024 Paladin's
   // "Oath of the Holy Spells", a Cleric's "Life Domain Spells". Those are the class's own always-
-  // prepared spells, not a feat's separate casting, so the granting item is looked up: only a real
-  // feat (or a grant whose owner cannot be found, where caution wins) is kept apart.
+  // prepared spells, not a feat's separate casting, so the granting item is looked up: only a
+  // class feature (`type.value` "class", subclass features included) may merge. Everything else stays
+  // apart — a real feat, a species trait ("race") or background feature, an uncategorised feat-type
+  // item (dnd5e's default `type.value` is "", not absent), and a grant whose owner cannot be found.
   const chosenSource = String(chosen.system?.sourceItem ?? "");
   const grantedSource = String(granted.system?.sourceItem ?? "");
   if ( chosenSource.startsWith("feat:") ) return false;
   if ( grantedSource.startsWith("feat:") ) {
     const owner = grantOwner(granted, actorLike);
-    if ( !owner || (owner.system?.type?.value ?? "feat") === "feat" ) return false;
+    if ( owner?.system?.type?.value !== "class" ) return false;
   }
 
   // Different slot pools are different resources — a Warlock's pact-magic copy and an ordinary

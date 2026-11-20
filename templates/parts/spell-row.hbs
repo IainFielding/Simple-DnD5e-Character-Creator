@@ -28,7 +28,10 @@
           data-tooltip="{{ccItemTooltip uuid}}">
     <img class="creator-pickrow-img" src="{{img}}" alt="">
     <span class="creator-spellrow-text">
-      <span class="creator-pickrow-name">{{name}}{{!-- A spell the class's specialization suggests (World of Warcraft). --}}{{#if suggested}}<i class="creator-pickrow-rec fa-solid fa-star" data-tooltip="{{suggested}}" aria-label="{{suggested}}"></i>{{/if}}</span>
+      {{!-- A spell the class's specialization suggests (World of Warcraft). The star leads the name:
+            the spell grid clamps names to two lines, and a trailing star on a long name would be
+            clipped with its tooltip. --}}
+      <span class="creator-pickrow-name">{{#if suggested}}<i class="creator-pickrow-rec is-leading fa-solid fa-star" data-tooltip="{{suggested}}" aria-label="{{suggested}}"></i>{{/if}}{{name}}</span>
       <span class="creator-spellrow-meta">
         {{#if levelLabel}}<span class="creator-spellrow-level">{{levelLabel}}</span>{{/if}}
         {{#if school}}<span>{{school}}</span>{{/if}}

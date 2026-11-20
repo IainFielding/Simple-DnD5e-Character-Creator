@@ -1,4 +1,4 @@
-import { recommendedInOrder, specializationOf } from "./specializations.mjs";
+import { recommendedInOrder, recommendsAny, specializationOf } from "./specializations.mjs";
 import { log, levelUpHpDefault } from "../config.mjs";
 import { QUICK_BUILD, FEATURE_PREFERENCES } from "./quick-build-data.mjs";
 import { LevelUpDriver } from "../levelup/manager-driver.mjs";
@@ -128,7 +128,7 @@ export class QuickClimbProvider {
   async warm(classItem) {
     this.#spec = await specializationOf(classItem).catch(() => null);
     const names = this.#profile.subclasses ?? [];
-    if ( !names.length && !this.#spec?.subclass ) return;
+    if ( !names.length && !recommendsAny(this.#spec, "subclass") ) return;
 
     const identifier = classItem?.system?.identifier ?? "";
     const rules = classItem?.system?.source?.rules ?? null;
@@ -285,7 +285,7 @@ export class QuickClimbProvider {
     // A specialization feat for each improvement: the first it names that the picker offers and
     // whose own prerequisites the character meets. A feat dnd5e would refuse leaves the improvement
     // unspent, so anything doubtful falls back to the ability increase.
-    if ( this.#spec?.feats?.length ) {
+    if ( recommendsAny(this.#spec, "feat") ) {
       const chosen = new Set(this.#asiFeats.values());
       for ( const rec of driver.asiSteps ?? [] ) {
         if ( this.#asiFeats.has(rec) || !rec.advancement?.allowFeat ) continue;
@@ -367,10 +367,15 @@ export class QuickClimbProvider {
     // Names are resolved here, in the async warm, because matching a preference against a pool
     // means reading each document — which the synchronous accessor could never do.
     const named = new Map();
+    // The identifier rides along so the specialization's feats match the same feat from another
+    // package (see data/specializations.mjs), not only by name.
+    const identifiers = new Map();
     for ( const uuid of pool ) {
       if ( already.has(uuid) ) continue;
       const doc = await fromUuid(uuid).catch(() => null);
-      if ( doc?.name ) named.set(uuid, doc.name.toLowerCase());
+      if ( !doc?.name ) continue;
+      named.set(uuid, doc.name.toLowerCase());
+      identifiers.set(uuid, doc.system?.identifier ?? null);
     }
 
     const prefer = [...(this.#profile.features ?? []), ...FEATURE_PREFERENCES]
@@ -378,7 +383,7 @@ export class QuickClimbProvider {
     const out = [];
     // The specialization's feats lead (a Holy Paladin's Blessed Warrior, a Protection one's
     // Interception), ahead of the table's preferences.
-    const candidates = [...named].map(([uuid, name]) => ({ uuid, name }));
+    const candidates = [...named].map(([uuid, name]) => ({ uuid, name, identifier: identifiers.get(uuid) }));
     for ( const { uuid } of recommendedInOrder(this.#spec, "feat", candidates) ) {
       if ( out.length >= wanted ) break;
       if ( !out.includes(uuid) ) out.push(uuid);
