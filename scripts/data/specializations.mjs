@@ -174,11 +174,13 @@ async function build() {
 
       // The page's class is the first class it links ("choose the Paladin class"); a hero class's
       // page links the class it is built on, and its entry carries the hero's own name.
-      const described = new Map();
-      for ( const uuid of [...html.matchAll(LINK)].map(m => m[1]) ) {
-        if ( !described.has(uuid) ) described.set(uuid, await describeLink(uuid));
-        if ( described.get(uuid)?.type === "class" ) break;
-      }
+      // Every link on the page is described at once rather than one after another: the reads used
+      // to run serially, a compendium load apiece, and the page links dozens of items. The loops
+      // below then read from this map, so their order-sensitive rules are unchanged. The map is
+      // filled in page order, not completion order: "the page's class" is the first class it links.
+      const links = [...new Set([...html.matchAll(LINK)].map(m => m[1]))];
+      const results = await Promise.all(links.map(describeLink));
+      const described = new Map(links.map((uuid, i) => [uuid, results[i]]));
       const cls = [...described.values()].find(d => d?.type === "class");
       if ( !cls?.identifier ) continue;
       // Matched through isHeroName, not the translated name alone: in a world in another language the
@@ -225,6 +227,16 @@ async function getIndex() {
     return new Map();
   });
   return building;
+}
+
+/**
+ * Build the index ahead of need. Part of the `ready` warm: the Class step awaits the index before a
+ * selected class can render, and the build reads the whole book plus every item it links, so left
+ * cold it sat behind the first class click. A no-op (an empty map, at once) without the module.
+ * @returns {Promise<void>}
+ */
+export async function warmSpecializations() {
+  await getIndex();
 }
 
 /**
