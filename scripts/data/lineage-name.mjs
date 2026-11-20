@@ -41,13 +41,18 @@ export function lineageCardName(species, lineage) {
 /**
  * A lineage's image, when it is art rather than one of Foundry's generic icons. The Player's
  * Handbook paints its Drow and Forest Gnome; most other lineages carry a core icon (`icons/…`), which
- * would be a poor swap for the species' own portrait.
+ * would be a poor swap for the species' own portrait. dnd5e's own stock images (`systems/dnd5e/icons/…`,
+ * its default item placeholders among them) are icons in the same sense, for content that uses them.
  * @param {string|null|undefined} img
  * @returns {string|null}
  */
 export function lineageArt(img) {
-  return (img && !String(img).startsWith("icons/")) ? img : null;
+  const path = String(img ?? "");
+  return (path && !GENERIC_ICONS.some(prefix => path.startsWith(prefix))) ? path : null;
 }
+
+/** Image folders that hold generic icons rather than a lineage's own art. */
+const GENERIC_ICONS = ["icons/", "systems/dnd5e/icons/"];
 
 /**
  * The update that names a species item for its lineage.

@@ -63,32 +63,49 @@ export function chosenHeroClass(state, source) {
 }
 
 /**
+ * Whether a book entry or page name is a hero class's. The module's hero names are localisation keys
+ * and its book is written in English, so in a world in another language the translated name and the
+ * book's own disagree. A name matches when it is the hero's translated name (a translated book), or
+ * when it slugs to the hero's identifier — "Death Knight" → `death-knight`, which is how the module
+ * coins its identifiers (an untranslated book). **Pure.**
+ * @param {string} name                                The entry's or page's name.
+ * @param {{identifier: string, name: string}} hero    From {@link heroClassesFor}.
+ * @returns {boolean}
+ */
+export function isHeroName(name, hero) {
+  if ( !name || !hero ) return false;
+  if ( name === hero.name ) return true;
+  const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return !!slug && (slug === hero.identifier);
+}
+
+/**
  * A hero class's own description, from the module's book: the entry named for the hero ("Death
  * Knight") opens with a page of the same name describing it. The large art the page opens with is
  * left out; the smaller piece further down is moved to the front, so the class page can float it
  * beside the text rather than after it. Null when the book has no such page.
- * @param {string} heroName   The hero's localised name, as {@link heroClassesFor} gives it.
+ * @param {{identifier: string, name: string}} hero   From {@link heroClassesFor}.
  * @returns {Promise<string|null>}   Enriched HTML.
  */
-export function heroDescription(heroName) {
-  if ( !heroName || !wowConfig() ) return Promise.resolve(null);
-  if ( !HERO_TEXT.has(heroName) ) {
-    HERO_TEXT.set(heroName, (async () => {
+export function heroDescription(hero) {
+  if ( !hero?.identifier || !wowConfig() ) return Promise.resolve(null);
+  if ( !HERO_TEXT.has(hero.identifier) ) {
+    HERO_TEXT.set(hero.identifier, (async () => {
       const pack = game.packs?.get?.(`${PACKAGE}.book`);
       const index = pack ? await pack.getIndex() : null;
-      const id = index?.find(e => e.name === heroName)?._id;
+      const id = index?.find(e => isHeroName(e.name, hero))?._id;
       const entry = id ? await pack.getDocument(id) : null;
       const pages = [...(entry?.pages ?? [])].filter(p => (p.type === "text") && p.text?.content);
-      const page = pages.find(p => p.name === heroName) ?? null;
+      const page = pages.find(p => isHeroName(p.name, hero)) ?? null;
       if ( !page ) return null;
       const html = artFirst(stripLeadingEmbed(page.text.content));
       return foundry.applications.ux.TextEditor.implementation.enrichHTML(html, { relativeTo: page, secrets: false });
     })().catch(err => {
-      log(`warcraft: could not read ${heroName}'s description`, err);
+      log(`warcraft: could not read ${hero.name}'s description`, err);
       return null;
     }));
   }
-  return HERO_TEXT.get(heroName);
+  return HERO_TEXT.get(hero.identifier);
 }
 
 /**
@@ -105,7 +122,7 @@ export function warcraftSourceBook() {
   return label ? game.i18n.localize(label) : (mod.title ?? null);
 }
 
-/** Hero name → promise of its enriched description. Cleared with the sources. */
+/** Hero identifier → promise of its enriched description. Cleared with the sources. */
 const HERO_TEXT = new Map();
 
 /**

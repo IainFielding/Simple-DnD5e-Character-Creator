@@ -31,6 +31,8 @@ describe("lineage naming", () => {
     expect(lineageArt("modules/dnd-players-handbook/assets/icons/species/drow.webp"))
       .toBe("modules/dnd-players-handbook/assets/icons/species/drow.webp");
     expect(lineageArt("icons/skills/wounds/blood-cells-red.webp")).toBeNull();
+    // dnd5e's own stock images are icons too, not a lineage's art.
+    expect(lineageArt("systems/dnd5e/icons/svg/items/feature.svg")).toBeNull();
     expect(lineageArt("")).toBeNull();
   });
 

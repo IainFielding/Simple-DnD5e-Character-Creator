@@ -45,9 +45,10 @@ try {
     const m = await import(`/modules/sogrom-dnd5e-character-creator/scripts/data/specializations.mjs?v=${Date.now()}`);
     const spec = await m.findSpecialization("ranger", "hunter", "marksmanship");
     const rows = [];
-    for ( const u of spec?.spells ?? [] ) {
-      const d = await fromUuid(u);
-      rows.push(`${d?.name} L${d?.system?.level} ${u}`);
+    // The book's spell picks, from the specialization's `refs`.
+    for ( const r of (spec?.refs ?? []).filter(x => x.type === "spell") ) {
+      const d = await fromUuid(r.uuid);
+      rows.push(`${r.name} L${d?.system?.level} ${r.identifier ?? "-"} ${r.uuid}`);
     }
     return rows;
   });

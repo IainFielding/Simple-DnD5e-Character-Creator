@@ -1,5 +1,5 @@
 import { log, MODULE_ID } from "../config.mjs";
-import { heroClassesFor } from "./warcraft.mjs";
+import { heroClassesFor, isHeroName } from "./warcraft.mjs";
 
 /**
  * World of Warcraft's class specializations — Paladin's Holy, Protection and Retribution, Mage's
@@ -181,7 +181,11 @@ async function build() {
       }
       const cls = [...described.values()].find(d => d?.type === "class");
       if ( !cls?.identifier ) continue;
-      const hero = heroClassesFor(cls.identifier).find(h => h.name === entry.name)?.identifier ?? null;
+      // Matched through isHeroName, not the translated name alone: in a world in another language the
+      // book's English "Death Knight" is not the hero's translated name, and a missed match would file
+      // the Death Knight's specializations as the Paladin's own.
+      const hero = heroClassesFor(cls.identifier).find(h => isHeroName(entry.name, h))?.identifier ?? null;
+      const key = keyOf(cls.identifier, hero);
 
       const specs = [];
       for ( const s of sections ) {
@@ -198,7 +202,14 @@ async function build() {
         const keys = new Set(refs.flatMap(r => recommendationKeys(r.type, r)));
         specs.push({ id: specializationId(s.name), name: s.name, intro: s.intro, pageUuid: page.uuid, refs, keys });
       }
-      map.set(keyOf(cls.identifier, hero), specs);
+      // One page per class (or hero class). A second page claiming the same one is a misread — a hero's
+      // page whose entry did not match its hero — and must not replace the first: the first stays,
+      // and the clash is logged.
+      if ( map.has(key) ) {
+        log(`specializations: "${entry.name}" also reads as ${key}; keeping the first page`);
+        continue;
+      }
+      map.set(key, specs);
     }
   }
   log(`specializations: read ${map.size} class page(s)`);

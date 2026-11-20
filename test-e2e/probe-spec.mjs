@@ -28,8 +28,10 @@ try {
   // 1. What the reader made of the book.
   report.specs = await ev(async () => {
     const m = await import(`/modules/sogrom-dnd5e-character-creator/scripts/data/specializations.mjs?v=${Date.now()}`);
+    // A specialization holds its picks as `refs` ({type, uuid, identifier, name}), in the book's order.
+    const of = (s, type) => s.refs.filter(r => r.type === type);
     const show = async (cls, hero) => (await m.specializationsFor(cls, hero)).map(s =>
-      `${s.name}: sub=${s.subclass ? "yes" : "-"} feats=${s.feats.length} spells=${s.spells.length}`);
+      `${s.name}: sub=${of(s, "subclass")[0]?.name ?? "-"} feats=${of(s, "feat").length} spells=${of(s, "spell").length}`);
     return { paladin: await show("paladin"), deathKnight: await show("paladin", "death-knight"),
       hunter: await show("ranger", "hunter"), mage: await show("wizard", "mage") };
   });

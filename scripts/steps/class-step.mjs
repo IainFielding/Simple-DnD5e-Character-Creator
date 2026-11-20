@@ -194,7 +194,7 @@ export const classStep = {
     // description from the book and lists the features the hero swaps in.
     let groups = null;
     if ( selected && hero ) {
-      const text = await heroDescription(hero.name);
+      const text = await heroDescription(hero);
       // The title row's book badge follows: a Death Knight is the World of Warcraft book's.
       if ( detail && text ) detail = { ...detail, enriched: text, source: warcraftSourceBook() ?? detail.source };
       const doc = await readableDoc(await fromUuid(selected).catch(() => null), { heroClass: hero.identifier });
@@ -282,8 +282,11 @@ async function specPickContext(state, card) {
   const specs = await specializationsFor(card.identifier, state.heroClass ?? null);
   if ( !specs.length ) return null;
   const chosen = specs.find(s => s.id === state.specialization) ?? null;
+  // Enriched relative to the book's page, so a relative link in the advice (`@UUID[.Item…]`)
+  // resolves as it does in the journal.
+  const page = chosen?.intro && chosen.pageUuid ? await fromUuid(chosen.pageUuid).catch(() => null) : null;
   const intro = chosen?.intro
-    ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(chosen.intro, { secrets: false })
+    ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(chosen.intro, { relativeTo: page ?? undefined, secrets: false })
     : null;
   return {
     options: specs.map(s => ({ id: s.id, name: s.name, selected: s.id === state.specialization })),

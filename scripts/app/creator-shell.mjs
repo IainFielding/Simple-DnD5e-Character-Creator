@@ -172,6 +172,8 @@ export class CreatorShell extends CreatorShellBase {
    * that screen reopens the list rather than leaving the wizard: see {@link CreatorShell#_navBack}.
    */
   #pickerBehind = false;
+  /** The class bar's menu listeners, aborted on the next render or on close: see {@link CreatorShell##wireBarMenus}. */
+  #barMenuWiring = null;
 
   constructor(actor, options = {}, draft = null) {
     super(options);
@@ -621,6 +623,14 @@ export class CreatorShell extends CreatorShellBase {
       else await clearDraft();
     }
     return super.close(options);
+  }
+
+  /** @override */
+  _onClose(options) {
+    // A class-bar menu left open as the window closes would keep its document listener.
+    this.#barMenuWiring?.abort();
+    this.#barMenuWiring = null;
+    super._onClose(options);
   }
 
   /**
@@ -1254,23 +1264,31 @@ export class CreatorShell extends CreatorShellBase {
   /**
    * Close the class bar's open menus ("Play as", templates/steps/class.hbs) on a click outside them
    * or on Escape, as a dropdown does. A `<details>` only closes when its own summary is clicked.
-   * The document listener lives while a menu is open, and only then.
+   * The document listener lives while a menu is open, and only then — and never past the render that
+   * drew it: picking an option re-renders the step with the menu still open, so its `toggle` never
+   * fires closed. Every listener is tied to {@link CreatorShell##barMenuWiring}, aborted by the next
+   * render and by closing the window.
    * @param {HTMLElement} root
    */
   #wireBarMenus(root) {
-    for ( const menu of root.querySelectorAll(".creator-bar-menu") ) {
+    this.#barMenuWiring?.abort();
+    const menus = root.querySelectorAll(".creator-bar-menu");
+    if ( !menus.length ) { this.#barMenuWiring = null; return; }
+    const wiring = this.#barMenuWiring = new AbortController();
+    for ( const menu of menus ) {
       const outside = ev => { if ( !menu.contains(ev.target) ) menu.open = false; };
-      const escape = ev => {
-        if ( ev.key !== "Escape" ) return;
+      menu.addEventListener("toggle", () => {
+        if ( menu.open ) document.addEventListener("pointerdown", outside, { capture: true, signal: wiring.signal });
+        else document.removeEventListener("pointerdown", outside, true);
+      }, { signal: wiring.signal });
+      // Escape closes an open menu and goes no further. A closed menu leaves it alone, so Escape on
+      // its summary still reaches the window.
+      menu.addEventListener("keydown", ev => {
+        if ( (ev.key !== "Escape") || !menu.open ) return;
         ev.stopPropagation();
         menu.open = false;
         menu.querySelector("summary")?.focus();
-      };
-      menu.addEventListener("toggle", () => {
-        if ( menu.open ) document.addEventListener("pointerdown", outside, true);
-        else document.removeEventListener("pointerdown", outside, true);
-      });
-      menu.addEventListener("keydown", escape);
+      }, { signal: wiring.signal });
     }
   }
 

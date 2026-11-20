@@ -81,7 +81,7 @@ All notable changes to the Simple D&D Character Creator.
   the card. The finished character's species reads the same way on the sheet, with the card's name
   and art.
 - **The Class page shows the class's artwork.** Where the class's book has a painting of it, as the
-  Player's Handbook and Forge of the Artificer do, it sits beside the class's description..
+  Player's Handbook and Forge of the Artificer do, it sits beside the class's description.
 - **Back on the Class page goes back to the class list.** With a class chosen, Back reopens the list
   of classes instead of leaving for the start screen.
 

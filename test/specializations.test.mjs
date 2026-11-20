@@ -1,7 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import {
-  parseSpecializations, recommendationKeys, recommendedInOrder, recommends, specializationId
+  parseSpecializations, recommendationKeys, recommendedInOrder, recommends, specializationId,
+  specializationsFor, resetSpecializations
 } from "../scripts/data/specializations.mjs";
+import { isHeroName } from "../scripts/data/warcraft.mjs";
 
 /**
  * Reading World of Warcraft's "Playing a …" pages into specializations. The shapes below are the
@@ -83,5 +86,58 @@ describe("recommends", () => {
     const pool = [{ uuid: "a", name: "Bless" }, { uuid: "b", name: "Hunter's Mark", identifier: "hunters-mark" }];
     expect(recommendedInOrder(spec, "spell", pool).map(c => c.uuid)).toEqual(["b"]);
     expect(recommendedInOrder(spec, "feat", pool)).toEqual([]);
+  });
+});
+
+/**
+ * A hero class's page is told from its base class's by the entry's name. The module's hero names are
+ * localisation keys and its book is English, so in a German world "Death Knight" is not the hero's
+ * translated "Todesritter". Matched on the translated name alone, the Death Knight's page was filed
+ * as the Paladin's own and replaced it.
+ */
+describe("the specialization index", () => {
+  const WOW = "dnd-world-warcraft";
+  const PALADIN = "Compendium.p.classes.Item.paladin";
+  const page = (name, specs) => ({
+    name, type: "text", uuid: `Compendium.${WOW}.book.JournalEntry.x.JournalEntryPage.${name}`,
+    text: { content: `<p>Choose the @UUID[${PALADIN}]{Paladin} class.</p>`
+      + specs.map(s => `<h4>${s} Specialization</h4><p>${s}.</p><p>@UUID[Compendium.p.feats.Item.${s}]{${s}}</p>`).join("") }
+  });
+
+  beforeEach(() => {
+    installFoundryShims();
+    resetSpecializations();
+    const hero = { name: "WOW.HeroClasses.DeathKnight", identifier: "death-knight", img: "dk.webp" };
+    game.modules = { get: id => (id === WOW) ? { active: true, config: { heroClasses: { paladin: [hero] } } } : null };
+    game.i18n.localize = key => (key === "WOW.HeroClasses.DeathKnight") ? "Todesritter" : key;
+    const entries = [
+      { name: "Paladin", pages: [page("Playing a Paladin", ["Holy", "Protection"])] },
+      { name: "Death Knight", pages: [page("Playing a Death Knight", ["Blood", "Unholy"])] }
+    ];
+    game.packs = { get: id => (id === `${WOW}.book`) ? { getDocuments: async () => entries } : null };
+    globalThis.fromUuid = async uuid => (uuid === PALADIN)
+      ? { uuid, type: "class", name: "Paladin", system: { identifier: "paladin" } }
+      : { uuid, type: "feat", name: uuid.split(".").pop(), system: { identifier: uuid.split(".").pop().toLowerCase() } };
+  });
+
+  it("files a hero's page under the hero in a world in another language", async () => {
+    expect((await specializationsFor("paladin")).map(s => s.id)).toEqual(["holy", "protection"]);
+    expect((await specializationsFor("paladin", "death-knight")).map(s => s.id)).toEqual(["blood", "unholy"]);
+  });
+
+  it("keeps the first page when a second claims the same class", async () => {
+    // A hero entry the matcher cannot place reads as its base class; it must not replace that page.
+    game.modules.get(WOW).config.heroClasses.paladin = [];
+    expect((await specializationsFor("paladin")).map(s => s.id)).toEqual(["holy", "protection"]);
+  });
+});
+
+describe("isHeroName", () => {
+  const hero = { identifier: "death-knight", name: "Todesritter" };
+  it("matches the translated name or the name the identifier was slugged from", () => {
+    expect(isHeroName("Todesritter", hero)).toBe(true);
+    expect(isHeroName("Death Knight", hero)).toBe(true);
+    expect(isHeroName("Demon Hunter", hero)).toBe(false);
+    expect(isHeroName("", hero)).toBe(false);
   });
 });
