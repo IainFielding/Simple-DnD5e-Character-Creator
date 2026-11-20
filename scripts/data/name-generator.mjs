@@ -1,7 +1,7 @@
-import { NAME_STYLES, SPECIES_STYLE_ALIASES } from "./name-data.mjs";
+import { NAME_STYLES, SPECIES_STYLE_ALIASES, PACKAGE_STYLE_ALIASES } from "./name-data.mjs";
 // Species are matched on identifier *or* display name, so callers may pass either: "Elf, Drow" and
 // "elf-drow" fold to the same key.
-import { slugify } from "./ids.mjs";
+import { packageOf, slugify } from "./ids.mjs";
 
 /**
  * Random fantasy name generator for the Details step.
@@ -47,6 +47,20 @@ export function styleForSpecies(identifier) {
   const key = slugify(identifier);
   const style = styleAliases()[key] ?? (tables[key] ? key : "default");
   return tables[style] ? style : "default";
+}
+
+/**
+ * What to hand {@link generateName} for a species card: its identifier (else its name), or — where
+ * the publishing package names the people differently from another book using the same identifier —
+ * that package's own style. World of Warcraft's Goblin and D&D's Goblin are both `goblin`; see
+ * {@link PACKAGE_STYLE_ALIASES}.
+ * @param {{uuid?: string, identifier?: string, name?: string}|null} card
+ * @returns {string}
+ */
+export function speciesNameKey(card) {
+  const key = card?.identifier || card?.name || "";
+  const byPackage = PACKAGE_STYLE_ALIASES[packageOf(card?.uuid)]?.[slugify(key)];
+  return (byPackage && styleTables()[byPackage]) ? byPackage : key;
 }
 
 /** A human-readable label for a style key ("half-orc" -> "Half-Orc", "default" -> "Generic"). */

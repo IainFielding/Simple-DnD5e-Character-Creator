@@ -52,6 +52,10 @@ All notable changes to the Simple D&D Character Creator.
   feats in place of ability increases where the character qualifies. The same menu opens the first
   screen of every level-up, so a character can take up a specialization later, change it, or drop
   it, and a class taken by multiclassing can choose one too.
+- **Names for World of Warcraft's peoples.** Rolling a name for a Dracthyr, Draenei, Earthen,
+  Forsaken, Goblin, Haranir, Mechagnome, Pandaren, Tauren, Troll, Vulpera or Worgen now uses names
+  in that people's own style instead of the generic list. A World of Warcraft Goblin gets its own
+  names, and a D&D Goblin keeps the ones it had.
 - **A Beast Master Hunter chooses Roving or Pet Specialization.** At level 6 the World of Warcraft
   Hunter takes one or the other, and the level-up page now offers them as a choice of one instead of
   two boxes that could both be ticked.

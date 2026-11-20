@@ -6,7 +6,7 @@ import { resolveFeatSpells, originGrantedSpellKeys } from "../steps/feat-spells-
 import { spellKey } from "../data/spell-identity.mjs";
 import { normalizePrepared, spellInfoFor, spellLimits } from "../steps/spells-step.mjs";
 import { findSpecialization, recommendedInOrder } from "./specializations.mjs";
-import { generateName } from "./name-generator.mjs";
+import { generateName, speciesNameKey } from "./name-generator.mjs";
 
 /**
  * The Quick Build engine: fill the whole CreatorState from the selected class's suggestion
@@ -120,7 +120,7 @@ export async function applyQuickBuild({ state, source, spells, equipment }, {
     // Some species ship without an identifier (every Ravenloft lineage does), so fall
     // back to the name — the generator folds either into the same style key.
     const species = source.card(state.speciesUuid);
-    const name = generateName(species?.identifier || species?.name);
+    const name = generateName(speciesNameKey(species));
     if ( name ) state.details.name = name;
   });
 
