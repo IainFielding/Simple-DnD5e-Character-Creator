@@ -259,9 +259,6 @@ export function isGrantUsesTarget(target) {
 export function isForeignEffect(effect, itemData) {
   // Added by another item's advancement (dnd5e's ModifyItem marks its copies both ways).
   if ( effect?.flags?.dnd5e?.advancementOrigin || effect?.system?.origin?.item ) return true;
-  // The creator's lineage name ("Elf (Drow)", data/lineage-name.mjs) is the character's, not the
-  // content's — it must neither read as a change nor be lost by one.
-  if ( effect?.flags?.["sogrom-dnd5e-character-creator"]?.lineageName ) return true;
   const origin = effect?.origin;
   if ( !origin ) return false;
   // Compared by the last uuid segment: dnd5e's 2014 packs write a relative origin

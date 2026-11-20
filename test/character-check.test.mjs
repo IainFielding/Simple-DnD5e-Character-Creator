@@ -77,6 +77,12 @@ describe("checkCharacter", () => {
     expect(keys(twoSources)).not.toContain("check.duplicate");
   });
 
+  it("does not count the copy dnd5e caches for a feature's Cast activity", () => {
+    const cached = { ...spell(1, "class:wizard", "shield"), flags: { dnd5e: { cachedFor: ".Item.x.Activity.y" } } };
+    const findings = checkCharacter(wizardActor({ items: [spell(1, "class:wizard", "shield"), cached] }));
+    expect(keys(findings)).not.toContain("check.duplicate");
+  });
+
   it("notes XP below the current level in an XP world, and not in a milestone world", () => {
     const behind = wizardActor({ xp: { value: 100, min: 2700, max: 6500 } });
     expect(checkCharacter(behind).find(f => f.text.includes("check.xpBehind"))).toMatchObject({ kind: "note" });

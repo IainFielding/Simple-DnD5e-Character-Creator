@@ -141,8 +141,8 @@ export async function assembleActor(state, source, equipment) {
       await actor.update({ "system.attributes.inspiration": true }, { render: false });
     }
 
-    // The species item reads as the card the player picked — "Elf (Drow)" — through an enchantment,
-    // not a rename, so the stored item stays the compendium's. See data/lineage-name.mjs.
+    // The species item reads as the card the player picked — "Elf (Drow)", with the lineage's art
+    // where it has some. See data/lineage-name.mjs.
     await nameSpeciesForLineage(actor, resolved);
   }
 

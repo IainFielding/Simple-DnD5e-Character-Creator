@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { installFoundryShims } from "./helpers/foundry-shims.mjs";
 import {
-  lineageShortName, lineageCardName, lineageArt, lineageEnchantment, LINEAGE_FLAG
+  lineageShortName, lineageCardName, lineageArt, lineageRename, LINEAGE_FLAG
 } from "../scripts/data/lineage-name.mjs";
 
 /**
- * Naming a species for its lineage: the Species page's cards and the enchantment that renames the
- * built species item. The shims' `t` echoes the key and its data, so the assertions read the data
+ * Naming a species for its lineage: the Species page's cards and the rename of the built species
+ * item. The shims' `t` echoes the key and its data, so the assertions read the data
  * handed to the format string.
  */
 describe("lineage naming", () => {
@@ -34,25 +34,22 @@ describe("lineage naming", () => {
     expect(lineageArt("")).toBeNull();
   });
 
-  it("builds a non-magical, self-applied enchantment renaming the item through {}", () => {
-    const effect = lineageEnchantment(
-      { label: "Drow", uuid: "Compendium.p.origins.Item.drow", img: "modules/p/drow.webp" },
-      "Actor.a.Item.b"
+  it("renames the species item and records what it replaced", () => {
+    const update = lineageRename(
+      { name: "Elf", img: "modules/p/elf.webp" },
+      { label: "Drow", uuid: "Compendium.p.origins.Item.drow", img: "modules/p/drow.webp" }
     );
-    expect(effect.type).toBe("enchantment");
-    expect(effect.transfer).toBe(true);
-    expect(effect.origin).toBe("Actor.a.Item.b");
-    expect(effect.system.magical).toBe(false);
-    expect(effect.flags["sogrom-dnd5e-character-creator"][LINEAGE_FLAG]).toBe("Compendium.p.origins.Item.drow");
-    const [name, img] = effect.system.changes;
-    expect(name).toMatchObject({ key: "name", type: "override", phase: "initial" });
-    expect(name.value).toContain('"species":"{}","lineage":"Drow"');
-    expect(img).toMatchObject({ key: "img", type: "override", value: "modules/p/drow.webp" });
+    expect(update.name).toContain('"species":"Elf","lineage":"Drow"');
+    expect(update.img).toBe("modules/p/drow.webp");
+    expect(update[`flags.sogrom-dnd5e-character-creator.${LINEAGE_FLAG}`]).toEqual({
+      uuid: "Compendium.p.origins.Item.drow", name: "Elf", img: "modules/p/elf.webp"
+    });
   });
 
   it("leaves the species' image alone for a lineage with only a core icon", () => {
-    const effect = lineageEnchantment({ label: "Blood Elf", img: "icons/skills/wounds/blood-cells-red.webp" });
-    expect(effect.system.changes.map(c => c.key)).toEqual(["name"]);
-    expect(effect.origin).toBeUndefined();
+    const update = lineageRename({ name: "Elf", img: "modules/p/elf.webp" },
+      { label: "Blood Elf", img: "icons/skills/wounds/blood-cells-red.webp" });
+    expect(update).not.toHaveProperty("img");
+    expect(update[`flags.sogrom-dnd5e-character-creator.${LINEAGE_FLAG}`].uuid).toBeNull();
   });
 });

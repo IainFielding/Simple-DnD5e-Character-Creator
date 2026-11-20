@@ -73,9 +73,8 @@ All notable changes to the Simple D&D Character Creator.
   Ancestor)** or **Goliath (Cloud Giant)**, instead of one Elf card with the lineage chosen beside
   it. Picking a card chooses the species and the lineage together, and the lineage's own description
   follows the species'. A lineage with its own art, such as the Player's Handbook's Drow, shows it on
-  the card. The finished character's species reads the same way on the sheet: an enchantment on the
-  species gives it the card's name and art, and deleting the enchantment from the species' Effects
-  tab puts the plain species back.
+  the card. The finished character's species reads the same way on the sheet, with the card's name
+  and art.
 
 ### Fixed
 
@@ -90,6 +89,11 @@ All notable changes to the Simple D&D Character Creator.
   is Skilled, with a background that also gives Skilled (Noble, Scribe or Charlatan, for example),
   ends up with two copies of the feat. The character had the right skills, but each copy recorded
   all six of them instead of its own three. Each copy now records only the skills chosen for it.
+- **A spell your oath or domain gives you, chosen again earlier.** A Paladin who picked Shield of
+  Faith at level 1 and took the Oath of Devotion at level 3 kept two copies of it, and the extra copy used
+  up one of their prepared spells. The chosen copy is now removed when the oath or domain grants the
+  spell. A spell from a feat, a species or a background is still kept separately, because you can
+  cast it in its own way as well.
 
 ## 3.4.0 — Milestone Levels & Check Character
 

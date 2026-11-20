@@ -124,12 +124,12 @@ function assertLineageName(scenario, creator) {
   if ( !lineage || !scenario.speciesUuid ) return;
   const species = creator.items.find(i => i.type === "race");
   if ( !species ) return;
-  const effect = species.effects.find(e => e.flags?.["sogrom-dnd5e-character-creator"]?.lineageName);
+  const flag = species.flags?.["sogrom-dnd5e-character-creator"]?.lineageName;
   const short = /\(([^()]+)\)\s*$/.exec(lineage.name)?.[1]?.trim() ?? lineage.name;
-  const want = `${species._source.name} (${short})`;
-  if ( !effect || (species.name !== want) ) {
-    throw new Error(`the creator's species should read "${want}" through its lineage enchantment; `
-      + `it reads "${species.name}"${effect ? "" : " and carries no lineage enchantment"}`);
+  const want = `${flag?.name ?? "?"} (${short})`;
+  if ( !flag?.name || (species.name !== want) ) {
+    throw new Error(`the creator's species should be renamed "${want}" for its lineage; `
+      + `it reads "${species.name}"${flag ? "" : " and carries no lineage flag"}`);
   }
 }
 

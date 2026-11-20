@@ -4,15 +4,16 @@ import { MODULE_ID, t, log } from "../config.mjs";
  * How a species and its lineage are named together — "Elf (Drow)", "Goliath (Cloud Giant)" — on the
  * Species page's cards and, once built, on the character's species item.
  *
- * The built item is not renamed. An `enchantment` effect on it overrides its name (dnd5e substitutes
- * the item's own name for `{}`, the way a "+1" weapon is named) and, where the lineage has real art,
- * its image. The stored item stays the compendium's, so Update to New Content still recognises it,
- * and deleting the effect from the item's Effects tab puts the plain species back.
+ * The built item is renamed outright, and takes the lineage's image where the lineage has real art.
+ * (An enchantment would have kept the stored name, but dnd5e offers no way to manage an enchantment
+ * on a species item, so the player could neither see nor remove it.) A flag records the lineage and
+ * the compendium name and image. Nothing else is touched: the item keeps its compendium source, so
+ * Update to New Content still finds it, and a content refresh always keeps an item's name and icon.
  *
  * Nothing here names a species or a lineage.
  */
 
-/** The flag marking the enchantment as ours, holding the lineage's uuid. */
+/** The flag on a renamed species item: `{uuid, name, img}`, the lineage and the name and image it replaced. */
 export const LINEAGE_FLAG = "lineageName";
 
 /**
@@ -29,7 +30,7 @@ export function lineageShortName(label) {
 
 /**
  * "Elf (Drow)": a species qualified by its lineage.
- * @param {string} species   The species' name — or `{}`, for dnd5e's name substitution.
+ * @param {string} species   The species' name.
  * @param {string} lineage   The lineage's own name.
  * @returns {string}
  */
@@ -49,43 +50,34 @@ export function lineageArt(img) {
 }
 
 /**
- * The enchantment that names a species item for its lineage.
+ * The update that names a species item for its lineage.
+ * @param {{name: string, img?: string}} species                   The species item (or its data).
  * @param {{label: string, uuid?: string, img?: string}} lineage   The chosen lineage option.
- * @param {string} [origin]   The built lineage item's uuid, recorded as where the effect came from.
- * @returns {object}          ActiveEffect data.
+ * @returns {object}   Item update data.
  */
-export function lineageEnchantment(lineage, origin = null) {
+export function lineageRename(species, lineage) {
   const art = lineageArt(lineage.img);
-  const change = (key, value) => ({ key, value, type: "override", phase: "initial", priority: null });
   return {
-    name: lineageShortName(lineage.label),
-    img: lineage.img || "icons/svg/aura.svg",
-    type: "enchantment",
-    transfer: true,
-    disabled: false,
-    ...(origin ? { origin } : {}),
-    flags: { [MODULE_ID]: { [LINEAGE_FLAG]: lineage.uuid ?? true } },
-    system: {
-      // Not magic: an antimagic field must not turn a Drow back into a plain Elf.
-      magical: false,
-      changes: [
-        change("name", lineageCardName("{}", lineage.label)),
-        ...(art ? [change("img", art)] : [])
-      ]
+    name: lineageCardName(species.name, lineage.label),
+    ...(art ? { img: art } : {}),
+    [`flags.${MODULE_ID}.${LINEAGE_FLAG}`]: {
+      uuid: lineage.uuid ?? null,
+      name: species.name,
+      img: species.img ?? null
     }
   };
 }
 
 /**
  * Name a freshly built character's species item for the lineage chosen on the Species page.
- * A no-op when the species has no lineage, or the item already carries the enchantment.
+ * A no-op when the species has no lineage, or the item has already been named for one.
  * @param {Actor} actor
  * @param {{sources?: object[]}} resolved   The choice-resolver output the build was made from.
  */
 export async function nameSpeciesForLineage(actor, resolved) {
   const species = actor?.items?.find(i => i.type === "race");
   if ( !species ) return;
-  if ( species.effects.some(e => e.flags?.[MODULE_ID]?.[LINEAGE_FLAG]) ) return;
+  if ( species.getFlag?.(MODULE_ID, LINEAGE_FLAG) ?? species.flags?.[MODULE_ID]?.[LINEAGE_FLAG] ) return;
   const pick = (resolved?.sources ?? [])
     .filter(s => s.key === "species")
     .flatMap(s => s.requirements ?? [])
@@ -93,9 +85,8 @@ export async function nameSpeciesForLineage(actor, resolved) {
     .flatMap(r => r.options ?? [])
     .find(o => o.isSelected);
   if ( !pick ) return;
-  const built = actor.items.find(i => i._stats?.compendiumSource === (pick.uuid ?? pick.key));
   try {
-    await species.createEmbeddedDocuments("ActiveEffect", [lineageEnchantment(pick, built?.uuid ?? null)], { render: false });
+    await species.update(lineageRename(species, pick), { render: false });
   } catch ( err ) {
     log(`could not name ${species.name} for its lineage`, err);
   }
