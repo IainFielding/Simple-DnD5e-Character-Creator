@@ -168,8 +168,9 @@ export class CreatorShell extends CreatorShellBase {
    */
   #focusAfterRender = null;
   /**
-   * Whether the first step's choice is made and its list is closed, as of the last render. Back on
-   * that screen reopens the list rather than leaving the wizard: see {@link CreatorShell#_navBack}.
+   * Whether the current pick step's (Class, Species, Background) choice is made and its list is
+   * closed, as of the last render. Back on that screen reopens the list rather than leaving the
+   * step: see {@link CreatorShell#_navBack}.
    */
   #pickerBehind = false;
   /** The class bar's menu listeners, aborted on the next render or on close: see {@link CreatorShell##wireBarMenus}. */
@@ -1013,10 +1014,10 @@ export class CreatorShell extends CreatorShellBase {
    */
   _navBack() {
     if ( this.#entry && (this.#entry !== "chooser") ) return this._openEntry("chooser");
-    // The first step with its choice made: the list it was chosen from is what is behind it. Back
-    // reopens the class list before it leaves for the entry screen, so changing your mind about the
-    // class is one click, not a trip out of the wizard and back in.
-    if ( (this._prevIndex() < 0) && this.#pickerBehind ) return this._setPicker(true);
+    // A pick step (Class, Species, Background) with its choice made: the list it was chosen from is
+    // what is behind it. Back reopens that list before it leaves the step, so changing your mind
+    // about the class, species or background is one click. With the list open, Back leaves as usual.
+    if ( this.#pickerBehind ) return this._setPicker(true);
     // The first step of a build that came in through an entry screen: the screen it came from is
     // what is behind it, so Back means that rather than nothing. Without this the custom path led
     // to a greyed Back on its very first screen, which reads as "there is no way back" on the one
