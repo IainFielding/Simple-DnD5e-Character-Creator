@@ -49,7 +49,9 @@ All notable changes to the Simple D&D Character Creator.
   it opens the page. The subclass, spells and feats it suggests
   are marked **Recommended for Holy** (or whichever you chose) when you pick them, at creation and at
   every level-up, and Quick Build follows it: its subclass, its spells, its fighting style, and its
-  feats in place of ability increases where the character qualifies.
+  feats in place of ability increases where the character qualifies. The same menu opens the first
+  screen of every level-up, so a character can take up a specialization later, change it, or drop
+  it, and a class taken by multiclassing can choose one too.
 - **A Beast Master Hunter chooses Roving or Pet Specialization.** At level 6 the World of Warcraft
   Hunter takes one or the other, and the level-up page now offers them as a choice of one instead of
   two boxes that could both be ticked.

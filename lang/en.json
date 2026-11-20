@@ -313,6 +313,9 @@
           "label": "Subclass",
           "intro": "Choose the subclass gained at this level."
         },
+        "specialization": {
+          "label": "Specialization"
+        },
         "grant": {
           "label": "Spell",
           "prompt": "Choose the spellcasting ability for this spell."

@@ -1,0 +1,15 @@
+{{!-- Level-up specialization block (inside level.hbs): the class's World of Warcraft specialization,
+      changeable here as on the creator's Class page. "None" clears it. Fires specPick on change;
+      data from specialization-step.mjs. --}}
+<section class="creator-levelup creator-levelup-specialization">
+  <p class="creator-choice-hint">{{hint}}</p>
+  <label class="creator-work-bar-pick creator-specialization">
+    <span>{{localize "sogrom-dnd5e-character-creator.step.class.spec.title"}}</span>
+    <select data-step-change="specPick">
+      <option value="" {{#unless chosen}}selected{{/unless}}>{{localize "sogrom-dnd5e-character-creator.step.class.spec.none"}}</option>
+      {{#each options}}
+      <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+      {{/each}}
+    </select>
+  </label>
+</section>

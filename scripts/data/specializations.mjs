@@ -254,6 +254,29 @@ export async function specializationOf(classItem) {
 }
 
 /**
+ * The specializations a built class item can follow: its class's, or its hero class's when it was
+ * built as one. Empty without the module.
+ * @param {Item5e|null} classItem
+ * @returns {Promise<object[]>}
+ */
+export async function specializationsOfClass(classItem) {
+  if ( !classItem ) return [];
+  const hero = classItem.flags?.[PACKAGE]?.heroClass ?? null;
+  return specializationsFor(classItem.system?.identifier ?? classItem.identifier, hero);
+}
+
+/**
+ * Set (or, with null, clear) the specialization a class item follows. Written to the item's source,
+ * so on the level-up driver's clone it is committed with the rest of the level-up, and every step
+ * reading {@link specializationOf} on that item sees it at once.
+ * @param {Item5e} classItem
+ * @param {string|null} id
+ */
+export function setSpecialization(classItem, id) {
+  classItem?.updateSource?.({ [`flags.${MODULE_ID}.specialization`]: id || null });
+}
+
+/**
  * One specialization by id, or null.
  * @param {string} classIdentifier
  * @param {string|null} heroClass

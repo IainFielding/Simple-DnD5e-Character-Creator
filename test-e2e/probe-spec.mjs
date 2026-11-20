@@ -100,6 +100,22 @@ try {
     return blocks.map(b => `${b.dataset.stepAction}: ${b.textContent.trim().replace(/\s+/g, " ").slice(0, 40)}`);
   });
   await shot("2-hunter-level6");
+
+  // 5. The level-up's own Specialization block: it shows the class's choice, and changing it writes
+  // the flag to the class on the driver's clone (read back through the live window's state).
+  const levelUpSpec = () => ev(() => {
+    const sel = document.querySelector(".creator-levelup-specialization select");
+    const app = [...foundry.applications.instances.values()].find(a => a.state?.driver && a.state?.classItem);
+    return sel ? {
+      options: [...sel.options].map(o => o.value), value: sel.value,
+      status: sel.closest(".levelup-block")?.querySelector(".levelup-block-status")?.textContent.trim() ?? null,
+      cloneFlag: app?.state.classItem.flags?.["sogrom-dnd5e-character-creator"]?.specialization ?? null
+    } : null;
+  });
+  report.levelUpSpec = await levelUpSpec();
+  await pick(".creator-levelup-specialization select", "survival");
+  report.levelUpSpecAfter = await levelUpSpec();
+  await shot("3-hunter-levelup-spec");
   console.log(JSON.stringify(report, null, 1));
 } finally {
   await session?.close?.();

@@ -39,6 +39,29 @@ const { findRestrictedItems, evalItemPrereq } = await import(`${MODULE}/data/cho
 const ABILITY_ORDER = ["str", "dex", "con", "int", "wis", "cha"];
 
 /**
+ * Candidates reordered so the preferred ones lead, in the preference's order; the rest keep theirs.
+ * A preference matches by uuid, identifier or name — the book links one package's copy of a feat and
+ * a pool may list another's.
+ * @param {string[]} uuids
+ * @param {{uuid?: string, identifier?: string, name?: string}[]} prefer
+ * @returns {Promise<string[]>}
+ */
+async function preferredFirst(uuids, prefer = []) {
+  if ( !prefer?.length ) return uuids;
+  const docs = new Map();
+  for ( const uuid of uuids ) docs.set(uuid, await fromUuid(uuid).catch(() => null));
+  const lower = v => String(v ?? "").trim().toLowerCase();
+  const lead = [];
+  for ( const ref of prefer ) {
+    const hit = uuids.find(u => !lead.includes(u) && ((u === ref.uuid)
+      || (ref.identifier && (docs.get(u)?.system?.identifier === ref.identifier))
+      || (ref.name && (lower(docs.get(u)?.name) === lower(ref.name)))));
+    if ( hit ) lead.push(hit);
+  }
+  return [...lead, ...uuids.filter(u => !lead.includes(u))];
+}
+
+/**
  * Whether an advancement's choice is deliberately routed around the driver rather than through it.
  *
  * During **creation**, spell-type `ItemChoice`s (Magic Initiate and every variant of it) are owned by
@@ -188,7 +211,7 @@ async function generateTrait(adv, offered, reserved = new Set()) {
  * A drop-restricted pool (the Artificer's "Replicate Magic Item") carries no authored options at
  * all; those come from the same compendium scan the creator uses.
  */
-async function generateItemChoice(adv, level, offered, reserved = new Set()) {
+async function generateItemChoice(adv, level, offered, reserved = new Set(), prefer = []) {
   const cfg = adv.configuration ?? {};
   const count = cfg.choices?.[level]?.count ?? 0;
   const ability = sorted(cfg.spell?.ability ?? [])[0] ?? null;
@@ -246,7 +269,7 @@ async function generateItemChoice(adv, level, offered, reserved = new Set()) {
   // a Human's Versatile was answered Alert while the Criminal background grants Alert, building two
   // copies natively and a refused pick in the creator.
   const uuids = [];
-  for ( const uuid of sorted(candidates) ) {
+  for ( const uuid of await preferredFirst(sorted(candidates), prefer) ) {
     if ( uuids.length >= count ) break;
     const name = (await fromUuid(uuid).catch(() => null))?.name?.trim().toLowerCase();
     if ( name && reserved.has(`feat|${name}`) ) continue;
@@ -342,12 +365,12 @@ function fallbackMaxSpellSlot(adv, level) {
  * take one twice while the creator shows it as taken — a known, deliberate difference, and not the
  * one under test.
  */
-async function generateSpellChoice(adv, level, { offered, reserved, maxSpellSlot } = {}) {
+async function generateSpellChoice(adv, level, { offered, reserved, maxSpellSlot, prefer = [] } = {}) {
   const cfg = adv.configuration ?? {};
   const restriction = cfg.restriction ?? {};
   const lists = Array.from(restriction.list ?? []);
   // An authored pool (a fixed handful of spells) renders checkboxes like any feature choice.
-  if ( Array.from(cfg.pool ?? []).length ) return generateItemChoice(adv, level, offered, reserved);
+  if ( Array.from(cfg.pool ?? []).length ) return generateItemChoice(adv, level, offered, reserved, prefer);
 
   const count = cfg.choices?.[level]?.count ?? 0;
   const ability = sorted(cfg.spell?.ability ?? [])[0] ?? null;
@@ -392,7 +415,10 @@ async function generateSpellChoice(adv, level, { offered, reserved, maxSpellSlot
     for ( const entry of await allSpellEntries() ) consider(entry.uuid, entry);
   }
 
-  const uuids = [...byName.keys()].sort().slice(0, count).map(n => byName.get(n));
+  // A specialization's spells first, in the book's order; then the rest by name.
+  const wanted = prefer.map(r => String(r.name ?? "").trim().toLowerCase()).filter(n => byName.has(n));
+  const names = [...new Set([...wanted, ...[...byName.keys()].sort()])];
+  const uuids = names.slice(0, count).map(n => byName.get(n));
   if ( uuids.length < count ) {
     const shown = levels ? [...levels].join("/") : "any";
     return { missing: `"${adv.name}" has ${uuids.length} eligible spell(s) on ${lists.join(", ") || "any list"} `
@@ -508,7 +534,7 @@ function passesContentGates(feat, actor) {
  * @param {Advancement} adv
  * @param {number} level   The character level the decision is raised at.
  */
-async function generateAsiFeat(adv, level) {
+async function generateAsiFeat(adv, level, { prefer = [], fallback = false } = {}) {
   const cfg = adv.configuration ?? {};
   // Only a *class* ASI offers a feat. Ask the advancement rather than re-deriving the rule: the
   // system's own `allowFeat` getter is `(item.type === "class") && <the allowFeats setting> …`,
@@ -524,8 +550,17 @@ async function generateAsiFeat(adv, level) {
   const feats = await loadGeneralFeats();
   const held = new Set(adv.actor?.items?.map(i => i._stats?.compendiumSource ?? i.flags?.dnd5e?.sourceId) ?? []);
   const characterLevel = level || adv.actor?.system?.details?.level || 0;
-  const pick = feats.find(f => (f.level <= characterLevel) && (f.repeatable || !held.has(f.uuid))
-    && passesContentGates(f, adv.actor));
+  const takeable = f => (f.level <= characterLevel) && (f.repeatable || !held.has(f.uuid))
+    && passesContentGates(f, adv.actor);
+  // A specialization's feats lead, in the book's order — only those in the general list above, so
+  // eligibility is still decided without re-implementing item prerequisites.
+  const wanted = prefer.map(r => feats.find(f => (f.uuid === r.uuid)
+    || (f.name.trim().toLowerCase() === String(r.name ?? "").trim().toLowerCase()))).filter(Boolean);
+  const preferred = wanted.find(takeable);
+  // The specialization axis spends an ASI on its own feat or, failing one, on points — as Quick Build
+  // does — rather than on whichever general feat sorts first.
+  if ( !preferred && fallback ) return generateAsi(adv);
+  const pick = preferred ?? feats.find(takeable);
   if ( !pick ) return { missing: `no general feat is takeable at level ${characterLevel}` };
   return { answer: { feat: pick.uuid } };
 }
@@ -553,11 +588,19 @@ function generateAsi(adv) {
 
   const open = openAbilities(adv);
 
-  // Nothing to decide: a capstone's fixed `+4` (Primal Champion, Body and Mind), a half-feat's `+1`,
-  // or a budget with a single legal target. Both sides apply these without asking anyone — the
-  // driver holds them back and applies them in level order, the native manager's pre-render seed
-  // lands them — so answering would only make the ledger report a decision neither side made.
-  if ( isForcedAsi(adv) ) {
+  // Nothing to decide: a capstone's fixed `+4` (Primal Champion, Body and Mind). Both sides apply it
+  // without asking anyone — the driver holds it back and applies it in level order, the native
+  // manager's seed lands it (`apply` with `initial` applies `fixed`) — so answering would only make
+  // the ledger report a decision neither side made.
+  //
+  // A budget with a single legal target is *not* in that set, though `isForcedAsi` groups them: a
+  // half-feat's "+1 Charisma" (the PHB's Actor: one point, the other five locked). The driver applies
+  // it at ingest, but dnd5e's seed applies only `fixed`, and its flow renders Charisma with a live,
+  // un-clicked "+" (see harness.mjs `decisionDifferences`). Answered null, the native side never
+  // clicked it and came out a point short — first seen on the specialization axis, the first sweep to
+  // take Actor at an improvement. So it is answered like any allocation below; the creator never
+  // asks, and the ledger still marks it `forced`, so that one-sided read is not reported.
+  if ( isForcedAsi(adv) && !openAbilities(adv).length ) {
     return { answer: null, note: "a forced increase, not an allocation" };
   }
 
@@ -585,18 +628,20 @@ function generateAsi(adv) {
  *                                       against a character (see {@link generateTrait}).
  * @returns {Promise<{answer?: *, missing?: string, note?: string}>}
  */
-async function generate(adv, level, { offered, asiFeats = false, reserved, phase, maxSpellSlot } = {}) {
+async function generate(adv, level, { offered, asiFeats = false, reserved, phase, maxSpellSlot, prefer = {} } = {}) {
   if ( isDeferred(adv, phase) ) return { answer: null, note: "deferred to the creator's feat-spells step" };
   if ( (adv?.type === "ItemChoice") && (adv.configuration?.type === "spell") ) {
-    return generateSpellChoice(adv, level, { offered, reserved, maxSpellSlot });
+    return generateSpellChoice(adv, level, { offered, reserved, maxSpellSlot, prefer: prefer.spell ?? [] });
   }
   switch ( adv?.type ) {
     case "HitPoints": return { answer: "avg" };   // never "roll" — a die is not an equivalence test
     case "Size": return generateSize(adv);
     case "Trait": return generateTrait(adv, offered, reserved);
-    case "ItemChoice": return generateItemChoice(adv, level, offered, reserved);
+    case "ItemChoice": return generateItemChoice(adv, level, offered, reserved, prefer.feat ?? []);
     case "ItemGrant": return generateGrantAbility(adv);
-    case "AbilityScoreImprovement": return asiFeats ? generateAsiFeat(adv, level) : generateAsi(adv);
+    case "AbilityScoreImprovement":
+      if ( prefer.feat?.length ) return generateAsiFeat(adv, level, { prefer: prefer.feat, fallback: !asiFeats });
+      return asiFeats ? generateAsiFeat(adv, level) : generateAsi(adv);
     case "Subclass":
       // The subclass is the variable a sweep is sweeping. Generating one would defeat the point, so
       // a scenario that raises this decision must state it.
@@ -701,8 +746,9 @@ export class AnswerBook {
    * @param {object} [options.overrides]   The scenario's `answers` table.
    * @param {boolean} [options.generate]   Generate an answer for anything the table does not cover.
    */
-  constructor({ overrides = {}, generate = false, asiFeats = false, origins = [] } = {}) {
+  constructor({ overrides = {}, generate = false, asiFeats = false, origins = [], prefer = null } = {}) {
     this.#overrides = overrides ?? {};
+    this.#prefer = prefer ?? {};
     this.#generate = generate;
     this.#asiFeats = asiFeats;
     this.#origins = (origins ?? []).filter(Boolean);
@@ -710,6 +756,13 @@ export class AnswerBook {
 
   /** @type {string[]} The scenario's species, background and class uuids. */
   #origins;
+
+  /**
+   * @type {{feat?: object[], spell?: object[]}} Picks to take first where they are offered — the
+   * specialization axis's book picks ({uuid, identifier, name}, in the book's order). Both sides read
+   * the one memoised answer, so a preference cannot make them disagree.
+   */
+  #prefer;
 
   /** @type {Promise<Set<string>>|null} `mode|key` for every trait an origin grants at level 0–1. */
   #reserved = null;
@@ -831,7 +884,8 @@ export class AnswerBook {
         entry.source = "override";
       } else if ( this.#generate ) {
         const result = await generate(adv, level, {
-          offered, asiFeats: this.#asiFeats, reserved: await this.#siblingReserved(entry), phase, maxSpellSlot
+          offered, asiFeats: this.#asiFeats, reserved: await this.#siblingReserved(entry), phase, maxSpellSlot,
+          prefer: this.#prefer
         });
         entry.answer = result.answer;
         entry.missing = result.missing ?? null;

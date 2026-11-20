@@ -358,7 +358,7 @@ export async function runScenario(scenario, { keep = false, render = false } = {
     // whoever asks second, which is what makes a generated scenario comparable at all: the two
     // builds walk in different orders off different clones and still cannot disagree about what was
     // chosen. A scenario without `generate` answers only from its own table, exactly as before.
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario) });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario), prefer: scenario.prefer ?? null });
 
     // Both adapters record which answers they actually read, so an answer nobody wanted can be
     // caught below rather than quietly changing the character.
@@ -973,7 +973,7 @@ export async function compareItem({ scenarioId, itemName, level = 20, incrementa
   let native = null;
   let creator = null;
   try {
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario) });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario), prefer: scenario.prefer ?? null });
     // The same tolerance `runScenario` grants a generating scenario. Without it the resolver's first
     // pass — which legitimately offers a narrower pool than the settled one — throws, and this tool
     // cannot be pointed at the sweep findings it exists to explain.
@@ -1826,7 +1826,7 @@ export async function probeNative({
   const byLevel = [];
   let actor = null;
   try {
-    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario) });
+    const book = new AnswerBook({ overrides: scenario.answers ?? {}, generate: !!scenario.generate, asiFeats: !!scenario.asiFeats, origins: scenarioOrigins(scenario), prefer: scenario.prefer ?? null });
     actor = await buildNative({ ...scenario, name: `${PREFIX}${scenario.name} [native]` }, {
       book,
       onLevel: (lvl, a) => {

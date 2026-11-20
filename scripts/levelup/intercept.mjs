@@ -43,6 +43,7 @@ export function registerLevelUp() {
     tpl("levelup/subclass.hbs"),
     tpl("levelup/grant.hbs"),
     tpl("levelup/optional-grant.hbs"),
+    tpl("levelup/specialization.hbs"),
     tpl("levelup/review.hbs"),
     tpl("levelup/spells.hbs"),
     // A third-party advancement's own screen, mounted inside the level (Potent Dragonmark). Missing

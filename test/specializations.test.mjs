@@ -5,6 +5,7 @@ import {
   specializationsFor, resetSpecializations
 } from "../scripts/data/specializations.mjs";
 import { isHeroName } from "../scripts/data/warcraft.mjs";
+import { specializationStep } from "../scripts/levelup/steps/specialization-step.mjs";
 
 /**
  * Reading World of Warcraft's "Playing a …" pages into specializations. The shapes below are the
@@ -129,6 +130,40 @@ describe("the specialization index", () => {
     // A hero entry the matcher cannot place reads as its base class; it must not replace that page.
     game.modules.get(WOW).config.heroClasses.paladin = [];
     expect((await specializationsFor("paladin")).map(s => s.id)).toEqual(["holy", "protection"]);
+  });
+  /** A class item on the driver's clone: flags written through updateSource, as dnd5e's would be. */
+  const classItem = (hero = null) => {
+    const item = { system: { identifier: "paladin" }, flags: hero ? { [WOW]: { heroClass: hero } } : {} };
+    item.updateSource = changes => {
+      for ( const [path, value] of Object.entries(changes) ) {
+        const [, scope, key] = path.split(".");
+        (item.flags[scope] ??= {})[key] = value;
+      }
+    };
+    return item;
+  };
+  const levelState = item => ({ classItem: item, committed: false, gainedLevels: () => [4, 5] });
+
+  it("offers the class's specializations at level-up, on the first level screen only", async () => {
+    const state = levelState(classItem());
+    const block = await specializationStep.sectionsAt({ state }, 4);
+    expect(block.options.map(o => o.id)).toEqual(["holy", "protection"]);
+    expect(block.chosen).toBe(false);
+    expect(await specializationStep.sectionsAt({ state }, 5)).toBeNull();
+    // A hero class offers its own.
+    const dk = await specializationStep.sectionsAt({ state: levelState(classItem("death-knight")) }, 4);
+    expect(dk.options.map(o => o.id)).toEqual(["blood", "unholy"]);
+  });
+
+  it("writes the level-up pick to the class item, and None clears it", async () => {
+    const item = classItem();
+    const state = levelState(item);
+    specializationStep.handle("specPick", { value: "protection" }, { state });
+    expect(item.flags["sogrom-dnd5e-character-creator"].specialization).toBe("protection");
+    const block = await specializationStep.sectionsAt({ state }, 4);
+    expect(block.options.find(o => o.selected)?.id).toBe("protection");
+    specializationStep.handle("specPick", { value: "" }, { state });
+    expect(item.flags["sogrom-dnd5e-character-creator"].specialization).toBeNull();
   });
 });
 
